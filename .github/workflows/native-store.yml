@@ -1,6 +1,14 @@
 name: Independent Swift Store trial
 on:
   workflow_dispatch:
+    inputs:
+      decryption_backend:
+        description: Native diagnostics or offline model verification
+        type: choice
+        default: native
+        options:
+          - native
+          - offline
 permissions:
   contents: read
 concurrency:
@@ -16,6 +24,18 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
+          persist-credentials: false
+      - name: Check offline model before account or download work
+        if: inputs.decryption_backend == 'offline'
+        env:
+          FAIRPLAY_MODEL_B64: ${{ secrets.FAIRPLAY_MODEL_B64 }}
+        run: python3 tools/offline_verify.py --check-ready
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        if: inputs.decryption_backend == 'offline'
+        with:
+          repository: DrWhax/unfairplay
+          ref: 26a099fcb2292eaacd9e0ce89793cdbc88e516d1
+          path: native-source/unfairplay
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -42,6 +62,12 @@ jobs:
           cd native-source/ipatool
           go test ./cmd/lab-kbsync
           go build -o ../../lab-kbsync ./cmd/lab-kbsync
+      - name: Build optional offline backend
+        if: inputs.decryption_backend == 'offline'
+        working-directory: native-source/unfairplay
+        run: |
+          go test -p 2 -timeout 180s ./internal/fairplay ./cmd/unfairplay
+          go build -p 2 -trimpath -o ../../offline-engine ./cmd/unfairplay
       - name: Test Python orchestrator before native compilation
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
       - name: Check Swift toolchain and correct ambiguous diagnostics
@@ -80,6 +106,8 @@ jobs:
         run: ./lab-kbsync --prewarm
       - name: Authenticate and acquire without exporting account or IPA
         env:
+          LAB_OFFLINE_ENGINE: ${{ inputs.decryption_backend == 'offline' && format('{0}/offline-engine', github.workspace) || '' }}
+          FAIRPLAY_MODEL_B64: ${{ inputs.decryption_backend == 'offline' && secrets.FAIRPLAY_MODEL_B64 || '' }}
           LAB_KBSYNC_HELPER: ${{ github.workspace }}/lab-kbsync
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}

@@ -1,0 +1,48 @@
+name: Offline engine contracts
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: offline-engine-contracts
+  cancel-in-progress: false
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: DrWhax/unfairplay
+          ref: 26a099fcb2292eaacd9e0ce89793cdbc88e516d1
+          path: upstream/unfairplay
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: upstream/unfairplay/go.mod
+          cache: true
+          cache-dependency-path: upstream/unfairplay/go.sum
+      - name: Test offline decryption and hash validation on synthetic data
+        working-directory: upstream/unfairplay
+        run: go test -p 2 -timeout 180s ./internal/fairplay ./cmd/unfairplay
+      - name: Build Linux x86_64 offline engine
+        working-directory: upstream/unfairplay
+        run: go build -p 2 -trimpath -o ../../offline-engine ./cmd/unfairplay
+      - name: Test adapter and existing Python contracts without accounts
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Verify compiled command interface
+        run: ./offline-engine verify --help
+      - name: Confirm missing model blocks before account or download work
+        run: |
+          set +e
+          python3 tools/offline_verify.py --check-ready
+          result=$?
+          set -e
+          test "$result" -eq 2
+      - name: Report test boundaries
+        run: |
+          echo 'Offline engine compiled and synthetic contracts passed.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No Apple account, private model or real IPA was used. Real decryption is not established.' >> "$GITHUB_STEP_SUMMARY"

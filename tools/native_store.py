@@ -3,6 +3,7 @@ import argparse, json, os, re, subprocess, tempfile
 from pathlib import Path
 from store_download import app_id, metadata
 from private_trial import evaluate
+from offline_verify import verify as verify_offline, readiness as offline_readiness, outcome as offline_outcome
 
 def classify(result):
     text = (result.stdout + result.stderr).lower()
@@ -71,10 +72,15 @@ def run(binary, args, env):
     return subprocess.run([binary] + args, env=env, stdin=subprocess.DEVNULL,
                           capture_output=True, text=True, timeout=300)
 
-def trial(binary, engine, target):
+def trial(binary, engine, target, offline_binary=None):
+    if offline_binary:
+        missing = offline_readiness()
+        if missing:
+            return dict(offline_outcome(missing), downloaded=False)
     info = metadata(app_id(target))
     email = os.environ["APPLE_ID"].strip()
     env = dict(os.environ)
+    env.pop("FAIRPLAY_MODEL_B64", None)
     env["APPLEPACKAGE_PASSWORD"] = os.environ["APPLE_PASSWORD"]
     login_args = ["login", email]
     if os.environ.get("APPLE_2FA_CODE"):
@@ -89,6 +95,10 @@ def trial(binary, engine, target):
             result = run(binary, ["download", email, info["bundleId"], "--output", str(ipa)], env)
             if result.returncode or not ipa.is_file():
                 return {"status": classify_download(result), "authenticated": True, "downloaded": False, **download_diagnostics(result)}
+            if offline_binary:
+                result = verify_offline(offline_binary, ipa)
+                result.update(downloaded=True, authenticated=True)
+                return result
             result = evaluate(ipa, engine, root)
             result.update(status="native_downloaded_and_diagnosed", downloaded=True)
             return result
@@ -103,6 +113,7 @@ def main():
     p.add_argument("--binary", required=True)
     p.add_argument("--engine", required=True)
     p.add_argument("--target", default="6599842047")
+    p.add_argument("--offline-binary", default=os.environ.get("LAB_OFFLINE_ENGINE") or None)
     args = p.parse_args()
     if os.environ.get("GITHUB_ACTIONS") != "true":
         print('{"status":"requires_github_actions"}')
@@ -111,12 +122,14 @@ def main():
         print('{"status":"missing_credentials"}')
         return 2
     try:
-        result = trial(str(Path(args.binary).resolve()), str(Path(args.engine).resolve()), args.target)
+        result = trial(str(Path(args.binary).resolve()), str(Path(args.engine).resolve()), args.target, args.offline_binary)
     except subprocess.TimeoutExpired:
         result = {"status": "native_timeout", "downloaded": False}
     except Exception:
         result = {"status": "native_trial_failed", "downloaded": False}
     print(json.dumps(result))
+    if args.offline_binary:
+        return 0 if result.get("plaintext_verified") is True else 2
     return 0 if result.get("downloaded") else 2
 
 if __name__ == "__main__":
