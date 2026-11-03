@@ -18,3 +18,13 @@
 真实下载需要上述账号配置。仓库没有账号时，只能完成编译、CLI兼容性和模拟认证测试，不得宣称真实下载已验证。下载与解密分别判断，downloaded=true 仍不代表 decryption_proven=true。
 
 当前仍是诊断原型，无支付、商业分发或常驻服务。账号操作可能受地区、协议变化和验证码有效期影响。后续需验证真实账号下载，再决定长期凭据和私人存储方案。
+
+## 认证误判修正
+
+固定的上游提交会把 MZFinance.BadLogin.Configurator_message 映射成 ErrAuthCodeRequired；该通用响应本身不足以证明 Apple 明确要求双重认证。本项目通过可校验的构建补丁修正此分支，Go 回归测试直接调用上游响应解析器。Python 层不再以帮助文本中出现 auth-code 和 required 来推断需要验证码。
+
+[修正后 Intel 验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41723998603)：回归测试、编译及无账号测试通过，真实登录返回 authentication_unresolved_generic_bad_login，未下载 IPA。该结果不等于密码一定错误，也不等于无需认证即可继续。
+
+已增加 ARM/Intel 运行器选项，用于一次受控兼容性对照，不用于无限重复登录。Go 缓存仅保存依赖和编译对象，不保存 Apple 账号、会话或 IPA。未实现长期登录会话的保存和复用。
+
+上方旧版说明中的 requires_2fa 不再用来解释该通用 BadLogin 响应。只有获得进一步可验证证据后，才可定位具体账号或协议问题。
