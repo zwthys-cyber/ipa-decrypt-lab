@@ -16,7 +16,7 @@ class NativeStoreTests(unittest.TestCase):
         self.assertEqual(classify(r), "native_signing_failed")
 
     def test_diagnostics_only_allow_fixed_markers(self):
-        r = SimpleNamespace(stdout="email secret\\nIPA_LAB_STAGE:lookup_app\\nIPA_LAB_STAGE:secret\\n",
+        r = SimpleNamespace(stdout="email secret\nIPA_LAB_STAGE:lookup_app\nIPA_LAB_STAGE:secret\n",
                             stderr="password secret", returncode=1)
         self.assertEqual(download_diagnostics(r), {"stage": "lookup_app", "exit_code": 1})
     def test_diagnostics_unknown_stage_is_not_exposed(self):
