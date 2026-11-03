@@ -8,7 +8,7 @@ BOOLS = {
     "decryption_proven", "accessibility_trusted", "console_user_session",
     "app_store_installed", "app_store_launched",
 }
-COUNTS = {"window_count", "nodes_examined", "text_fields", "secure_fields"}
+COUNTS = {"window_count", "nodes_examined", "text_fields", "secure_fields", "sign_in_disabled", "sign_in_pressable", "sign_in_other"}
 def clean(value):
     if not isinstance(value, dict) or value.get("schema") != "ipa-lab-enrollment-environment-v1":
         raise ValueError("invalid_probe")

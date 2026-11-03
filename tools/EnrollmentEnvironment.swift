@@ -25,6 +25,25 @@ func attribute(_ element: AXUIElement, _ name: String) -> CFTypeRef? {
     guard AXUIElementCopyAttributeValue(element, name as CFString, &result) == .success else { return nil }
     return result
 }
+func pressTarget(_ start: AXUIElement) -> AXUIElement? {
+    var current = start
+    for _ in 0..<5 {
+        _ = AXUIElementSetMessagingTimeout(current, 0.5)
+        let role = attribute(current, kAXRoleAttribute) as? String ?? ""
+        var names: CFArray?
+        let available = AXUIElementCopyActionNames(current, &names) == .success
+            && ((names as? [String]) ?? []).contains(kAXPressAction)
+        let enabled = attribute(current, kAXEnabledAttribute) as? Bool
+        if available && enabled != false &&
+            ["AXButton", "AXLink", "AXRadioButton", "AXMenuItem", "AXRow", "AXMenuBarItem"].contains(role) {
+            return current
+        }
+        guard let parent = attribute(current, kAXParentAttribute),
+              CFGetTypeID(parent) == AXUIElementGetTypeID() else { return nil }
+        current = unsafeBitCast(parent, to: AXUIElement.self)
+    }
+    return nil
+}
 struct UIResult {
     var windows = 0
     var nodes = 0
@@ -37,6 +56,9 @@ struct UIResult {
     var welcomeContinue: AXUIElement?
     var storeMenu: AXUIElement?
     var securityPrompt = false
+    var signInDisabled = 0
+    var signInPressable = 0
+    var signInOther = 0
     var knownLabels: Set<String> = []
     var roles: [String: Int] = [:]
     var report: [String: Any] {
@@ -44,7 +66,8 @@ struct UIResult {
          "secure_fields": secureFields, "sign_in_control_found": signIn != nil,
          "scan_limited": limited, "sign_in_label_seen": signInSeen,
          "welcome_seen": welcomeSeen, "continue_control_found": welcomeContinue != nil,
-         "known_labels": knownLabels.sorted(), "roles": roles, "security_prompt": securityPrompt]
+         "known_labels": knownLabels.sorted(), "roles": roles, "security_prompt": securityPrompt, "sign_in_disabled": signInDisabled,
+         "sign_in_pressable": signInPressable, "sign_in_other": signInOther]
     }
 }
 func scan(_ app: AXUIElement) -> UIResult {
@@ -85,7 +108,9 @@ func scan(_ app: AXUIElement) -> UIResult {
         if strings.contains(where: { $0.hasPrefix("sign in") || ["登录", "登入"].contains($0) }) {
             result.signInSeen = true
             result.knownLabels.insert("sign_in")
-            if enabled && pressable && result.signIn == nil { result.signIn = item }
+            if attribute(item, kAXEnabledAttribute) as? Bool == false { result.signInDisabled += 1 }
+            if pressable { result.signInPressable += 1 } else { result.signInOther += 1 }
+            if result.signIn == nil { result.signIn = pressTarget(item) }
         }
         if strings.contains(where: { $0.contains("welcome") || $0.contains("欢迎") || $0 == "app store & privacy" }) {
             result.welcomeSeen = true
