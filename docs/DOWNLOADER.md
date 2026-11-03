@@ -28,3 +28,5 @@
 已增加 ARM/Intel 运行器选项，用于一次受控兼容性对照，不用于无限重复登录。Go 缓存仅保存依赖和编译对象，不保存 Apple 账号、会话或 IPA。未实现长期登录会话的保存和复用。
 
 上方旧版说明中的 requires_2fa 不再用来解释该通用 BadLogin 响应。只有获得进一步可验证证据后，才可定位具体账号或协议问题。
+
+[ARM 对照验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41725046970)同样通过回归测试和构建，真实登录仍返回 authentication_unresolved_generic_bad_login。切换这两种 GitHub 托管运行器未解决问题；不能由此宣称已排除所有网络或协议因素。原始 IPA 仍未获取。需要替代认证实现或可验证的合法会话来源，不能靠修改状态名、禁用认证检查或无限重试获得真实授权。
