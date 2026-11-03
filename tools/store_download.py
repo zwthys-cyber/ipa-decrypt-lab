@@ -49,9 +49,17 @@ def metadata(identifier):
 
 def acquire(binary, engine, target, email, password, code):
     identifier = app_id(target)
-    metadata(identifier)  # Enforce free current US application before license acquisition.
+    try:
+        metadata(identifier)  # Enforce free current US application before license acquisition.
+    except Exception:
+        return {"status": "metadata_lookup_failed", "downloaded": False, "decryption_proven": False}
     passphrase = secrets.token_urlsafe(32)
-    state = login(binary, email, password, code, passphrase)
+    try:
+        state = login(binary, email, password, code, passphrase)
+    except subprocess.TimeoutExpired:
+        return {"status": "authentication_timeout", "downloaded": False, "decryption_proven": False}
+    except Exception:
+        return {"status": "authentication_setup_failed", "downloaded": False, "decryption_proven": False}
     if state != "authenticated":
         return {"status": state, "downloaded": False, "decryption_proven": False}
     try:

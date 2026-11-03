@@ -61,6 +61,7 @@ jobs:
           set +e
           python3 tools/store_download.py --ipatool "$RUNNER_TEMP/ipatool" --engine build/ipa-engine --target "$IPA_TARGET" > "$RUNNER_TEMP/store-summary.json"
           trial_status=$?
+          cat "$RUNNER_TEMP/store-summary.json"
           {
             echo '### Original IPA acquisition'
             cat "$RUNNER_TEMP/store-summary.json"
