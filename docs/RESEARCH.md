@@ -1,0 +1,31 @@
+# 第二阶段验证记录
+
+验证提交：`3b4adddd913778fcdcc9ba45ecb92bbe7d0cf61b`
+
+[GitHub Actions 验证运行](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41713104024)
+
+## 已完成证据
+
+- Intel macOS 与 Linux：原生程序编译通过，二进制契约测试和 IPA 包检查测试通过。
+- Intel macOS 的原生 remap 合成试验：调用实际发生，返回 -1，errno=45，未完成映射读取，未产生解密结果。
+- Darwin 的 errno=45 对应 ENOTSUP，即操作不受支持。该结果来自特定 GitHub 运行器、特定合成调用，不推广为所有 Mac 或所有真实应用的结论。
+- ARM macOS 仍需以同一运行内对应 job 的最终状态和 native-selftest.json 为准；未运行不能当通过。
+
+## 本次试验边界
+
+样本完全由程序生成，不含 Apple 授权记录，不使用 Apple 账号、个人手机、真实 IPA 或第三方服务。原生 API 对此样本拒绝，不是应用授权失败的完整诊断，也不能证明登录账号后一定可行。
+
+IPA 包检查器只验证结构、读取边界、架构和加密标志。它不验证原始明文、不运行应用、不修复签名，也不会输出可以安装的 IPA。
+
+## 下一步真实解密的必要门槛
+
+1. 找到在用户基础设施约束下可运行、可验证的授权与解密路径。GitHub 编译机和原生函数符号本身不是账号凭据。
+2. 在不将真实应用或账号信息公开到此仓库和日志的前提下，确定可用的测试数据与结果验证方式。
+3. 通过已知正确数据或独立运行验证证明明文正确。不得只凭 cryptid=0、字节变化、API 返回0或CI绿色宣告成功。
+4. 上述门槛未通过前，不提供收费解密结果、不启用收费假任务流程、不承诺独立解密任意 App Store 应用。
+
+## 系统约束
+
+所有构建、测试、试运行仅在 GitHub-hosted Actions。无 Debian 项目运行、无个人手机节点、无第三方收费 API。商业生产部署仍未获授权；Actions 不作为常驻服务。
+
+参考：[Apple errno.h](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/errno.h)、[Apple kern_mman.c](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_mman.c)。
