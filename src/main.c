@@ -14,7 +14,7 @@
 #include <sys/utsname.h>
 #endif
 
-#define MAX_INPUT (512U * 1024U * 1024U)
+#define IPA_LAB_MAX_INPUT (512U * 1024U * 1024U)
 #define ARM64_CPU 0x0100000cU
 
 typedef struct {
@@ -74,7 +74,7 @@ static unsigned char *load(const char *path, size_t *n) {
     if (fd < 0) { perror("open input"); return NULL; }
     struct stat st;
     if (fstat(fd, &st) || !S_ISREG(st.st_mode) || st.st_size < 0 ||
-        (uint64_t)st.st_size > MAX_INPUT) {
+        (uint64_t)st.st_size > IPA_LAB_MAX_INPUT) {
         close(fd); fail("input must be a regular file, at most 512 MiB"); return NULL;
     }
     *n = (size_t)st.st_size;
