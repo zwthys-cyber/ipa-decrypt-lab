@@ -13,6 +13,7 @@
 #include <dlfcn.h>
 #include <sys/utsname.h>
 #include <signal.h>
+#include <sys/sysctl.h>
 #endif
 
 #define IPA_LAB_MAX_INPUT (512U * 1024U * 1024U)
@@ -97,8 +98,8 @@ static int attempt(const char *input, const char *output, unsigned char *p, size
     if (im->cpu != ARM64_CPU || !im->has_encryption || im->cryptid != 1U)
         return fail("native research backend requires an encrypted arm64 image with cryptid=1");
     long page = sysconf(_SC_PAGESIZE);
-    if (page <= 0 || im->cryptoff % (uint32_t)page || im->cryptsize % (uint32_t)page)
-        return fail("encrypted range is not host-page aligned; backend unsupported");
+    if (page <= 0 || im->cryptoff % (uint32_t)page)
+        return fail("encrypted start is not host-page aligned; backend unsupported");
     RemapFn remap = (RemapFn)dlsym(RTLD_DEFAULT, "mremap_encrypted");
     if (!remap) return fail("native FairPlay remap symbol unavailable");
     /* The system still requires valid account licenses and platform support.
@@ -109,9 +110,17 @@ static int attempt(const char *input, const char *output, unsigned char *p, size
     close(fd);
     if (map == MAP_FAILED) return fail("cannot map source image");
     unsigned char *region = (unsigned char *)map + im->cryptoff;
+    /* XNU checks the start alignment and rounds the end internally. A final
+       partial host page is valid; copy only the original cryptsize bytes. */
+    puts("{\"event\":\"native_call\",\"requested_cryptid\":2}");
+    fflush(stdout);
+    errno = 0;
     int rc = remap(region, im->cryptsize, 2U, im->cpu, im->subtype);
+    int call_errno = errno;
+    printf("{\"event\":\"native_return\",\"return_code\":%d,\"errno\":%d}\n", rc, call_errno);
+    fflush(stdout);
     if (rc != 0) {
-        fprintf(stderr, "native backend refused request (errno=%d); license/platform may be unavailable\n", errno);
+        fprintf(stderr, "native backend refused request (errno=%d); license/platform may be unavailable\n", call_errno);
         munmap(map, n); return -1;
     }
     /* Reads can SIGBUS even after remap returned success. Caller isolates this
@@ -240,8 +249,11 @@ int main(int argc, char **argv) {
 #ifdef __APPLE__
         struct utsname os;
         if (uname(&os)) return 1;
-        printf("{\"platform\":\"macOS\",\"architecture\":\"%s\",\"native_symbol_available\":%s,\"account_authorization_verified\":false,\"decryption_proven\":false}\n",
-            os.machine, dlsym(RTLD_DEFAULT, "mremap_encrypted") ? "true" : "false");
+        int virtualized = -1;
+        size_t virtualized_size = sizeof(virtualized);
+        if (sysctlbyname("kern.hv_vmm_present", &virtualized, &virtualized_size, NULL, 0)) virtualized = -1;
+        printf("{\"platform\":\"macOS\",\"architecture\":\"%s\",\"page_size\":%ld,\"virtualized\":%d,\"native_symbol_available\":%s,\"account_authorization_verified\":false,\"decryption_proven\":false}\n",
+            os.machine, sysconf(_SC_PAGESIZE), virtualized, dlsym(RTLD_DEFAULT, "mremap_encrypted") ? "true" : "false");
 #else
         puts("{\"platform\":\"non-macOS\",\"native_symbol_available\":false,\"account_authorization_verified\":false,\"decryption_proven\":false}");
 #endif

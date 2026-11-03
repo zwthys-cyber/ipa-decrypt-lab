@@ -12,3 +12,5 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_test(NAME parser-contract COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/contracts.py $<TARGET_FILE:ipa-engine>)
 add_test(NAME ipa-archive-contract COMMAND ${Python3_EXECUTABLE} -m unittest discover -s ${CMAKE_CURRENT_SOURCE_DIR}/tests -p test_ipa_audit.py -v)
 add_test(NAME private-trial-contract COMMAND ${Python3_EXECUTABLE} -m unittest discover -s ${CMAKE_CURRENT_SOURCE_DIR}/tests -p test_private_trial.py -v)
+
+add_test(NAME license-staging-contract COMMAND ${Python3_EXECUTABLE} -m unittest discover -s ${CMAKE_CURRENT_SOURCE_DIR}/tests -p test_license_stage.py -v)

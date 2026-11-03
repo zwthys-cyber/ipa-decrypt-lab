@@ -41,6 +41,20 @@ class Contracts(unittest.TestCase):
         report = json.loads(r.stdout)
         self.assertIs(report["decryption_proven"], False)
         self.assertIs(report["account_authorization_verified"], False)
+    def test_partial_host_page_length_reaches_native_call(self):
+        probe = json.loads(subprocess.run([ENGINE, "probe"], check=True, capture_output=True,
+                                         text=True, timeout=5).stdout)
+        if probe.get("platform") != "macOS" or not probe.get("native_symbol_available"):
+            self.skipTest("requires macOS native symbol")
+        page = probe["page_size"]
+        source = self.root / "sample"
+        data = image(cryptoff=page, cryptsize=4096).ljust(page + 4096, b"\0")
+        source.write_bytes(data)
+        result = subprocess.run([ENGINE, "attempt", str(source), str(self.root/"candidate")],
+                                capture_output=True, text=True, timeout=35)
+        self.assertIn('"event":"native_call"', result.stdout)
+        self.assertFalse((self.root/"candidate").exists())
+
     def test_encrypted_flag_is_reported(self):
         r = self.run_image(image())
         self.assertEqual(r.returncode, 0, r.stderr)

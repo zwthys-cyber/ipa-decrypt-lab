@@ -67,6 +67,8 @@ jobs:
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build --parallel 2
+          ulimit -c 0
+          ctest --test-dir build --output-on-failure
       - name: Save public-source build cache before credentials are supplied
         if: steps.swift-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
