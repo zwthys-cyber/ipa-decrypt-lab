@@ -26,7 +26,17 @@ Source review:
 
 There is no matching private model configured in this repository at the time of this implementation. This update does not claim to have recovered one, and does not perform a new failed remap experiment. The user's personal phone and Debian server are not used.
 
-The engine compilation and adapter are ready for CI verification; real offline decryption remains gated on matching enrollment material. No paid Telegram decryption service is ready.
+## Verified CI result
+
+Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41737576446 completed successfully on commit 0d659ffb969370f8189b0f107075bb64dc8402e3.
+
+- Linux x86_64 engine compilation passed.
+- Upstream internal/fairplay and cmd/unfairplay tests passed, including synthetic wrong-page-key rejection and pre-encryption hash checks.
+- 52 Python tests passed, including missing-model early exit, full encrypted-image coverage requirements, private model permissions, environment filtering and cleanup.
+- The no-model probe returned missing_enrollment_model, with decryption_proven=false, plaintext_verified=false and runtime_verified=false.
+- No Apple login, real IPA, enrollment collection or private-model recovery occurred in this run.
+
+The engine compilation and adapter are verified under these synthetic conditions; real offline decryption remains gated on matching enrollment material. No paid Telegram decryption service is ready.
 
 ## Pinned engine and notices
 
