@@ -6,10 +6,11 @@
 
 ## 已完成证据
 
-- Intel macOS 与 Linux：原生程序编译通过，二进制契约测试和 IPA 包检查测试通过。
+- ARM macOS、Intel macOS 与 Linux：原生程序编译通过，二进制契约测试和 IPA 包检查测试通过。
 - Intel macOS 的原生 remap 合成试验：调用实际发生，返回 -1，errno=45，未完成映射读取，未产生解密结果。
 - Darwin 的 errno=45 对应 ENOTSUP，即操作不受支持。该结果来自特定 GitHub 运行器、特定合成调用，不推广为所有 Mac 或所有真实应用的结论。
-- ARM macOS 仍需以同一运行内对应 job 的最终状态和 native-selftest.json 为准；未运行不能当通过。
+- ARM macOS 的同一原生 remap 合成试验：调用实际发生，返回 -1，errno=1（EPERM，操作不被允许），未完成映射读取，未产生解密结果。
+- 三个平台 Actions 最终均为 success：这里的成功只代表构建、契约测试和诊断正常完成，不代表原生解密成功。
 
 ## 本次试验边界
 
