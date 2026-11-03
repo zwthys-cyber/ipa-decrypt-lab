@@ -130,7 +130,7 @@ func scan(_ app: AXUIElement) -> UIResult {
             result.welcomeSeen = true
             result.knownLabels.insert("welcome")
         }
-        if strings.contains(where: { ["continue", "继续"].contains($0) }) {
+        if strings.contains(where: { ["continue", "get started", "继续", "开始使用"].contains($0) }) {
             result.knownLabels.insert("continue")
             if enabled && pressable && result.welcomeContinue == nil { result.welcomeContinue = item }
         }
@@ -195,16 +195,22 @@ if let application = application, AXIsProcessTrusted() {
     _ = AXUIElementSetMessagingTimeout(element, 0.5)
     var before = scan(element)
     report["ui_before"] = before.report
-    // A fresh, account-free launch may show an introduction without a "Welcome" heading.
-    // Never advance a credential form or an account-security prompt.
-    if before.signIn == nil && !before.securityPrompt && before.textFields == 0
-        && before.secureFields == 0 && before.windows == 1,
-       let button = before.welcomeContinue {
-        report["welcome_continue_result"] = Int(AXUIElementPerformAction(button, kAXPressAction as CFString).rawValue)
+    // First-launch privacy/recommendation pages can appear asynchronously.
+    // This probe has no credentials; never advance a credential/security form.
+    var introductionActions = 0
+    for _ in 0..<3 {
+        if before.signIn != nil || before.securityPrompt || before.emailFields > 0 || before.secureFields > 0 { break }
+        guard before.words.contains("privacy") || before.words.contains("personalized") || before.welcomeSeen else { break }
+        if let button = before.welcomeContinue {
+            let action = AXUIElementPerformAction(button, kAXPressAction as CFString)
+            if action != .success { break }
+            introductionActions += 1
+        }
         RunLoop.current.run(until: Date().addingTimeInterval(5))
         before = scan(element)
         report["ui_after_welcome"] = before.report
     }
+    report["introduction_actions"] = introductionActions
     if before.signIn == nil, let menu = before.storeMenu {
         report["store_menu_press_result"] = Int(AXUIElementPerformAction(menu, kAXPressAction as CFString).rawValue)
         RunLoop.current.run(until: Date().addingTimeInterval(2))

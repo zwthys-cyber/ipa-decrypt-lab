@@ -48,6 +48,9 @@ def clean(value):
                          "AXMenuBar", "AXMenuBarItem", "AXMenu", "AXMenuItem", "AXScrollArea", "AXImage", "other"}
                 result[key]["roles"] = {k: v for k, v in roles.items()
                                         if k in names and type(v) is int and 0 <= v <= 512}
+    actions = value.get("introduction_actions")
+    if type(actions) is int and 0 <= actions <= 3:
+        result["introduction_actions"] = actions
     press = value.get("sign_in_press_result")
     if type(press) is int and -26000 <= press <= 0:
         result["sign_in_press_result"] = press
