@@ -35,6 +35,8 @@ struct UIResult {
     var signInSeen = false
     var welcomeSeen = false
     var welcomeContinue: AXUIElement?
+    var storeMenu: AXUIElement?
+    var securityPrompt = false
     var knownLabels: Set<String> = []
     var roles: [String: Int] = [:]
     var report: [String: Any] {
@@ -42,7 +44,7 @@ struct UIResult {
          "secure_fields": secureFields, "sign_in_control_found": signIn != nil,
          "scan_limited": limited, "sign_in_label_seen": signInSeen,
          "welcome_seen": welcomeSeen, "continue_control_found": welcomeContinue != nil,
-         "known_labels": knownLabels.sorted(), "roles": roles]
+         "known_labels": knownLabels.sorted(), "roles": roles, "security_prompt": securityPrompt]
     }
 }
 func scan(_ app: AXUIElement) -> UIResult {
@@ -80,7 +82,7 @@ func scan(_ app: AXUIElement) -> UIResult {
         let pressable = AXUIElementCopyActionNames(item, &actions) == .success
             && ((actions as? [String]) ?? []).contains(kAXPressAction)
         let enabled = attribute(item, kAXEnabledAttribute) as? Bool == true
-        if strings.contains(where: { ["sign in", "sign in to the app store", "登录", "登入"].contains($0) }) {
+        if strings.contains(where: { $0.hasPrefix("sign in") || ["登录", "登入"].contains($0) }) {
             result.signInSeen = true
             result.knownLabels.insert("sign_in")
             if enabled && pressable && result.signIn == nil { result.signIn = item }
@@ -93,11 +95,15 @@ func scan(_ app: AXUIElement) -> UIResult {
             result.knownLabels.insert("continue")
             if enabled && pressable && result.welcomeContinue == nil { result.welcomeContinue = item }
         }
+        if strings.contains(where: { text in ["security", "two-factor", "authentication", "升级", "认证", "安全"].contains(where: { text.contains($0) }) }) {
+            result.securityPrompt = true
+        }
         if strings.contains(where: { ["account", "账户", "帐户"].contains($0) }) {
             result.knownLabels.insert("account")
         }
         if strings.contains(where: { ["store", "商店"].contains($0) }) {
             result.knownLabels.insert("store")
+            if enabled && pressable && role == kAXMenuBarItemRole { result.storeMenu = item }
         }
         for key in [kAXChildrenAttribute, "AXContents", "AXVisibleChildren", "AXChildrenInNavigationOrder"] {
             if let children = attribute(item, key) as? [AXUIElement] {
@@ -150,11 +156,21 @@ if let application = application, AXIsProcessTrusted() {
     _ = AXUIElementSetMessagingTimeout(element, 0.5)
     var before = scan(element)
     report["ui_before"] = before.report
-    if before.signIn == nil && before.welcomeSeen, let button = before.welcomeContinue {
+    // A fresh, account-free launch may show an introduction without a "Welcome" heading.
+    // Never advance a credential form or an account-security prompt.
+    if before.signIn == nil && !before.securityPrompt && before.textFields == 0
+        && before.secureFields == 0 && before.windows == 1,
+       let button = before.welcomeContinue {
         report["welcome_continue_result"] = Int(AXUIElementPerformAction(button, kAXPressAction as CFString).rawValue)
         RunLoop.current.run(until: Date().addingTimeInterval(5))
         before = scan(element)
         report["ui_after_welcome"] = before.report
+    }
+    if before.signIn == nil, let menu = before.storeMenu {
+        report["store_menu_press_result"] = Int(AXUIElementPerformAction(menu, kAXPressAction as CFString).rawValue)
+        RunLoop.current.run(until: Date().addingTimeInterval(2))
+        before = scan(element)
+        report["ui_after_store_menu"] = before.report
     }
     if CommandLine.arguments.contains("--open-signin"), let button = before.signIn {
         let status = AXUIElementPerformAction(button, kAXPressAction as CFString)

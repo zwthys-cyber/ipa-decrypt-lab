@@ -24,11 +24,11 @@ def clean(value):
         if isinstance(value.get(key), dict):
             result[key] = {k: v for k, v in value[key].items()
                            if k in {"native_sidb", "native_sids", "shared_sidb"} and type(v) is bool}
-    for key in ("ui_before", "ui_after_welcome", "ui_after"):
+    for key in ("ui_before", "ui_after_welcome", "ui_after_store_menu", "ui_after"):
         if isinstance(value.get(key), dict):
             result[key] = {k: v for k, v in value[key].items()
                            if (k in COUNTS and type(v) is int and 0 <= v <= 512)
-                           or (k in {"sign_in_control_found", "scan_limited", "sign_in_label_seen", "welcome_seen", "continue_control_found"} and type(v) is bool)}
+                           or (k in {"sign_in_control_found", "scan_limited", "sign_in_label_seen", "welcome_seen", "continue_control_found", "security_prompt"} and type(v) is bool)}
             labels = value[key].get("known_labels", [])
             if isinstance(labels, list):
                 result[key]["known_labels"] = sorted({x for x in labels if type(x) is str and
@@ -51,7 +51,7 @@ def main():
     else:
         try:
             run = subprocess.run(["./enrollment-environment", "--open-signin"],
-                                 capture_output=True, text=True, timeout=70, stdin=subprocess.DEVNULL)
+                                 capture_output=True, text=True, timeout=100, stdin=subprocess.DEVNULL)
             if run.returncode == 0 and len(run.stdout) <= 16384:
                 result = clean(json.loads(run.stdout))
         except subprocess.TimeoutExpired:
