@@ -40,6 +40,7 @@ DOWNLOAD_STAGES = {
     "resolve_version", "request_product", "acquire_free_license",
     "inspect_download", "download_bytes", "inject_signature",
     "validate_platform", "publish_file", "parse_product", "validate_product",
+    "resolve_ent_endpoint", "generate_kbsync", "request_ent_product", "validate_ent_product",
 }
 
 def download_diagnostics(result):
@@ -62,6 +63,8 @@ def download_diagnostics(result):
                   and len(code) == 3 and 100 <= int(code) <= 599]
     if http_codes:
         diagnostic["http_statuses"] = http_codes[-8:]
+    if "IPA_LAB_LICENSE:unconfirmed_5002" in result.stdout.splitlines():
+        diagnostic["purchase_5002_unconfirmed"] = True
     return diagnostic
 
 def run(binary, args, env):
