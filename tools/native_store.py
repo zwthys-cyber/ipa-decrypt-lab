@@ -1,5 +1,5 @@
 """Independent Swift authentication/download trial; GitHub-hosted only."""
-import argparse, json, os, subprocess, tempfile
+import argparse, json, os, re, subprocess, tempfile
 from pathlib import Path
 from store_download import app_id, metadata
 from private_trial import evaluate
@@ -51,6 +51,9 @@ def download_diagnostics(result):
     codes = [int(code) for code in codes if code.isascii() and code.isdigit() and len(code) <= 5]
     diagnostic = {"stage": stages[-1] if stages else "before_download",
                   "exit_code": result.returncode}
+    if not codes:
+        codes = [int(code) for code in re.findall(r"failureType:\s*([0-9]{1,5})(?![0-9])",
+                                                result.stderr)]
     if codes:
         diagnostic["apple_failure_code"] = codes[-1]
     http_codes = [line.removeprefix("IPA_LAB_HTTP:") for line in result.stdout.splitlines()
