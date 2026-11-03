@@ -54,6 +54,20 @@ def clean(value):
     press = value.get("sign_in_press_result")
     if type(press) is int and -26000 <= press <= 0:
         result["sign_in_press_result"] = press
+    auth = value.get("authentication")
+    if isinstance(auth, dict):
+        statuses = {
+            "missing_credentials", "native_login_form_unavailable", "native_email_input_failed",
+            "native_password_input_failed", "native_submit_unavailable", "native_verification_required",
+            "native_login_rejected", "native_security_choice_unresolved", "native_password_submit_unavailable",
+            "native_ui_indicates_signed_in", "native_login_unresolved",
+        }
+        result["authentication"] = {
+            "status": auth["status"] if auth.get("status") in statuses else "native_login_unresolved",
+            **{key: auth[key] for key in ("account_login_attempted", "password_submitted",
+               "optional_upgrade_declined", "enrollment_created", "decryption_proven")
+               if type(auth.get(key)) is bool},
+        }
     return result
 
 def main():
@@ -62,8 +76,11 @@ def main():
         result["status"] = "requires_github_actions"
     else:
         try:
-            run = subprocess.run(["./enrollment-environment", "--open-signin"],
-                                 capture_output=True, text=True, timeout=100, stdin=subprocess.DEVNULL)
+            command = ["./enrollment-environment", "--open-signin"]
+            if os.environ.get("LAB_NATIVE_UI_AUTH") == "1":
+                command.append("--authenticate")
+            run = subprocess.run(command,
+                                 capture_output=True, text=True, timeout=220, stdin=subprocess.DEVNULL)
             if run.returncode == 0 and len(run.stdout) <= 16384:
                 result = clean(json.loads(run.stdout))
         except subprocess.TimeoutExpired:
@@ -75,7 +92,7 @@ def main():
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
             fence = chr(96) * 3
-            summary.write("Account-free native App Store capability probe. No enrollment or decryption proof.\n\n"
+            summary.write("Native App Store research probe. UI and path visibility are not enrollment or decryption proof.\n\n"
                           + fence + "json\n" + output + "\n" + fence + "\n")
     return 0 if result["status"] in {"probe_complete", "app_store_not_found"} else 2
 

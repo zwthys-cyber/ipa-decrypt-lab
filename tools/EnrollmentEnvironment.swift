@@ -64,6 +64,14 @@ struct UIResult {
     var roles: [String: Int] = [:]
     var words: Set<String> = []
     var emailFields = 0
+    var emailInput: AXUIElement?
+    var passwordInput: AXUIElement?
+    var signOut: AXUIElement?
+    var declineUpgrade: AXUIElement?
+    var otherOptions: AXUIElement?
+    var upgradePrompt = false
+    var verificationPrompt = false
+    var errorPrompt = false
     var report: [String: Any] {
         ["window_count": windows, "nodes_examined": nodes, "text_fields": textFields,
          "secure_fields": secureFields, "sign_in_control_found": signIn != nil,
@@ -98,8 +106,12 @@ func scan(_ app: AXUIElement) -> UIResult {
         let knownRole = ["AXWindow", "AXGroup", "AXButton", "AXStaticText", "AXTextField", "AXWebArea", "AXMenuBar", "AXMenuBarItem", "AXMenu", "AXMenuItem", "AXScrollArea", "AXImage"].contains(role) ? role : "other"
         result.roles[knownRole, default: 0] += 1
         if role == kAXTextFieldRole { result.textFields += 1 }
-        if subrole == kAXSecureTextFieldSubrole { result.secureFields += 1 }
-        let strings = [kAXTitleAttribute, kAXDescriptionAttribute, kAXValueAttribute, "AXHelp", "AXPlaceholderValue"].compactMap {
+        if subrole == kAXSecureTextFieldSubrole { result.secureFields += 1; result.passwordInput = item }
+        // Never read credential field values into text diagnostics.
+        let attributes = role == kAXTextFieldRole
+            ? [kAXTitleAttribute, kAXDescriptionAttribute, "AXHelp", "AXPlaceholderValue"]
+            : [kAXTitleAttribute, kAXDescriptionAttribute, kAXValueAttribute, "AXHelp", "AXPlaceholderValue"]
+        let strings = attributes.compactMap {
             attribute(item, $0) as? String
         }.map {
             $0.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -114,7 +126,7 @@ func scan(_ app: AXUIElement) -> UIResult {
         for word in vocabulary where strings.contains(where: { $0.contains(word) }) { result.words.insert(word) }
         if role == kAXTextFieldRole && strings.contains(where: { value in
             ["email", "apple account", "apple id", "phone"].contains(where: { value.contains($0) })
-        }) { result.emailFields += 1 }
+        }) { result.emailFields += 1; result.emailInput = item }
         var actions: CFArray?
         let pressable = AXUIElementCopyActionNames(item, &actions) == .success
             && ((actions as? [String]) ?? []).contains(kAXPressAction)
@@ -137,6 +149,20 @@ func scan(_ app: AXUIElement) -> UIResult {
         if strings.contains(where: { text in ["security", "two-factor", "authentication", "升级", "认证", "安全"].contains(where: { text.contains($0) }) }) {
             result.securityPrompt = true
         }
+        if strings.contains(where: { $0.contains("upgrade") || $0.contains("升级") }) { result.upgradePrompt = true }
+        if strings.contains(where: { text in ["verification code", "six-digit", "验证码"].contains(where: { text.contains($0) }) }) {
+            result.verificationPrompt = true
+        }
+        if strings.contains(where: { text in ["incorrect", "could not sign", "cannot sign", "unable to sign", "could not be verified", "account is locked", "密码错误"].contains(where: { text.contains($0) }) }) {
+            result.errorPrompt = true
+        }
+        if strings.contains(where: { ["sign out", "退出登录", "登出"].contains($0) }), let target = pressTarget(item) { result.signOut = target }
+        if strings.contains(where: { ["don't upgrade", "don’t upgrade", "do not upgrade", "not now", "不升级", "稍后"].contains($0) }), let target = pressTarget(item) {
+            result.declineUpgrade = target
+        }
+        if strings.contains(where: { ["other options", "其他选项"].contains($0) }), let target = pressTarget(item) {
+            result.otherOptions = target
+        }
         if strings.contains(where: { ["account", "账户", "帐户"].contains($0) }) {
             result.knownLabels.insert("account")
         }
@@ -156,6 +182,82 @@ func scan(_ app: AXUIElement) -> UIResult {
     if cursor < queue.count { result.limited = true }
     return result
 }
+
+func fill(_ field: AXUIElement, _ text: String) -> Bool {
+    guard AXUIElementSetAttributeValue(field, kAXFocusedAttribute as CFString, kCFBooleanTrue) == .success else { return false }
+    guard AXUIElementSetAttributeValue(field, kAXValueAttribute as CFString, text as CFString) == .success else { return false }
+    // Commit the edit without invoking a default security/upgrade action.
+    let source = CGEventSource(stateID: .hidSystemState)
+    let down = CGEvent(keyboardEventSource: source, virtualKey: 48, keyDown: true)
+    let up = CGEvent(keyboardEventSource: source, virtualKey: 48, keyDown: false)
+    down?.post(tap: .cghidEventTap)
+    up?.post(tap: .cghidEventTap)
+    RunLoop.current.run(until: Date().addingTimeInterval(1))
+    return true
+}
+func nativeLogin(_ element: AXUIElement, email: String, password: String) -> [String: Any] {
+    var result: [String: Any] = ["status": "native_login_form_unavailable", "account_login_attempted": false,
+                                 "password_submitted": false, "optional_upgrade_declined": false,
+                                 "enrollment_created": false, "decryption_proven": false]
+    var form = scan(element)
+    guard !form.scanLimitedForAuthentication, form.emailFields == 1, let field = form.emailInput else { return result }
+    guard !form.verificationPrompt && !form.upgradePrompt else { return result }
+    guard fill(field, email) else { result["status"] = "native_email_input_failed"; return result }
+    form = scan(element)
+    var passwordSent = false
+    if form.secureFields == 1, let secure = form.passwordInput {
+        guard fill(secure, password) else { result["status"] = "native_password_input_failed"; return result }
+        passwordSent = true
+        form = scan(element)
+    }
+    guard let submit = form.signIn, AXUIElementPerformAction(submit, kAXPressAction as CFString) == .success else {
+        result["status"] = "native_submit_unavailable"; return result
+    }
+    result["account_login_attempted"] = true
+    result["password_submitted"] = passwordSent
+    var upgradeActions = 0
+    let end = Date().addingTimeInterval(75)
+    while Date() < end {
+        RunLoop.current.run(until: Date().addingTimeInterval(4))
+        form = scan(element)
+        if form.verificationPrompt { result["status"] = "native_verification_required"; return result }
+        if form.errorPrompt { result["status"] = "native_login_rejected"; return result }
+        if form.upgradePrompt && form.securityPrompt {
+            if let decline = form.declineUpgrade, upgradeActions < 2 {
+                guard AXUIElementPerformAction(decline, kAXPressAction as CFString) == .success else { break }
+                result["optional_upgrade_declined"] = true
+                upgradeActions += 1
+                continue
+            }
+            if let other = form.otherOptions, upgradeActions == 0 {
+                guard AXUIElementPerformAction(other, kAXPressAction as CFString) == .success else { break }
+                upgradeActions += 1
+                continue
+            }
+            result["status"] = "native_security_choice_unresolved"; return result
+        }
+        if !passwordSent && form.secureFields == 1, let secure = form.passwordInput {
+            guard fill(secure, password) else { result["status"] = "native_password_input_failed"; return result }
+            form = scan(element)
+            guard let submit = form.signIn, AXUIElementPerformAction(submit, kAXPressAction as CFString) == .success else {
+                result["status"] = "native_password_submit_unavailable"; return result
+            }
+            passwordSent = true
+            result["password_submitted"] = true
+            continue
+        }
+        if passwordSent && form.signOut != nil && form.emailFields == 0 && form.secureFields == 0 {
+            result["status"] = "native_ui_indicates_signed_in"
+            return result
+        }
+    }
+    result["status"] = "native_login_unresolved"
+    return result
+}
+extension UIResult {
+    var scanLimitedForAuthentication: Bool { limited }
+}
+
 var report: [String: Any] = [
     "schema": "ipa-lab-enrollment-environment-v1", "status": "probe_complete",
     "account_credentials_supplied": false, "account_login_attempted": false,
@@ -222,6 +324,17 @@ if let application = application, AXIsProcessTrusted() {
         report["sign_in_press_result"] = Int(status.rawValue)
         RunLoop.current.run(until: Date().addingTimeInterval(3))
         report["ui_after"] = scan(element).report
+    }
+    if CommandLine.arguments.contains("--authenticate") {
+        let env = ProcessInfo.processInfo.environment
+        if let email = env["APPLE_ID"], !email.isEmpty, let password = env["APPLE_PASSWORD"], !password.isEmpty {
+            report["account_credentials_supplied"] = true
+            let auth = nativeLogin(element, email: email, password: password)
+            report["authentication"] = auth
+            report["account_login_attempted"] = auth["account_login_attempted"]
+        } else {
+            report["authentication"] = ["status": "missing_credentials"]
+        }
     }
     _ = application.terminate()
 } else if let application = application {

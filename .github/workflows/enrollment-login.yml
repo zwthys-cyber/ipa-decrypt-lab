@@ -1,0 +1,28 @@
+name: Native App Store enrollment login trial
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-app-store-account-trial
+  cancel-in-progress: false
+jobs:
+  login:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Compile native UI research helper before supplying credentials
+        run: swiftc -swift-version 5 -framework AppKit -framework ApplicationServices -framework SystemConfiguration tools/EnrollmentEnvironment.swift -o enrollment-environment
+      - name: One native account login with private diagnostics
+        timeout-minutes: 4
+        env:
+          LAB_NATIVE_UI_AUTH: '1'
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        run: |
+          ulimit -c 0
+          python3 tools/enrollment_environment.py
