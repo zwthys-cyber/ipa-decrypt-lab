@@ -57,3 +57,7 @@ GitHub macOS 虚拟机不是已授权的 App Store 解密节点。编译成功�
 - tools/ipa_audit.py 直接读取 ZIP，不提取文件到磁盘。扫描主程序、扩展、框架和 FAT 内所有架构；支持 32/64 位 Mach-O，检查重复路径、路径穿越、符号链接及读取预算。
 - 报告区分 encrypted_slices_present 与 no_encrypted_flags_found，两者均不声明 plaintext_verified 或 runtime_verified。
 - 完整 IPA 的解密、重打包和真实应用授权初始化仍未实现。工具不会把原有 IPA 修改成“假砸壳包”。
+
+## 第三阶段：原生调用对照
+
+diagnose 命令分别以 cryptid=0、1、2 调用同一接口，每组都在独立子进程中执行，输出 native-controls.jsonl。0 是不加密控制组：即使返回成功也绝不代表 FairPlay 解密成功。1、2 分别检查应用及模型加密调用路径。所有样本仍无 Apple 授权，失败结果不能精确等同于“缺账号”。
