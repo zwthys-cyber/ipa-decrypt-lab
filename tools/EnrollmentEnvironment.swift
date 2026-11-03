@@ -1,4 +1,4 @@
-// Account-free capability probe; run only on a disposable GitHub-hosted Mac.
+// Native App Store enrollment research; run only on a disposable GitHub-hosted Mac.
 import Foundation
 import AppKit
 import ApplicationServices

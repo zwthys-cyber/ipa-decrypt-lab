@@ -1,4 +1,4 @@
-"""Publish only bounded, account-free probe results; discard native diagnostics."""
+"""Publish only bounded native UI research results; discard raw diagnostics."""
 import json
 import os
 import subprocess
@@ -68,6 +68,9 @@ def clean(value):
                "optional_upgrade_declined", "enrollment_created", "decryption_proven")
                if type(auth.get(key)) is bool},
         }
+        # UI state never establishes enrollment recovery or plaintext verification.
+        result["authentication"].update(enrollment_created=False, decryption_proven=False)
+    result.update(enrollment_created=False, decryption_proven=False)
     return result
 
 def main():
@@ -94,6 +97,8 @@ def main():
             fence = chr(96) * 3
             summary.write("Native App Store research probe. UI and path visibility are not enrollment or decryption proof.\n\n"
                           + fence + "json\n" + output + "\n" + fence + "\n")
+    if os.environ.get("LAB_NATIVE_UI_AUTH") == "1":
+        return 0 if result.get("authentication", {}).get("status") == "native_ui_indicates_signed_in" else 2
     return 0 if result["status"] in {"probe_complete", "app_store_not_found"} else 2
 
 if __name__ == "__main__":
