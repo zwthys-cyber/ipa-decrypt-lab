@@ -10,3 +10,6 @@
 - Keep research results candid: missing credentials/platform support must fail explicitly; never clear cryptid to pretend decryption succeeded.
 - Pin action revisions; use read-only workflow permissions, bounded timeouts and short artifact retention.
 - GitHub Actions is a bounded build/research environment, not permanent production hosting.
+
+- The account owner declines the optional two-factor security upgrade. Never enable or accept that upgrade automatically.
+- Do not infer an enabled two-factor setting or a definite verification challenge from MZFinance.BadLogin.Configurator_message. Treat it as ambiguous until stronger response evidence is available.
