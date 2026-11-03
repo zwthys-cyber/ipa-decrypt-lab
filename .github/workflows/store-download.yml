@@ -12,6 +12,14 @@ on:
         default: '6599842047'
         required: true
         type: string
+      runner:
+        description: GitHub macOS runner for controlled compatibility comparison
+        default: macos-15-intel
+        required: true
+        type: choice
+        options:
+          - macos-15-intel
+          - macos-15
 permissions:
   contents: read
 concurrency:
@@ -20,7 +28,7 @@ concurrency:
 jobs:
   downloader:
     if: github.ref == 'refs/heads/main'
-    runs-on: macos-15-intel
+    runs-on: ${{ inputs.runner || 'macos-15-intel' }}
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
