@@ -32,8 +32,8 @@ def require(ok, message):
         raise AuditError(message)
 
 def thin(data):
-    require(data[:4] in MAGICS, "unsupported or invalid Mach-O magic")
-    endian, header_size = MAGICS[data[:4]]
+    require(bytes(data[:4]) in MAGICS, "unsupported or invalid Mach-O magic")
+    endian, header_size = MAGICS[bytes(data[:4])]
     require(len(data) >= header_size, "truncated Mach-O header")
     cpu, subtype = struct.unpack_from(endian + "II", data, 4)
     count, command_bytes = struct.unpack_from(endian + "II", data, 16)
@@ -60,9 +60,9 @@ def thin(data):
             "encryption": encryption, "runtime_verified": False}
 
 def macho(data):
-    if data[:4] not in FAT_MAGICS:
+    if bytes(data[:4]) not in FAT_MAGICS:
         return [thin(data)]
-    endian, wide = FAT_MAGICS[data[:4]]
+    endian, wide = FAT_MAGICS[bytes(data[:4])]
     require(len(data) >= 8, "truncated FAT header")
     count = struct.unpack_from(endian + "I", data, 4)[0]
     stride = 32 if wide else 20
