@@ -1,0 +1,27 @@
+name: Native enrollment environment probe
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: enrollment-environment
+  cancel-in-progress: false
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Compile account-free native probe
+        run: swiftc -swift-version 5 -framework AppKit -framework ApplicationServices -framework SystemConfiguration tools/EnrollmentEnvironment.swift -o enrollment-environment
+      - name: Inspect native App Store session without credentials
+        timeout-minutes: 2
+        run: |
+          ulimit -c 0
+          python3 tools/enrollment_environment.py
