@@ -35,9 +35,13 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
           go-version-file: vendor-source/ipatool/go.mod
-          cache: false
+          cache: true
+          cache-dependency-path: vendor-source/ipatool/go.sum
       - name: Correct ambiguous authentication mapping
         run: python3 tools/patch_auth_diagnostics.py vendor-source/ipatool
+      - name: Generate upstream test mocks
+        working-directory: vendor-source/ipatool
+        run: go generate ./...
       - name: Test real authentication response parser
         working-directory: vendor-source/ipatool
         run: go test -p 2 ./pkg/appstore -run TestGenericBadLoginIsNotDefiniteTwoFactor -count=1
