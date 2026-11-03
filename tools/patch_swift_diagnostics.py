@@ -71,3 +71,19 @@ source = source.replace(anchor, anchor + """
             }
 """)
 library.write_text(source)
+
+endpoint = Path(sys.argv[1])/"Sources/ApplePackage/Commands/StoreDownloadEndpoint+Fetch.swift"
+source = endpoint.read_text()
+changes = [
+    ('            defer { finalResponse = response }',
+     '            print("IPA_LAB_HTTP:" + String(response.status.code))\n            defer { finalResponse = response }'),
+    ('        let plist = try PropertyListSerialization.propertyList(',
+     '        print("IPA_LAB_STAGE:parse_product")\n        let plist = try PropertyListSerialization.propertyList('),
+    ('        guard (response["customerMessage"] as? String ?? "").isEmpty,',
+     '        print("IPA_LAB_STAGE:validate_product")\n        guard (response["customerMessage"] as? String ?? "").isEmpty,'),
+]
+for before, after in changes:
+    if source.count(before) != 1:
+        raise SystemExit("pinned endpoint diagnostics changed; refusing patch")
+    source = source.replace(before, after)
+endpoint.write_text(source)

@@ -39,7 +39,7 @@ DOWNLOAD_STAGES = {
     "validate_output", "load_account", "resolve_country", "lookup_app",
     "resolve_version", "request_product", "acquire_free_license",
     "inspect_download", "download_bytes", "inject_signature",
-    "validate_platform", "publish_file",
+    "validate_platform", "publish_file", "parse_product", "validate_product",
 }
 
 def download_diagnostics(result):
@@ -53,6 +53,12 @@ def download_diagnostics(result):
                   "exit_code": result.returncode}
     if codes:
         diagnostic["apple_failure_code"] = codes[-1]
+    http_codes = [line.removeprefix("IPA_LAB_HTTP:") for line in result.stdout.splitlines()
+                  if line.startswith("IPA_LAB_HTTP:")]
+    http_codes = [int(code) for code in http_codes if code.isascii() and code.isdigit()
+                  and len(code) == 3 and 100 <= int(code) <= 599]
+    if http_codes:
+        diagnostic["http_statuses"] = http_codes[-8:]
     return diagnostic
 
 def run(binary, args, env):
