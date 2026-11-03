@@ -1,0 +1,71 @@
+name: Original App Store IPA
+on:
+  push:
+    paths:
+      - 'tools/**'
+      - 'tests/**'
+      - '.github/workflows/store-download.yml'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: App Store link or ID (US free current version)
+        default: '6599842047'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: original-store-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  downloader:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15-intel
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: majd/ipatool
+          ref: d9c0247daea564d3ec7d04a9b015d0a29af66b04
+          path: vendor-source/ipatool
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: vendor-source/ipatool/go.mod
+          cache: false
+      - name: Compile pinned download protocol implementation
+        working-directory: vendor-source/ipatool
+        run: go build -p 2 -trimpath -o "$RUNNER_TEMP/ipatool" .
+      - name: Verify compiled CLI contract
+        run: |
+          "$RUNNER_TEMP/ipatool" auth login --help | grep -- --auth-code
+          "$RUNNER_TEMP/ipatool" download --help | grep -- --app-id
+          "$RUNNER_TEMP/ipatool" download --help | grep -- --purchase
+      - name: Run account-free tests
+        run: |
+          python3 -m unittest discover -s tests -p 'test_*.py' -v
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel 2
+      - name: Acquire and diagnose original IPA
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_2FA_CODE: ${{ secrets.APPLE_2FA_CODE }}
+          IPA_TARGET: ${{ inputs.target }}
+        run: |
+          ulimit -c 0
+          set +e
+          python3 tools/store_download.py --ipatool "$RUNNER_TEMP/ipatool" --engine build/ipa-engine --target "$IPA_TARGET" > "$RUNNER_TEMP/store-summary.json"
+          trial_status=$?
+          {
+            echo '### Original IPA acquisition'
+            cat "$RUNNER_TEMP/store-summary.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$trial_status"
+      - name: Remove temporary outputs
+        if: always()
+        run: rm -f "$RUNNER_TEMP/ipatool" "$RUNNER_TEMP/store-summary.json"

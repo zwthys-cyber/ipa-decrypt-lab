@@ -55,31 +55,35 @@ def trial(engine, url):
                 if total > 512*1024*1024:
                     raise ValueError("download budget exceeded")
                 out.write(chunk)
-        info = audit(ipa)
-        extract_checked(ipa, root / "payload")
-        summary = dict(status="diagnostic_only", binary_count=info["binary_count"],
-                       encrypted_slice_count=info["encrypted_slice_count"], attempted=0,
-                       rejected=0, unsupported=0, candidate_unverified=0,
-                       decryption_proven=False, runtime_verified=False)
-        for i, b in enumerate(info["binaries"]):
-            encrypted = [s for s in b["slices"] if s["encryption"] and s["encryption"]["cryptid"]]
-            if not encrypted:
-                continue
-            if len(b["slices"]) != 1 or "fat_offset" in b["slices"][0] or encrypted[0]["cpu_type"] != 0x0100000C:
-                summary["unsupported"] += 1
-                continue
-            summary["attempted"] += 1
-            output = root / ("candidate-" + str(i))
-            try:
-                r = subprocess.run([engine, "attempt", str(root/"payload"/b["path"]), str(output)],
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=40)
-                key = "candidate_unverified" if r.returncode == 0 and output.is_file() else "rejected"
-                summary[key] += 1
-            except subprocess.TimeoutExpired:
-                summary["rejected"] += 1
-            finally:
-                output.unlink(missing_ok=True)
-        return summary
+        return evaluate(ipa, engine, root)
+
+
+def evaluate(ipa, engine, root):
+    info = audit(ipa)
+    extract_checked(ipa, root / "payload")
+    summary = dict(status="diagnostic_only", binary_count=info["binary_count"],
+                   encrypted_slice_count=info["encrypted_slice_count"], attempted=0,
+                   rejected=0, unsupported=0, candidate_unverified=0,
+                   decryption_proven=False, runtime_verified=False)
+    for i, b in enumerate(info["binaries"]):
+        encrypted = [s for s in b["slices"] if s["encryption"] and s["encryption"]["cryptid"]]
+        if not encrypted:
+            continue
+        if len(b["slices"]) != 1 or "fat_offset" in b["slices"][0] or encrypted[0]["cpu_type"] != 0x0100000C:
+            summary["unsupported"] += 1
+            continue
+        summary["attempted"] += 1
+        output = root / ("candidate-" + str(i))
+        try:
+            r = subprocess.run([engine, "attempt", str(root/"payload"/b["path"]), str(output)],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=40)
+            key = "candidate_unverified" if r.returncode == 0 and output.is_file() else "rejected"
+            summary[key] += 1
+        except subprocess.TimeoutExpired:
+            summary["rejected"] += 1
+        finally:
+            output.unlink(missing_ok=True)
+    return summary
 
 def main():
     if os.environ.get("GITHUB_ACTIONS") != "true":
