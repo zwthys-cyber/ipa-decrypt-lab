@@ -1,0 +1,46 @@
+name: Independent Swift Store trial
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: independent-swift-store
+  cancel-in-progress: false
+jobs:
+  native:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: Lakr233/ApplePackage
+          ref: 391bfe6ee6598d73e4f94b88b38b50bd6f6ec67b
+          path: native-source/ApplePackage
+          persist-credentials: false
+      - name: Check Swift toolchain and correct ambiguous diagnostics
+        run: |
+          swift --version
+          python3 tools/patch_swift_diagnostics.py native-source/ApplePackage
+      - name: Test independent signing request construction
+        working-directory: native-source/ApplePackage
+        run: swift test -j 2 --filter SAPAuthenticationRequestTests
+      - name: Build independent native client
+        working-directory: native-source/ApplePackage
+        run: swift build -j 2 --product ApplePackageTool
+      - name: Test orchestrator and build diagnostic engine
+        run: |
+          python3 -m unittest discover -s tests -p 'test_*.py' -v
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel 2
+      - name: Authenticate and acquire without exporting account or IPA
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_2FA_CODE: ${{ secrets.APPLE_2FA_CODE }}
+        run: |
+          ulimit -c 0
+          python3 tools/native_store.py --binary native-source/ApplePackage/.build/debug/ApplePackageTool --engine build/ipa-engine
