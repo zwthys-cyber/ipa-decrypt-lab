@@ -61,3 +61,11 @@ GitHub macOS 虚拟机不是已授权的 App Store 解密节点。编译成功�
 ## 第三阶段：原生调用对照
 
 diagnose 命令分别以 cryptid=0、1、2 调用同一接口，每组都在独立子进程中执行，输出 native-controls.jsonl。0 是不加密控制组：即使返回成功也绝不代表 FairPlay 解密成功。1、2 分别检查应用及模型加密调用路径。所有样本仍无 Apple 授权，失败结果不能精确等同于“缺账号”。
+
+## 真实 IPA 的手动诊断入口
+
+Actions → Authorized IPA diagnostic，仅主分支可运行。将原始 IPA 的 HTTPS 直链保存到仓库 Actions Secret AUTHORIZED_IPA_URL。商店页面不是下载地址。当前目标为 examples/target.json 中的 App ID 6599842047。
+
+流程不登录 App Store，不生成账号凭据。保留包内授权文件相对路径供原生系统尝试读取。IPA 和候选文件仅在临时目录处理，任务正常退出后删除，不上传文件，只输出不包含应用标识的计数摘要。即使生成候选，仍为 candidate_unverified。
+
+此入口尚未验证真实 IPA，必须先有有效原始包来源。公开日志和摘要不输出地址、授权内容、候选明文。实际输入由 GitHub 托管运行器处理；不得将 Secret 理解为运行器之外的额外保密保证。
