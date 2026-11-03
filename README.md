@@ -1,0 +1,51 @@
+# IPA Decrypt Lab
+
+自主研发的 IPA 解密引擎可行性原型。**尚未完成真实 App Store IPA 解密验证，不是已可收费的服务。**
+
+## 固定约束
+
+- 代码直接提交 GitHub；所有编译、测试、验证和试运行只在 GitHub-hosted Actions。
+- 不在用户 Debian 服务器或编辑工作环境构建、安装项目依赖、执行项目代码或部署服务。
+- 不使用用户个人 iPhone / TrollStore，不依赖第三方收费解密 API。
+- 公开仓库只保存源码与合成测试数据；禁止上传真实 IPA、Apple 账号、凭据和 Bot Token。
+- Actions 用于限时研发验证，不作为 TG 商业服务的长期运行主机。
+
+## 本阶段交付
+
+独立 C 实现，无第三方解密库：
+
+1. 严格解析 thin little-endian 64-bit Mach-O 及其加密命令。
+2. macOS / Intel macOS / Linux 编译与合成契约测试。
+3. 输出 macOS 原生解密符号探测结果；符号存在绝不等于已具备账号授权。
+4. macOS 原生 remap 实验入口，子进程隔离异常并设置 30 秒超时。
+5. 只有原生调用成功且读取出的加密区内容发生变化时，才允许生成 **candidate**；仍不声明代码正确或可安装。
+
+这是原型的单个 Mach-O 核心，不是完整 IPA 服务。暂不支持 FAT、ZIP 解包/重打包、应用下载、账号凭据初始化、支付或 TG 接入。
+
+## GitHub 上查看验证
+
+打开 Actions → Native engine feasibility。成功运行会生成各平台程序和 capability.json，保留 3 天。
+
+- probe: 报告平台和原生符号是否存在。
+- inspect: 只读解析二进制；cryptid=0 不是“解密已验证”。
+- attempt: 实验性 macOS 路径，需要兼容运行环境和该应用的有效授权。
+
+仓库不提供 IPA 上传或任意远程下载工作流。CI 全部使用合成样本，不登录 App Store。
+
+## 技术限制与下一步
+
+GitHub macOS 虚拟机不是已授权的 App Store 解密节点。编译成功、系统符号存在和原生 API 返回成功，都不能分别证明真实应用已解密。实际账号授权、系统版本与平台限制仍需可验证证据。
+
+下一阶段必须先解决：在不依赖个人手机的环境中，如何取得并维持所需的授权和解密能力。没有证据前，不搭收费假流程、不将加密标记直接改零当作结果、不承诺任意应用可用。
+
+收费服务还需要独立生产运行环境；当前“仅 GitHub 执行”的约束保持不变，未授权生产部署。
+
+## 来源
+
+实现代码为本项目编写。接口和格式依据：
+
+- [Apple XNU mman.h](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/mman.h)
+- [Apple XNU Mach-O loader.h](https://github.com/apple-oss-distributions/xnu/blob/main/EXTERNAL_HEADERS/mach-o/loader.h)
+- [GitHub-hosted runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
+
+开源仓库或构建平台的使用权限不自动授予第三方应用的处理和分发权。
