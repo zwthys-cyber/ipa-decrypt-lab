@@ -11,6 +11,11 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "tools"))
 import enrollment_environment as probe
 
 class EnrollmentEnvironmentTests(unittest.TestCase):
+    def setUp(self):
+        state = patch("enrollment_environment.privileged_state", return_value={})
+        state.start()
+        self.addCleanup(state.stop)
+
     def result(self, status="native_login_unresolved"):
         return {"schema": "ipa-lab-enrollment-environment-v1", "status": "probe_complete",
                 "authentication": {"status": status, "account_login_attempted": True,
@@ -67,6 +72,27 @@ class EnrollmentEnvironmentTests(unittest.TestCase):
         ) as run, contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(probe.main(), 0)
             self.assertNotIn("--authenticate", run.call_args.args[0])
+
+    def test_privileged_stat_distinguishes_denied_and_missing(self):
+        for code, out, error, expected in [
+            (0, "2048\n", "", "present_nonempty"), (0, "0\n", "", "present_empty"),
+            (1, "", "stat: fixed path: No such file or directory", "not_found"),
+            (1, "", "stat: fixed path: Operation not permitted", "inaccessible"),
+            (1, "", "sudo: private detail", "stat_failed"),
+        ]:
+            with self.subTest(expected=expected):
+                self.assertEqual(probe.classify_stat(SimpleNamespace(returncode=code, stdout=out, stderr=error)), expected)
+
+    def test_last_login_ui_contains_no_raw_dialog_or_values(self):
+        raw = self.result()
+        raw["authentication"]["last_ui"] = {
+            "email_fields": 1, "secure_fields": 1, "sign_in_enabled": True,
+            "email_value": "private-email", "password_value": "private-password",
+            "error_kinds": ["cannot_connect", "private-dialog-text", {"secret": True}],
+        }
+        output = json.dumps(probe.clean(raw))
+        self.assertIn("cannot_connect", output)
+        self.assertNotIn("private", output)
 
     def test_workspace_execution_is_rejected_before_launch(self):
         with patch.dict(os.environ, {}, clear=True), patch("enrollment_environment.subprocess.run") as run:

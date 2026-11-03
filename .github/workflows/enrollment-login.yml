@@ -15,6 +15,8 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+      - name: Test private diagnostics before supplying credentials
+        run: python3 -m unittest discover -s tests -p 'test_enrollment_environment.py' -v
       - name: Compile native UI research helper before supplying credentials
         run: swiftc -swift-version 5 -framework AppKit -framework ApplicationServices -framework SystemConfiguration tools/EnrollmentEnvironment.swift -o enrollment-environment
       - name: One native account login with private diagnostics

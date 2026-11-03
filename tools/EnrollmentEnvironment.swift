@@ -72,6 +72,7 @@ struct UIResult {
     var upgradePrompt = false
     var verificationPrompt = false
     var errorPrompt = false
+    var errors: Set<String> = []
     var report: [String: Any] {
         ["window_count": windows, "nodes_examined": nodes, "text_fields": textFields,
          "secure_fields": secureFields, "sign_in_control_found": signIn != nil,
@@ -163,6 +164,17 @@ func scan(_ app: AXUIElement) -> UIResult {
         if strings.contains(where: { ["other options", "其他选项"].contains($0) }), let target = pressTarget(item) {
             result.otherOptions = target
         }
+        let errorPhrases: [String: [String]] = [
+            "device_unverified": ["device could not be verified", "unable to verify your device", "device cannot be verified"],
+            "invalid_credentials": ["password is incorrect", "incorrect password", "apple id or password is incorrect"],
+            "cannot_connect": ["cannot connect", "can't connect", "can’t connect", "connection failed"],
+            "unknown_error": ["unknown error", "unexpected error", "an error occurred"],
+            "account_locked": ["account is locked", "account has been locked", "account is disabled"],
+            "terms_required": ["agree to the terms", "review your account"],
+        ]
+        for (kind, phrases) in errorPhrases where strings.contains(where: { text in phrases.contains(where: { text.contains($0) }) }) {
+            result.errors.insert(kind)
+        }
         if strings.contains(where: { ["account", "账户", "帐户"].contains($0) }) {
             result.knownLabels.insert("account")
         }
@@ -219,9 +231,19 @@ func nativeLogin(_ element: AXUIElement, email: String, password: String) -> [St
     let end = Date().addingTimeInterval(75)
     while Date() < end {
         RunLoop.current.run(until: Date().addingTimeInterval(4))
-        form = scan(element)
+        let live = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.AppStore").first
+        let current = live.map { AXUIElementCreateApplication($0.processIdentifier) } ?? element
+        _ = AXUIElementSetMessagingTimeout(current, 0.5)
+        form = scan(current)
+        result["last_ui"] = [
+            "window_count": form.windows, "email_fields": form.emailFields, "secure_fields": form.secureFields,
+            "sign_in_enabled": form.signIn != nil, "sign_out_enabled": form.signOut != nil,
+            "security_prompt": form.securityPrompt, "upgrade_prompt": form.upgradePrompt,
+            "verification_prompt": form.verificationPrompt, "scan_limited": form.limited,
+            "error_kinds": form.errors.sorted(),
+        ]
         if form.verificationPrompt { result["status"] = "native_verification_required"; return result }
-        if form.errorPrompt { result["status"] = "native_login_rejected"; return result }
+        if form.errorPrompt || !form.errors.isEmpty { result["status"] = "native_login_rejected"; return result }
         if form.upgradePrompt && form.securityPrompt {
             if let decline = form.declineUpgrade, upgradeActions < 2 {
                 guard AXUIElementPerformAction(decline, kAXPressAction as CFString) == .success else { break }

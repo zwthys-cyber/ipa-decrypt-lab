@@ -2,6 +2,7 @@
 import json
 import os
 import subprocess
+import sys
 
 BOOLS = {
     "account_credentials_supplied", "account_login_attempted", "enrollment_created",
@@ -9,6 +10,35 @@ BOOLS = {
     "app_store_installed", "app_store_launched",
 }
 COUNTS = {"window_count", "nodes_examined", "text_fields", "secure_fields", "sign_in_disabled", "sign_in_pressable", "sign_in_other", "email_fields"}
+def classify_stat(result):
+    if result.returncode == 0 and result.stdout.strip().isdigit():
+        return "present_nonempty" if int(result.stdout.strip()) > 0 else "present_empty"
+    error = result.stderr.lower()
+    if "no such file or directory" in error:
+        return "not_found"
+    if "operation not permitted" in error or "permission denied" in error:
+        return "inaccessible"
+    return "stat_failed"
+
+def privileged_state():
+    if sys.platform != "darwin":
+        return {}
+    paths = {
+        "native_sidb": "/private/var/db/fpsd/SC Info/SC Info.sidb",
+        "native_sids": "/private/var/db/fpsd/SC Info/SC Info.sids",
+        "shared_sidb": "/Users/Shared/SC Info/SC Info.sidb",
+    }
+    result = {}
+    for key, path in paths.items():
+        try:
+            state = subprocess.run(["sudo", "-n", "/usr/bin/stat", "-f", "%z", path],
+                                   env={"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "LC_ALL": "C"},
+                                   capture_output=True, text=True, timeout=5, stdin=subprocess.DEVNULL)
+            result[key] = classify_stat(state)
+        except Exception:
+            result[key] = "stat_failed"
+    return result
+
 def clean(value):
     if not isinstance(value, dict) or value.get("schema") != "ipa-lab-enrollment-environment-v1":
         raise ValueError("invalid_probe")
@@ -68,6 +98,21 @@ def clean(value):
                "optional_upgrade_declined", "enrollment_created", "decryption_proven")
                if type(auth.get(key)) is bool},
         }
+        last = auth.get("last_ui")
+        if isinstance(last, dict):
+            result["authentication"]["last_ui"] = {
+                k: v for k, v in last.items()
+                if (k in {"window_count", "email_fields", "secure_fields"} and type(v) is int and 0 <= v <= 512)
+                or (k in {"sign_in_enabled", "sign_out_enabled", "security_prompt", "upgrade_prompt",
+                          "verification_prompt", "scan_limited"} and type(v) is bool)
+            }
+            kinds = last.get("error_kinds")
+            if isinstance(kinds, list):
+                allowed = {"device_unverified", "invalid_credentials", "cannot_connect", "unknown_error",
+                           "account_locked", "terms_required"}
+                result["authentication"]["last_ui"]["error_kinds"] = sorted({
+                    item for item in kinds if type(item) is str and item in allowed
+                })
         # UI state never establishes enrollment recovery or plaintext verification.
         result["authentication"].update(enrollment_created=False, decryption_proven=False)
     result.update(enrollment_created=False, decryption_proven=False)
@@ -79,6 +124,7 @@ def main():
         result["status"] = "requires_github_actions"
     else:
         try:
+            before = privileged_state()
             command = ["./enrollment-environment", "--open-signin"]
             if os.environ.get("LAB_NATIVE_UI_AUTH") == "1":
                 command.append("--authenticate")
@@ -86,6 +132,8 @@ def main():
                                  capture_output=True, text=True, timeout=220, stdin=subprocess.DEVNULL)
             if run.returncode == 0 and len(run.stdout) <= 16384:
                 result = clean(json.loads(run.stdout))
+                result["privileged_state_before"] = before
+                result["privileged_state_after"] = privileged_state()
         except subprocess.TimeoutExpired:
             result["status"] = "probe_timeout"
         except Exception:
