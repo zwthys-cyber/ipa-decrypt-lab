@@ -26,18 +26,24 @@ jobs:
       - name: Compile
         run: cmake --build build --parallel 2
       - name: Test synthetic contracts
-        run: ctest --test-dir build --output-on-failure
+        run: |
+          ulimit -c 0
+          ctest --test-dir build --output-on-failure
       - name: Record native runtime capability
         shell: bash
         run: |
+          ulimit -c 0
           mkdir -p reports
           build/ipa-engine probe > reports/capability.json
+          build/ipa-engine self-test > reports/native-selftest.json
           cat reports/capability.json
+          cat reports/native-selftest.json
           {
             echo '### Native runtime capability'
             echo 'Synthetic tests do not prove real IPA decryption.'
             echo '```json'
             cat reports/capability.json
+            cat reports/native-selftest.json
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -46,5 +52,7 @@ jobs:
           path: |
             build/ipa-engine
             reports/capability.json
+            reports/native-selftest.json
+            tools/ipa_audit.py
           retention-days: 3
           if-no-files-found: error

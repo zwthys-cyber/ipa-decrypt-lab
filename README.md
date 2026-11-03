@@ -49,3 +49,11 @@ GitHub macOS 虚拟机不是已授权的 App Store 解密节点。编译成功�
 - [GitHub-hosted runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
 
 开源仓库或构建平台的使用权限不自动授予第三方应用的处理和分发权。
+
+## 第二阶段：真实接口调用与 IPA 包检查
+
+- Actions 在隔离子进程内对无授权、合成的 Mach-O 调用原生 remap；记录返回值、errno 和信号。调用设有 10 秒超时，临时文件随后删除。
+- 无授权合成样本被拒绝是正常的，但不能由此断言“所有真实 IPA 都不能解密”。同样，符号存在或调用返回 0 也不证明真实应用已成功解密。
+- tools/ipa_audit.py 直接读取 ZIP，不提取文件到磁盘。扫描主程序、扩展、框架和 FAT 内所有架构；支持 32/64 位 Mach-O，检查重复路径、路径穿越、符号链接及读取预算。
+- 报告区分 encrypted_slices_present 与 no_encrypted_flags_found，两者均不声明 plaintext_verified 或 runtime_verified。
+- 完整 IPA 的解密、重打包和真实应用授权初始化仍未实现。工具不会把原有 IPA 修改成“假砸壳包”。

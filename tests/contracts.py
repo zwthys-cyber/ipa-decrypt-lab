@@ -25,6 +25,11 @@ class Contracts(unittest.TestCase):
         p = self.root / "sample"
         p.write_bytes(data)
         return subprocess.run([ENGINE, "inspect", str(p)], capture_output=True, text=True, timeout=5)
+    def test_native_selftest_is_not_a_decryption_claim(self):
+        r = subprocess.run([ENGINE, "self-test"], check=True, capture_output=True, text=True, timeout=20)
+        report = json.loads(r.stdout)
+        self.assertEqual(report["sample"], "synthetic_without_license")
+        self.assertIs(report["decryption_proven"], False)
     def test_probe_does_not_claim_decryption(self):
         r = subprocess.run([ENGINE, "probe"], check=True, capture_output=True, text=True, timeout=5)
         report = json.loads(r.stdout)
