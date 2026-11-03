@@ -25,8 +25,18 @@ def login(binary, email, password, code, passphrase, run=invoke):
         args += ["--auth-code", code]
     result = run(binary, args, passphrase)
     output = (result.stdout + result.stderr).lower()
-    if "2fa code is required" in output or "auth-code" in output and "required" in output:
-        return "requires_2fa"
+    if "apple_auth_ambiguous_bad_login" in output:
+        return "authentication_unresolved_generic_bad_login"
+    if "2fa code is required" in output:
+        return "upstream_reports_2fa_unverified"
+    if "account is disabled" in output:
+        return "account_disabled"
+    if "rate limited" in output or "http 429" in output:
+        return "authentication_rate_limited"
+    if "keychain" in output and result.returncode:
+        return "credential_storage_failed"
+    if "no usable authentication response" in output:
+        return "authentication_protocol_or_network_failed"
     if result.returncode != 0:
         return "authentication_failed"
     # Upstream may return zero even when no usable session exists.

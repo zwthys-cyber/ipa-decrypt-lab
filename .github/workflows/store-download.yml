@@ -36,6 +36,45 @@ jobs:
         with:
           go-version-file: vendor-source/ipatool/go.mod
           cache: false
+      - name: Correct ambiguous authentication mapping
+        run: python3 tools/patch_auth_diagnostics.py vendor-source/ipatool
+      - name: Test real authentication response parser
+        working-directory: vendor-source/ipatool
+        run: go test -p 2 ./pkg/appstore -run '^TestGenericBadLoginIsNotDefiniteTwoFactor
+        working-directory: vendor-source/ipatool
+        run: go build -p 2 -trimpath -o "$RUNNER_TEMP/ipatool" .
+      - name: Verify compiled CLI contract
+        run: |
+          "$RUNNER_TEMP/ipatool" auth login --help | grep -- --auth-code
+          "$RUNNER_TEMP/ipatool" download --help | grep -- --app-id
+          "$RUNNER_TEMP/ipatool" download --help | grep -- --purchase
+      - name: Run account-free tests
+        run: |
+          python3 -m unittest discover -s tests -p 'test_*.py' -v
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel 2
+      - name: Acquire and diagnose original IPA
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_2FA_CODE: ${{ secrets.APPLE_2FA_CODE }}
+          IPA_TARGET: ${{ inputs.target }}
+        run: |
+          ulimit -c 0
+          set +e
+          python3 tools/store_download.py --ipatool "$RUNNER_TEMP/ipatool" --engine build/ipa-engine --target "$IPA_TARGET" > "$RUNNER_TEMP/store-summary.json"
+          trial_status=$?
+          cat "$RUNNER_TEMP/store-summary.json"
+          {
+            echo '### Original IPA acquisition'
+            cat "$RUNNER_TEMP/store-summary.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$trial_status"
+      - name: Remove temporary outputs
+        if: always()
+        run: rm -f "$RUNNER_TEMP/ipatool" "$RUNNER_TEMP/store-summary.json"
+ -count=1
       - name: Compile pinned download protocol implementation
         working-directory: vendor-source/ipatool
         run: go build -p 2 -trimpath -o "$RUNNER_TEMP/ipatool" .
