@@ -8,7 +8,7 @@ BOOLS = {
     "decryption_proven", "accessibility_trusted", "console_user_session",
     "app_store_installed", "app_store_launched",
 }
-COUNTS = {"window_count", "nodes_examined", "text_fields", "secure_fields", "sign_in_disabled", "sign_in_pressable", "sign_in_other"}
+COUNTS = {"window_count", "nodes_examined", "text_fields", "secure_fields", "sign_in_disabled", "sign_in_pressable", "sign_in_other", "email_fields"}
 def clean(value):
     if not isinstance(value, dict) or value.get("schema") != "ipa-lab-enrollment-environment-v1":
         raise ValueError("invalid_probe")
@@ -33,6 +33,15 @@ def clean(value):
             if isinstance(labels, list):
                 result[key]["known_labels"] = sorted({x for x in labels if type(x) is str and
                                                      x in {"sign_in", "welcome", "continue", "account", "store"}})
+            flags = value[key].get("word_flags", [])
+            words = {"app store", "apple account", "apple id", "email", "phone", "password",
+                     "welcome", "discover", "privacy", "personalized", "personalised", "ads",
+                     "data", "continue", "terms", "conditions", "security", "two-factor",
+                     "upgrade", "verify", "verification", "search", "connect", "connection",
+                     "unavailable", "cannot", "can’t", "retry", "try again", "done", "get started",
+                     "sign out", "signed in"}
+            if isinstance(flags, list):
+                result[key]["word_flags"] = sorted({x for x in flags if type(x) is str and x in words})
             roles = value[key].get("roles", {})
             if isinstance(roles, dict):
                 names = {"AXWindow", "AXGroup", "AXButton", "AXStaticText", "AXTextField", "AXWebArea",

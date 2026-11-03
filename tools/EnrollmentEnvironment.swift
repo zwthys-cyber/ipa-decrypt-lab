@@ -34,9 +34,10 @@ func pressTarget(_ start: AXUIElement) -> AXUIElement? {
         let available = AXUIElementCopyActionNames(current, &names) == .success
             && ((names as? [String]) ?? []).contains(kAXPressAction)
         let enabled = attribute(current, kAXEnabledAttribute) as? Bool
-        if available && enabled != false &&
-            ["AXButton", "AXLink", "AXRadioButton", "AXMenuItem", "AXRow", "AXMenuBarItem"].contains(role) {
-            return current
+        if ["AXWindow", "AXApplication", "AXMenu", "AXMenuBar", "AXMenuBarItem"].contains(role) { return nil }
+        if ["AXButton", "AXLink", "AXRadioButton", "AXMenuItem", "AXRow"].contains(role) {
+            if enabled == false { return nil }
+            if available { return current }
         }
         guard let parent = attribute(current, kAXParentAttribute),
               CFGetTypeID(parent) == AXUIElementGetTypeID() else { return nil }
@@ -61,13 +62,16 @@ struct UIResult {
     var signInOther = 0
     var knownLabels: Set<String> = []
     var roles: [String: Int] = [:]
+    var words: Set<String> = []
+    var emailFields = 0
     var report: [String: Any] {
         ["window_count": windows, "nodes_examined": nodes, "text_fields": textFields,
          "secure_fields": secureFields, "sign_in_control_found": signIn != nil,
          "scan_limited": limited, "sign_in_label_seen": signInSeen,
          "welcome_seen": welcomeSeen, "continue_control_found": welcomeContinue != nil,
          "known_labels": knownLabels.sorted(), "roles": roles, "security_prompt": securityPrompt, "sign_in_disabled": signInDisabled,
-         "sign_in_pressable": signInPressable, "sign_in_other": signInOther]
+         "sign_in_pressable": signInPressable, "sign_in_other": signInOther,
+         "word_flags": words.sorted(), "email_fields": emailFields]
     }
 }
 func scan(_ app: AXUIElement) -> UIResult {
@@ -95,12 +99,22 @@ func scan(_ app: AXUIElement) -> UIResult {
         result.roles[knownRole, default: 0] += 1
         if role == kAXTextFieldRole { result.textFields += 1 }
         if subrole == kAXSecureTextFieldSubrole { result.secureFields += 1 }
-        let strings = [kAXTitleAttribute, kAXDescriptionAttribute, kAXValueAttribute].compactMap {
+        let strings = [kAXTitleAttribute, kAXDescriptionAttribute, kAXValueAttribute, "AXHelp", "AXPlaceholderValue"].compactMap {
             attribute(item, $0) as? String
         }.map {
             $0.trimmingCharacters(in: .whitespacesAndNewlines)
                 .trimmingCharacters(in: CharacterSet(charactersIn: ".…")).lowercased()
         }
+        let vocabulary = ["app store", "apple account", "apple id", "email", "phone", "password",
+                          "welcome", "discover", "privacy", "personalized", "personalised", "ads",
+                          "data", "continue", "terms", "conditions", "security", "two-factor",
+                          "upgrade", "verify", "verification", "search", "connect", "connection",
+                          "unavailable", "cannot", "can’t", "retry", "try again", "done", "get started",
+                          "sign out", "signed in"]
+        for word in vocabulary where strings.contains(where: { $0.contains(word) }) { result.words.insert(word) }
+        if role == kAXTextFieldRole && strings.contains(where: { value in
+            ["email", "apple account", "apple id", "phone"].contains(where: { value.contains($0) })
+        }) { result.emailFields += 1 }
         var actions: CFArray?
         let pressable = AXUIElementCopyActionNames(item, &actions) == .success
             && ((actions as? [String]) ?? []).contains(kAXPressAction)
