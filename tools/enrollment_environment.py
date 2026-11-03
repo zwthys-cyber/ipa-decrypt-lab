@@ -24,11 +24,15 @@ def clean(value):
         if isinstance(value.get(key), dict):
             result[key] = {k: v for k, v in value[key].items()
                            if k in {"native_sidb", "native_sids", "shared_sidb"} and type(v) is bool}
-    for key in ("ui_before", "ui_after"):
+    for key in ("ui_before", "ui_after_welcome", "ui_after"):
         if isinstance(value.get(key), dict):
             result[key] = {k: v for k, v in value[key].items()
-                           if (k in COUNTS and type(v) is int and 0 <= v <= 160)
-                           or (k in {"sign_in_control_found", "scan_limited"} and type(v) is bool)}
+                           if (k in COUNTS and type(v) is int and 0 <= v <= 512)
+                           or (k in {"sign_in_control_found", "scan_limited", "sign_in_label_seen", "welcome_seen", "continue_control_found"} and type(v) is bool)}
+            labels = value[key].get("known_labels", [])
+            if isinstance(labels, list):
+                result[key]["known_labels"] = sorted({x for x in labels if type(x) is str and
+                                                     x in {"sign_in", "welcome", "continue", "account", "store"}})
     press = value.get("sign_in_press_result")
     if type(press) is int and -26000 <= press <= 0:
         result["sign_in_press_result"] = press

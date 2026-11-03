@@ -32,10 +32,16 @@ struct UIResult {
     var secureFields = 0
     var signIn: AXUIElement?
     var limited = false
+    var signInSeen = false
+    var welcomeSeen = false
+    var welcomeContinue: AXUIElement?
+    var knownLabels: Set<String> = []
     var report: [String: Any] {
         ["window_count": windows, "nodes_examined": nodes, "text_fields": textFields,
          "secure_fields": secureFields, "sign_in_control_found": signIn != nil,
-         "scan_limited": limited]
+         "scan_limited": limited, "sign_in_label_seen": signInSeen,
+         "welcome_seen": welcomeSeen, "continue_control_found": welcomeContinue != nil,
+         "known_labels": knownLabels.sorted()]
     }
 }
 func scan(_ app: AXUIElement) -> UIResult {
@@ -49,7 +55,7 @@ func scan(_ app: AXUIElement) -> UIResult {
     }
     let deadline = Date().addingTimeInterval(12)
     var cursor = 0
-    while cursor < queue.count && cursor < 160 && Date() < deadline {
+    while cursor < queue.count && cursor < 512 && Date() < deadline {
         let item = queue[cursor]
         cursor += 1
         result.nodes += 1
@@ -58,18 +64,38 @@ func scan(_ app: AXUIElement) -> UIResult {
         let subrole = attribute(item, kAXSubroleAttribute) as? String ?? ""
         if role == kAXTextFieldRole { result.textFields += 1 }
         if subrole == kAXSecureTextFieldSubrole { result.secureFields += 1 }
-        if role == kAXButtonRole || role == kAXMenuItemRole {
-            let title = (attribute(item, kAXTitleAttribute) as? String ?? "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .trimmingCharacters(in: CharacterSet(charactersIn: ".…"))
-                .lowercased()
-            if ["sign in", "登录", "登入"].contains(title), result.signIn == nil,
-               attribute(item, kAXEnabledAttribute) as? Bool == true {
-                result.signIn = item
-            }
+        let strings = [kAXTitleAttribute, kAXDescriptionAttribute, kAXValueAttribute].compactMap {
+            attribute(item, $0) as? String
+        }.map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: ".…")).lowercased()
+        }
+        var actions: CFArray?
+        let pressable = AXUIElementCopyActionNames(item, &actions) == .success
+            && ((actions as? [String]) ?? []).contains(kAXPressAction)
+        let enabled = attribute(item, kAXEnabledAttribute) as? Bool == true
+        if strings.contains(where: { ["sign in", "sign in to the app store", "登录", "登入"].contains($0) }) {
+            result.signInSeen = true
+            result.knownLabels.insert("sign_in")
+            if enabled && pressable && result.signIn == nil { result.signIn = item }
+        }
+        if strings.contains(where: { ["welcome to the app store", "app store & privacy",
+                                      "what’s new in the app store", "欢迎使用 app store"].contains($0) }) {
+            result.welcomeSeen = true
+            result.knownLabels.insert("welcome")
+        }
+        if strings.contains(where: { ["continue", "继续"].contains($0) }) {
+            result.knownLabels.insert("continue")
+            if enabled && pressable && result.welcomeContinue == nil { result.welcomeContinue = item }
+        }
+        if strings.contains(where: { ["account", "账户", "帐户"].contains($0) }) {
+            result.knownLabels.insert("account")
+        }
+        if strings.contains(where: { ["store", "商店"].contains($0) }) {
+            result.knownLabels.insert("store")
         }
         if let children = attribute(item, kAXChildrenAttribute) as? [AXUIElement] {
-            let capacity = max(0, 160 - queue.count)
+            let capacity = max(0, 512 - queue.count)
             queue.append(contentsOf: children.prefix(capacity))
             if children.count > capacity { result.limited = true }
         }
@@ -111,11 +137,17 @@ while !launchComplete && Date() < launchDeadline {
 }
 report["app_store_launched"] = application != nil
 if let application = application, AXIsProcessTrusted() {
-    RunLoop.current.run(until: Date().addingTimeInterval(3))
+    RunLoop.current.run(until: Date().addingTimeInterval(8))
     let element = AXUIElementCreateApplication(application.processIdentifier)
     _ = AXUIElementSetMessagingTimeout(element, 0.5)
-    let before = scan(element)
+    var before = scan(element)
     report["ui_before"] = before.report
+    if before.signIn == nil && before.welcomeSeen, let button = before.welcomeContinue {
+        report["welcome_continue_result"] = Int(AXUIElementPerformAction(button, kAXPressAction as CFString).rawValue)
+        RunLoop.current.run(until: Date().addingTimeInterval(5))
+        before = scan(element)
+        report["ui_after_welcome"] = before.report
+    }
     if CommandLine.arguments.contains("--open-signin"), let button = before.signIn {
         let status = AXUIElementPerformAction(button, kAXPressAction as CFString)
         report["sign_in_press_result"] = Int(status.rawValue)
