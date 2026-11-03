@@ -18,6 +18,22 @@ def classify(result):
         return "native_rate_limited"
     return "native_authentication_failed"
 
+def classify_download(result):
+    text = (result.stdout + result.stderr).lower()
+    if "apple_auth_ambiguous_bad_login" in text:
+        return "native_download_authentication_rejected"
+    if "license" in text:
+        return "native_license_failed"
+    if "terms" in text:
+        return "native_terms_confirmation_required"
+    if "token" in text and "expired" in text:
+        return "native_password_token_expired"
+    if "version" in text:
+        return "native_version_resolution_failed"
+    if "no items" in text or "noitems" in text:
+        return "native_download_no_items"
+    return "native_download_failed"
+
 def run(binary, args, env):
     return subprocess.run([binary] + args, env=env, stdin=subprocess.DEVNULL,
                           capture_output=True, text=True, timeout=300)
@@ -39,7 +55,7 @@ def trial(binary, engine, target):
             ipa = root/"original.ipa"
             result = run(binary, ["download", email, info["bundleId"], "--output", str(ipa)], env)
             if result.returncode or not ipa.is_file():
-                return {"status": "native_download_failed", "authenticated": True, "downloaded": False}
+                return {"status": classify_download(result), "authenticated": True, "downloaded": False}
             result = evaluate(ipa, engine, root)
             result.update(status="native_downloaded_and_diagnosed", downloaded=True)
             return result
