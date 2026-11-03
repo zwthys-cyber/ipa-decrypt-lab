@@ -19,7 +19,8 @@ def classify(result):
     return "native_authentication_failed"
 
 def classify_download(result):
-    text = (result.stdout + result.stderr).lower()
+    text = "\n".join(line for line in (result.stdout + result.stderr).splitlines()
+                     if not line.startswith("IPA_LAB_")).lower()
     if "apple_auth_ambiguous_bad_login" in text:
         return "native_download_authentication_rejected"
     if "license" in text:
@@ -45,8 +46,14 @@ def download_diagnostics(result):
     stages = [line.removeprefix("IPA_LAB_STAGE:") for line in result.stdout.splitlines()
               if line.startswith("IPA_LAB_STAGE:")]
     stages = [stage for stage in stages if stage in DOWNLOAD_STAGES]
-    return {"stage": stages[-1] if stages else "before_download",
-            "exit_code": result.returncode}
+    codes = [line.removeprefix("IPA_LAB_FAILURE:") for line in result.stdout.splitlines()
+             if line.startswith("IPA_LAB_FAILURE:")]
+    codes = [int(code) for code in codes if code.isascii() and code.isdigit() and len(code) <= 5]
+    diagnostic = {"stage": stages[-1] if stages else "before_download",
+                  "exit_code": result.returncode}
+    if codes:
+        diagnostic["apple_failure_code"] = codes[-1]
+    return diagnostic
 
 def run(binary, args, env):
     return subprocess.run([binary] + args, env=env, stdin=subprocess.DEVNULL,

@@ -59,3 +59,15 @@ for anchor, stage in stages:
     source = source.replace(anchor, indent + 'print("IPA_LAB_STAGE:' + stage + '")\n' + anchor)
 download.write_text(source)
 
+
+library = Path(sys.argv[1])/"Sources/ApplePackage/Commands/Download.swift"
+source = library.read_text()
+anchor = '        if let failureType = dict["failureType"] as? String {'
+if source.count(anchor) != 1:
+    raise SystemExit("pinned product response changed; refusing patch")
+source = source.replace(anchor, anchor + """
+            if let code = Int(failureType), (0...99999).contains(code) {
+                print("IPA_LAB_FAILURE:" + String(code))
+            }
+""")
+library.write_text(source)
