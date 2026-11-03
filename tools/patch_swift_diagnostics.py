@@ -20,20 +20,13 @@ before = '''            let downloadOutput = try await ApplePackage.Download.dow
                 app: app,
                 externalVersionID: resolvedVersionID,
             )'''
-after = '''            let downloadOutput: DownloadOutput
-            do {
-                downloadOutput = try await ApplePackage.Download.download(
-                    account: &account, app: app, externalVersionID: resolvedVersionID
-                )
-            } catch ApplePackageError.licenseRequired {
-                guard let price = app.price, price == 0 else {
-                    throw ApplePackageError.licenseRequired
-                }
-                try await Purchase.purchase(account: &account, app: app)
-                downloadOutput = try await ApplePackage.Download.download(
-                    account: &account, app: app, externalVersionID: resolvedVersionID
-                )
-            }'''
+after = '''            guard let price = app.price, price == 0 else {
+                throw ApplePackageError.licenseRequired
+            }
+            try await Purchase.purchase(account: &account, app: app)
+            let downloadOutput = try await ApplePackage.Download.download(
+                account: &account, app: app, externalVersionID: resolvedVersionID
+            )'''
 if source.count(before) != 1:
     raise SystemExit("pinned download operation changed; refusing patch")
 source = source.replace(before, after)
@@ -44,8 +37,8 @@ stages = [
     ("            guard let country = Configuration.countryCode", "resolve_country"),
     ("            let app = try await Lookup.lookup", "lookup_app"),
     ("            let resolvedVersionID = try await resolveVersionID", "resolve_version"),
-    ("            let downloadOutput: DownloadOutput", "request_product"),
-    ("                try await Purchase.purchase", "acquire_free_license"),
+    ("            let downloadOutput = try await ApplePackage.Download.download", "request_product"),
+    ("            try await Purchase.purchase", "acquire_free_license"),
     ("            let (contentLength, supportsRanges)", "inspect_download"),
     ("                try await downloadWithProgress", "download_bytes"),
     ("            try await SignatureInjector.inject", "inject_signature"),
