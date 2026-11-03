@@ -34,6 +34,20 @@ def classify_download(result):
         return "native_download_no_items"
     return "native_download_failed"
 
+DOWNLOAD_STAGES = {
+    "validate_output", "load_account", "resolve_country", "lookup_app",
+    "resolve_version", "request_product", "acquire_free_license",
+    "inspect_download", "download_bytes", "inject_signature",
+    "validate_platform", "publish_file",
+}
+
+def download_diagnostics(result):
+    stages = [line.removeprefix("IPA_LAB_STAGE:") for line in result.stdout.splitlines()
+              if line.startswith("IPA_LAB_STAGE:")]
+    stages = [stage for stage in stages if stage in DOWNLOAD_STAGES]
+    return {"stage": stages[-1] if stages else "before_download",
+            "exit_code": result.returncode}
+
 def run(binary, args, env):
     return subprocess.run([binary] + args, env=env, stdin=subprocess.DEVNULL,
                           capture_output=True, text=True, timeout=300)
@@ -55,7 +69,7 @@ def trial(binary, engine, target):
             ipa = root/"original.ipa"
             result = run(binary, ["download", email, info["bundleId"], "--output", str(ipa)], env)
             if result.returncode or not ipa.is_file():
-                return {"status": classify_download(result), "authenticated": True, "downloaded": False}
+                return {"status": classify_download(result), "authenticated": True, "downloaded": False, **download_diagnostics(result)}
             result = evaluate(ipa, engine, root)
             result.update(status="native_downloaded_and_diagnosed", downloaded=True)
             return result

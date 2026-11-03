@@ -36,4 +36,26 @@ after = '''            let downloadOutput: DownloadOutput
             }'''
 if source.count(before) != 1:
     raise SystemExit("pinned download operation changed; refusing patch")
-download.write_text(source.replace(before, after))
+source = source.replace(before, after)
+# Fixed, non-sensitive progress markers; no account data or server responses.
+stages = [
+    ("        let outputURL = try validateOutputURL(output)", "validate_output"),
+    ("        try await Configuration.withAccount(email: email)", "load_account"),
+    ("            guard let country = Configuration.countryCode", "resolve_country"),
+    ("            let app = try await Lookup.lookup", "lookup_app"),
+    ("            let resolvedVersionID = try await resolveVersionID", "resolve_version"),
+    ("            let downloadOutput: DownloadOutput", "request_product"),
+    ("                try await Purchase.purchase", "acquire_free_license"),
+    ("            let (contentLength, supportsRanges)", "inspect_download"),
+    ("                try await downloadWithProgress", "download_bytes"),
+    ("            try await SignatureInjector.inject", "inject_signature"),
+    ("            try PackagePlatformValidator.ensurePackage", "validate_platform"),
+    ("            try replaceOutput", "publish_file"),
+]
+for anchor, stage in stages:
+    if source.count(anchor) != 1:
+        raise SystemExit("pinned download stage changed; refusing patch")
+    indent = anchor[:len(anchor) - len(anchor.lstrip())]
+    source = source.replace(anchor, indent + 'print("IPA_LAB_STAGE:' + stage + '")\n' + anchor)
+download.write_text(source)
+
