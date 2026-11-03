@@ -33,6 +33,12 @@ def clean(value):
             if isinstance(labels, list):
                 result[key]["known_labels"] = sorted({x for x in labels if type(x) is str and
                                                      x in {"sign_in", "welcome", "continue", "account", "store"}})
+            roles = value[key].get("roles", {})
+            if isinstance(roles, dict):
+                names = {"AXWindow", "AXGroup", "AXButton", "AXStaticText", "AXTextField", "AXWebArea",
+                         "AXMenuBar", "AXMenuBarItem", "AXMenu", "AXMenuItem", "AXScrollArea", "AXImage", "other"}
+                result[key]["roles"] = {k: v for k, v in roles.items()
+                                        if k in names and type(v) is int and 0 <= v <= 512}
     press = value.get("sign_in_press_result")
     if type(press) is int and -26000 <= press <= 0:
         result["sign_in_press_result"] = press
