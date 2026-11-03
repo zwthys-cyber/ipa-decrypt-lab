@@ -30,3 +30,17 @@ IPA 包检查器只验证结构、读取边界、架构和加密标志。它不�
 所有构建、测试、试运行仅在 GitHub-hosted Actions。无 Debian 项目运行、无个人手机节点、无第三方收费 API。商业生产部署仍未获授权；Actions 不作为常驻服务。
 
 参考：[Apple errno.h](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/errno.h)、[Apple kern_mman.c](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_mman.c)。
+
+## 第三阶段：原生接口对照结果
+
+[验证运行](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41714295084)。三个平台构建和测试全部通过。
+
+| GitHub 运行器 | cryptid=0 不加密控制 | cryptid=1 应用加密 | cryptid=2 模型加密 |
+| --- | --- | --- | --- |
+| macos-15 ARM | 返回0，映射可读 | 返回-1，errno=1 | 返回-1，errno=1 |
+| macos-15-intel | 返回0，映射可读 | 返回-1，errno=45 | 返回-1，errno=45 |
+| ubuntu-24.04 | 不支持原生接口 | 不支持原生接口 | 不支持原生接口 |
+
+控制组证明当前调用入口及基础映射路径可以执行。两种加密路径在无授权合成样本上均被拒绝。此结果仍不能确定真实应用所缺的具体授权条件，也不能证明登录账号或重签名就能解决。没有真实明文解密证据。
+
+当前研发瓶颈已从编译转为有效授权环境及真实数据验证。继续增加解析器或合成测试无法替代这一门槛。所有试验保持仅 GitHub Actions 执行。
