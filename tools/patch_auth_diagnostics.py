@@ -43,3 +43,56 @@ func TestGenericBadLoginIsNotDefiniteTwoFactor(t *testing.T) {
     }
 }
 ''')
+
+
+profile = sys.argv[2] if len(sys.argv) > 2 else "upstream"
+if profile not in {"upstream", "plist-compat"}:
+    raise SystemExit("unknown authentication profile")
+if profile == "plist-compat":
+    # Request shape independently compared with pinned AssppWeb 485be0b.
+    # Do not change the endpoint, SAP signer, certificate checks or credentials.
+    source = path.read_text()
+    replacements = {
+        '"Content-Type": "application/x-www-form-urlencoded"': '"Content-Type": "application/x-apple-plist"',
+        '"attempt":  strconv.Itoa(attempt)': '"attempt":  strconv.Itoa(compatibilityWireAttempt(authCode))',
+    }
+    for before, after in replacements.items():
+        if source.count(before) != 1:
+            raise SystemExit("pinned request template changed; refusing compatibility patch")
+        source = source.replace(before, after)
+    source += '''
+func compatibilityWireAttempt(authCode string) int {
+    if authCode == "" {
+        return 4
+    }
+    return 2
+}
+'''
+    path.write_text(source)
+    extra = root/"pkg/appstore/auth_wire_compatibility_test.go"
+    extra.write_text('''package appstore
+import (
+    "testing"
+    "github.com/majd/ipatool/v2/pkg/http"
+)
+func TestPlistCompatibilityRequest(t *testing.T) {
+    for _, item := range []struct{code, attempt, password string}{
+        {"", "4", "synthetic-password"},
+        {"123456", "2", "synthetic-password123456"},
+    } {
+        store := &appstore{}
+        request := store.loginRequest("synthetic@example.invalid", "synthetic-password",
+            item.code, "synthetic-guid", "https://auth.itunes.apple.com/auth/v1/native/fast/", 1, nil)
+        if request.Headers["Content-Type"] != "application/x-apple-plist" {
+            t.Fatal("incorrect request content type")
+        }
+        payload, ok := request.Payload.(*http.XMLPayload)
+        if !ok || payload.Content["attempt"] != item.attempt || payload.Content["password"] != item.password {
+            t.Fatal("incorrect request attempt/password construction")
+        }
+        if request.URL != "https://auth.itunes.apple.com/auth/v1/native/fast/" {
+            t.Fatal("compatibility profile must not replace the configured endpoint")
+        }
+    }
+}
+''')

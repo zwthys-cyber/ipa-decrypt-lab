@@ -12,6 +12,14 @@ on:
         default: '6599842047'
         required: true
         type: string
+      auth_profile:
+        description: Authentication request profile
+        default: upstream
+        required: true
+        type: choice
+        options:
+          - upstream
+          - plist-compat
       runner:
         description: GitHub macOS runner for controlled compatibility comparison
         default: macos-15-intel
@@ -46,13 +54,15 @@ jobs:
           cache: true
           cache-dependency-path: vendor-source/ipatool/go.sum
       - name: Correct ambiguous authentication mapping
-        run: python3 tools/patch_auth_diagnostics.py vendor-source/ipatool
+        env:
+          AUTH_PROFILE: ${{ inputs.auth_profile || 'upstream' }}
+        run: python3 tools/patch_auth_diagnostics.py vendor-source/ipatool "$AUTH_PROFILE"
       - name: Generate upstream test mocks
         working-directory: vendor-source/ipatool
         run: go generate ./...
       - name: Test real authentication response parser
         working-directory: vendor-source/ipatool
-        run: go test -p 2 ./pkg/appstore -run TestGenericBadLoginIsNotDefiniteTwoFactor -count=1
+        run: go test -p 2 ./pkg/appstore -run 'TestGenericBadLoginIsNotDefiniteTwoFactor|TestPlistCompatibilityRequest' -count=1
       - name: Compile pinned download protocol implementation
         working-directory: vendor-source/ipatool
         run: go build -p 2 -trimpath -o "$RUNNER_TEMP/ipatool" .
