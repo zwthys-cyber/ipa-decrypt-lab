@@ -34,7 +34,7 @@ fi
 install -m 0600 "$config" /etc/ipazake/bot.json
 previous=$(readlink -f /opt/ipazake/current 2>/dev/null || true)
 systemctl stop ipazake.service 2>/dev/null || true
-if [ -n "$previous" ] && [ -d "$previous" ]; then
+if [ -n "$previous" ] && [ -d "$previous" ] && [ "$previous" != "$destination" ]; then
   ln -sfn "$previous" /opt/ipazake/previous
 fi
 ln -sfn "$destination" /opt/ipazake/current.next

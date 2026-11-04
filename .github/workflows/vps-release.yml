@@ -69,7 +69,7 @@ jobs:
           for module in app_preflight capacity telegram_daemon persistent_journal telegram_controller telegram_runtime telegram_api telegram_menu telegram_queue task_progress delivery_scheduler ipa_audit; do
             cp "tools/$module.py" package/tools/
           done
-          cp deploy/ipazake.service deploy/install.sh package/deploy/
+          cp deploy/ipazake.service deploy/install.sh deploy/prune_releases.py package/deploy/
           printf '%s\n' "$GITHUB_SHA" > package/SOURCE_COMMIT
       - name: Validate Debian 13 runtime compatibility on GitHub
         run: |
@@ -143,6 +143,7 @@ jobs:
           sshpass -e ssh -o UserKnownHostsFile="$DEPLOY_TEMP/known_hosts" -o StrictHostKeyChecking=yes -o ConnectTimeout=15 "root@$VPS_HOST" "sh -s -- /root/ipazake-$GITHUB_SHA.tar.gz /root/ipazake-$GITHUB_SHA.json $GITHUB_SHA $sha" < deploy/install.sh
           for attempt in $(seq 1 30); do
             if sshpass -e ssh -o UserKnownHostsFile="$DEPLOY_TEMP/known_hosts" -o StrictHostKeyChecking=yes "root@$VPS_HOST" "systemctl is-active --quiet ipazake.service && grep -q '\"state\": \"ready\"' /var/lib/ipazake/health.json"; then
+              sshpass -e ssh -o UserKnownHostsFile="$DEPLOY_TEMP/known_hosts" -o StrictHostKeyChecking=yes "root@$VPS_HOST" "python3 /opt/ipazake/current/deploy/prune_releases.py" || echo release_cleanup_deferred
               echo persistent_service_ready_verified
               exit 0
             fi
