@@ -11,6 +11,7 @@ import urllib.parse
 from telegram_api import APIError, private_message
 from telegram_queue import GitHub, QueueError, request_id
 from telegram_runtime import local_bot
+from delivery_journal import Journal
 from telegram_menu import configure as configure_menu
 from task_progress import ProgressCard, LABELS
 from delivery_scheduler import app_from_run, queued_too_long, retryable, MAX_RUNS
@@ -46,7 +47,8 @@ def event(status, **fields):
     print(json.dumps({"schema":"telegram-session-v1","status":status,**fields}),flush=True)
 
 class Controller:
-    def __init__(self, bot, github, owner, crypt, token):
+    def __init__(self, bot, github, owner, crypt, token, journal=None):
+        self.journal = journal
         self.bot,self.github,self.owner,self.crypt,self.token = bot,github,owner,crypt,token
         self.current = None
         self.started = time.time()
@@ -56,6 +58,36 @@ class Controller:
         self.last_notice = 0
         self.delivered = set()
         self.cards = {}
+
+    def record(self,rid,state,app=""):
+        if self.journal is not None:
+            self.journal.write(rid,state,app)
+
+    def recover(self):
+        if self.journal is None:
+            return
+        self.journal.load()
+        self.delivered.update(rid for rid,r in self.journal.records.items() if r["state"]=="delivered")
+        pending=self.journal.pending()
+        if len(pending)>1:
+            raise QueueError("multiple_pending_tasks_require_manual_recovery")
+        if pending:
+            item=pending[0]
+            run=self.github.find(item["rid"])
+            if run is None:
+                self.say("上次提交结果尚未确认，保留任务编号："+item["rid"]+"。不会自动重新提交。")
+                self.current={"rid":item["rid"],"app":item["app"],"state":"dispatch_pending",
+                              "since":time.monotonic(),"recovered":True}
+            elif run.get("status")=="completed" and run.get("conclusion")!="success":
+                self.record(item["rid"],"closed")
+                self.say("上次任务已结束但未成功。任务编号："+item["rid"])
+            else:
+                self.resume(item["rid"],item["app"])
+                if self.current:
+                    self.current["recovered"]=True
+        for item in self.journal.records.values():
+            if item["state"]=="sending" and 0<=time.time()-item["at"]<86400:
+                self.say("上次文件发送结果需要确认，请先检查聊天。不会自动重发；未收到可用 /get "+item["rid"])
 
     def say(self,text):
         return self.bot.message(self.owner,text)
@@ -97,6 +129,8 @@ class Controller:
                 self.say("当前没有可取消的任务。")
                 return
             rid = self.current["rid"]
+            self.record(rid,"cancelled")
+            self.current = None
             self.github.cancel(rid)
             self.card(rid).update("cancelled",force=True)
             self.current = None
@@ -124,6 +158,10 @@ class Controller:
             self.say("请稍候 30 秒再提交。")
             return
         rid = opaque_id(self.token,self.owner,update_number,app)
+        if self.journal is not None and rid in self.journal.records:
+            self.say("这个请求已记录，请用 /status 或 /get 查询。")
+            return
+        self.record(rid,"pending",app)
         # Record before dispatch: an ambiguous network outcome must not cause a duplicate POST.
         self.current = {"rid":rid,"app":app,"state":"dispatch_pending","since":time.monotonic()}
         self.card(rid,app).update("dispatch_pending")
@@ -142,9 +180,11 @@ class Controller:
         card=self.card(rid)
         card.update("retrieving")
         try:
+            self.record(rid,"sending")
             result=self.github.deliver(rid,self.bot,self.owner,self.crypt,progress=card.update)
             event(**result)
             self.delivered.add(rid)
+            self.record(rid,"delivered")
             card.update("done",force=True)
             return True
         except APIError:
@@ -160,6 +200,12 @@ class Controller:
 
     def resume(self,rid,app=""):
         run=self.github.find(rid)
+        if self.journal is not None:
+            prior=self.journal.records.get(rid,{})
+            if prior.get("state") in ("sending","delivered","cancelled","closed"):
+                self.say("此任务已结束或发送结果需确认；如需重新取回，请明确使用 /get "+rid)
+                return
+            self.record(rid,"pending",app or (app_from_run(run,rid) if run else ""))
         if run and run.get("status")!="completed":
             self.current={"rid":rid,"app":app or app_from_run(run,rid),"state":run.get("status","queued"),
                           "stage":"processing","since":time.monotonic()}
@@ -170,6 +216,9 @@ class Controller:
 
     def failover(self,run):
         current=self.current
+        # Recovery never repeats a possibly accepted failover POST from a lost session.
+        if current.get("recovered"):
+            return False
         rid=current["rid"]
         if type(run.get("id")) is not int:
             return False
@@ -242,6 +291,7 @@ class Controller:
             except QueueError:
                 pass
             if reported=="failed":
+                self.record(rid,"closed")
                 self.current=None
                 self.card(rid).update("failed",force=True)
                 self.say("下载或校验未完成。任务编号："+rid)
@@ -263,6 +313,7 @@ class Controller:
                 if rid not in self.delivered:
                     self.deliver(rid)
             else:
+                self.record(rid,"closed")
                 self.say("任务未完成："+str(run.get("conclusion","unknown"))+"\n任务编号："+rid)
                 self.card(rid).update("failed",force=True)
                 event("worker_not_successful",request_id=rid)
@@ -295,7 +346,8 @@ def main():
         github=GitHub(os.environ.get("GH_TOKEN",""))
         crypt=str(Path(args.crypt).resolve())
         with local_bot(args.server) as bot:
-            controller=Controller(bot,github,owner,crypt,os.environ["TELEGRAM_BOT_TOKEN"])
+            journal=Journal(github,os.environ["TELEGRAM_BOT_TOKEN"],owner)
+            controller=Controller(bot,github,owner,crypt,os.environ["TELEGRAM_BOT_TOKEN"],journal=journal)
             event("local_bot_authenticated")
             event(**configure_menu(bot,owner))
             if args.mode=="progress-demo":
@@ -313,9 +365,11 @@ def main():
                 event("owner_message_confirmed")
                 return 0
             if args.mode=="deliver":
+                journal.load()
                 return 0 if controller.deliver(request_id(args.request_id)) else 2
             controller.say("IPA 机器人限时测试已启动，约 "+str(args.minutes)+" 分钟。\n\n"+HELP)
-            if args.request_id:
+            controller.recover()
+            if args.request_id and not controller.current:
                 controller.resume(request_id(args.request_id),args.resume_app_id)
             deadline=time.monotonic()+args.minutes*60
             offset=0

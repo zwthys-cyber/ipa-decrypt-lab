@@ -56,3 +56,9 @@
 - Early readiness/archive integrity probe 41879112828 passed 305 Python tests (1 environment skip) and read back the real encrypted sample without plaintext or Telegram transmission.
 
 - Latest regression/probe run 41882955218 passed 308 Python tests (1 environment skip) and real ciphertext readiness/archive-digest verification. Prefer verified worker/native-check stages over delayed queued metadata; before queue cancellation cross-check that the bound native Check is actually queued. New Telegram sessions replace old bounded sessions, not IPA worker workflows.
+
+## Bounded cross-session recovery
+- telegram-session.yml may use checks:write for sanitized, HMAC-authenticated recovery records anchored to commit 482c1fccde988a4ca198251e32935374e83578f1. Never publish raw owner IDs, message IDs, update IDs, tokens, account data or file contents.
+- A journal write and readback must precede dispatch or file transmission. Unknown file-send outcomes must not be automatically repeated after restart. Explicit owner /get remains a manual retrieval action.
+- Keep the existing single-session concurrency group and owner-only gate. This bounded Checks log is not a production database or distributed lock. Recovered work must not repeat ambiguous failover dispatches.
+- journal-contracts.yml may write/read synthetic journal records using its GitHub token, without Apple/Telegram secrets, to test cross-runner recovery and principal isolation.

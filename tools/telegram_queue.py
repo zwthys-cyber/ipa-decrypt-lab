@@ -45,6 +45,7 @@ class GitHub:
     def call(self, path, payload=None, method="GET", limit=4*1024*1024):
         require((path.startswith("/actions/") or
                  re.fullmatch(r"/check-runs(?:/[1-9][0-9]*)?",path) or
+                 re.fullmatch(r"/commits/[a-f0-9]{40}/check-runs\?check_name=delivery-journal-[a-f0-9]{32}&filter=all&per_page=100&page=[1-5]",path) or
                  re.fullmatch(r"/commits/[a-f0-9]{40}/check-runs\?check_name=delivery-progress-[a-f0-9]{32}&per_page=100",path))
                 and "\n" not in path, "invalid_github_path")
         request = urllib.request.Request("https://api.github.com/repos/" + REPOSITORY + path,
