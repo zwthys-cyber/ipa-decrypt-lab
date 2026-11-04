@@ -22,13 +22,18 @@ static void setObject(id object, NSString *name, id value) {
 }
 @interface LabAnisetteProvider : NSObject
 @property(nonatomic, strong) id data;
+@property(nonatomic, copy) id (^dataSource)(void);
 @property(nonatomic) NSUInteger fetchCalls;
 @property(nonatomic) NSUInteger otherCalls;
 @end
 @implementation LabAnisetteProvider
 - (void)fetchAnisetteDataAndProvisionIfNecessary:(BOOL)needed withCompletion:(void (^)(id, NSError *))completion {
-    self.fetchCalls++;
-    completion(self.data, self.data ? nil : [NSError errorWithDomain:@"IPALab.Anisette" code:1 userInfo:nil]);
+    id value = nil;
+    @synchronized(self) {
+        self.fetchCalls++;
+        value = self.dataSource ? self.dataSource() : self.data;
+    }
+    completion(value, value ? nil : [NSError errorWithDomain:@"IPALab.Anisette" code:1 userInfo:nil]);
 }
 - (void)legacyAnisetteDataForDSID:(id)dsid withCompletion:(void (^)(id, NSError *))completion {
     self.otherCalls++;
