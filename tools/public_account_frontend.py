@@ -68,12 +68,17 @@ def inspect_text(raw):
     for pattern in patterns:
         refs.extend(re.findall(pattern, text))
     modules = {}
-    for module_id in ():
+    for module_id in (37689,):
         marker = re.search(r"(?<![0-9])" + str(module_id) + r":(?:\(|function)", text)
         if marker:
             tail = text[marker.start():marker.start()+18000]
             following = re.search(r"},[0-9]{2,6}:(?:\(|function)", tail[20:])
             modules[str(module_id)] = tail[:20+following.start()+1] if following else tail
+    for match in re.finditer(r"DeauthAllMachines", text):
+        headers = list(re.finditer(r"(?<![0-9])([0-9]{2,6}):(?:\(|function)", text[:match.start()]))
+        if headers:
+            marker = headers[-1]
+            modules["origin-" + marker[1]] = text[marker.start():marker.start()+600]
     runtime_match = re.search(r"\.u\s*=\s*", text)
     runtime = []
     if runtime_match:
