@@ -36,6 +36,27 @@ for before, after in purpose_changes:
     if source.count(before) != 1:
         raise SystemExit("pinned authentication purpose source changed")
     source = source.replace(before, after)
+session_changes = [
+    ('                machineAuthorization: ProcessInfo.processInfo.environment["LAB_AUTHORIZATION_PURPOSE"] == "machineAuthorize",',
+     """                machineAuthorization: ProcessInfo.processInfo.environment["LAB_AUTHORIZATION_PURPOSE"] == "machineAuthorize",
+                createMachineSession: ProcessInfo.processInfo.environment["LAB_AUTHORIZATION_PURPOSE"] == "machineSession","""),
+    ("machineAuthorization: Bool = false,", "machineAuthorization: Bool = false, createMachineSession: Bool = false,"),
+    ("        let parameters: [String: String] = [", "        var parameters: [String: String] = ["),
+    ('"why": machineAuthorization ? "machineAuthorize" : "signIn",',
+     '"why": (machineAuthorization || createMachineSession) ? "machineAuthorize" : "signIn",'),
+    ("        let data = try PropertyListSerialization.data(fromPropertyList: parameters, format: .xml, options: 0)",
+     """        if createMachineSession {
+            parameters.removeValue(forKey: "rmp")
+            parameters["attempt"] = "1"
+            parameters["createSession"] = "true"
+            parameters["machineName"] = ProcessInfo.processInfo.hostName
+        }
+        let data = try PropertyListSerialization.data(fromPropertyList: parameters, format: .xml, options: 0)"""),
+]
+for before, after in session_changes:
+    if source.count(before) != 1:
+        raise SystemExit("pinned machine session source changed")
+    source = source.replace(before, after)
 auth.write_text(source)
 
 tests = root / "Tests/ApplePackageTests/SAPAuthenticationRequestTests.swift"
@@ -95,3 +116,29 @@ after = """                if let destination = ProcessInfo.processInfo.environm
 if source.count(before) != 1:
     raise SystemExit("pinned login handoff changed")
 login.write_text(source.replace(before, after))
+
+source_tests = tests.read_text()
+before = "    func testMachineAuthorizationPurposeIsSignedIntoTheExactBody() async throws {"
+after = """    func testMachineSessionFieldsAreSignedIntoTheExactBody() async throws {
+        let signer = RecordingSigner()
+        let request = try await Authenticator.makeRequest(
+            endpoint: XCTUnwrap(URL(string: "https://auth.itunes.apple.com/login")),
+            email: "reader@example.invalid", password: "synthetic-password", code: "",
+            cookies: [], deviceIdentifier: "001122334455", sapSigner: signer, createMachineSession: true,
+        )
+        let body = try bodyData(request)
+        let signedBodies = await signer.recordedBodies()
+        XCTAssertEqual(signedBodies, [body])
+        let parameters = try XCTUnwrap(PropertyListSerialization.propertyList(from: body, format: nil) as? [String: String])
+        XCTAssertEqual(parameters["why"], "machineAuthorize")
+        XCTAssertEqual(parameters["createSession"], "true")
+        XCTAssertEqual(parameters["attempt"], "1")
+        XCTAssertEqual(parameters["machineName"], ProcessInfo.processInfo.hostName)
+        XCTAssertEqual(parameters["guid"], "001122334455")
+        XCTAssertNil(parameters["rmp"])
+    }
+
+""" + before
+if source_tests.count(before) != 1:
+    raise SystemExit("pinned machine session test changed")
+tests.write_text(source_tests.replace(before, after))

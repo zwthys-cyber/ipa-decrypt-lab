@@ -9,6 +9,7 @@ on:
         options:
           - signIn
           - machineAuthorize
+          - machineSession
       session_context:
         description: Store session context forwarded to the authorization request
         type: choice
