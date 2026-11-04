@@ -18,6 +18,7 @@ on:
         default: '00000000000000000000000000000001'
 permissions:
   contents: read
+  checks: write
 concurrency:
   group: private-ipa-delivery
   cancel-in-progress: false
@@ -120,6 +121,7 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_2FA_CODE: ${{ secrets.APPLE_2FA_CODE }}
+          GH_TOKEN: ${{ github.token }}
           DELIVERY_APP_ID: ${{ inputs.app_id }}
           DELIVERY_REQUEST_ID: ${{ inputs.request_id }}
         run: |

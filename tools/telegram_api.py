@@ -25,7 +25,7 @@ class Telegram:
 
     def call(self, method, payload=None, timeout=40):
         if method not in {"getMe", "getWebhookInfo", "getUpdates", "sendMessage",
-                          "sendDocument", "logOut", "close", "setMyCommands", "getMyCommands",
+                          "editMessageText", "sendDocument", "logOut", "close", "setMyCommands", "getMyCommands",
                           "setChatMenuButton", "getChatMenuButton"}:
             raise APIError("unsupported_telegram_method")
         data = json.dumps(payload or {}, ensure_ascii=True).encode()
@@ -64,6 +64,13 @@ class Telegram:
         if not isinstance(hook, dict) or hook.get("url"):
             raise APIError("existing_webhook_requires_resolution")
         return True
+
+    def edit(self, chat, message, text):
+        result=self.call("editMessageText", {"chat_id":chat,"message_id":message,"text":text,
+                          "link_preview_options":{"is_disabled":True}})
+        if not isinstance(result,dict) or result.get("message_id")!=message:
+            raise APIError("telegram_edit_unconfirmed")
+        return result
 
     def message(self, chat, text):
         result = self.call("sendMessage", {"chat_id": chat, "text": text,

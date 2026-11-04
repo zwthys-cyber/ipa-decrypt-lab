@@ -33,3 +33,8 @@
 - Telegram delivery 41864719056 authenticated the pinned official local Bot API server, privately decrypted the ciphertext on GitHub Linux, independently checked digest and archive structure, and obtained a private-owner sendDocument acknowledgement for all 92,118,013 bytes. This is private delivery evidence, not proof of actual Linux FairPlay decryption or installation/runtime.
 - DELIVERY_AGE_IDENTITY and Telegram credentials are configured as Secrets. Do not regenerate/replace the delivery identity merely to retry an existing artifact. See docs/TELEGRAM.md for bounded session commands and limits.
 - Queue/owner/deduplication behavior has synthetic coverage. Record actual Telegram-request-to-workflow runs separately before claiming that live path verified.
+
+## Sanitized progress reporting
+
+- The user requested live Telegram progress. private-delivery.yml may use checks:write solely to publish the fixed delivery-progress check for its own request/run and source commit. No account data, raw logs, file paths or secrets may enter progress payloads.
+- The Telegram controller may read those checks with checks:read and edit its own owner-private progress message. Report actual stages and elapsed time; never invent byte percentages. Completion 100% requires the file-send acknowledgement. Progress reporting failures must not repeat a job or file upload.

@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import zipfile
 from ipa_audit import audit
+from task_progress import WorkerProgress
 from native_store import classify, classify_download, run
 from offline_verify import readiness
 from store_download import app_id, metadata
@@ -117,7 +118,8 @@ def verify_output(path, before):
         require(archive.testzip() is None, "output_crc_failed")
     return after
 
-def export(binary, engine, crypt, target, request_id, recipient, output_dir):
+def export(binary, engine, crypt, target, request_id, recipient, output_dir, progress=None):
+    progress = progress or (lambda stage: None)
     require(os.environ.get("GITHUB_ACTIONS") == "true", "requires_github_actions")
     require(re.fullmatch(r"[a-f0-9]{32}", request_id) is not None, "invalid_request_id")
     identifier = app_id(target)
@@ -126,6 +128,7 @@ def export(binary, engine, crypt, target, request_id, recipient, output_dir):
     require(not readiness(), "missing_or_invalid_model")
     require(os.environ.get("APPLE_ID") and os.environ.get("APPLE_PASSWORD"), "missing_apple_credentials")
     require(not output_dir.exists(), "output_directory_exists")
+    progress("metadata")
     info = metadata(identifier)
     email = os.environ["APPLE_ID"].strip()
     # Only native downloader receives the Store password, never the delivery key.
@@ -135,15 +138,18 @@ def export(binary, engine, crypt, target, request_id, recipient, output_dir):
     if os.environ.get("APPLE_2FA_CODE"):
         login += ["--code", os.environ["APPLE_2FA_CODE"]]
     try:
+        progress("authenticating")
         state = classify(run(binary, login, env))
         require(state == "authenticated", state)
         with tempfile.TemporaryDirectory(prefix="ipa-delivery-private-") as directory:
             root = Path(directory)
             root.chmod(0o700)
             original, candidate, cleaned = root/"source.ipa", root/"candidate.ipa", root/"delivery.ipa"
+            progress("downloading")
             result = run(binary, ["download", email, info["bundleId"], "--output", str(original)], env)
             require(result.returncode == 0 and original.is_file(), classify_download(result))
             require(0 < original.stat().st_size <= MAX_BYTES, "source_too_large")
+            progress("auditing")
             before = audit(original)
             require(before["bundle_id"] == info["bundleId"], "downloaded_app_mismatch")
             model = root/"model.bin"
@@ -152,6 +158,7 @@ def export(binary, engine, crypt, target, request_id, recipient, output_dir):
             child_env = {k: os.environ[k] for k in ("HOME", "PATH", "LANG") if k in os.environ}
             child_env.update(TMPDIR=str(root), TMP=str(root), TEMP=str(root))
             report_path = root/"private-report.json"
+            progress("decrypting")
             completed = subprocess.run([engine, "decrypt", "--input", str(original),
                 "--output", str(candidate), "--report", str(report_path), "--model", str(model),
                 "--strip-account-data"], stdin=subprocess.DEVNULL, capture_output=True,
@@ -159,10 +166,12 @@ def export(binary, engine, crypt, target, request_id, recipient, output_dir):
             require(completed.returncode == 0 and candidate.is_file() and report_path.is_file(),
                     "decryption_rejected")
             require(report_path.stat().st_size <= 8 * 1024 * 1024, "report_too_large")
+            progress("verifying")
             report = json.loads(report_path.read_bytes())
             images, pages = validate_report(report, before, candidate)
             scrub_archive(candidate, cleaned)
             verify_output(cleaned, before)
+            progress("encrypting")
             sealed = root/"package.ipa.age"
             completed = subprocess.run([crypt, "encrypt", str(cleaned), str(sealed), recipient],
                 stdin=subprocess.DEVNULL, capture_output=True, env=dict(child_env, GITHUB_ACTIONS="true"),
@@ -200,11 +209,13 @@ def main():
     args = p.parse_args()
     os.umask(0o077)
     output = Path("delivery-out")
+    progress = WorkerProgress(os.environ.get("DELIVERY_REQUEST_ID",""))
     try:
         recipient = json.loads(Path("config/delivery.json").read_text())["recipient"]
         result = export(str(Path(args.binary).resolve()), str(Path(args.engine).resolve()),
                         str(Path(args.crypt).resolve()), os.environ.get("DELIVERY_APP_ID", ""),
-                        os.environ.get("DELIVERY_REQUEST_ID", ""), recipient, output)
+                        os.environ.get("DELIVERY_REQUEST_ID", ""), recipient, output, progress.advance)
+        progress.advance("artifact_ready")
         print(json.dumps(result), flush=True)
         return 0
     except ExportError as exc:
@@ -213,6 +224,7 @@ def main():
         status = "private_export_timeout"
     except Exception:
         status = "private_export_failed"
+    progress.advance("failed")
     # An incomplete output directory is never uploaded by the workflow.
     import shutil
     shutil.rmtree(output, ignore_errors=True)

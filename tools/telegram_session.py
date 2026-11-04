@@ -12,6 +12,7 @@ from telegram_api import APIError, private_message
 from telegram_queue import GitHub, QueueError, request_id
 from telegram_runtime import local_bot
 from telegram_menu import configure as configure_menu
+from task_progress import ProgressCard
 
 HELP = ("发送美区免费 App Store 链接或数字 App ID，创建下载与解密任务。\n"
         "/status 查看当前任务\n/cancel 取消当前任务\n"
@@ -53,9 +54,15 @@ class Controller:
         self.last_submission = 0
         self.last_notice = 0
         self.delivered = set()
+        self.cards = {}
 
     def say(self,text):
         return self.bot.message(self.owner,text)
+
+    def card(self,rid,app=""):
+        if rid not in self.cards:
+            self.cards[rid]=ProgressCard(self.bot,self.owner,rid,app)
+        return self.cards[rid]
 
     def handle(self, update):
         item = private_message(update)
@@ -79,7 +86,10 @@ class Controller:
             self.say("你的 Telegram 数字用户 ID："+str(self.owner))
             return
         if command=="/status":
-            self.say("当前任务："+self.current["rid"]+"\n状态："+self.current["state"] if self.current else "当前没有正在处理的任务。")
+            if self.current:
+                self.card(self.current["rid"],self.current["app"]).update(self.current.get("stage","queued"),force=True)
+            else:
+                self.say("当前没有正在处理的任务。")
             return
         if command=="/cancel":
             if not self.current:
@@ -87,8 +97,8 @@ class Controller:
                 return
             rid = self.current["rid"]
             self.github.cancel(rid)
+            self.card(rid).update("cancelled",force=True)
             self.current = None
-            self.say("已请求取消任务："+rid)
             event("cancellation_requested",request_id=rid)
             return
         if command=="/get":
@@ -115,29 +125,34 @@ class Controller:
         rid = opaque_id(self.token,self.owner,update_number,app)
         # Record before dispatch: an ambiguous network outcome must not cause a duplicate POST.
         self.current = {"rid":rid,"app":app,"state":"dispatch_pending","since":time.monotonic()}
+        self.card(rid,app).update("dispatch_pending")
         self.submitted+=1
         self.last_submission=time.monotonic()
         try:
             result = self.github.dispatch(app,rid)
             self.current["state"] = result.get("status","queued")
-            self.say("任务已提交。\nApp ID："+app+"\n任务编号："+rid+"\n用 /status 查询进度。")
+            self.card(rid,app).update("queued")
             event("job_submitted",request_id=rid,app_id=app)
         except QueueError:
-            self.say("提交结果尚未确认，正在查询，请勿重复提交。\n任务编号："+rid)
+            self.card(rid,app).update("dispatch_pending")
             event("dispatch_outcome_unknown",request_id=rid)
 
     def deliver(self,rid):
-        self.say("正在私有校验并上传文件，请稍候。\n任务编号："+rid)
+        card=self.card(rid)
+        card.update("retrieving")
         try:
-            result=self.github.deliver(rid,self.bot,self.owner,self.crypt)
+            result=self.github.deliver(rid,self.bot,self.owner,self.crypt,progress=card.update)
             event(**result)
             self.delivered.add(rid)
+            card.update("done",force=True)
             return True
         except APIError:
             # sendDocument can time out after Telegram accepted it. No automatic resend.
+            card.update("unknown",force=True)
             event("delivery_outcome_unknown",request_id=rid)
             self.say("文件发送结果未确认。请先检查聊天；如未收到，可稍后用 /get "+rid+" 手动重试。")
         except QueueError as exc:
+            card.update("failed",force=True)
             event(str(exc),request_id=rid)
             self.say("暂时无法交付文件："+str(exc)+"\n任务编号："+rid)
         return False
@@ -160,14 +175,24 @@ class Controller:
                     self.deliver(rid)
             else:
                 self.say("任务未完成："+str(run.get("conclusion","unknown"))+"\n任务编号："+rid)
+                self.card(rid).update("failed",force=True)
                 event("worker_not_successful",request_id=rid)
-        elif state!=self.current["state"]:
+        else:
             self.current["state"]=state
-            self.say("任务状态："+state+"\n任务编号："+rid)
+            stage="queued" if state in ("queued","waiting","pending","requested") else "preparing"
+            if state=="in_progress":
+                try:
+                    reported=self.github.progress(run,rid)
+                    if isinstance(reported,str):
+                        stage=reported
+                except QueueError:
+                    stage=self.current.get("stage","preparing")
+            self.current["stage"]=stage
+            self.card(rid,self.current["app"]).update(stage)
 
 def main():
     p=argparse.ArgumentParser()
-    p.add_argument("--mode",choices=("check","menu","session","deliver"),default="check")
+    p.add_argument("--mode",choices=("check","menu","progress-demo","session","deliver"),default="check")
     p.add_argument("--minutes",type=int,default=30)
     p.add_argument("--request-id",default="")
     p.add_argument("--server",required=True)
@@ -186,6 +211,14 @@ def main():
             controller=Controller(bot,github,owner,crypt,os.environ["TELEGRAM_BOT_TOKEN"])
             event("local_bot_authenticated")
             event(**configure_menu(bot,owner))
+            if args.mode=="progress-demo":
+                card=ProgressCard(bot,owner,"0"*32,demo=True)
+                for stage in ("queued","downloading","decrypting","verifying","uploading","done"):
+                    if not card.update(stage,force=True):
+                        raise APIError("progress_demo_edit_unconfirmed")
+                    time.sleep(2)
+                event("progress_demo_verified",edits=5)
+                return 0
             if args.mode=="menu":
                 return 0
             if args.mode=="check":

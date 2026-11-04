@@ -42,7 +42,10 @@ class GitHub:
         self.opener = urllib.request.build_opener(NoRedirect())
 
     def call(self, path, payload=None, method="GET", limit=4*1024*1024):
-        require(path.startswith("/actions/") and "\n" not in path, "invalid_github_path")
+        require((path.startswith("/actions/") or
+                 re.fullmatch(r"/check-runs(?:/[1-9][0-9]*)?",path) or
+                 re.fullmatch(r"/commits/[a-f0-9]{40}/check-runs\?check_name=delivery-progress-[a-f0-9]{32}&per_page=100",path))
+                and "\n" not in path, "invalid_github_path")
         request = urllib.request.Request("https://api.github.com/repos/" + REPOSITORY + path,
             data=None if payload is None else json.dumps(payload).encode(),
             method=method, headers={"Authorization": "Bearer " + self.token,
@@ -89,6 +92,18 @@ class GitHub:
             return {"id":response["workflow_run_id"], "status":"queued"}
         return {"status":"dispatch_pending"}
 
+    def progress(self, run, rid):
+        from task_progress import parse_stage
+        request_id(rid)
+        commit=run.get("head_sha","")
+        require(re.fullmatch(r"[a-f0-9]{40}",commit), "invalid_progress_commit")
+        data=self.call("/commits/"+commit+"/check-runs?check_name=delivery-progress-"+rid+"&per_page=100")
+        for check in data.get("check_runs",[]):
+            stage=parse_stage(check,rid,run["id"])
+            if stage:
+                return stage
+        return None
+
     def cancel(self, rid):
         run = self.find(rid)
         require(run is not None, "run_not_found")
@@ -131,8 +146,10 @@ class GitHub:
         except (OSError, http.client.HTTPException):
             raise QueueError("artifact_transport_failed") from None
 
-    def deliver(self, rid, bot, owner, crypt):
+    def deliver(self, rid, bot, owner, crypt, progress=None):
         request_id(rid)
+        progress = progress or (lambda stage: None)
+        progress("retrieving")
         run = self.find(rid)
         require(run is not None and run.get("status") == "completed"
                 and run.get("conclusion") == "success", "artifact_not_ready")
@@ -167,6 +184,7 @@ class GitHub:
                         dst.write(block)
             require(encrypted.stat().st_size == receipt["ciphertext_bytes"]
                     and sha256(encrypted) == receipt["ciphertext_sha256"], "ciphertext_digest_mismatch")
+            progress("delivery_verifying")
             output = root/(receipt["app_id"] + "_decrypted.ipa")
             env = {k:os.environ[k] for k in ("PATH","HOME","LANG","DELIVERY_AGE_IDENTITY") if k in os.environ}
             env["GITHUB_ACTIONS"] = "true"
@@ -182,6 +200,7 @@ class GitHub:
                 require(not any(personalized(e.filename) for e in z.infolist()), "account_member_retained")
             require(bot.base == "http://127.0.0.1:8081", "large_file_server_required")
             # Local server reads private local file; no multipart buffering and no public link.
+            progress("uploading")
             reply = bot.call("sendDocument", {"chat_id":owner, "document":output.as_uri(),
                 "caption":"IPA 已完成明文校验；已移除账号元数据。\n需要重签名后安装，尚未验证实际运行。\n任务：" + rid,
                 "disable_content_type_detection":True}, timeout=600)
