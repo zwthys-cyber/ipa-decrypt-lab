@@ -17,7 +17,8 @@ int main(void) { @autoreleasepool {
  lab_store_token_impl=storeMethod?(void *)method_getImplementation(storeMethod):NULL;
  lab_dictionary_token_impl=dictionaryMethod?(void *)method_getImplementation(dictionaryMethod):NULL;
  if(!dlopen("/System/Library/PrivateFrameworks/CommerceKit.framework/CommerceKit",RTLD_NOW|RTLD_GLOBAL))return 5;
- if(!dlopen("/System/Library/PrivateFrameworks/StoreFoundation.framework/StoreFoundation",RTLD_NOW|RTLD_GLOBAL))return 6;
+ // StoreFoundation may be a nested CommerceKit framework and load transitively.
+ dlopen("/System/Library/PrivateFrameworks/StoreFoundation.framework/StoreFoundation",RTLD_NOW|RTLD_GLOBAL);
  lab_frameworks_loaded();
  return 0;
 }}
