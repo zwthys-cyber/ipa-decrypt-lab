@@ -5,6 +5,8 @@
 #include <dlfcn.h>
 #include <string.h>
 #include <unistd.h>
+#include <mach/mach.h>
+#include <servers/bootstrap.h>
 #import <xpc/xpc.h>
 #import <Security/Security.h>
 
@@ -139,6 +141,16 @@ static void removeProxyTrace(void) {
         @selector(synchronousRemoteObjectProxyWithErrorHandler:)), syncProxyOriginal);
 }
 
+static NSDictionary *bootstrapDetail(void) {
+    mach_port_t service = MACH_PORT_NULL;
+    kern_return_t code = bootstrap_look_up(bootstrap_port, "com.apple.ak.auth.xpc", &service);
+    BOOL found = code == KERN_SUCCESS && MACH_PORT_VALID(service);
+    NSString *kind = found ? @"found" : code == BOOTSTRAP_UNKNOWN_SERVICE ? @"unknown_service" :
+        code == BOOTSTRAP_NOT_PRIVILEGED ? @"not_privileged" : @"other_error";
+    if (MACH_PORT_VALID(service)) mach_port_deallocate(mach_task_self(), service);
+    return @{@"auth_service_port_available": @(found), @"bootstrap_lookup_code": @(code),
+             @"bootstrap_lookup_status": kind};
+}
 static NSDictionary *signatureDetail(void) {
     NSMutableDictionary *r = [@{@"signature_metadata_available": @NO,
         @"declared_internal_authkit_entitlement": @NO} mutableCopy];
@@ -173,6 +185,7 @@ int main(int argc, const char **argv) {
             @"account_login_attempted": @NO, @"enrollment_created": @NO, @"decryption_proven": @NO} mutableCopy];
         @try {
             [r addEntriesFromDictionary:signatureDetail()];
+            [r addEntriesFromDictionary:bootstrapDetail()];
             r[@"proxy_trace_installed"] = @(installProxyTrace());
             dlopen("/System/Library/PrivateFrameworks/AuthKit.framework/AuthKit", RTLD_LAZY | RTLD_LOCAL);
             Class cls = NSClassFromString(@"AKAppleIDAuthenticationController");

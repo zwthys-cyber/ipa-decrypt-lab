@@ -18,9 +18,9 @@ BOOLS = {"explicit_client_identifier", "bundle_identifier_present", "bag_selecto
          "reason_connection_rejected", "reason_internal_authkit_entitlement_named",
          "reason_peer_code_requirement", "reason_peer_cancelled",
          "signature_metadata_available", "declared_internal_authkit_entitlement", "native_process_signalled",
-         "proxy_trace_installed", "effective_user_is_root"}
+         "proxy_trace_installed", "effective_user_is_root", "auth_service_port_available"}
 STATUSES = {"interface_unavailable", "transport_timeout", "transport_rejected", "bag_fetch_succeeded",
-            "empty_result", "native_exception", "probe_failed", "requires_github_macos", "native_process_failed"}
+            "empty_result", "native_exception", "probe_failed", "requires_github_macos", "native_process_failed", "gui_context_unavailable"}
 DOMAINS = {"NSCocoaErrorDomain", "AKAuthenticationError", "AKAuthenticationServerError",
            "NSPOSIXErrorDomain", "NSURLErrorDomain"}
 SERVICES = {"com.apple.ak.auth.xpc", "com.apple.ak.anisette.xpc",
@@ -49,6 +49,12 @@ def clean(value, nested=False):
     if type(value.get("invalidation_reason_terms")) is list:
         result["invalidation_reason_terms"] = sorted({term for term in value["invalidation_reason_terms"]
             if type(term) is str and term in REASON_TERMS})
+    if type(value.get("bootstrap_lookup_code")) is int and -999999 <= value["bootstrap_lookup_code"] <= 999999:
+        result["bootstrap_lookup_code"] = value["bootstrap_lookup_code"]
+    if type(value.get("bootstrap_lookup_status")) is str and value["bootstrap_lookup_status"] in {"found", "unknown_service", "not_privileged", "other_error"}:
+        result["bootstrap_lookup_status"] = value["bootstrap_lookup_status"]
+    if type(value.get("gui_context_process")) is str and value["gui_context_process"] in {"Finder", "Dock", "none"}:
+        result["gui_context_process"] = value["gui_context_process"]
     if type(value.get("native_exit_code")) is int and -128 <= value["native_exit_code"] <= 255:
         result["native_exit_code"] = value["native_exit_code"]
     if type(value.get("service_name")) is str and value["service_name"] in SERVICES:
@@ -108,15 +114,36 @@ def daemon_diagnostic():
         pass
     return result
 
+def gui_context():
+    for name in ("Finder", "Dock"):
+        try:
+            run = subprocess.run(["/usr/bin/pgrep", "-u", str(os.getuid()), "-x", name],
+                stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=3, env=environment())
+            if run.returncode == 0 and len(run.stdout) <= 64:
+                values = run.stdout.split()
+                if len(values) == 1 and values[0].isascii() and values[0].isdigit() and 1 < int(values[0]) < 2147483647:
+                    return name, values[0]
+        except Exception:
+            pass
+    return "none", None
+
 def probe(binary, mode, scope="user"):
     if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "darwin":
         return clean({"status": "requires_github_macos"})
-    if mode not in {"default", "named"} or scope not in {"user", "root_gui"}:
+    if mode not in {"default", "named"} or scope not in {"user", "root_gui", "gui_process_user"}:
         return clean({})
     try:
         command = [str(Path(binary).resolve()), mode]
+        gui_name = None
         if scope == "root_gui":
             command = ["/usr/bin/sudo", "-n", "/bin/launchctl", "asuser", str(os.getuid()),
+                       "/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "GITHUB_ACTIONS=true"] + command
+        elif scope == "gui_process_user":
+            gui_name, pid = gui_context()
+            if pid is None:
+                return clean({"status": "gui_context_unavailable", "gui_context_process": gui_name})
+            command = ["/usr/bin/sudo", "-n", "/bin/launchctl", "bsexec", pid,
+                       "/usr/bin/sudo", "-n", "-u", "#" + str(os.getuid()),
                        "/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "GITHUB_ACTIONS=true"] + command
         run = subprocess.run(command, stdin=subprocess.DEVNULL,
                              capture_output=True, text=True, timeout=20, env=environment())
@@ -127,6 +154,8 @@ def probe(binary, mode, scope="user"):
             return clean({})
         result = clean(json.loads(run.stdout))
         result["stderr_classification"] = classify_connection_text(run.stderr)
+        if gui_name:
+            result["gui_context_process"] = gui_name
         return result
     except Exception:
         return clean({})
@@ -178,7 +207,11 @@ def main():
             rows.append(row)
     for mode in ("default", "named"):
         row = probe("./AuthKitTransport.app/Contents/MacOS/AuthKitTransport", mode, scope="root_gui")
-        row["container"] = "own_app_root_in_user_gui"
+        row["container"] = "own_app_root_via_asuser"
+        rows.append(row)
+    for mode in ("default", "named"):
+        row = probe("./AuthKitTransport.app/Contents/MacOS/AuthKitTransport", mode, scope="gui_process_user")
+        row["container"] = "own_app_gui_process_context"
         rows.append(row)
     report = {"schema": "ipa-lab-authkit-transport-comparison-v1", "probes": rows,
               "metadata": service_metadata(), "daemon_diagnostic": daemon_diagnostic(),

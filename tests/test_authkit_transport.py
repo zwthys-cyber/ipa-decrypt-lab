@@ -86,6 +86,32 @@ class TransportTests(unittest.TestCase):
             result = transport.probe("/synthetic", "named", scope="root_gui")
         self.assertIs(result["effective_user_is_root"], True)
 
+    def test_gui_process_adoption_uses_validated_pid_and_restores_user_credentials(self):
+        def child(command, **kwargs):
+            self.assertEqual(command[:5], ["/usr/bin/sudo", "-n", "/bin/launchctl", "bsexec", "12345"])
+            self.assertEqual(command[5:9], ["/usr/bin/sudo", "-n", "-u", "#" + str(os.getuid())])
+            self.assertNotIn("APPLE_PASSWORD", kwargs["env"])
+            return SimpleNamespace(returncode=0, stdout=json.dumps({"status": "transport_rejected",
+                "effective_user_is_root": False, "auth_service_port_available": True,
+                "bootstrap_lookup_code": 0, "bootstrap_lookup_status": "found"}), stderr="")
+        with patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}), patch.object(
+            transport.sys, "platform", "darwin"
+        ), patch.object(transport, "gui_context", return_value=("Finder", "12345")), patch.object(
+            transport.subprocess, "run", side_effect=child
+        ):
+            result = transport.probe("/synthetic", "named", scope="gui_process_user")
+        self.assertEqual(result["gui_context_process"], "Finder")
+        self.assertFalse(result["effective_user_is_root"])
+        self.assertTrue(result["auth_service_port_available"])
+        self.assertNotIn("12345", json.dumps(result))
+
+    def test_gui_context_discovery_rejects_ambiguous_or_non_numeric_processes(self):
+        for value in ("private-data", "1", "-5", "23 24", "9" * 65):
+            with patch.object(transport.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout=value)):
+                self.assertEqual(transport.gui_context(), ("none", None))
+        with patch.object(transport.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout="12345\n")):
+            self.assertEqual(transport.gui_context(), ("Finder", "12345"))
+
     def test_bag_success_requires_completed_nonempty_error_free_response(self):
         value = {"status": "bag_fetch_succeeded", "callback_completed": True,
                  "bag_result_present": True, "error_present": False}
