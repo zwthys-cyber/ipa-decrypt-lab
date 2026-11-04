@@ -1,6 +1,15 @@
 name: Independent Anisette prerequisite probe
 on:
   workflow_dispatch:
+    inputs:
+      runner:
+        description: GitHub-hosted environment for the account-free prerequisite check
+        required: true
+        default: ubuntu-24.04
+        type: choice
+        options:
+          - ubuntu-24.04
+          - macos-15
 permissions:
   contents: read
 concurrency:
@@ -8,8 +17,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   probe:
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
+    if: github.ref == 'refs/heads/main' && (inputs.runner == 'ubuntu-24.04' || inputs.runner == 'macos-15')
+    runs-on: ${{ inputs.runner }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -17,6 +26,12 @@ jobs:
           persist-credentials: false
       - name: Test privacy, endpoint and prerequisite contracts
         run: python3 -m unittest discover -s tests -p 'test_anisette_probe.py' -v
+      - name: Inspect native AuthKit adapter capabilities without account access
+        if: runner.os == 'macOS'
+        timeout-minutes: 2
+        run: |
+          clang -fobjc-arc -framework Foundation tools/AuthKitCapabilities.m -o authkit-capabilities
+          python3 tools/authkit_capabilities.py
       - name: Fetch pinned open-source provider
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -37,7 +52,7 @@ jobs:
             --proto '=https' --proto-redir '=https' \
             --output applemusic.apk \
             https://apps.mzstatic.com/content/android-apple-music-apk/applemusic.apk
-          sha256sum applemusic.apk
+          shasum -a 256 applemusic.apk
       - name: Provision once and verify private session reuse without an Apple account
         timeout-minutes: 3
         run: |
