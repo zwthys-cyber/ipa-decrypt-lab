@@ -1,0 +1,28 @@
+name: Account-free official account-management UI capability
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: account-management-capabilities
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Compile bounded account-free capability probe
+        run: clang -Wall -Wextra -Werror -fobjc-arc -framework Foundation -framework AppKit -framework ApplicationServices tools/NativeAccountManagementCapabilities.m -o account-management-capabilities
+      - name: Inspect official Music launch and existing UI access without credentials
+        timeout-minutes: 1
+        run: |
+          ulimit -c 0
+          ./account-management-capabilities
