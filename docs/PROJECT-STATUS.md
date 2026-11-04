@@ -106,3 +106,11 @@
 - 将仍使用的控制器移至 `telegram_controller.py`，更新守护进程、发布文件列表和测试引用。
 - 保留并迁移 9 项控制器恢复测试到真实临时 SQLite；移除 6 项旧 Checks 专属或已有 SQLite 覆盖的测试，因此总数从 347 调整为 341。
 - 现行模型、下载、解密、交付、构建缓存工作流及研究证据继续保留。已删除代码可通过 Git 历史查阅，不另存过时代码副本。
+
+## QQ（App ID 444934666）审计限制复核
+
+任务 `4f99d3d815873a46c93a0ec3d500f552` 原运行 [41901560282](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41901560282)仅报告 private_export_failed，未保留足够错误分类，不能仅凭此认定账号或解密失败。
+
+新增安全阶段与错误码后，[41904195598](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41904195598)确认下载后触发 4096 条归档条目限制。上限调整至 32768 后，[41905063840](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41905063840)触发单 Mach-O 128 MiB 限制；调整至 512 MiB、总读取预算 2 GiB 后，[41906323142](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41906323142)仍报告 macho_member_limit，failed_stage=auditing。应用查询、账号登录和原始下载均通过，但尚未进入解密，未生成可交付文件。
+
+当前代码 `8c0d4f5a2746cc9f58af04209da2837d4d12ab45` 已由 [41906318760](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41906318760)构建、部署并通过服务健康检查，Ubuntu 和 Debian 13 各 347 项测试（1 项跳过）。QQ 支持仍未完成；后续应改为有界流式/磁盘映射审计，避免通过持续提高整文件内存读取上限适配大型应用。不应跳过结构、明文或摘要校验。
