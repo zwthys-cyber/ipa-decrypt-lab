@@ -65,6 +65,16 @@ class SessionTests(unittest.TestCase):
         gh.deliver.assert_called_once()
         self.assertIsNone(c.current)
 
+    def test_manual_get_does_not_trigger_duplicate_automatic_send(self):
+        c,bot,gh=self.controller()
+        c.current={"rid":RID,"app":"6599842047","state":"in_progress","since":time.monotonic()}
+        gh.find.return_value={"status":"completed","conclusion":"success"}
+        gh.deliver.return_value={"status":"telegram_file_delivered","request_id":RID,"bytes":100}
+        c.handle(update(text="/get "+RID))
+        c.tick()
+        gh.deliver.assert_called_once()
+        self.assertIsNone(c.current)
+
     def test_strict_target(self):
         self.assertEqual(target_id("https://apps.apple.com/us/app/name/id6599842047?l=en"),"6599842047")
         for bad in ("https://example.com/id6599842047","https://apps.apple.com.evil/id6599842047",

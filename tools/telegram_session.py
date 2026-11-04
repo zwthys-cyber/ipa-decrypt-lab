@@ -51,6 +51,7 @@ class Controller:
         self.submitted = 0
         self.last_submission = 0
         self.last_notice = 0
+        self.delivered = set()
 
     def say(self,text):
         return self.bot.message(self.owner,text)
@@ -74,7 +75,7 @@ class Controller:
             self.say("你的 Telegram 数字用户 ID："+str(self.owner))
             return
         if command=="/status":
-            self.say("当前任务："+self.current["rid"] if self.current else "当前没有正在处理的任务。")
+            self.say("当前任务："+self.current["rid"]+"\n状态："+self.current["state"] if self.current else "当前没有正在处理的任务。")
             return
         if command=="/cancel":
             if not self.current:
@@ -126,6 +127,7 @@ class Controller:
         try:
             result=self.github.deliver(rid,self.bot,self.owner,self.crypt)
             event(**result)
+            self.delivered.add(rid)
             return True
         except APIError:
             # sendDocument can time out after Telegram accepted it. No automatic resend.
@@ -150,7 +152,8 @@ class Controller:
         if state=="completed":
             self.current=None
             if run.get("conclusion")=="success":
-                self.deliver(rid)
+                if rid not in self.delivered:
+                    self.deliver(rid)
             else:
                 self.say("任务未完成："+str(run.get("conclusion","unknown"))+"\n任务编号："+rid)
                 event("worker_not_successful",request_id=rid)
