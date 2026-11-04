@@ -518,3 +518,34 @@ The macOS import block was then inspected directly on both architectures in run 
 
 Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41766070751 passed on both architectures: 12 Python checks per architecture and native extraction/header contracts. Both fixed invalid samples produced import_fairplay_status=-42023, context_ready_before_request=true and context_stable_after_rejection=true. This validates numeric extraction without using an account; it does not assign the real response the same cause.
 
+### Repeated real keybag response with numeric import diagnosis
+
+Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41766153823 passed 24 Python tests, 11 Swift tests, native compilation and synthetic contracts. It used the same signIn + cookies + login_agent request configuration. Store login again succeeded, the single authorization response again contained a nonempty keybag without a business failure, and import again failed. The newly extracted import_fairplay_status was -42023; context_ready_before_request and context_stable_before_import were both true. The observed four SIDB/SIDS flags remained false, and enrollment_created/decryption_proven remained false.
+
+The repeated response establishes progress beyond the previous 2002 blocker, but the matching error code for a deliberately invalid sample does not establish the real response's failure cause. No second request, retry import, deauthorization or private artifact export was performed in this trial.
+
+Actual macOS context code inspection in https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41766323939 passed on both architectures and confirms /Users/Shared/SC Info as the AMSFairPlayContext storage path, after _validateFairPlayPath. The existing state checks therefore include the actual directory; this does not prove all FairPlay state anywhere on the runner is absent. Static low-level import inspection in https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41766425771 does not itself establish the meaning of -42023.
+
+The manual trial and CLI now default to cookies + login_agent, preserving the explicitly tested request configuration. The Python trial API retains legacy defaults for existing callers and tests.
+
+Primary references: [pinned ApplePackage client configuration](https://github.com/Lakr233/ApplePackage/blob/391bfe6ee6598d73e4f94b88b38b50bd6f6ec67b/Sources/ApplePackage/Configuration/Configuration.swift), [iOS AMSKeybag reference](https://github.com/EthanArbuckle/iPhone17-1_18.2_22C152_Restore/blob/e26ed4563f78871c59d2d96856756a65d62517e5/System/Library/PrivateFrameworks/AppleMediaServices.framework/AMSKeybag.m), and the macOS runtime CI reports above. iOS reference behavior is not assumed to match macOS without a runtime check.
+
+### Shared-directory control
+
+Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41766654638 passed on ARM and Intel (12 Python checks per architecture and native contracts). After native context creation the actual shared directory was present, not a symlink, and writable by the process. The fixed invalid sample still returned -42023. This does not establish every later database I/O would succeed, but provides no evidence to justify a root rerun as a directory-permission fix.
+
+Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41766657666 inspected the actual path-validation function on both architectures with four Python checks per architecture. The lower-level import implementation uses obfuscated control flow; the bounded static snippets do not establish the precise condition producing -42023. No error-code meaning is inferred from an unrelated search result.
+
+### Response-envelope control
+
+Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41766951830 passed 25 Python and 11 Swift checks plus native shape/error/header contracts before credentials were supplied. The server again returned a keybag with no business error; native import again returned -42023 with the same context. The live trial confirmed the shared directory was present, writable and not a symlink. The returned data had size bucket under_4096 (256–4095 bytes) and did not match strict canonical Base64 ASCII, an XML prefix, bplist00 or gzip magic. These bounded format flags neither reveal payload bytes nor validate the FairPlay envelope. No unwrapping or import retry was attempted on speculation.
+
+### App Store daemon request prerequisite
+
+The existing runtime metadata confirmed ASDFairPlayService is available. Its reference implementation uses App Store daemon RPC rather than the process-local AMSKeybag context. A separate account-free probe checks actual ABI and attempts only local keybag-request generation for a fixed synthetic account. It never signs in, sends a machine-authorization request or imports a keybag. All stdout/stderr stay discarded and only allowlisted metadata is published.
+
+Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41767257252 passed on both architectures with three Python privacy/evidence tests per architecture and native compilation. Both found the service and verified its method ABI, but generating a request for synthetic account zero returned ASDErrorDomain 505 and no data. A green diagnostic workflow records completion of a bounded probe; it does not mean request generation or enrollment succeeded. A zero-account result alone cannot distinguish an input restriction from service access or initialization failure.
+
+The follow-up run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41767422349 passed four Python report/privacy tests per architecture, native compilation and synthetic nested-error contracts. It compared fixed synthetic account zero and nonzero in separate processes. All four calls returned ASDErrorDomain 505 with no request data. The bounded classifiers found entitlement wording in each error, but no account/DSID, connection/XPC or permission wording, and no published underlying error. This points to a caller-entitlement prerequisite rather than explaining the independent AMS import error; the classifier is not a complete entitlement-policy proof. No real account was passed, and no Apple authorization or keybag import was attempted.
+
+Current verified position: three private trials with the consistent login agent obtained server keybag data, but all attempted AMS imports failed. The numeric diagnostic in the latter two reported -42023. App Store daemon generation is separately unavailable to the current probe, with entitlement wording in its error. Neither path has produced a recovered FairPlay model or verified decrypted IPA. The next substantive requirement is a supported, demonstrated import/enrollment path; repeated compilation or login is not model generation.
