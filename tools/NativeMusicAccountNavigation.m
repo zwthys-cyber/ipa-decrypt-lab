@@ -129,6 +129,33 @@ static NSDictionary *WindowSnapshot(AXUIElementRef app) {
     }
     return PublicSnapshot(all);
 }
+// Only fixed first-run sheet button captions, in this credential-free executable.
+static NSArray *WelcomeCaptions(AXUIElementRef app) {
+    id windows = ReadAttribute(app,kAXWindowsAttribute);
+    NSMutableArray *captions = [NSMutableArray array];
+    if (![windows isKindOfClass:NSArray.class]) return captions;
+    for (id window in windows) {
+        if (CFGetTypeID((__bridge CFTypeRef)window)!=AXUIElementGetTypeID()) continue;
+        for (NSDictionary *node in Nodes((__bridge AXUIElementRef)window)) {
+            if (![node[@"role"] isEqual:@"AXSheet"]) continue;
+            NSArray *sheet = Nodes((__bridge AXUIElementRef)node[@"element"]);
+            if (![PublicSnapshot(sheet)[@"labels"][@"welcome"] unsignedIntegerValue]) continue;
+            for (NSDictionary *control in sheet) {
+                if (![control[@"role"] isEqual:@"AXButton"] || captions.count>=4) continue;
+                NSMutableDictionary *caption=[NSMutableDictionary dictionary];
+                AXUIElementRef element=(__bridge AXUIElementRef)control[@"element"];
+                for (NSString *attribute in @[@"AXTitle",@"AXDescription",@"AXValue"]) {
+                    NSString *value=Text(ReadAttribute(element,(__bridge CFStringRef)attribute));
+                    if (value.length>0 && value.length<=64 &&
+                        [value rangeOfString:@"^[A-Za-z][A-Za-z ’'….,!?-]*$" options:NSRegularExpressionSearch].location!=NSNotFound)
+                        caption[attribute]=value;
+                }
+                [captions addObject:caption];
+            }
+        }
+    }
+    return captions;
+}
 static BOOL Press(NSArray *nodes, NSString *action, NSMutableDictionary *report) {
     NSMutableArray *matches = [NSMutableArray array];
     for (NSDictionary *node in nodes)
@@ -211,6 +238,7 @@ int main(int argc, const char **argv) { @autoreleasepool {
                 } else report[@"status"]=@"account_menu_unavailable";
             }
             report[@"after_navigation"]=WindowSnapshot(target);
+            report[@"first_run_button_captions"]=WelcomeCaptions(target);
             CFRelease(target);
             [app terminate];
         }
