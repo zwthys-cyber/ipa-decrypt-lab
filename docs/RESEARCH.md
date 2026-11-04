@@ -1,5 +1,7 @@
 # 第二阶段验证记录
 
+> 历史阶段记录：以下结论针对当时的原生接口和合成样本。后续模型恢复与真实 IPA 校验已经通过，最新进展见 [项目状态与使用说明](PROJECT-STATUS.md)；本文保留原始失败证据。
+
 验证提交：`3b4adddd913778fcdcc9ba45ecb92bbe7d0cf61b`
 
 [GitHub Actions 验证运行](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41713104024)

@@ -1,5 +1,7 @@
 # Offline decryption backend
 
+For the maintained milestone summary and workflow choices, see [Project status and usage](docs/PROJECT-STATUS.md). This document retains the chronological research evidence.
+
 ## Current verified status (2026-11-04)
 
 **A real model has now been recovered entirely on GitHub-hosted macOS and validated against the complete original IPA.** [Successful bootstrap 41846142942](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41846142942) verified 62 encrypted slices and 12,524 plaintext pages. The model and private native-state checkpoint were saved as GitHub Secrets at 14:22:53 UTC; neither plaintext nor a decrypted IPA artifact was published.

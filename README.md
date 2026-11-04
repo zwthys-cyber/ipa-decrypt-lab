@@ -2,6 +2,14 @@
 
 **已在 GitHub-hosted macOS 上恢复 FairPlay 模型，并验证指定应用的原始 IPA 解密。** Telegram 接入、应用安装运行及收费服务尚未完成。
 
+## 当前阶段与使用入口
+
+当前 GitHub-only 模型研究阶段已完成验证。完整操作步骤、三次成功记录与待办见 [项目状态与使用说明](docs/PROJECT-STATUS.md)。
+
+- **常规验证**：打开 [Independent Swift Store trial](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/workflows/native-store.yml)，选择 `main`，将 `decryption_backend` 改为 **`offline`**。
+- **从授权检查点重新恢复**：打开 [Private same-runner model bootstrap](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/workflows/model-bootstrap.yml)，选择 `main` 和 **`checkpoint-replay`**。
+- 这两个入口均复用已有私有数据，不调用新的机器授权。当前默认测试目标为 App ID 6599842047；成功后仍只保留验证结果，不提供 IPA 下载产物。
+
 ## 当前结果
 
 [完整成功试验 41846142942](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41846142942)在全新 GitHub 运行器上完成：
@@ -98,6 +106,7 @@
 
 ## 模块与详细记录
 
+- [项目状态与使用说明](docs/PROJECT-STATUS.md)：阶段成果、操作入口、Secret 用途及尚未完成部分。
 - [下载接口实现](ENT-DOWNLOAD.md)：Swift 登录、ent/download、kbsync 辅助程序。
 - [原生实验结果](NATIVE-DOWNLOAD-RESULTS.md)与[后续分析](IOS-DECRYPTION-FOLLOWUP.md)。
 - [离线引擎、模型要求与上游许可](OFFLINE-BACKEND.md)。
