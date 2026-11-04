@@ -8,8 +8,8 @@ import struct
 import sys
 import zipfile
 
-MEMBER_LIMIT = 128 * 1024 * 1024
-READ_LIMIT = 512 * 1024 * 1024
+MEMBER_LIMIT = 512 * 1024 * 1024
+READ_LIMIT = 2 * 1024 * 1024 * 1024
 ENTRY_LIMIT = 32768
 MAGICS = {
     b"\xce\xfa\xed\xfe": ("<", 28),

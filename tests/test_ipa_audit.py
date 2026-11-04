@@ -121,6 +121,16 @@ class ArchiveTests(unittest.TestCase):
                 audit.audit(self.path)
         finally:
             audit.MEMBER_LIMIT = original
+    def test_total_read_budget_remains_enforced(self):
+        self.make(image())
+        original=audit.READ_LIMIT
+        try:
+            audit.READ_LIMIT=4096
+            with self.assertRaisesRegex(audit.AuditError,"audit read budget exceeded"):
+                audit.audit(self.path)
+        finally:
+            audit.READ_LIMIT=original
+
     def test_invalid_plist_rejected(self):
         with zipfile.ZipFile(self.path, "w") as z:
             z.writestr("Payload/Demo.app/Info.plist", b"not a plist")
