@@ -10,12 +10,12 @@ import sys
 import tempfile
 from native_keybag import DOMAINS, STATE_KEYS
 
-STATUSES = {"commerce_request_prepared", "commerce_import_unverified", "commerce_service_failed", "commerce_connection_changed", "invalid_diversitybag", "diversitybag_import_failed", "keybag_context_changed", "keybag_context_unavailable", "invalid_keybag_rejected", "invalid_keybag_unexpected_result", "invalid_private_input", "request_preparation_failed", "request_timeout", "request_stopped",
+STATUSES = {"account_count_unavailable", "computer_quota_full", "state_observer_unavailable", "commerce_request_prepared", "commerce_import_unverified", "commerce_service_failed", "commerce_connection_changed", "invalid_diversitybag", "diversitybag_import_failed", "keybag_context_changed", "keybag_context_unavailable", "invalid_keybag_rejected", "invalid_keybag_unexpected_result", "invalid_private_input", "request_preparation_failed", "request_timeout", "request_stopped",
     "response_not_plist", "keybag_not_issued", "import_interface_unavailable",
     "keybag_imported_model_unverified", "keybag_import_failed", "native_exception", "probe_failed",
     "missing_credentials", "login_failed", "login_ambiguous", "login_timeout", "native_timeout",
     "native_process_failed", "private_handoff_failed"}
-BOOLS = {"running_as_root", "diversitybag_present", "diversity_import_attempted", "diversity_import_succeeded", "diversity_error_present", "initial_import_succeeded", "initial_error_present", "keybag_import_attempted", "keybag_retry_attempted", "context_stable_after_diversity", "expected_invalid_diversity_rejected", "keybag_gzip", "keybag_binary_plist", "keybag_xml", "keybag_base64_text", "shared_directory_present", "shared_directory_writable", "shared_directory_symlink", "context_stable_after_rejection", "context_ready_before_request", "context_stable_before_import", "expected_invalid_keybag_rejected", "client_agent_bound", "client_agent_changed", "md_data_present", "md_data_valid", "amd_data_present", "amd_data_valid", "authorization_request_attempted", "ephemeral_account", "session_identity_verified", "body_token_bound",
+BOOLS = {"need_diversitybag", "running_as_root", "diversitybag_present", "diversity_import_attempted", "diversity_import_succeeded", "diversity_error_present", "initial_import_succeeded", "initial_error_present", "keybag_import_attempted", "keybag_retry_attempted", "context_stable_after_diversity", "expected_invalid_diversity_rejected", "keybag_gzip", "keybag_binary_plist", "keybag_xml", "keybag_base64_text", "shared_directory_present", "shared_directory_writable", "shared_directory_symlink", "context_stable_after_rejection", "context_ready_before_request", "context_stable_before_import", "expected_invalid_keybag_rejected", "client_agent_bound", "client_agent_changed", "md_data_present", "md_data_valid", "amd_data_present", "amd_data_valid", "authorization_request_attempted", "ephemeral_account", "session_identity_verified", "body_token_bound",
     "redirect_blocked", "response_oversized", "error_present", "apple_failure_present",
     "dialog_present", "keybag_present", "keybag_import_succeeded", "redirect_seen",
     "redirect_query_supported", "redirect_method_post", "redirect_https", "storefront_header_present",
@@ -182,7 +182,39 @@ def native_command(binary, report, env, user="runner", probe=False):
         argv = ["/usr/bin/sudo", "-n", "--", "/usr/bin/env", "-i"] + forwarded + argv
     return argv
 
-def trial(login_binary, native_binary, purpose="signIn", session_context="token", client_context="native", native_user="runner", backend="ams"):
+
+def observed_count(session):
+    from store_account_summary import fetch_summary
+    try:
+        result = fetch_summary(session)
+    except Exception:
+        return None
+    value = result.get("authorized_computers")
+    return value if (result.get("status") == "computer_count_observed"
+        and result.get("computer_count_observed") is True
+        and result.get("store_session_authenticated") is True
+        and result.get("http_status") == 200
+        and type(value) is int and 0 <= value <= 5) else None
+
+def observe_state_safely():
+    from fairplay_state_observer import collect
+    try:
+        return collect()
+    except Exception:
+        return {"root_status": "unavailable"}
+
+def finish_observed(result, session, before):
+    if session is None:
+        return result
+    result.update(before)
+    result["state_observation_after"] = observe_state_safely()
+    count = observed_count(session)
+    result["account_count_after_observed"] = count is not None
+    if count is not None:
+        result["account_count_after"] = count
+    return result
+
+def trial(login_binary, native_binary, purpose="signIn", session_context="token", client_context="native", native_user="runner", backend="ams", observe_state=False):
     if native_user not in {"runner", "root"} or client_context not in {"native", "login_agent"} or purpose not in {"signIn", "machineAuthorize", "machineSession", "booleanSession"} or session_context not in {"token", "cookies", "storefront", "store"}:
         return clean({"status": "invalid_private_input"})
     if backend not in {"ams", "commerce"} or (backend == "commerce" and
@@ -213,6 +245,19 @@ def trial(login_binary, native_binary, purpose="signIn", session_context="token"
         handoff.unlink()
         private = json.loads(data)
         login_summary = clean_login_summary(private.get("login_provisioning"))
+        observed_session, observation = None, {}
+        if observe_state:
+            from store_account_summary import validate_session
+            observed_session = validate_session(private)
+            count = observed_count(observed_session)
+            if count is None:
+                return clean({"status": "account_count_unavailable", "authorization_request_attempted": False})
+            if count >= 5:
+                return dict(clean({"status": "computer_quota_full", "authorization_request_attempted": False}), account_count_before=count)
+            state = observe_state_safely()
+            if state.get("root_status") != "observed":
+                return dict(clean({"status": "state_observer_unavailable", "authorization_request_attempted": False}), account_count_before=count)
+            observation = {"account_count_before": count, "state_observation_before": state}
         allowed = {"dsid", "token", "guid"}
         if session_context in {"store", "cookies"}:
             allowed.add("cookies")
@@ -231,14 +276,14 @@ def trial(login_binary, native_binary, purpose="signIn", session_context="token"
         try:
             code, _, _ = run_private(native_command(native_binary, report, env, native_user), env, data=data, timeout=75)
         except subprocess.TimeoutExpired:
-            return clean({"status": "native_timeout"})
+            return finish_observed(clean({"status": "native_timeout"}), observed_session, observation)
         finally:
             del data
         native_ended = datetime.now(timezone.utc)
         if code:
-            return clean({"status": "native_process_failed"})
+            return finish_observed(clean({"status": "native_process_failed"}), observed_session, observation)
         if not report.is_file() or report.stat().st_size > 65536:
-            return clean({"status": "private_handoff_failed"})
+            return finish_observed(clean({"status": "private_handoff_failed"}), observed_session, observation)
         result = clean(json.loads(report.read_text()))
         if backend == "commerce":
             from commerce_import_logs import collect
@@ -253,12 +298,13 @@ def trial(login_binary, native_binary, purpose="signIn", session_context="token"
         result["client_context"] = client_context
         if client_context == "login_agent" and result.get("authorization_request_attempted") is True and result.get("client_agent_bound") is not True:
             result["status"] = "probe_failed"
-        return result
+        return finish_observed(result, observed_session, observation)
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--login-binary", required=True)
     parser.add_argument("--native-binary", required=True)
+    parser.add_argument("--observe-state", action="store_true")
     parser.add_argument("--backend", choices=("ams", "commerce"), default="ams")
     parser.add_argument("--native-user", choices=("runner", "root"), default="runner")
     parser.add_argument("--purpose", choices=("signIn", "machineAuthorize", "machineSession", "booleanSession"), default="signIn")
@@ -268,7 +314,7 @@ def main():
     if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "darwin":
         raise SystemExit("GitHub-hosted macOS required")
     try:
-        r = trial(str(Path(args.login_binary).resolve()), str(Path(args.native_binary).resolve()), args.purpose, args.session_context, args.client_context, args.native_user, args.backend)
+        r = trial(str(Path(args.login_binary).resolve()), str(Path(args.native_binary).resolve()), args.purpose, args.session_context, args.client_context, args.native_user, args.backend, args.observe_state)
     except Exception:
         r = clean({"status": "probe_failed"})
     print(json.dumps(r, sort_keys=True))

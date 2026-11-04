@@ -71,6 +71,9 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p 'test_native_keybag.py' -v
           python3 -m unittest discover -s tests -p 'test_machine_enrollment.py' -v
+          python3 -m unittest discover -s tests -p 'test_store_account_summary.py' -v
+          python3 -m unittest discover -s tests -p 'test_fairplay_state_observer.py' -v
+          python3 -m unittest discover -s tests -p 'test_observed_enrollment.py' -v
           python3 -m unittest discover -s tests -p 'test_native_commerce*.py' -v
           python3 -m unittest discover -s tests -p 'test_commerce_import_logs.py' -v
       - name: Build native prerequisite and one-request client
@@ -116,7 +119,7 @@ jobs:
           path: native-source/ApplePackage/.build
           key: ${{ steps.swift-cache.outputs.cache-primary-key }}
       - name: Authenticate once and attempt one machine authorization request
-        timeout-minutes: 4
+        timeout-minutes: 8
         env:
           LAB_BACKEND: ${{ inputs.backend }}
           LAB_NATIVE_USER: ${{ inputs.native_user }}
@@ -128,4 +131,4 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
         run: |
           ulimit -c 0
-          python3 tools/machine_enrollment.py --login-binary native-source/ApplePackage/.build/debug/ApplePackageTool --native-binary native-machine-enrollment --backend "$LAB_BACKEND" --native-user "$LAB_NATIVE_USER" --purpose "$LAB_PURPOSE" --session-context "$LAB_SESSION_CONTEXT" --client-context "$LAB_CLIENT_CONTEXT"
+          python3 tools/machine_enrollment.py --login-binary native-source/ApplePackage/.build/debug/ApplePackageTool --native-binary native-machine-enrollment --backend "$LAB_BACKEND" --native-user "$LAB_NATIVE_USER" --purpose "$LAB_PURPOSE" --session-context "$LAB_SESSION_CONTEXT" --client-context "$LAB_CLIENT_CONTEXT" --observe-state
