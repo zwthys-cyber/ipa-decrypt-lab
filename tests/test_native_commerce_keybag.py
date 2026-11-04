@@ -32,13 +32,24 @@ class CommerceContracts(unittest.TestCase):
 
     def test_types_bounds_and_state_allowlist(self):
         result = mod.clean(dict(status=[], error_code=True, underlying_error_code=1000000,
-            framework_loaded=1, transaction_type=True, state_after={"shared_sidb": True, "PRIVATE": "PRIVATE"}))
-        for key in ("error_code", "underlying_error_code", "framework_loaded", "transaction_type"):
+            framework_loaded=1, native_exit_code=True, transaction_type=True, state_after={"shared_sidb": True, "PRIVATE": "PRIVATE"}))
+        for key in ("error_code", "underlying_error_code", "framework_loaded", "transaction_type", "native_exit_code"):
             self.assertNotIn(key, result)
         self.assertEqual(result["state_after"], {"shared_sidb": True})
         self.assertNotIn("PRIVATE", json.dumps(result))
         for malformed in (None, [], "PRIVATE"):
             self.assertEqual(mod.clean(malformed)["status"], "probe_failed")
+
+    def test_crash_diagnostics_only_publish_phase_signal_and_flags(self):
+        result = mod.clean(dict(status="native_process_failed", native_exit_code=-6,
+            native_phase="loading_framework", process_mentions_assertion=True,
+            stderr="PRIVATE", stdout="PRIVATE", process_mentions_bundle=1))
+        self.assertEqual(result["native_exit_code"], -6)
+        self.assertEqual(result["native_phase"], "loading_framework")
+        self.assertNotIn("process_mentions_bundle", result)
+        self.assertNotIn("PRIVATE", json.dumps(result))
+        for invalid in ("PRIVATE", [], None):
+            self.assertNotIn("native_phase", mod.clean({"native_phase": invalid}))
 
     def test_loader_and_service_errors_are_only_fixed_metadata(self):
         result = mod.clean(dict(status="framework_unavailable", loader_mentions_missing=True,

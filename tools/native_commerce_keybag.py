@@ -16,7 +16,8 @@ BOOLS = {"framework_loaded", "service_class_present", "client_class_present", "a
     "transport_error_received", "service_success", "need_diversitybag", "synthetic_sync_present",
     "error_present", "error_mentions_entitlement", "error_mentions_permission", "error_mentions_account",
     "error_mentions_connection", "running_as_root", "loader_mentions_missing",
-    "loader_mentions_architecture", "loader_mentions_signature"}
+    "loader_mentions_architecture", "loader_mentions_signature", "process_mentions_assertion",
+    "process_mentions_bundle", "process_mentions_application", "process_mentions_initialization", "process_mentions_library"}
 
 def clean(value):
     result = dict(schema="ipa-lab-commerce-keybag-v1", status="probe_failed",
@@ -32,6 +33,10 @@ def clean(value):
     for key in ("error_domain", "underlying_error_domain"):
         if type(value.get(key)) is str and value[key] in DOMAINS:
             result[key] = value[key]
+    if type(value.get("native_exit_code")) is int and -128 <= value["native_exit_code"] <= 255:
+        result["native_exit_code"] = value["native_exit_code"]
+    if type(value.get("native_phase")) is str and value["native_phase"] in {"started", "loading_framework", "framework_loaded", "account_constructed", "service_connected", "request_sent"}:
+        result["native_phase"] = value["native_phase"]
     for key in ("error_code", "underlying_error_code", "fairplay_status"):
         if type(value.get(key)) is int and -999999 <= value[key] <= 999999:
             result[key] = value[key]
@@ -55,11 +60,21 @@ def probe(user, sample):
         env = {"PATH": "/usr/bin:/bin", "HOME": os.environ.get("HOME", temp), "GITHUB_ACTIONS": "true"}
         argv = native_command(str(Path("native-commerce-keybag").resolve()), report, env, user) + [sample]
         try:
-            code, _, _ = run_private(argv, env, timeout=35)
+            code, out, err = run_private(argv, env, timeout=35)
         except subprocess.TimeoutExpired:
             return clean({"status": "native_timeout"})
         if code or not report.is_file() or report.stat().st_size > 16384:
-            return clean({"status": "native_process_failed"})
+            partial = json.loads(report.read_text()) if report.is_file() and report.stat().st_size <= 16384 else {}
+            partial.update(status="native_process_failed", native_exit_code=code)
+            diagnostic = (out + err)[:32768].lower()
+            for key, terms in {
+                "assertion": (b"assert",), "bundle": (b"bundle",),
+                "application": (b"nsapplication", b"application"),
+                "initialization": (b"initializ",),
+                "library": (b"library", b"dyld", b"image not found"),
+            }.items():
+                partial["process_mentions_" + key] = any(term in diagnostic for term in terms)
+            return clean(partial)
         result = clean(json.loads(report.read_text()))
         if result.get("running_as_root") is not (user == "root"):
             result["status"] = "probe_failed"

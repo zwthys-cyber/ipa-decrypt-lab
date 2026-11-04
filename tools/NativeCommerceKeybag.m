@@ -63,18 +63,27 @@ static id SyntheticAccount(BOOL nonzero,NSMutableDictionary *r) {
  r[@"synthetic_account_verified"]=B(verified);
  return verified?account:nil;
 }
+static NSString *CheckpointPath;
+static void Checkpoint(NSMutableDictionary *r,NSString *phase) {
+ r[@"native_phase"]=phase;
+ NSData *data=[NSJSONSerialization dataWithJSONObject:r options:0 error:NULL];
+ if(data && CheckpointPath)[data writeToFile:CheckpointPath options:NSDataWritingAtomic error:NULL];
+}
 static void CommerceRequest(BOOL nonzero,NSMutableDictionary *r) {
+ Checkpoint(r,@"loading_framework");
  dlerror();
  BOOL loaded=dlopen("/System/Library/PrivateFrameworks/CommerceKit.framework/CommerceKit",RTLD_NOW|RTLD_GLOBAL)!=NULL;
  const char *loaderError=loaded?NULL:dlerror();
  r[@"framework_loaded"]=B(loaded);LoaderFields(r,loaderError);
  if(!loaded){r[@"status"]=@"framework_unavailable";return;}
+ Checkpoint(r,@"framework_loaded");
  Class cls=NSClassFromString(@"ServiceProxy");
  r[@"service_class_present"]=B(cls!=Nil);
  SEL get=NSSelectorFromString(@"commerceServiceWithErrorHandler:");
  if(!ABI(cls,get,@"@",@[@"@?"]))return;
  id account=SyntheticAccount(nonzero,r);
  if(!account){r[@"status"]=@"synthetic_account_unavailable";return;}
+ Checkpoint(r,@"account_constructed");
  NSLock *lock=[NSLock new];dispatch_semaphore_t done=dispatch_semaphore_create(0);
  __block BOOL finished=NO;
  void (^finish)(BOOL,BOOL,id,BOOL,id)=^(BOOL transport,BOOL success,id data,BOOL needDiv,id suppliedError) {
@@ -95,11 +104,12 @@ static void CommerceRequest(BOOL nonzero,NSMutableDictionary *r) {
    [lock unlock];
  };
  id service=((id(*)(id,SEL,id))objc_msgSend)(cls,get,^(NSError *error){finish(YES,NO,nil,NO,error);});
+ Checkpoint(r,@"service_connected");
  SEL generate=NSSelectorFromString(@"kbSyncForTransactionType:account:reply:");
  BOOL valid=ABI(service,generate,@"v",@[@"C",@"@",@"@?"]) || ABI(service,generate,@"v",@[@"c",@"@",@"@?"]);
  r[@"abi_verified"]=B(valid);
  if(!valid)return;
- r[@"synthetic_request_attempted"]=@YES;
+ r[@"synthetic_request_attempted"]=@YES;Checkpoint(r,@"request_sent");
  // The four-argument reply is verified from the actual Intel macOS callback descriptor.
  ((void(*)(id,SEL,unsigned char,id,id))objc_msgSend)(service,generate,2,account,
    ^(char success,NSData *data,char needDiv,NSError *error){finish(NO,success!=0,data,needDiv!=0,error);});
@@ -118,6 +128,7 @@ int main(int argc,const char **argv) { @autoreleasepool {
  NSMutableDictionary *r=[@{@"schema":@"ipa-lab-commerce-keybag-v1",@"status":@"interface_unavailable",
    @"account_login_attempted":@NO,@"authorization_request_attempted":@NO,@"keybag_import_attempted":@NO,
    @"enrollment_created":@NO,@"decryption_proven":@NO,@"running_as_root":B(geteuid()==0),@"transaction_type":@2} mutableCopy];
+ CheckpointPath=@(argv[1]);Checkpoint(r,@"started");
  r[@"state_before"]=State();
  @try {CommerceRequest(!strcmp(argv[2],"nonzero"),r);}
  @catch(NSException *error){r[@"status"]=@"native_exception";}
