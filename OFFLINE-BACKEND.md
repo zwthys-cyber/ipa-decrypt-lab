@@ -336,3 +336,32 @@ No new account login was attempted during this follow-up. The pinned UnfairPlay 
 Further work needs a supported client path that reaches the authentication service, or a separately implemented and verified Store/FairPlay registration protocol. Repeating the same account credentials, declaring the internal entitlement again, or treating the successful diagnostic workflow as a working authorization model is not justified. This does not prove that every GitHub-only implementation is impossible.
 
 All edits were made through GitHub APIs. All compilation, tests and process experiments ran on GitHub-hosted Actions. No external Mac, Debian execution, personal phone, TG integration, public credentials, account identifiers, headers, model material or real IPA artifacts were used.
+
+
+## Native keybag prerequisites and upstream candidates (2026-11-04)
+
+The AuthKit transport failure does not establish that every in-process FairPlay operation is unavailable. A separate account-free native probe now checks AppleMediaServices directly on GitHub-hosted macOS 15 ARM and Intel.
+
+Run [41753771388](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41753771388) confirmed a nonzero, error-free native FairPlay context and nonempty synthetic account-0 keybag sync data on both architectures. None of the four monitored SIDB/SIDS files appeared. An earlier run had incorrectly boxed C comparisons as JSON numbers; strict report validation rejected those results. Native boolean serialization was fixed instead of relaxing the public schema.
+
+Run [41755075728](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41755075728) passed 11 Python contracts per architecture plus native request-policy positive and negative cases. It established:
+
+- AMSKeybag and AMSAuthorizeMachineTask exist with checked Objective-C method signatures on both runners.
+- An ephemeral synthetic account can build machine-authorization parameters with native kbsync, GUID and machine name. Neither identifiers nor blob contents are published.
+- The observed macOS parameter keys are guid, kbsync, machineName, needDiv, ownerDsid and xToken. The xToken body field is the string "0", and needDiv is observed as one; xToken must not be confused with a password token.
+- The public AMS bag resolves authorizeMachine to HTTPS buy.itunes.apple.com/commerce/machine/authorize. This differs from assumed legacy WebObjects routes.
+- The native builder produces a POST property-list request for the ephemeral account without an Anisette or SAP header in these observations. This is request construction, not server acceptance.
+- A separate session adapter checks the exact destination, body account ID, six-byte GUID and kbsync before adding X-Token, X-Dsid and iCloud-DSID headers. Tests reject changed hosts, HTTP, unexpected ports, userinfo, paths/query parameters, a different account and an empty token.
+- No authorization request was submitted by these prerequisite runs.
+
+The private machine-enrollment workflow uses a fresh successful Store login as the session source. The patched login exports only DSID, password token and GUID to a temporary mode-0600 handoff and returns before saving a persistent account. A native client keeps parameter generation and keybag import in one process, verifies the session/device identity, submits one request with redirects disabled, caps the response at 2 MiB, and separately checks the returned keybag and import result. It does not call the native task's high-level performAuthorization method: reviewed iOS code can resolve that promise successfully even after an import error. Model recovery and plaintext verification remain separate requirements. No session, keybag, SIDB, model or IPA artifact is published.
+
+Interface research used the [iOS 18.2 AMSAuthorizeMachineTask implementation](https://github.com/EthanArbuckle/iPhone17-1_18.2_22C152_Restore/blob/e26ed4563f78871c59d2d96856756a65d62517e5/System/Library/PrivateFrameworks/AppleMediaServices.framework/AMSAuthorizeMachineTask.m), [AMSKeybag implementation](https://github.com/EthanArbuckle/iPhone17-1_18.2_22C152_Restore/blob/e26ed4563f78871c59d2d96856756a65d62517e5/System/Library/PrivateFrameworks/AppleMediaServices.framework/AMSKeybag.m), and macOS runtime headers. Runtime observations take precedence where macOS differs from those iOS sources.
+
+### User-supplied candidate projects
+
+[EEliberto/Pastel-macOS at 82576f2](https://github.com/EEliberto/Pastel-macOS/tree/82576f2295516e84b6eaa99a4e364af5e8de7664) is a downloader. Its active StoreHelper calls ipatool Download followed by ReplicateSinf, using the same pinned ipatool d9c0247 dependency already investigated here. Its November 2 fix adds missing account license files to downloaded IPAs; it does not remove Mach-O encryption. The README requires a physical Apple-silicon Mac and says virtual machines are unsupported. It is a download-flow reference, not evidence of GitHub-only enrollment.
+
+[EthanArbuckle/fairplay-decrypt at bb09a610](https://github.com/EthanArbuckle/fairplay-decrypt/tree/bb09a61046f5c99eb1795589a307646df04b26d0) implements offline decryption using a matching 16-byte account credential. Its Python decryptor runs on macOS/Linux; its credential-retrieval workflow requires a paired jailbroken iOS device with root SSH and an installed app owned by the account. The Mac build produces iPhoneOS arm64 retriever/driver/trigger binaries; compiling them does not create a credential. This is a possible alternative offline backend, not a verified credential bootstrap for a fresh GitHub runner. No code has been imported from this GPL-3.0 repository, and no user phone has been used.
+
+For decrypt.day, a read-only request from this research environment returned HTTP 451 and the body "error code: 1026"; that observation is not a global outage diagnosis. No current public decryption API contract was verified. The same-name [decrypt-day organization](https://github.com/decrypt-day) exposes idevice-tools with only a one-line libimobiledevice archive-build README, not the service backend. No account was registered, credentials supplied, API job submitted or message sent to its operators.
