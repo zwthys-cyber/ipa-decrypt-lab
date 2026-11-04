@@ -59,14 +59,21 @@ print("LAB_COMMERCE_STACK "+json.dumps(dict(process_state=p.GetState(),exit_stat
         env = {"PATH": "/usr/bin:/bin", "HOME": temp, "GITHUB_ACTIONS": "true"}
         if os.environ.get("DEVELOPER_DIR"):
             env["DEVELOPER_DIR"] = os.environ["DEVELOPER_DIR"]
-        argv = ["xcrun", "lldb", "--batch", "-o", "settings set target.disable-aslr false",
+        argv = ["xcrun", "lldb", "--batch", "--no-lldbinit", "-k", command,
+            "-k", "script lldb.debugger.GetSelectedTarget().GetProcess().Kill()", "-o", "settings set target.disable-aslr false",
             "-o", "run", "-o", command, "-o", "script lldb.debugger.GetSelectedTarget().GetProcess().Kill()",
             "--", binary, str(Path(temp) / "report.json"), "nonzero"]
         process = subprocess.Popen(argv, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    stdin=subprocess.DEVNULL, start_new_session=True)
         try:
-            out, _ = process.communicate(timeout=45)
+            out, err = process.communicate(timeout=45)
             result = extract(out.decode("utf-8", errors="replace"))
+            diagnostic = (out + err).lower()
+            result.update(debugger_exit_code=process.returncode,
+                debugger_script_error=b"traceback" in diagnostic or b"syntaxerror" in diagnostic,
+                debugger_attribute_error=b"attributeerror" in diagnostic,
+                debugger_launch_denied=b"not allowed to attach" in diagnostic,
+                stack_marker_present=PREFIX.encode() in out, output_size_exceeded=len(out)>131072)
         except subprocess.TimeoutExpired:
             stop_private_group(process)
             process.communicate(timeout=5)
