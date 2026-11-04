@@ -4,6 +4,7 @@
 #import <objc/message.h>
 #include <dlfcn.h>
 #include <string.h>
+#include <unistd.h>
 #import <xpc/xpc.h>
 #import <Security/Security.h>
 
@@ -168,6 +169,7 @@ int main(int argc, const char **argv) {
         NSMutableDictionary *r = [@{@"schema": @"ipa-lab-authkit-transport-v1",
             @"status": @"interface_unavailable", @"explicit_client_identifier": @(named),
             @"bundle_identifier_present": @((BOOL)(NSBundle.mainBundle.bundleIdentifier.length > 0)),
+            @"effective_user_is_root": @((BOOL)(geteuid() == 0)),
             @"account_login_attempted": @NO, @"enrollment_created": @NO, @"decryption_proven": @NO} mutableCopy];
         @try {
             [r addEntriesFromDictionary:signatureDetail()];

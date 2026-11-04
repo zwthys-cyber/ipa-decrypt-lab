@@ -18,7 +18,7 @@ BOOLS = {"explicit_client_identifier", "bundle_identifier_present", "bag_selecto
          "reason_connection_rejected", "reason_internal_authkit_entitlement_named",
          "reason_peer_code_requirement", "reason_peer_cancelled",
          "signature_metadata_available", "declared_internal_authkit_entitlement", "native_process_signalled",
-         "proxy_trace_installed"}
+         "proxy_trace_installed", "effective_user_is_root"}
 STATUSES = {"interface_unavailable", "transport_timeout", "transport_rejected", "bag_fetch_succeeded",
             "empty_result", "native_exception", "probe_failed", "requires_github_macos", "native_process_failed"}
 DOMAINS = {"NSCocoaErrorDomain", "AKAuthenticationError", "AKAuthenticationServerError",
@@ -108,13 +108,17 @@ def daemon_diagnostic():
         pass
     return result
 
-def probe(binary, mode):
+def probe(binary, mode, scope="user"):
     if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "darwin":
         return clean({"status": "requires_github_macos"})
-    if mode not in {"default", "named"}:
+    if mode not in {"default", "named"} or scope not in {"user", "root_gui"}:
         return clean({})
     try:
-        run = subprocess.run([str(Path(binary).resolve()), mode], stdin=subprocess.DEVNULL,
+        command = [str(Path(binary).resolve()), mode]
+        if scope == "root_gui":
+            command = ["/usr/bin/sudo", "-n", "/bin/launchctl", "asuser", str(os.getuid()),
+                       "/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "GITHUB_ACTIONS=true"] + command
+        run = subprocess.run(command, stdin=subprocess.DEVNULL,
                              capture_output=True, text=True, timeout=20, env=environment())
         if run.returncode:
             return clean({"status": "native_process_failed", "native_exit_code": run.returncode,
@@ -172,6 +176,10 @@ def main():
             row = probe(binary, mode)
             row["container"] = label
             rows.append(row)
+    for mode in ("default", "named"):
+        row = probe("./AuthKitTransport.app/Contents/MacOS/AuthKitTransport", mode, scope="root_gui")
+        row["container"] = "own_app_root_in_user_gui"
+        rows.append(row)
     report = {"schema": "ipa-lab-authkit-transport-comparison-v1", "probes": rows,
               "metadata": service_metadata(), "daemon_diagnostic": daemon_diagnostic(),
               "account_login_attempted": False,

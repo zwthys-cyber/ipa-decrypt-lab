@@ -70,6 +70,22 @@ class TransportTests(unittest.TestCase):
             self.assertNotIn("observed_proxy_failures", row)
             self.assertEqual(row["error_code"], 4099)
 
+    def test_root_gui_control_preserves_target_session_and_clears_environment(self):
+        def child(command, **kwargs):
+            self.assertEqual(command[:4], ["/usr/bin/sudo", "-n", "/bin/launchctl", "asuser"])
+            self.assertEqual(command[4], str(os.getuid()))
+            self.assertEqual(command[5:9], ["/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "GITHUB_ACTIONS=true"])
+            self.assertEqual(command[-1], "named")
+            self.assertNotIn("APPLE_ID", kwargs["env"])
+            self.assertNotIn("APPLE_PASSWORD", kwargs["env"])
+            return SimpleNamespace(returncode=0, stdout=json.dumps({
+                "status": "transport_rejected", "effective_user_is_root": True}), stderr="")
+        with patch.dict(os.environ, {"GITHUB_ACTIONS": "true", "APPLE_ID": "private", "APPLE_PASSWORD": "private"}), patch.object(
+            transport.sys, "platform", "darwin"
+        ), patch.object(transport.subprocess, "run", side_effect=child):
+            result = transport.probe("/synthetic", "named", scope="root_gui")
+        self.assertIs(result["effective_user_is_root"], True)
+
     def test_bag_success_requires_completed_nonempty_error_free_response(self):
         value = {"status": "bag_fetch_succeeded", "callback_completed": True,
                  "bag_result_present": True, "error_present": False}
