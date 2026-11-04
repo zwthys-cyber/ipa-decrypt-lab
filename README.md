@@ -4,57 +4,29 @@
 
 ## 当前结果
 
-用户明确同意后，[全部解除电脑授权](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41837099155)已执行成功：操作前确认 **5 台**，只发送一次请求，服务器 HTTP 200，随后只读复查为 **0 台**。未重复解除，也没有把释放名额视为模型或砸壳成功。后续正在恢复一次 CommerceKit 授权导入试验；若重新授权成功，数量可能随之增加。
+**已在 GitHub-hosted Mac 上生成非空 SIDB 系统授权状态文件；尚未恢复并验证可用模型，也没有已验证的砸壳产物。**
 
-解除前的只读结果：[下载器会话查询](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41834443913)已成功读取账号实际授权电脑数量：**5 台**。Swift 登录成功，账户摘要接口返回 HTTP 200 和 `authorizations.authorizedComputers = 5`；Linux/macOS 各通过 20 项 Python 测试，另通过 11 项 Swift 测试。无需用户另备电脑，也不依赖失败的“音乐”原生登录。**只查询了数量，没有申请新机器授权或解除任何授权，仍未取得模型或验证砸壳。** [详细证据](OFFLINE-BACKEND.md#downloader-session-account-summary-2026-11-04)。
+[增强后的 CommerceKit 试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41839179045)通过 95 项 Python、11 项 Swift 测试及原生检查。真实请求获得 keybag 和 diversitybag，HTTP 200、无业务失败码；服务端导入调用返回，后续同步从需要 diversitybag 变为不需要。管理员只读检查确认 `/private/var/db/fpsd/SC Info/SC Info.sidb` 从不存在变为非空普通文件。普通用户对该路径无读取权限，先前统一为 false 的检查无法区分权限不足和不存在，现已修正。
 
-已准备独立的“全部解除电脑授权”流程：[Linux/macOS 预览](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41836096346)各通过 38 项测试，真实解除任务已跳过。操作会先确认仍有 5 台，最多发送一次解除请求，再复查是否变为 0；默认预览不登录、不联网。**用户随后已明确同意，单次真实解除与数量复查已成功，见上方最新记录。** 该操作影响账号下全部电脑的购买授权，并受 Apple 一年一次的限制；清空名额本身不代表模型或砸壳成功。[已准备的实现](tools/store_deauthorization.py)。
+授权数量也已纳入前后检查：本次 **1 → 2 台**。此前经用户明确同意，[单次全部解除授权](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41837099155)已确认 **5 → 0 台**；之后两次受控试验占用了两个名额。不会把全部解除授权作为重复试验的清理方式。Apple 的五台上限与一年一次全部解除限制仍适用。[官方说明](https://support.apple.com/en-us/118292)。
 
-此前的 [CommerceKit 真实试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41778198600)完成 59 项 Python、11 项 Swift 测试及原生检查。真实登录成功，原生 GUID 与下载器一致，账号、令牌、User-Agent 和 Cookie 已绑定；服务器返回 HTTP 200，但正文包含业务失败码 **3002**，并提到“五台电脑”。**没有 keybag，没有执行导入，也没有模型或已验证的砸壳产物。**
-
-这比早先仅出现“五台电脑”措辞的成功发包响应更明确，强烈指向电脑授权数量限制；后续只读账户摘要已确认实际数量为 5；仍未取得各电脑的明细或归属，不能据此确定每个名额来自哪次试验。此前五次返回 keybag 的临时运行器试验可能计入授权，现有摘要无法确认。暂不重复真实授权请求，不自动撤销现有设备授权。Apple 官方说明最多同时授权五台电脑，可在 Mac/Windows 的“音乐”或 Apple TV 账户设置中核对数量；“全部解除授权”影响所有电脑，且一年只能使用一次。[官方说明](https://support.apple.com/zh-cn/118292)。
-
-此前发现的会话绑定缺口已在[双架构检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41777147010)和[实际客户端预检](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41777899832)中补齐。原生 GUID 未被重写，绑定后同步数据、令牌和 needDiv 均保持一致。[最终无账号回归](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41778381405)在两个架构各通过 55 项 Python 检查及原生检查；无完成回调的服务后端不能被标记为直接导入成功。[完整证据](OFFLINE-BACKEND.md#commercekit-session-binding-and-server-refusal-2026-11-04)。
-
-| 环节 | 已有证据 | 尚未完成 |
+| 环节 | 已验证结果 | 仍待完成 |
 | --- | --- | --- |
-| 下载客户端账号登录 | Swift 签名下载路径已成功登录，无需本次输入 OTP | 不代表系统 FairPlay 注册完成 |
-| 原生 App Store 首次注册研究 | ARM 与 Intel 均完成原生表单提交；精确登录窗口已观察到 Anisette 获取及初始化失败 | 原生登录仍被拒绝，预期 SIDB/SIDS 未生成，未得到模型 |
-| 独立 Anisette 与原生接入 | Linux / ARM Mac 初始化及复用成功；原生代理回调契约通过 | 实际 AuthKit 调用返回 XPC 4099，数据提供器未被调用，未生成模型 |
-| 原生 keybag / 机器授权 | 统一登录与授权身份后，服务器返回 keybag 和 diversitybag；已补齐两步导入及文件访问诊断 | keybag 为 -42023、diversitybag 为 -42032；root 下仍失败，未取得模型 |
-| App Store 守护进程 FairPlay 接口 | 双架构接口存在，固定零值和非零值对照完成 | 均返回 ASDErrorDomain 505，错误提到 entitlement，未生成请求数据 |
-| CommerceKit 系统服务路径 | 双架构会话绑定和实际客户端预检通过；真实登录及 GUID/账号/令牌/User-Agent 校验通过 | 新授权返回业务错误 3002 并提到五台电脑；未发放 keybag，未进入导入 |
-| 原始 IPA 下载 | 目标 App ID 6599842047 已成功下载并检查到 62 个加密 Mach-O 切片 | 原始包仍然加密，不是砸壳产物 |
-| macOS 原生实验 | 62 次实际调用均返回 EPERM；已区分路径、文件布局和调用前检查 | 没有生成已验证明文；不能仅凭 EPERM 确定原因 |
-| 离线解密引擎 | 固定版本 UnfairPlay 在 GitHub Linux x86_64 编译成功，相关 Go 测试及 52 项 Python 测试通过 | 缺少匹配的私有 FairPlay enrollment 模型，未验证真实 IPA 解密 |
-| Telegram / 支付 / 交付 | 尚未实现 | 不应据此开通收费砸壳服务 |
+| Swift 下载器登录 | 签名登录成功，真实账户摘要可读 | 原生 Music/AuthKit 登录失败仍是独立问题 |
+| 电脑授权管理 | 实际数量读取成功；用户批准后单次解除成功；新授权前后检查已接入 | 不提高或绕过 Apple 的服务端数量上限 |
+| CommerceKit 机器授权 | GUID、账号、令牌、User-Agent、Cookie 绑定通过；keybag 和 diversitybag 已取得 | 单向导入调用本身没有完成结果 |
+| 系统授权状态 | 管理员确认 SIDB 从缺失变为非空；只读库存检查已区分权限和缺失 | 尚未确认 SIDB 格式、账号记录及 IPA 许可能用于模型恢复 |
+| 原始 IPA | App ID 6599842047 已成功下载，检查到 62 个加密 Mach-O 切片 | 原始包仍是加密包 |
+| 离线引擎 | 固定版本 UnfairPlay 已构建并通过合成测试 | 尚无匹配模型通过完整真实 IPA 校验 |
+| Telegram / 收费服务 | 暂不接入 | 没有可交付的收费砸壳服务 |
 
-可复查记录：
+已接通新的同运行器流程：先构建和测试，再执行一次授权、下载匹配原始 IPA、尝试从 SIDB 恢复模型，最后复核全部加密切片和可用的加密前页面哈希。传给恢复器的是从 IPA 解出的**候选应用包**，没有把它声称为已安装或运行过的 Mac 应用；上游格式与认证检查不被放宽。恢复流程仍在验证中。
 
-- [真实下载与原生诊断](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41736203256)：下载成功，原生解密未成功。[详细结果](NATIVE-DOWNLOAD-RESULTS.md)。
-- [离线引擎构建与合成测试](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41737576446)：编译与测试成功，不涉及真实账号、IPA 或模型。[离线后端说明](OFFLINE-BACKEND.md)。
+原始账号、SINF、SIDB、IPA、模型及候选明文不会以明文进入仓库、日志或 artifacts。仅在模型与完整 IPA 校验通过后，模型才会封装为 GitHub 仓库公钥加密的 Secret 传输数据；这不包含可直接使用的模型明文。当前尚未产生该传输数据或配置 `FAIRPLAY_MODEL_B64`。
 
-用户已说明该目标应用此前没有下载过。购买接口的通用 5002 响应仍标记为未确认，不能解释成“账号已经拥有此应用”。
+[完整研究记录与局限](OFFLINE-BACKEND.md)。较早的 AMS 直接导入错误、原生解密 EPERM、AuthKit/Music 登录失败以及 CommerceKit 3002 记录均作为历史证据保留，不代替上方最新结果。
 
-最新进展：[真实机器授权试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41764672563)首次取得服务器返回的 keybag。该次试验在正文 xToken 已绑定、Cookie 已携带的基础上，使授权请求使用与登录相同的 User-Agent；服务器返回 HTTP 200，未含业务失败码，keybag 非空。23 项 Python、11 项 Swift 测试及原生合成检查通过。
-
-[补齐 diversitybag 的真实试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41768524362)通过 37 项测试，确认服务器同时返回两份数据。客户端按 macOS 原生顺序分别导入，结果为 keybag `-42023`、diversitybag `-42032`，未触发重试。
-
-[最新 root 对照](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41770295634)通过 40 项测试及原生检查。无账号对照先发现 ARM 普通用户存在 `EACCES`，root 下对应打开操作成功；但真实 root 试验中的两步导入仍返回上述错误，未生成已确认的授权状态或模型。文件访问诊断只覆盖指定函数，不能据此排除全部存储或权限问题。
-
-该次响应还出现“五台电脑”相关措辞。现有关键词摘要不能确定已超限，也没有保存原始消息；暂不重复真实授权请求，不撤销其他设备授权。[最终无账号检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41770552591)在两个架构各通过 19 项 Python 测试及原生检查，包括 root 子进程超时清理。[完整证据与局限](OFFLINE-BACKEND.md#bounded-native-import-file-io-observations-2026-11-04)。
-
-另有[App Store 服务对照](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41767422349)：接口存在，但固定测试值均返回 ASDErrorDomain 505，错误提到 entitlement，没有生成请求数据。这与 AMS 导入错误分开记录。**尚未取得模型，也没有已验证的砸壳产物。**
-
-最新无账号进展：[CommerceKit 系统服务验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41774463734)在 ARM、Intel 各通过 7 项 Python 检查及原生检查。修复初始化调用的 ARC 所有权问题后，又根据系统实现改用受支持的 Configurator 客户端标识；两个架构的普通用户进程均成功创建合成账号、发出请求并收到非空测试用同步数据，回复要求 diversitybag。root 对照未通过接口检查，未发送生成请求。该次没有使用 Apple Secrets，没有提交服务器授权请求或导入 keybag，四个预期非空 SIDB/SIDS 标志仍为 false。**这是服务调用前提验证，尚不是账号注册、模型获取或真实解密成功。** [详细证据](OFFLINE-BACKEND.md#commercekit-service-prerequisite-2026-11-04)。
-
-后续[无效导入与日志对照](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41775774340)在两个架构各通过 17 项 Python 检查及原生检查。无效数据的导入调用也会返回，服务之后仍能生成同步数据；ARM 日志窗口记录到两条导入失败消息，固定错误码摘要包含 `-42018`，Intel 没有匹配日志。四个预期状态标志均未变化，故仍记为 `submission_unverified`。
-
-[未发送请求的构造检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41776353497)在双架构各通过 17 项测试：系统服务构造了目标地址正确的 HTTPS POST，保留固定同步数据、测试令牌和 needDiv，并加入六字节格式 GUID。但目标账号的 ownerDsid、X-Dsid 和 Configurator User-Agent 检查尚未通过；ARM 存在两项预期 Anisette 头，Intel 不同时具备。这些字段的存在不证明认证有效。这项较早的构造检查尚未绑定真实会话；后续绑定和真实服务器结果以上方最新记录为准。
-
-用户目前没有可用电脑。官方“音乐”界面自动化已在 GitHub ARM、Intel Mac 上跑通：能够处理首次启动提示，进入“账户 → 登录”，并填入、清空未提交的合成邮箱。[双架构预检](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41828237601)通过。进一步的[真实登录诊断](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41830015849)完成邮箱和密码提交，但官方窗口显示“未知错误”，未确认登录成功。受限日志观察到服务端认证失败、SRP 服务端证明缺失（M2 missing）、AKAuthenticationError -7012 和 AppleIDAuthSupport 2；不能仅凭这些记录认定密码错误或双重认证已启用。**该原生 UI 路径尚未进入账户设置，也未执行解除授权。** 后续通过下载器会话直接读取账户摘要，已确认实际数量为 5；原生 UI 登录本身仍未修复。最新两个架构各通过 20 项 Python 测试、原生检查及无账号预检。手机端仍可通过 [Apple 支持](https://support.apple.com/zh-cn/contact)请求核对授权数量，但不保证能够重置限制。[研究详情](OFFLINE-BACKEND.md#official-music-ui-navigation-and-private-account-query-2026-11-04)。
-
-## 当前阻塞：电脑名额已释放，授权数据导入与模型获取仍待验证
+## 当前阻塞：已生成 SIDB，待验证模型恢复和 IPA 许可匹配
 
 现有下载器创建临时账号会话并生成下载用 kbsync；这条代码路径不创建离线引擎需要的系统 FairPlay enrollment 状态。
 
@@ -62,7 +34,7 @@
 
 Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直接作为该模型传入。同一 Apple ID 也不能代替对实际 IPA 与 enrollment 是否匹配的验证。
 
-目前没有匹配模型，也没有在现有 GitHub-only 条件下完成首次注册。原生 UI 登录及独立 AuthKit 路径此前未成功；直接机器授权路径现已推进到服务器返回 keybag，但本机导入失败。keybag 返回、原生导入、模型恢复和真实 IPA 完整验证是分别检查的阶段，前一阶段成功不能代替后续证据。[源码依据与验收条件](OFFLINE-BACKEND.md#enrollment-bootstrap-source-review)。
+目前没有经过真实 IPA 校验的匹配模型。原生 UI 登录及独立 AuthKit 路径此前未成功；AMS 直接导入曾失败，但后续 CommerceKit 服务路径已经取得授权数据并生成 SIDB。生成文件仍不等于完整首次注册或模型恢复完成。keybag 返回、原生导入、模型恢复和真实 IPA 完整验证是分别检查的阶段，前一阶段成功不能代替后续证据。[源码依据与验收条件](OFFLINE-BACKEND.md#enrollment-bootstrap-source-review)。
 
 ## GitHub 验证入口
 
@@ -93,6 +65,8 @@ Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直�
 | Account-free CommerceKit invalid import observation | 固定无效数据、调用前后服务响应、状态标志与有界日志摘要 | 无账号；仅无效合成导入，不把调用返回当作成功 |
 | Account-free CommerceKit request construction | 构造固定测试身份的请求，检查地址、方法与字段保留 | 无账号；不发送返回的授权请求 |
 | Account-free keybag import rejection probe | 双架构无效 keybag/diversitybag、文件访问、普通用户/root 与超时清理检查 | 不传入账号、不发送授权请求 |
+| Account-free FairPlay state visibility | 只读比较普通用户和管理员视角的固定状态文件及有界目录库存 | 无账号，不读取文件正文，报告缺失、权限不足及扫描限制 |
+| Private same-runner model bootstrap | 先构建测试，再串联一次授权、下载、候选恢复和完整 IPA 校验 | 当前仍在验证；只有完整校验成功才生成仓库公钥加密的模型传输数据 |
 | Private native machine enrollment trial | 最多一次授权请求；可选 AMS 直接导入或 CommerceKit 系统服务；后者要求普通用户、登录 User-Agent 和 Cookie | 先运行无账号预检，最后一步使用 Apple Secrets；服务调用返回不代表导入成功 |
 
 在 Independent Swift Store trial 中选择：
@@ -100,7 +74,7 @@ Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直�
 - `native`：下载原始 IPA 并执行 macOS 原生诊断。工作流成功可以只表示下载和诊断完成，不能据此认定砸壳成功。
 - `offline`：下载后调用离线验证器。必须先配置匹配模型的 `FAIRPLAY_MODEL_B64` Secret；缺少模型时在登录、下载与依赖编译前退出。通过编码检查也不等于模型匹配。
 
-真实 IPA、模型、账号信息和候选明文在运行器内部处理，不发布为仓库文件、公开日志或 Actions artifact。当前试验没有可领取的 IPA 下载产物。
+真实 IPA、模型、账号信息和候选明文在运行器内部处理，不发布为仓库文件、公开日志或 Actions artifact。当前试验没有可领取的 IPA 下载产物；已准备的模型传输仅为不可由公众解密的 GitHub Secret 密文，不是公开模型或 IPA artifact。
 
 较早的原生 UI、AuthKit、Anisette、路由、Cookie、会话创建与正文令牌对照保留在 [OFFLINE-BACKEND.md](OFFLINE-BACKEND.md)。这些历史试验尚未获得 keybag；最新进展以上方真实机器授权记录为准。
 

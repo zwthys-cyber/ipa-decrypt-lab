@@ -854,3 +854,43 @@ The user explicitly approved one account-wide computer deauthorization in chat b
 The result is `deauthorization_confirmed`, with `count_before=5`, `count_after=0`, `mutation_request_count=1`, and `automatic_retry=false`. This run did not issue a new machine authorization, create an enrollment model, or verify decryption. Existing computer purchase authorizations were revoked as approved. The annual all-computer operation must not be repeated as routine cleanup.
 
 With the quota condition now changed, one follow-up CommerceKit enrollment trial has been dispatched using the previously validated login identity, GUID, token, User-Agent, and Cookie bindings. Its result is pending; the zero count above records the state immediately after deauthorization, not a guarantee that future authorization leaves it unchanged.
+
+
+## CommerceKit creates SIDB; privileged visibility correction (2026-11-04)
+
+After the approved five-to-zero deauthorization, [run 41837662134](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41837662134) passed 60 Python and 11 Swift tests, logged in, and obtained keybag plus diversitybag with HTTP 200 and no business failure. The CommerceKit connection remained stable, the one-way import returned, and follow-up synchronization no longer requested a diversitybag. No matching import-log events were found; this is not proof of absence of errors. The legacy four file flags remained false and the run correctly exited unverified.
+
+Review found that those booleans conflated nonexistent files with inaccessible paths. The [credential-free visibility probe](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41839020872) passed 59 tests and demonstrated that the ordinary runner cannot inspect the fpsd state directory, while root can. On that fresh account-free runner the four files were absent even as root.
+
+The observed enrollment path now:
+
+- Requires a successful read-only current computer-count query before authorization.
+- Stops without native authorization if the count is unavailable or already five.
+- Requires successful administrator metadata observation before the request.
+- Records current-user and root state before and after, plus the account count after the attempt.
+- Retains the initial diversitybag requirement separately from the follow-up result.
+- Never treats permission denial, a successful HTTP response, or an asynchronous import return as complete model recovery.
+
+[Real observed run 41839179045](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41839179045), commit f8736886ab85708ef0ec8617f4ba6845cc5c1bf5, passed 95 Python tests, 11 Swift tests and native contracts:
+
+- Account count: **1 before, 2 after**.
+- Authenticated authorization: HTTP 200, keybag and diversitybag present, no business error, no redirect.
+- Initial request required diversitybag; post-import service synchronization did not.
+- Root saw the fixed fpsd SIDB change from **missing to regular_nonempty**.
+- The fpsd SIDS and both shared SC Info files remained missing in the root observations.
+- The ordinary process still reported permission denied for both fpsd paths.
+- No state-file contents, account identifiers or hardware identifiers were emitted.
+
+This establishes generation of a nonempty SIDB in the protected expected location, not its valid enrollment records, a recovered model, complete import success, or verified decrypted bytes. The old false flags cannot be interpreted as evidence that this protected file did not exist. The first post-reset trial was not observed as root, so its file creation is not claimed retrospectively.
+
+The metadata-only inventory is bounded by fixed roots, depth, entry count and time. It does not cover the entire machine. [Final account-free regression 41839639815](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41839639815) passed 60 tests and added an explicit depth-limit flag plus the system-preferences root. No further authorization was requested by that regression.
+
+### Same-runner recovery attempt prepared
+
+The new model-bootstrap workflow builds both pinned Swift variants, the pinned kbsync helper and UnfairPlay before providing Apple Secrets. Separate source trees avoid overlapping enrollment and downloader patches. One native enrollment, original IPA download, root-only collection/recovery and full IPA verification then occur on the same runner.
+
+The app input is explicitly an extracted IPA candidate, not a claimed native App Store installation. UnfairPlay's SINF, SIDB, hardware, selector and page-validation checks remain intact. An unsupported candidate or unmatched enrollment must fail; no fabricated files, relaxed checks, cryptid changes or synthetic report may substitute for real recovery.
+
+If setup produces a private model, the existing offline adapter independently checks the exact encrypted-slice coverage and available pre-encryption page hashes. A verified model can be sealed with libsodium-compatible anonymous boxes (pinned Go x/crypto dependency) to the GitHub repository's public key. Only that ciphertext and its public key ID may be relayed for creating FAIRPLAY_MODEL_B64; no model plaintext, credential, selector, state capture or IPA is uploaded or logged. The key was obtained from the repository's own GitHub public-key API, and the Secret did not exist when preparation began. Existing model Secrets must not be overwritten blindly.
+
+This recovery workflow is newly prepared and still requires its real result; SIDB generation alone is not model recovery.
