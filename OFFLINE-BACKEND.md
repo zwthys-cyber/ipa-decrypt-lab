@@ -156,3 +156,75 @@ The tested GitHub-only native bootstrap remains unsuccessful on both architectur
 - The account workflow tests redaction, limits, timeout behavior, environment isolation and failure reporting before supplying credentials. A log-query preflight must also pass before the account step.
 - The login workflow now exposes only the two explicitly permitted GitHub-hosted runner choices, serializes account trials and retains bounded job/step timeouts.
 - Compilation and all tests/experiments in this update ran on GitHub. No project build, test, login or execution occurred on the Debian server or editing workspace.
+
+
+## Isolated authentication failure and independent Anisette prerequisite (2026-11-04)
+
+### Narrowed native diagnostic
+
+[Run 41746379142](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41746379142), commit 9c60beb11d31a51e64b799b872d269234ac12758, ran on macos-15-intel. Twelve report/window tests, eleven diagnostic tests, log preflight and native Swift compilation passed. The account login still failed.
+
+The helper now marks the interval immediately before the first credential submission until its terminal UI observation. It rounds the upper bound to a whole second and waits beyond that bound before closing App Store. The Python wrapper requires that both private timestamps lie inside the child execution and that the interval is at most 180 seconds. Invalid/missing intervals, including helper timeouts, do not fall back to unrelated background logs. Timestamps and raw log messages are never published.
+
+This run's 14-second interval yielded 67 filtered events without truncation. It observed:
+
+- AKAnisetteError -8025 together with AKUnderlyingADIErrors -45061 and the fixed anisette_fetch_failed phrase classification.
+- AKAnisetteError -8008 with anisette_provisioning_failed.
+- AKAuthenticationError -7018 together with AKAnisetteError -8008 and -8001 in one error event.
+- A separate event containing -8008/-8001 and server_authentication_failed.
+- AKAuthenticationError -7066 with com.apple.devicecheck.error.baa -10000 and attestation_headers_failed, plus separate device_identity_unavailable events.
+- AKAuthenticationServerError -22410 together with AKAuthenticationError -7010.
+
+This is direct evidence of an Anisette acquisition/provisioning failure during the tested native authentication. It is more specific than the generic UI error. Co-occurrence records identify codes and fixed phrases within the same event; they do not reconstruct every nested error relationship or prove that device attestation is the sole root cause.
+
+-7012 also occurred inside the new interval, so it cannot be attributed solely to the helper closing App Store afterward. No reliable standalone semantic mapping was established. Neither selected_protocol_missing nor srp_server_proof_missing was observed in this run. It would be incorrect to import those explanations from unrelated public -7018 reports.
+
+The UI again showed unknown_error, with no detected OTP or optional security-upgrade prompt. All three privileged SIDB/SIDS checks remained not_found. No model or plaintext was produced.
+
+### Independent prerequisite experiment
+
+Anisette data is a device-authentication prerequisite. It is not the FairPlay enrollment model, SIDB, SINF, or the account's reusable app-decryption credential.
+
+To test the newly identified dependency without another account login, the repository adds an isolated experiment using [malmeloo/Anisette.py at a61cddfb2275187822ad0c3999af747b8c9a4f9a](https://github.com/malmeloo/Anisette.py/tree/a61cddfb2275187822ad0c3999af747b8c9a4f9a). Its source and frozen dependency lock are installed only on the GitHub runner. The [upstream MIT notice](https://github.com/malmeloo/Anisette.py/blob/a61cddfb2275187822ad0c3999af747b8c9a4f9a/LICENSE) remains in the checkout; this repository does not redistribute its binaries or Apple's libraries.
+
+The wrapper supplies an explicit local Apple Music APK, downloaded directly from Apple's public apps.mzstatic.com endpoint, instead of using the provider's default third-party library-bundle endpoint. Provisioning requests are limited to Apple HTTPS domains, without redirects, with request/body/time limits and normal TLS verification. There is no external Anisette service. The official APK URL is mutable; each run records its public SHA-256 as provenance, rather than claiming that the Apple library build is pinned by that URL.
+
+[Linux run 41747047524](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41747047524), commit 8f3ec9f606c323b7660a0235d4b8e7b40ee51087, completed successfully:
+
+- Seven contract tests passed.
+- Dependency installation used the upstream frozen lock and uv 0.9.13.
+- Three Apple provisioning requests completed.
+- The provider reported provisioned state and produced all required headers with bounded structure/base64 checks.
+- Saving the full private state to memory, reloading it and generating headers again succeeded; the machine-ID header remained identical within that session.
+- apple_login_attempted, native_state_imported, enrollment_created and decryption_proven all remained false.
+
+Public APK SHA-256 observed: 9aab4e3bfd44b509dd657b030d46df536c5592512c256fc59012cce47a2e9c9c.
+
+The result establishes independent Anisette initialization and reuse on that runner. It does not establish acceptance of those headers by an account-authentication endpoint, compatibility with native macOS ADI storage, successful native App Store login, or a reusable FairPlay model. No state or header values leave the worker. The synthetic state-persistence test and the real provider test both require reload success before reporting complete.
+
+### Hosted Apple Silicon confirmation
+
+[Mac run 41747343222](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41747343222), commit c0f39ed8e7e49d80bcb754fbdaf5de7be9dd0c87, repeated the same account-free prerequisite on macos-15 arm64. Seven contract tests, native metadata helper compilation and dependency installation passed. Three Apple provisioning requests again produced structurally valid headers and reloadable private state, with a stable machine-ID header after reload. The public APK hash matched the Linux run. No account was supplied or authenticated.
+
+The native metadata probe loaded AuthKit and observed these current selectors:
+
+- AKAppleIDAuthenticationContext: setAnisetteDataProvider:, anisetteDataProvider, setProxiedDeviceAnisetteData:, setCompanionDeviceAnisetteData:, _setPassword:, setUsername:, and the queried controls for ephemeral operation, login-attempt limit and optional security-upgrade handling.
+- AKAnisetteData: setters for machine ID, one-time password and routing information.
+- AKAppleIDAuthenticationController: authenticateWithContext:completion: and updateStateWithExternalAuthenticationResponse:forContext:completion:.
+
+However, objc_getProtocol("AKAnisetteServiceProtocol") returned no registered protocol. This only concerns that name in the loaded client process; it does not prove that custom providers are unavailable. The runtime presence of the context setter is a concrete integration lead, while the current provider/daemon callback contract and permissions remain unverified. No provider was installed, no account was created, and no authentication method was invoked in this metadata probe.
+
+### Integration boundary
+
+The obsolete mas sign-in command is not a verified shortcut: [mas issue 164](https://github.com/mas-cli/mas/issues/164) documents removal of ISAccountService's old signInWithContext:replyBlock: method. Historical [AuthKit context declarations](https://github.com/phatblat/macOSPrivateFrameworks/blob/9047371eb80f925642c8a7c4f1e00095aec66044/PrivateFrameworks/AuthKit/AKAppleIDAuthenticationContext.h) instead expose an anisetteDataProvider property. Historical declarations alone do not establish current availability or that a custom provider can cross the daemon boundary.
+
+The new account-free AuthKit capability probe checks only class/method/protocol metadata on the hosted Mac. It does not instantiate an account, call authentication, attach a provider, mutate system state, or infer successful enrollment from the existence of a selector.
+
+Before another authenticated trial, integration must establish a compatible way to supply the independently provisioned data to the account-authentication path, obey any real verification challenge, and preserve the user's refusal of the optional security upgrade. Even successful account authentication must then create and recover matching FairPlay state and validate a real IPA. Copying an Android ADI blob into native macOS storage, renaming it as FAIRPLAY_MODEL_B64, or treating the successful prerequisite probe as decryption would be unsupported.
+
+### Isolation and implementation
+
+- tools/anisette_probe.py launches a disposable worker with no Apple secrets, a 120-second timeout, suppressed stdout/stderr and a private temporary result file. Only fixed status/boolean/count fields are returned; all login, native-import, enrollment and decryption claims are forced false.
+- The private provider state is saved/reloaded only in memory and is discarded when the worker exits. No headers, machine identifiers, ADI files, model material or raw errors are uploaded or cached.
+- The workflow is manual, main-only, read-only, limited to GitHub-hosted runner choices, and uploads no artifacts. The public APK is removed afterward.
+- All implementation, dependency installation, compilation, tests and experiments remain on GitHub; no Debian server, external Mac, personal phone or TG integration is used.
