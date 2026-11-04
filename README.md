@@ -22,9 +22,9 @@
 
 [首次完整流程](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41841347693)通过 122 项 Python、20 项 Swift 测试及 Go/原生检查，实际完成一次授权、生成非空 SIDB、下载原始 IPA、提取候选应用包，但返回 `model_recovery_rejected`。没有产生模型、模型 Secret 或已验证砸壳包。旧错误摘要混入了恢复进度中的 SIDB/SINF 关键词，不能据此确定具体失败阶段。
 
-后续已改为**下载并检查全部 IPA 许可后，再决定是否授权**；新增 `input-inspection` 模式只检查输入，不调用电脑授权。错误报告仅输出固定错误类别及阶段，不公开上游错误正文。传给恢复器的仍是 IPA 解出的候选应用包，没有声称它已安装或运行；上游格式与认证检查不被放宽。目前先运行不消耗新授权名额的输入检查。
+后续已改为**下载并检查全部 IPA 许可后，再决定是否授权**；新增 `input-inspection` 模式只检查输入，不调用电脑授权。错误报告仅输出固定错误类别及阶段，不公开上游错误正文。传给恢复器的仍是 IPA 解出的候选应用包，没有声称它已安装或运行；上游格式与认证检查不被放宽。[仅检查输入的运行](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41843509689)已经通过：原始 IPA 清单与许可解析有效，检查到的 1 份许可符合当前格式，未提交新的电脑授权。剩余问题仍在授权状态与恢复算法的实际匹配。
 
-原始账号、SINF、SIDB、IPA、模型及候选明文不会以明文进入仓库、日志或 artifacts。仅在模型与完整 IPA 校验通过后，模型才会封装为 GitHub 仓库公钥加密的 Secret 传输数据；这不包含可直接使用的模型明文。当前尚未产生该传输数据或配置 `FAIRPLAY_MODEL_B64`。
+原始账号、SINF、SIDB、IPA、模型及候选明文不会以明文进入仓库、日志或 artifacts。模型仅在完整 IPA 校验通过后才封装为仓库公钥加密的 `FAIRPLAY_MODEL_B64` Secret 传输数据。另已准备有界的授权状态检查点 `FAIRPLAY_STATE_B64`，用于复用同一次授权排查失败；它可以在模型验证前加密保存，但不代表模型有效。两类密文用途隔离，均不公开明文。目前检查点仍在无账号预检，尚未配置这两个 Secret。
 
 [完整研究记录与局限](OFFLINE-BACKEND.md)。较早的 AMS 直接导入错误、原生解密 EPERM、AuthKit/Music 登录失败以及 CommerceKit 3002 记录均作为历史证据保留，不代替上方最新结果。
 
@@ -68,7 +68,7 @@ Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直�
 | Account-free CommerceKit request construction | 构造固定测试身份的请求，检查地址、方法与字段保留 | 无账号；不发送返回的授权请求 |
 | Account-free keybag import rejection probe | 双架构无效 keybag/diversitybag、文件访问、普通用户/root 与超时清理检查 | 不传入账号、不发送授权请求 |
 | Account-free FairPlay state visibility | 只读比较普通用户和管理员视角的固定状态文件及有界目录库存 | 无账号，不读取文件正文，报告缺失、权限不足及扫描限制 |
-| Private same-runner model bootstrap | 先构建测试，再下载并检查输入；`trial` 才继续一次授权、恢复与完整校验 | 最新真实恢复被拒绝；`input-inspection` 不提交电脑授权；只有完整校验成功才生成加密模型传输数据 |
+| Private same-runner model bootstrap | `preflight` 无账号测试；`input-inspection` 检查许可；`trial` 授权并恢复；`checkpoint-replay` 复用私有状态 | 最新真实恢复被拒绝；输入检查已通过；检查点仍在预检；只有完整校验成功才生成模型密文 |
 | Private native machine enrollment trial | 最多一次授权请求；可选 AMS 直接导入或 CommerceKit 系统服务；后者要求普通用户、登录 User-Agent 和 Cookie | 先运行无账号预检，最后一步使用 Apple Secrets；服务调用返回不代表导入成功 |
 
 在 Independent Swift Store trial 中选择：
@@ -76,7 +76,7 @@ Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直�
 - `native`：下载原始 IPA 并执行 macOS 原生诊断。工作流成功可以只表示下载和诊断完成，不能据此认定砸壳成功。
 - `offline`：下载后调用离线验证器。必须先配置匹配模型的 `FAIRPLAY_MODEL_B64` Secret；缺少模型时在登录、下载与依赖编译前退出。通过编码检查也不等于模型匹配。
 
-真实 IPA、模型、账号信息和候选明文在运行器内部处理，不发布为仓库文件、公开日志或 Actions artifact。当前试验没有可领取的 IPA 下载产物；已准备的模型传输仅为不可由公众解密的 GitHub Secret 密文，不是公开模型或 IPA artifact。
+真实 IPA、模型、账号信息和候选明文在运行器内部处理，不发布为仓库文件、公开日志或 Actions artifact。当前试验没有可领取的 IPA 下载产物；已准备的模型和授权检查点传输仅为不可由公众解密的 GitHub Secret 密文，不是公开模型或 IPA artifact。
 
 较早的原生 UI、AuthKit、Anisette、路由、Cookie、会话创建与正文令牌对照保留在 [OFFLINE-BACKEND.md](OFFLINE-BACKEND.md)。这些历史试验尚未获得 keybag；最新进展以上方真实机器授权记录为准。
 
