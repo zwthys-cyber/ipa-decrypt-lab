@@ -1,0 +1,39 @@
+name: Private checkpoint contracts
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: private-checkpoint-contracts
+  cancel-in-progress: false
+jobs:
+  contracts:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Check private checkpoint and replay contracts
+        run: |
+          python3 -m unittest discover -s tests -p 'test_private_fairplay_state.py' -v
+          python3 -m unittest discover -s tests -p 'test_model_bootstrap.py' -v
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: majd/ipatool
+          ref: d9c0247daea564d3ec7d04a9b015d0a29af66b04
+          path: native-source/ipatool
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: native-source/ipatool/go.mod
+          cache: true
+          cache-dependency-path: native-source/ipatool/go.sum
+      - name: Verify sealed-box roundtrip, tamper rejection and fixed Secret purposes
+        run: |
+          mkdir -p native-source/ipatool/cmd/lab-model-seal
+          cp tools/seal_model.go native-source/ipatool/cmd/lab-model-seal/main.go
+          cp tests/seal_model_test.go native-source/ipatool/cmd/lab-model-seal/main_test.go
+          cd native-source/ipatool
+          go test -p 2 ./cmd/lab-model-seal
