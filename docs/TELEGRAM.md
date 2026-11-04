@@ -39,6 +39,8 @@
 
 官方本地 Bot API 的上传上限为 2000 MB；本项目目前将 IPA 限为 1 GiB，并保留审计器的成员数量、Mach-O 大小和读取预算。超过当前审计范围会拒绝。完整 IPA 直接在私聊中发送，不拆分文件，也不发布公开明文下载链接。[Telegram 官方说明](https://core.telegram.org/bots/api#using-a-local-bot-api-server)。
 
+菜单实测 [41866282876](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41866282876) 已确认：7 个中文指令、默认语言与 zh 范围、commands 菜单按钮均读回匹配。
+
 ## 中文菜单
 
 每次启动均向管理员私聊注册中文指令（默认语言及 zh），并将菜单按钮设为指令列表。配置后使用 getMyCommands 和 getChatMenuButton 逐项读回确认；菜单保存在 Telegram，测试会话结束后仍显示，执行指令需要会话在线。
