@@ -14,7 +14,7 @@
 
 ## 流程与范围
 
-管理员发送美区免费 App Store 链接或数字 ID → 固定 GitHub 工作流 → 账号授权下载 → 复用已保存模型解密 → 校验每个加密切片 → 清理 Store 账号元数据 → age 加密 → VPS 认证解包并复核摘要及 IPA 结构 → Telegram 私聊发送。
+管理员发送 App Store 链接或数字 ID → 提交前检查美区上架、免费状态和标注大小 → 固定 GitHub 工作流 → 账号授权下载 → 复用已保存模型解密 → 校验每个加密切片 → 清理 Store 账号元数据 → age 加密 → VPS 认证解包并复核摘要及 IPA 结构 → Telegram 私聊发送。
 
 账号仍须具备下载许可。缺失验证材料、下载失败或摘要不匹配时拒绝交付。原始 IPA、模型、账号材料不发布到公开仓库或公开产物；公开密文保留一天。IPA 安装、签名兼容性及运行未验证。
 
@@ -67,3 +67,9 @@ Apple 账号、已有模型、Telegram 凭据与交付私钥均配置为 GitHub 
 [发布与部署 41910544129](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41910544129)通过 Ubuntu 和 Debian 13 各 357 项 Python 测试（1 项跳过），以及恰好 2,000,000,000 字节的 age 加密→解密→完整 SHA-256 比对和超出 1 字节拒绝测试。该大文件是 GitHub 上的合成数据，不是 2000 MB 游戏解密或 Telegram 真实上传实测。Go、systemd 凭据挂载与部署健康检查均通过。部署代码为 `4f3f79600a8f5df74c71eef6d0c03168d2895e13`。
 
 [macOS 26 Intel 预检 41910548494](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41910548494)已成功完成。独立 CMake/审计入口修复后的 [41910809719](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41910809719)中 Ubuntu 与 macOS 15 Intel 已通过；记录时 ARM 任务仍在排队，不计为已通过。
+
+## 提交前检查
+
+机器人先显示查询提示，再检查美区上架、价格和标注大小。地区不可用、收费或已知超限时不创建 GitHub 任务、不消耗提交额度，直接显示原因。网络异常单独提示稍后重试。查询正常时通常秒级返回；超时不保证立即确认。链接的国家代码不会自动切换下载账号地区。
+
+GitHub 手动导出也在依赖构建前检查应用条件；仍保留下载时的账号许可和实际大小校验。

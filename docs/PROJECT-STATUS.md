@@ -138,3 +138,15 @@
 [发布与部署 41910544129](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41910544129)通过 Ubuntu 和 Debian 13 各 357 项 Python 测试（1 项跳过），以及恰好 2,000,000,000 字节的 age 加密→解密→完整 SHA-256 比对和超出 1 字节拒绝测试。该大文件是 GitHub 上的合成数据，不是 2000 MB 游戏解密或 Telegram 真实上传实测。Go、systemd 凭据挂载与部署健康检查均通过。部署代码为 `4f3f79600a8f5df74c71eef6d0c03168d2895e13`。
 
 [macOS 26 Intel 预检 41910548494](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41910548494)已成功完成。独立 CMake/审计入口修复后的 [41910809719](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41910809719)中 Ubuntu 与 macOS 15 Intel 已通过；记录时 ARM 任务仍在排队，不计为已通过。
+
+## 提交前检查与旧发布自动清理（2026-11-04）
+
+机器人在创建任务、写入恢复记录和占用日额度之前，用无账号 App Store 查询核对美区上架、免费状态及标注大小。未通过会直接说明原因；网络错误不当成地区不匹配。查询使用 8 秒网络超时、2 MiB 响应预算，不自动重试、不跟随重定向。
+
+手动触发 GitHub 导出也会在拉取外部源码和编译之前检查。[闲鱼 510909506 复核 41919666036](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41919666036)预期拒绝 app_not_found_in_us，查询约 0.58 秒，整个作业约 18 秒；全部依赖构建、账号访问和解密步骤跳过。正常机器人拒绝发生在 GitHub dispatch 之前，不需要等待运行器。尚不支持中国区账号下载。
+
+[发布 41919936183](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41919936183)在 Ubuntu 与 Debian 13 各通过 371 项测试（1 项跳过）、2000 MB age 流式验证及 systemd 凭据验证，部署与健康检查成功。
+
+`deploy/prune_releases.py` 在新服务健康确认后仅保留 current 和 previous 指向的版本；只删除 releases 下符合提交 SHA 命名的真实旧目录，不跟随符号链接，不接触数据库、凭据、传输或 Telegram 状态。重复部署同一版本保留原回滚目标。清理异常只报告延后，不把健康部署当成失败。
+
+本次实际删除 6 个旧版本，服务器仅余 2 个发布目录，总计约 100 MiB。检查时传输临时目录约 4 KiB、Telegram 总状态约 44 KiB、系统 journal 约 8.1 MiB；没有发现遗留的大 IPA。状态为 ready，task_active=false。正常临时传输在结束时删除，异常残留在下一次启动清理，审计临时文件随关闭/进程退出释放。数据库和单份恢复备份保留；未配置额外的全系统日志清空操作。
