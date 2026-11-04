@@ -41,9 +41,13 @@
 
 菜单实测 [41866282876](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41866282876) 已确认：7 个中文指令、默认语言与 zh 范围、commands 菜单按钮均读回匹配。
 
+实时进度验证：[295 项 Python 测试及 Telegram 单消息更新 41868108407](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41868108407) 已通过；[阶段通道写入与读回 41868334364](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41868334364) 已通过。两项演示不下载或解密真实应用。
+
 ## 实时进度
 
 任务使用一张管理员私聊进度卡，显示真实阶段、任务编号和已用时间。同阶段约 15 秒刷新一次，阶段变化及时更新，避免连续发送多条通知。/status 会立即刷新当前进度卡。
+
+升级前启动的任务没有阶段上报代码，只能显示已有的排队/执行状态。更新后的新任务才有完整阶段；可在 session 模式传入 request_id 继续跟踪旧任务，不重新提交下载。
 
 阶段包括排队、准备环境、查询应用、验证下载账号、下载、解密及页面校验、完整 IPA 复核、结果加密、文件取回、交付复核、Telegram 上传和完成。短阶段可能在两次轮询间完成；不保证每一阶段都显示。
 
