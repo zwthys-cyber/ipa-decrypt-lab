@@ -43,7 +43,8 @@ def clean(value):
     for key in ("ams_loaded", "abi_verified", "context_ready", "error_present",
                 "sync_data_present", "synthetic_account_id", "ephemeral_account", "guid_is_six_bytes",
                 "owner_is_synthetic", "machine_name_present", "parameter_names_valid",
-                "bag_url_present", "endpoint_supported", "endpoint_query_present"):
+                "bag_url_present", "endpoint_supported", "endpoint_query_present",
+                "owner_field_present", "account_dsid_is_synthetic"):
         if type(value.get(key)) is bool:
             r[key] = value[key]
     if type(value.get("error_domain")) is str and value["error_domain"] in DOMAINS:
@@ -83,6 +84,12 @@ def clean(value):
                    "AMSBagKeyDeauthorizeMachineURL": {"deauthorizeMachine", "deauthorize-machine"}}
         r["bag_keys"] = {k: keys[k] for k, vals in allowed.items()
                          if type(keys.get(k)) is str and keys[k] in vals}
+    names = value.get("parameter_names")
+    if type(names) is list:
+        r["parameter_names"] = sorted({n for n in names if type(n) is str and re.fullmatch(r"[A-Za-z][A-Za-z-]{0,63}", n)})[:24]
+    route = value.get("public_endpoint_route")
+    if r.get("mode") == "public_bag" and type(route) is str and re.fullmatch(r"/[A-Za-z/._-]{1,158}", route):
+        r["public_endpoint_route"] = route
     host, path = value.get("endpoint_host"), value.get("endpoint_path")
     if type(host) is str and re.fullmatch(r"(buy|p[0-9]{1,3}-buy|finance-app)\.itunes\.apple\.com", host):
         r["endpoint_host"] = host

@@ -69,7 +69,7 @@ static void Parameters(NSMutableDictionary *r) {
  r[@"ephemeral_account"]=B(ephemeral);
  SEL dsid=NSSelectorFromString(@"ams_setDSID:");
  if(!ephemeral || !ABI(account,dsid,@"v",@[@"@"]))return;
- ((void(*)(id,SEL,id))objc_msgSend)(account,dsid,@0);
+ ((void(*)(id,SEL,id))objc_msgSend)(account,dsid,@1234567);
  id task=[NSClassFromString(@"AMSAuthorizeMachineTask") alloc];
  SEL init=NSSelectorFromString(@"initWithAccount:authorizeReason:bag:");
  if(!ABI(task,init,@"@",@[@"@",@"Q",@"@"]))return;
@@ -89,7 +89,15 @@ static void Parameters(NSMutableDictionary *r) {
  id guid=valid?params[@"guid"]:nil;
  r[@"guid_is_six_bytes"]=B([guid isKindOfClass:NSString.class] && [guid rangeOfString:@"^[A-Fa-f0-9]{12}$" options:NSRegularExpressionSearch].location!=NSNotFound);
  id owner=valid?params[@"ownerDsid"]:nil;
- r[@"owner_is_synthetic"]=B([owner isKindOfClass:NSNumber.class] && [owner isEqualToNumber:@0]);
+ r[@"owner_field_present"]=B(owner!=nil);
+ id dsidValue=((id(*)(id,SEL))objc_msgSend)(account,NSSelectorFromString(@"ams_DSID"));
+ r[@"account_dsid_is_synthetic"]=B([dsidValue isKindOfClass:NSNumber.class] && [dsidValue isEqualToNumber:@1234567]);
+ NSMutableArray *names=[NSMutableArray array];
+ for(id key in valid?[params allKeys]:@[]) {
+   if([key isKindOfClass:NSString.class] && [key rangeOfString:@"^[A-Za-z][A-Za-z-]{0,63}$" options:NSRegularExpressionSearch].location!=NSNotFound)[names addObject:key];
+ }
+ r[@"parameter_names"]=[names sortedArrayUsingSelector:@selector(compare:)];
+ r[@"owner_is_synthetic"]=B([owner isKindOfClass:NSNumber.class] && [owner isEqualToNumber:@1234567]);
  r[@"machine_name_present"]=B([params[@"machineName"] isKindOfClass:NSString.class] && [params[@"machineName"] length]>0);
  r[@"parameter_names_valid"]=B(valid && [[NSSet setWithArray:[params allKeys]] isEqualToSet:[NSSet setWithArray:@[@"kbsync",@"guid",@"machineName",@"ownerDsid"]]]);
  r[@"status"]=valid && present && !error?@"synthetic_parameters_ready":@"synthetic_parameters_failed";
@@ -120,6 +128,10 @@ static void PublicBag(NSMutableDictionary *r) {
    r[@"endpoint_supported"]=B([c.scheme isEqualToString:@"https"] && host && path && !c.user && !c.password && (!c.port || c.port.integerValue==443));
    if(host)r[@"endpoint_host"]=c.host;
    if(path)r[@"endpoint_path"]=c.path;
+   // Public bag only, without an account: expose a route made exclusively of
+   // alphabetic static path components. Never publish a query or credentials.
+   if(c.path.length<160 && [c.path rangeOfString:@"^/[A-Za-z/._-]+$" options:NSRegularExpressionSearch].location!=NSNotFound)
+     r[@"public_endpoint_route"]=c.path;
    r[@"endpoint_query_present"]=B(c.query.length>0);
  }
  r[@"status"]=url && !error?@"public_bag_ready":@"public_bag_failed";
