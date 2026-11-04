@@ -78,7 +78,7 @@ class BootstrapTests(unittest.TestCase):
             private.write_bytes(b"PRIVATE_SYNTHETIC_MODEL")
             private.chmod(0o600)
             path,summary=model.setup_summary(setup(private),root)
-            self.assertEqual(path,private)
+            self.assertEqual(path,private.resolve())
             self.assertNotIn("PRIVATE_SYNTHETIC",json.dumps(summary))
             private.chmod(0o644)
             with self.assertRaises(ValueError):
