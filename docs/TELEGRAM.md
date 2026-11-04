@@ -32,7 +32,7 @@
 3. 首次从云端迁移时，将 migrate_from_cloud 设为 true；已成功迁移的本仓库机器人保持 false。正常重启只连接本地服务，避免在云端退出冷却期内重复登录。
 4. 打开 [Telegram private IPA test session](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/workflows/telegram-session.yml)，分支 main。
 5. mode=check 验证本地服务并向管理员发送一条确认消息；mode=session 开启限时轮询。
-6. minutes 默认 30，允许 1–45。可选 request_id 用于启动后发送一个已经完成的交付任务。
+6. minutes 默认 30，允许 1–45。不填 request_id 时自动恢复最近一天内的已记录任务；填入 request_id 可明确恢复指定旧任务。已交付或发送不确定的记录不自动重发，需要明确使用 /get 或 mode=deliver。
 7. 已完成文件也可用 mode=deliver 和 request_id 单独取回；该模式不重复下载或恢复模型。
 
 所有 Telegram 会话使用同一个并发组，不能同时在其他服务轮询同一机器人。首次迁移会调用云端 logOut，再由本地服务认证；结束时退出本地会话并清理私有状态。Telegram 规定从云端退出后 10 分钟内不能重新登录云端。存在 webhook 时会明确失败，不自动删除 webhook。
@@ -140,3 +140,7 @@ GitHub 工作流总状态可能在文件已准备好之后仍显示运行中。�
 [41882955218](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41882955218)通过 308 项 Python 测试（1 项环境跳过）及真实加密样本就绪/归档摘要探针。工作流总状态与 jobs 元数据延迟时，优先显示已验证的 worker 阶段；准备阶段还读取原生 Check 状态。取消排队任务前，须额外确认原生 Check 仍为 queued，避免误停已经启动的运行器。
 
 启动新 Telegram 测试会话会替换旧会话，避免旧会话的收尾状态长期阻塞新窗口；这不会停止独立的 IPA 工作流。需要接回正在处理的任务时传入 request_id，新标题自带 App ID；旧标题可补 resume_app_id。
+
+## 跨会话状态
+
+已加入签名恢复日志、提交和发送前读回、成功交付记录。重启后接回已有任务；发送结果不明确时提示人工检查聊天，不自动重复上传。[恢复说明及 323 项测试、跨运行器验证结果](SESSION-RECOVERY.md)。仍为管理员私聊、限时会话；不支持多用户收费运营。
