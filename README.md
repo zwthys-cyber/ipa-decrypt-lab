@@ -25,7 +25,7 @@
 | 授权状态 | 管理员读取到非空 SIDB，并用于成功模型恢复 | CommerceKit 单向导入调用本身仍没有完成回执 |
 | 模型恢复 | GitHub macOS 上真实恢复并保存加密模型 | 未声称已安装或运行候选应用 |
 | IPA 解密校验 | 指定原始 IPA 的 62 个加密切片、12,524 页通过 | 尚未独立验证 Apple CMS 信任或应用安装运行 |
-| 模型复用 | 已在全新运行器使用 Secret 再次完成真实 IPA 校验 | 不推断所有账号、应用、版本都兼容 |
+| 模型与状态复用 | 直接使用保存的模型、从检查点重新恢复模型均在全新运行器通过真实 IPA 校验 | 两条复用路径均不调用机器授权；不推断所有账号、应用、版本都兼容 |
 | Telegram / 收费服务 | 按当前要求暂不接入 | 没有已部署的收费服务 |
 
 此前经用户明确批准，[单次全部解除授权](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41837099155)已确认 **5 → 0 台**，之后四次授权试验合计占用四个名额。不会把全部解除授权作为重复清理方式。Apple 的五台上限和一年一次全部解除限制仍适用。[官方说明](https://support.apple.com/en-us/118292)。
@@ -36,7 +36,7 @@
 
 模型与授权检查点的明文只在 GitHub 运行器私有临时目录中处理。公开日志仅包含固定结果和 GitHub 仓库公钥密文；只有 GitHub 保存的私钥能解开这些传输数据。两种 Secret 的用途和格式分别校验，模型必须通过完整 IPA 复核后才保存。
 
-`FAIRPLAY_STATE_B64` 仅包含固定 SIDB/SIDS 文件和必要硬件标识，不包含 IPA、Apple 密码或登录会话。它用于复用授权状态研究兼容性，不能单独当作已验证模型。实际检查点捕获和加密已成功；从该 Secret 重建状态的真实重放正在验证中。
+`FAIRPLAY_STATE_B64` 仅包含固定 SIDB/SIDS 文件和必要硬件标识，不包含 IPA、Apple 密码或登录会话。它用于复用授权状态研究兼容性，不能单独当作已验证模型。[真实检查点重放 41847775765](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41847775765)已在另一台全新运行器通过：从保存的状态重新恢复模型，随后完成相同的 62 个加密切片、12,524 页校验，且 `authorization_request_attempted=false`。归档状态只恢复到私有临时目录，不为新运行器注册电脑授权。
 
 本次候选明文在验证后删除，没有公开可下载的砸壳 IPA；`runtime_verified=false`。源码中已有真实解密后端，但生产交付、私有下载存储、计费及 Telegram 接入是后续工作。
 
@@ -72,7 +72,7 @@
 | Account-free CommerceKit request construction | 构造固定测试身份的请求，检查地址、方法与字段保留 | 无账号；不发送返回的授权请求 |
 | Account-free keybag import rejection probe | 双架构无效 keybag/diversitybag、文件访问、普通用户/root 与超时清理检查 | 不传入账号、不发送授权请求 |
 | Account-free FairPlay state visibility | 只读比较普通用户和管理员视角的固定状态文件及有界目录库存 | 无账号，不读取文件正文，报告缺失、权限不足及扫描限制 |
-| Private same-runner model bootstrap | `preflight` 无账号测试；`input-inspection` 检查许可；`trial` 授权并恢复；`checkpoint-replay` 复用私有状态 | 真实恢复和完整 IPA 校验已通过，模型及状态 Secret 已保存；真实检查点重放尚待验证 |
+| Private same-runner model bootstrap | `preflight` 无账号测试；`input-inspection` 检查许可；`trial` 授权并恢复；`checkpoint-replay` 复用私有状态 | 首次恢复、完整 IPA 校验及检查点真实重放均已通过；模型及状态 Secret 已保存 |
 | Private native machine enrollment trial | 最多一次授权请求；可选 AMS 或 CommerceKit 系统服务 | 单独授权试验不验证模型；优先使用已保存模型，避免重复占用名额 |
 
 在 Independent Swift Store trial 中选择：

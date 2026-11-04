@@ -6,7 +6,7 @@
 
 The latest measured computer count is 4 of 5. The user's approved all-computer deauthorization was performed once earlier (5 -> 0); four subsequent controlled enrollments account for the current measurement. The independent cross-runner reuse check [41846974302](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41846974302) also passed with 62 encrypted slices and 12,524 verified pages, using the stored model and a freshly downloaded IPA. It does not invoke machine authorization.
 
-Installation/runtime behavior, independent Apple CMS trust, real checkpoint replay, other accounts/apps, and a production Telegram service remain unverified or out of the current scope. See [the successful recovery record](#first-verified-github-only-model-recovery-2026-11-04) below. Earlier blocker/failed-run sections are historical evidence, not the current outcome.
+Real checkpoint replay also passed in [41847775765](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41847775765): a third fresh runner derived a model from the saved SIDB/IOMAC data and verified the complete newly downloaded IPA without invoking enrollment. Installation/runtime behavior, independent Apple CMS trust, other accounts/apps and a production Telegram service remain unverified or out of the current scope. See [the successful recovery record](#first-verified-github-only-model-recovery-2026-11-04) below. Earlier blocker/failed-run sections are historical evidence, not the current outcome.
 
 ## What is wired
 
@@ -975,3 +975,14 @@ Accordingly, [fresh-runner offline verification 41846974302](https://github.com/
 The run passed all 273 Python tests, 9 Swift tests, 4 C tests and the Go helper/engine tests. It used a fresh GitHub-hosted macOS runner and did not invoke machine enrollment. This establishes saved-model reuse beyond the original enrollment host for the tested account/application; other applications/accounts and actual Linux-hosted decryption are not claimed tested.
 
 A further `checkpoint-replay` job has been dispatched solely to exercise the newly implemented archived-state path with `FAIRPLAY_STATE_B64`. Its code explicitly skips enrollment; it will attempt model derivation from the saved SIDB/IOMAC inputs and independently verify a fresh original IPA. This is an unresolved integration check for the optional recovery checkpoint, not another machine authorization or a repeat of the successful model Secret check.
+
+
+### Verified real checkpoint replay and phase completion
+
+[Run 41847775765](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41847775765) completed successfully at b668df099334706a9f02e6bcaf56ff553b023c8b in `checkpoint-replay` mode. The new runner read `FAIRPLAY_STATE_B64`, downloaded and checked a fresh original IPA, materialized only fixed state files inside its private temporary directory, and supplied the archived IOMAC bytes through the pinned collector's explicit input override. It did not register the fresh host as an authorized computer or import the archived state into the host's system directories.
+
+The real report has `state_source=github_secret_checkpoint`, `authorization_request_attempted=false`, `model_recovered=true`, `status=model_recovered_and_verified`, `decryption_proven=true` and `plaintext_verified=true`. Both recovery validation and the independent complete IPA pass report **62 encrypted images and 12,524 pages**. `runtime_verified=false` and `plaintext_retained=false`. The same 140 Python, 20 Swift and Go/native prerequisite checks passed before the private replay.
+
+The replay also emitted a correctly bound encrypted model candidate, but the existing verified model Secret was not overwritten: the original saved model had already passed independent fresh-runner verification. No new state Secret was generated, no account-wide deauthorization was repeated, and no new computer authorization was requested. The latest directly observed account count remains 4 of 5 from the successful bootstrap.
+
+The current research phase is therefore complete for the tested account and App ID 6599842047: GitHub-only initial native state creation, model recovery, complete original IPA plaintext validation, private Secret persistence, direct model reuse on a fresh runner, and model re-derivation from saved native state all have real evidence. This does not constitute a universal-app guarantee, a retained downloadable IPA, an installation/runtime test, independently verified Apple CMS trust, real Linux-platform decryption, Telegram integration or a deployed paid service. The requested pause on TG integration remains in effect.
