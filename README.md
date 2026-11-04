@@ -8,7 +8,7 @@
 
 [增强后的 CommerceKit 试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41839179045)通过 95 项 Python、11 项 Swift 测试及原生检查。真实请求获得 keybag 和 diversitybag，HTTP 200、无业务失败码；服务端导入调用返回，后续同步从需要 diversitybag 变为不需要。管理员只读检查确认 `/private/var/db/fpsd/SC Info/SC Info.sidb` 从不存在变为非空普通文件。普通用户对该路径无读取权限，先前统一为 false 的检查无法区分权限不足和不存在，现已修正。
 
-授权数量也已纳入前后检查：本次 **1 → 2 台**。此前经用户明确同意，[单次全部解除授权](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41837099155)已确认 **5 → 0 台**；之后两次受控试验占用了两个名额。不会把全部解除授权作为重复试验的清理方式。Apple 的五台上限与一年一次全部解除限制仍适用。[官方说明](https://support.apple.com/en-us/118292)。
+授权数量已纳入前后检查：最新完整试验 **2 → 3 台**，当前已确认占用 3 个名额。此前经用户明确同意，[单次全部解除授权](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41837099155)已确认 **5 → 0 台**；之后三次受控试验共占用了三个名额。不会把全部解除授权作为重复试验的清理方式。Apple 的五台上限与一年一次全部解除限制仍适用。[官方说明](https://support.apple.com/en-us/118292)。
 
 | 环节 | 已验证结果 | 仍待完成 |
 | --- | --- | --- |
@@ -20,13 +20,15 @@
 | 离线引擎 | 固定版本 UnfairPlay 已构建并通过合成测试 | 尚无匹配模型通过完整真实 IPA 校验 |
 | Telegram / 收费服务 | 暂不接入 | 没有可交付的收费砸壳服务 |
 
-已接通新的同运行器流程：先构建和测试，再执行一次授权、下载匹配原始 IPA、尝试从 SIDB 恢复模型，最后复核全部加密切片和可用的加密前页面哈希。传给恢复器的是从 IPA 解出的**候选应用包**，没有把它声称为已安装或运行过的 Mac 应用；上游格式与认证检查不被放宽。恢复流程仍在验证中。
+[首次完整流程](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41841347693)通过 122 项 Python、20 项 Swift 测试及 Go/原生检查，实际完成一次授权、生成非空 SIDB、下载原始 IPA、提取候选应用包，但返回 `model_recovery_rejected`。没有产生模型、模型 Secret 或已验证砸壳包。旧错误摘要混入了恢复进度中的 SIDB/SINF 关键词，不能据此确定具体失败阶段。
+
+后续已改为**下载并检查全部 IPA 许可后，再决定是否授权**；新增 `input-inspection` 模式只检查输入，不调用电脑授权。错误报告仅输出固定错误类别及阶段，不公开上游错误正文。传给恢复器的仍是 IPA 解出的候选应用包，没有声称它已安装或运行；上游格式与认证检查不被放宽。目前先运行不消耗新授权名额的输入检查。
 
 原始账号、SINF、SIDB、IPA、模型及候选明文不会以明文进入仓库、日志或 artifacts。仅在模型与完整 IPA 校验通过后，模型才会封装为 GitHub 仓库公钥加密的 Secret 传输数据；这不包含可直接使用的模型明文。当前尚未产生该传输数据或配置 `FAIRPLAY_MODEL_B64`。
 
 [完整研究记录与局限](OFFLINE-BACKEND.md)。较早的 AMS 直接导入错误、原生解密 EPERM、AuthKit/Music 登录失败以及 CommerceKit 3002 记录均作为历史证据保留，不代替上方最新结果。
 
-## 当前阻塞：已生成 SIDB，待验证模型恢复和 IPA 许可匹配
+## 当前阻塞：SIDB 与原始 IPA 已取得，但模型恢复被拒绝
 
 现有下载器创建临时账号会话并生成下载用 kbsync；这条代码路径不创建离线引擎需要的系统 FairPlay enrollment 状态。
 
@@ -66,7 +68,7 @@ Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直�
 | Account-free CommerceKit request construction | 构造固定测试身份的请求，检查地址、方法与字段保留 | 无账号；不发送返回的授权请求 |
 | Account-free keybag import rejection probe | 双架构无效 keybag/diversitybag、文件访问、普通用户/root 与超时清理检查 | 不传入账号、不发送授权请求 |
 | Account-free FairPlay state visibility | 只读比较普通用户和管理员视角的固定状态文件及有界目录库存 | 无账号，不读取文件正文，报告缺失、权限不足及扫描限制 |
-| Private same-runner model bootstrap | 先构建测试，再串联一次授权、下载、候选恢复和完整 IPA 校验 | 当前仍在验证；只有完整校验成功才生成仓库公钥加密的模型传输数据 |
+| Private same-runner model bootstrap | 先构建测试，再下载并检查输入；`trial` 才继续一次授权、恢复与完整校验 | 最新真实恢复被拒绝；`input-inspection` 不提交电脑授权；只有完整校验成功才生成加密模型传输数据 |
 | Private native machine enrollment trial | 最多一次授权请求；可选 AMS 直接导入或 CommerceKit 系统服务；后者要求普通用户、登录 User-Agent 和 Cookie | 先运行无账号预检，最后一步使用 Apple Secrets；服务调用返回不代表导入成功 |
 
 在 Independent Swift Store trial 中选择：

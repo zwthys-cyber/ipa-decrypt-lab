@@ -56,6 +56,7 @@ AMS_CORE_METHODS = METHODS
 COMMERCE_ACCOUNT_METHODS = (
     "-[CKAccountStore viewAccount]",
     "-[CKMachineAuthorizationContext deauthorizeMachineWithCompletionHandler:]",
+    "__73-[CKMachineAuthorizationContext deauthorizeMachineWithCompletionHandler:]_block_invoke",
 )
 ACCOUNT_INFO_METHODS = (
     "-[AMSAccountDeviceInfoTask _deviceInfoRequest]",

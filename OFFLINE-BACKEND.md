@@ -894,3 +894,18 @@ The app input is explicitly an extracted IPA candidate, not a claimed native App
 If setup produces a private model, the existing offline adapter independently checks the exact encrypted-slice coverage and available pre-encryption page hashes. A verified model can be sealed with libsodium-compatible anonymous boxes (pinned Go x/crypto dependency) to the GitHub repository's public key. Only that ciphertext and its public key ID may be relayed for creating FAIRPLAY_MODEL_B64; no model plaintext, credential, selector, state capture or IPA is uploaded or logged. The key was obtained from the repository's own GitHub public-key API, and the Secret did not exist when preparation began. Existing model Secrets must not be overwritten blindly.
 
 This recovery workflow is newly prepared and still requires its real result; SIDB generation alone is not model recovery.
+
+
+## Same-runner recovery rejected; quota preserved for diagnosis (2026-11-04)
+
+[Run 41841347693](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41841347693) at commit 81796a77fc0f5ec1b004198365ffd682c5aa0948 passed 122 Python tests, 11 Swift enrollment tests, 9 Swift download tests, the pinned recovery/verification Go packages, the kbsync and sealed-box Go tests, and native contracts before exposing Apple credentials. The earlier run 41840968459 failed only a macOS /var versus /private/var canonical-path test before credentials; the test was corrected without weakening the implementation.
+
+The real trial authenticated, made one CommerceKit authorization request, obtained keybag and diversitybag with HTTP 200 and no business failure, and changed protected fpsd SIDB from missing to regular_nonempty. The independently queried account count changed from **2 to 3**. This is the third post-reset authorization, not another all-computer deauthorization. The approved annual all-computer action has not been repeated.
+
+The original IPA downloaded successfully and was safely extracted as an explicit candidate app. The pinned engine rejected recovery with nonzero status; the wrapper emitted `model_recovery_rejected`, `model_recovered=false`, `decryption_proven=false` and `plaintext_verified=false`. No model ciphertext was emitted and no model Secret was created. No private capture, IPA, raw upstream error or plaintext was exported.
+
+The original keyword-only diagnostic found SIDB and SINF mentions, but the upstream recovery progress itself contains both words. Those flags do not establish a SIDB/SINF mismatch, an unsupported layout, or the exact failure stage. The raw error was discarded, so it cannot be reconstructed from the public report. Do not infer a completed derivation step or changed cryptographic validity from those mentions.
+
+Commit 2d60d448dfc364679b24d603d0a7ae97049b5871 moves original download, safe extraction and the pinned engine's structural IPA doctor check ahead of machine authorization. All inspected licenses must have the supported current layout and valid inventory/SINF checks. A dedicated `input-inspection` mode stops after this check without calling enrollment. It uses the existing Apple download session but makes no explicit computer-authorization request.
+
+Recovery failures now parse only upstream `error: ` lines into fixed source-backed error codes. Allowlisted progress phases are reported separately; unknown messages, filenames, selectors, paths and account values never pass through. Synthetic regressions cover progress/error separation, unknown-message privacy, incompatible license inputs, failed downloads and the no-enrollment inspection mode. New verification is pending. No fourth real authorization has been dispatched.
