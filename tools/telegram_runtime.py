@@ -1,5 +1,5 @@
 """Temporary official Bot API server, bound only to loopback."""
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import os
 from pathlib import Path
 import re
@@ -26,7 +26,7 @@ def startup_failure(path):
     return "local_bot_server_exited"
 
 @contextmanager
-def local_bot(binary):
+def local_bot(binary, state_directory=None):
     token = os.environ.get("TELEGRAM_BOT_TOKEN","")
     api_id, api_hash = os.environ.get("TELEGRAM_API_ID",""), os.environ.get("TELEGRAM_API_HASH","")
     if not re.fullmatch(r"[1-9][0-9]{4,10}",api_id) or not re.fullmatch(r"[a-fA-F0-9]{32}",api_hash):
@@ -38,11 +38,18 @@ def local_bot(binary):
         cloud.check()
         if cloud.call("logOut") is not True:
             raise APIError("cloud_logout_unconfirmed")
-    with tempfile.TemporaryDirectory(prefix="telegram-local-private-") as directory:
+    if state_directory is not None:
+        persistent=Path(state_directory)
+        persistent.mkdir(mode=0o700,parents=True,exist_ok=True)
+        if persistent.is_symlink() or persistent.stat().st_mode & 0o077:
+            raise APIError("insecure_bot_state_directory")
+    context=(tempfile.TemporaryDirectory(prefix="telegram-local-private-")
+             if state_directory is None else nullcontext(str(persistent)))
+    with context as directory:
         root = Path(directory)
         root.chmod(0o700)
-        (root/"state").mkdir(mode=0o700)
-        (root/"temp").mkdir(mode=0o700)
+        (root/"state").mkdir(mode=0o700,exist_ok=True)
+        (root/"temp").mkdir(mode=0o700,exist_ok=True)
         env = {k:os.environ[k] for k in ("PATH","LANG") if k in os.environ}
         env.update(HOME=str(root), TELEGRAM_API_ID=api_id, TELEGRAM_API_HASH=api_hash)
         with open(root/"server.log","wb") as log:
@@ -51,6 +58,7 @@ def local_bot(binary):
                 "--dir="+str(root/"state"),"--temp-dir="+str(root/"temp")],
                 env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=log)
             bot = Telegram(token,"http://127.0.0.1:8081")
+            bot.process = process
             authenticated = False
             try:
                 deadline = time.monotonic()+120
@@ -70,7 +78,7 @@ def local_bot(binary):
                     raise APIError("local_bot_server_not_ready")
                 yield bot
             finally:
-                if authenticated:
+                if authenticated and state_directory is None:
                     try:
                         bot.call("logOut", timeout=30)
                     except APIError:

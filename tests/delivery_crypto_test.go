@@ -44,3 +44,23 @@ func TestRejectSymlinksAndOversize(t *testing.T){
  if f,e:=source(link,100);e==nil{f.Close();t.Fatal("accepted symlink")}
  if f,e:=source(original,1);e==nil{f.Close();t.Fatal("accepted oversized input")}
 }
+
+func TestVPSRuntimeOnlyDecrypts(t *testing.T){
+ t.Setenv("GITHUB_ACTIONS","")
+ t.Setenv("LAB_RUNTIME","vps")
+ if run([]string{"keygen"})==nil{t.Fatal("VPS generated repository identity")}
+ dir:=t.TempDir()
+ input:=filepath.Join(dir,"input")
+ encrypted:=filepath.Join(dir,"ciphertext")
+ output:=filepath.Join(dir,"output")
+ plain:=[]byte("synthetic VPS delivery")
+ if e:=os.WriteFile(input,plain,0600);e!=nil{t.Fatal(e)}
+ identity,e:=age.GenerateX25519Identity();if e!=nil{t.Fatal(e)}
+ if run([]string{"encrypt",input,encrypted,identity.Recipient().String()})==nil{t.Fatal("VPS accepted export encryption mode")}
+ if e=transform(input,encrypted,false,identity.Recipient().String());e!=nil{t.Fatal(e)}
+ t.Setenv("DELIVERY_AGE_IDENTITY",identity.String())
+ if e=run([]string{"decrypt",encrypted,output});e!=nil{t.Fatal(e)}
+ got,e:=os.ReadFile(output);if e!=nil||!bytes.Equal(got,plain){t.Fatal("VPS decrypt mismatch")}
+ t.Setenv("LAB_RUNTIME","")
+ if run([]string{"decrypt",encrypted,filepath.Join(dir,"forbidden")})==nil{t.Fatal("unconfigured runtime accepted")}
+}

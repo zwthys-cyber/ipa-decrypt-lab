@@ -65,7 +65,12 @@ func sealedIdentity() error {
  })
 }
 func run(args []string) error {
- if os.Getenv("GITHUB_ACTIONS")!="true" { return errors.New("requires GitHub Actions") }
+ if os.Getenv("GITHUB_ACTIONS")!="true" {
+  if os.Getenv("LAB_RUNTIME")=="vps" && len(args)==3 && args[0]=="decrypt" {
+   return transform(args[1],args[2],true,os.Getenv("DELIVERY_AGE_IDENTITY"))
+  }
+  return errors.New("requires GitHub Actions")
+ }
  if len(args)==1 && args[0]=="keygen" { return sealedIdentity() }
  if len(args)==4 && args[0]=="encrypt" { return transform(args[1],args[2],false,args[3]) }
  if len(args)==3 && args[0]=="decrypt" { return transform(args[1],args[2],true,os.Getenv("DELIVERY_AGE_IDENTITY")) }

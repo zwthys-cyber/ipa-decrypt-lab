@@ -1,7 +1,7 @@
 # Project constraints
 
-- All project compilation, tests, validation and execution MUST run on GitHub-hosted Actions runners only.
-- Never build, install project dependencies, run project code or deploy on the user's Debian server or this workspace.
+- All project compilation, automated tests and build validation MUST run on GitHub-hosted Actions runners only. The user subsequently authorized a VPS to run CI-verified finished services (2026-11-04).
+- Never build, install build dependencies or run test suites on the VPS or this workspace. Install only necessary system runtime packages and the CI-verified deployment bundle on the authorized VPS. No local project execution.
 - Edit source through GitHub APIs. Do not create local project checkouts or build caches.
 - Do not use the user's personal iPhone or TrollStore installation as infrastructure.
 - No third-party decryption services unless the user changes scope explicitly.
@@ -14,7 +14,7 @@
 - The account owner declines the optional two-factor security upgrade. Never enable or accept that upgrade automatically.
 - Do not infer an enabled two-factor setting or a definite verification challenge from MZFinance.BadLogin.Configurator_message. Treat it as ambiguous until stronger response evidence is available.
 
-- The user explicitly resumed Telegram integration on 2026-11-04. Implement bounded GitHub-hosted bot sessions and verified private delivery; this does not authorize server execution or permanent Actions hosting.
+- The user explicitly resumed Telegram integration on 2026-11-04. Implement bounded GitHub-hosted bot sessions and verified private delivery; the later explicit authorization permits finished-service execution on the VPS, but never permanent Actions hosting.
 
 ## Verified research milestone (2026-11-04)
 
@@ -62,3 +62,13 @@
 - A journal write and readback must precede dispatch or file transmission. Unknown file-send outcomes must not be automatically repeated after restart. Explicit owner /get remains a manual retrieval action.
 - Keep the existing single-session concurrency group and owner-only gate. This bounded Checks log is not a production database or distributed lock. Recovered work must not repeat ambiguous failover dispatches.
 - journal-contracts.yml may write/read synthetic journal records using its GitHub token, without Apple/Telegram secrets, to test cross-runner recovery and principal isolation.
+
+## Persistent VPS deployment
+- The user purchased a Debian 13 x86_64 VPS and explicitly asked to connect the project. Keep the server address and SSH credentials in deployment Secrets, not public source.
+- GitHub builds/tests the public release, including Debian 13 compatibility. The VPS installs only runtime packages and verified artifacts. SSH installation, service startup and operational health inspection are authorized; no tests or compilers on the VPS.
+- A dedicated VPS_GH_TOKEN limited to this repository supplies Actions write and Contents read. Never copy the maintainer's broad workstation OAuth credential onto the server.
+- The daemon uses a private SQLite recovery log, persistent Telegram state, a single-controller lock, systemd restart and a non-root service account. Apple credentials/model stay in GitHub. Only authenticated delivery-envelope decryption may run on the VPS.
+- Disable the bounded telegram-session workflow after successful cutover to prevent a second poller. Owner-only access and billing-off remain defaults.
+- Runtime service credentials travel only via pinned SSH to a root-private systemd credential file, never public artifacts/logs. Deploy only after CI passes; retain the previous release for rollback.
+
+Checks 不是 fine-grained PAT 的必填权限。遇到 Checks 权限拒绝时，服务器改用 Actions 任务/步骤状态；不再基于缺失的 Checks 证据提前交付或取消排队任务，等待正常完成后校验交付。

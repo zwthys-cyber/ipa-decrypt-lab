@@ -1,0 +1,46 @@
+[Unit]
+Description=Private IPA Telegram controller
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=ipazake
+Group=ipazake
+WorkingDirectory=/opt/ipazake/current
+StateDirectory=ipazake
+StateDirectoryMode=0700
+LoadCredential=bot.json:/etc/ipazake/bot.json
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=LAB_RUNTIME=vps
+Environment=IPAZAKE_STATE=/var/lib/ipazake
+Environment=IPAZAKE_DAILY_TASK_LIMIT=20
+ExecStart=/usr/bin/python3 /opt/ipazake/current/tools/telegram_daemon.py
+Restart=on-failure
+RestartSec=20
+TimeoutStopSec=90
+KillMode=mixed
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+MemoryMax=2G
+TasksMax=256
+LimitNOFILE=16384
+LimitCORE=0
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,139 @@
+name: Build and deploy verified VPS controller
+run-name: VPS-controller-${{ inputs.deploy && 'deploy' || 'build' }}
+on:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Install the tested release on the configured VPS
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: vps-release
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Run Python persistence and delivery regression tests without credentials
+        run: |
+          python3 -m unittest discover -s tests -p 'test_*.py' -v
+          sh -n deploy/install.sh
+          systemd-analyze verify deploy/ipazake.service
+      - name: Restore CI-verified official Bot API
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: dist/telegram-bot-api
+          key: telegram-bot-api-ubuntu24-x64-e3e9dd8e5b3d7ab-v1
+          fail-on-cache-miss: true
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: FiloSottile/age
+          ref: b74dce4cdbe35b5e5f66c06d9612b72f89028758
+          path: native-source/age
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: '1.27.0'
+          cache-dependency-path: native-source/age/go.sum
+      - name: Build and test private delivery helper
+        run: |
+          mkdir -p native-source/age/cmd/lab-delivery-crypt package/bin package/tools package/deploy
+          cp tools/delivery_crypto.go native-source/age/cmd/lab-delivery-crypt/main.go
+          cp tests/delivery_crypto_test.go native-source/age/cmd/lab-delivery-crypt/main_test.go
+          cd native-source/age
+          go test -p 2 -timeout 120s ./cmd/lab-delivery-crypt
+          CGO_ENABLED=0 go build -p 2 -trimpath -o ../../package/bin/delivery-crypt ./cmd/lab-delivery-crypt
+      - name: Assemble public runtime bundle
+        run: |
+          cp dist/telegram-bot-api package/bin/
+          for module in telegram_daemon persistent_journal telegram_session telegram_runtime telegram_api telegram_menu telegram_queue task_progress delivery_scheduler delivery_journal ipa_audit; do
+            cp "tools/$module.py" package/tools/
+          done
+          cp deploy/ipazake.service deploy/install.sh package/deploy/
+          printf '%s\n' "$GITHUB_SHA" > package/SOURCE_COMMIT
+      - name: Validate Debian 13 runtime compatibility on GitHub
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/src:ro" debian:13-slim sh -ec '
+            apt-get update -qq
+            apt-get install -y --no-install-recommends python3 ca-certificates libssl3t64 zlib1g libstdc++6
+            PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s /src/tests -p "test_*.py"
+            /src/package/bin/telegram-bot-api --version
+            PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/src/package/tools python3 -c "import telegram_daemon"
+            if LAB_RUNTIME=vps /src/package/bin/delivery-crypt keygen; then
+              echo forbidden_vps_keygen; exit 1
+            fi
+          '
+      - name: Package verified public release
+        run: |
+          tar -czf vps-controller.tar.gz -C package .
+          sha256sum vps-controller.tar.gz > vps-controller.sha256
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: vps-controller-${{ github.sha }}
+          path: |
+            vps-controller.tar.gz
+            vps-controller.sha256
+          retention-days: 7
+          if-no-files-found: error
+      - name: Install SSH transport on GitHub runner only
+        if: inputs.deploy
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends sshpass
+      - name: Deploy prebuilt controller and private credentials
+        if: inputs.deploy
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          SSHPASS: ${{ secrets.VPS_SSH_PASSWORD }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          VPS_GH_TOKEN: ${{ secrets.VPS_GH_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_OWNER_ID: ${{ secrets.TELEGRAM_OWNER_ID }}
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+          DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          umask 077
+          test -n "$VPS_GH_TOKEN" || { echo missing_VPS_GH_TOKEN; exit 2; }
+          test -n "$VPS_HOST"
+          test -n "$SSHPASS"
+          test -n "$VPS_KNOWN_HOSTS"
+          export DEPLOY_TEMP
+          DEPLOY_TEMP=$(mktemp -d)
+          trap 'rm -rf "$DEPLOY_TEMP"' EXIT
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$DEPLOY_TEMP/known_hosts"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          names=("TELEGRAM_BOT_TOKEN","TELEGRAM_OWNER_ID","TELEGRAM_API_ID","TELEGRAM_API_HASH","DELIVERY_AGE_IDENTITY")
+          values={k:os.environ[k] for k in names}
+          values["GH_TOKEN"]=os.environ["VPS_GH_TOKEN"]
+          if not all(values.values()):
+              raise SystemExit("missing_runtime_credentials")
+          (Path(os.environ["DEPLOY_TEMP"])/"bot.json").write_text(json.dumps(values))
+          PY
+          # Refuse overlapping cloud-runner pollers; do not cancel workers or owner tasks.
+          active=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/telegram-session.yml/runs?per_page=20" --jq '[.workflow_runs[] | select(.status!="completed")] | length')
+          test "$active" -eq 0 || { echo bounded_session_still_active; exit 2; }
+          sha=$(cut -d ' ' -f 1 vps-controller.sha256)
+          sshpass -e scp -q -o UserKnownHostsFile="$DEPLOY_TEMP/known_hosts" -o StrictHostKeyChecking=yes -o ConnectTimeout=15 vps-controller.tar.gz "root@$VPS_HOST:/root/ipazake-$GITHUB_SHA.tar.gz"
+          sshpass -e scp -q -o UserKnownHostsFile="$DEPLOY_TEMP/known_hosts" -o StrictHostKeyChecking=yes -o ConnectTimeout=15 "$DEPLOY_TEMP/bot.json" "root@$VPS_HOST:/root/ipazake-$GITHUB_SHA.json"
+          sshpass -e ssh -o UserKnownHostsFile="$DEPLOY_TEMP/known_hosts" -o StrictHostKeyChecking=yes -o ConnectTimeout=15 "root@$VPS_HOST" "sh -s -- /root/ipazake-$GITHUB_SHA.tar.gz /root/ipazake-$GITHUB_SHA.json $GITHUB_SHA $sha" < deploy/install.sh
+          for attempt in $(seq 1 30); do
+            if sshpass -e ssh -o UserKnownHostsFile="$DEPLOY_TEMP/known_hosts" -o StrictHostKeyChecking=yes "root@$VPS_HOST" "systemctl is-active --quiet ipazake.service && grep -q '\"state\": \"ready\"' /var/lib/ipazake/health.json"; then
+              gh workflow disable telegram-session.yml --repo "$GITHUB_REPOSITORY"
+              echo persistent_service_ready_verified
+              exit 0
+            fi
+            sleep 5
+          done
+          echo persistent_service_readiness_unconfirmed
+          exit 2

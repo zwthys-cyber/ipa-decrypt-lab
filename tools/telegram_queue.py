@@ -40,6 +40,7 @@ class GitHub:
     def __init__(self, token):
         require(bool(token), "missing_github_token")
         self.token = token
+        self.checks_readable = True
         self.opener = urllib.request.build_opener(NoRedirect())
 
     def call(self, path, payload=None, method="GET", limit=4*1024*1024):
@@ -65,6 +66,17 @@ class GitHub:
         except (OSError, ValueError, http.client.HTTPException):
             # A POST timeout may still have created a run. Never blindly retry it.
             raise QueueError("github_transport_unknown") from None
+
+    def read_checks(self,path):
+        if not self.checks_readable:
+            return None
+        try:
+            return self.call(path)
+        except QueueError as exc:
+            if str(exc)=="github_permission_denied":
+                self.checks_readable=False
+                return None
+            raise
 
     def runs(self, rid):
         request_id(rid)
@@ -119,7 +131,7 @@ class GitHub:
             identifier=job.get("id")
             if type(identifier) is not int or identifier<=0:
                 return False
-            check=self.call("/check-runs/"+str(identifier))
+            check=self.read_checks("/check-runs/"+str(identifier))
             if (not isinstance(check,dict) or check.get("status")!="queued"
                     or check.get("head_sha")!=run["head_sha"]
                     or check.get("app",{}).get("slug")!="github-actions"):
@@ -153,7 +165,7 @@ class GitHub:
         request_id(rid)
         commit=run.get("head_sha","")
         require(re.fullmatch(r"[a-f0-9]{40}",commit), "invalid_progress_commit")
-        data=self.call("/commits/"+commit+"/check-runs?check_name=delivery-progress-"+rid+"&per_page=100")
+        data=self.read_checks("/commits/"+commit+"/check-runs?check_name=delivery-progress-"+rid+"&per_page=100") or {}
         for check in data.get("check_runs",[]):
             stage=parse_stage(check,rid,run["id"])
             if stage:
@@ -167,12 +179,14 @@ class GitHub:
                     return "building"
             identifier=job.get("id")
             if type(identifier) is int and identifier>0:
-                check=self.call("/check-runs/"+str(identifier))
+                check=self.read_checks("/check-runs/"+str(identifier))
                 if (isinstance(check,dict) and isinstance(check.get("app"),dict)
                         and check["app"].get("slug")=="github-actions"
                         and check.get("head_sha")==run.get("head_sha")
                         and check.get("status")=="in_progress"):
                     return "preparing"
+            if not self.checks_readable and job.get("status")=="in_progress":
+                return "preparing"
         return None
 
     def cancel(self, rid):
@@ -285,8 +299,9 @@ class GitHub:
                     and sha256(encrypted) == receipt["ciphertext_sha256"], "ciphertext_digest_mismatch")
             progress("delivery_verifying")
             output = root/(receipt["app_id"] + "_decrypted.ipa")
-            env = {k:os.environ[k] for k in ("PATH","HOME","LANG","DELIVERY_AGE_IDENTITY") if k in os.environ}
-            env["GITHUB_ACTIONS"] = "true"
+            env = {k:os.environ[k] for k in ("PATH","HOME","LANG","DELIVERY_AGE_IDENTITY","LAB_RUNTIME") if k in os.environ}
+            if os.environ.get("GITHUB_ACTIONS")=="true":
+                env["GITHUB_ACTIONS"] = "true"
             completed = subprocess.run([crypt,"decrypt",str(encrypted),str(output)], env=env,
                 stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
             require(completed.returncode == 0 and output.is_file(), "delivery_decryption_rejected")

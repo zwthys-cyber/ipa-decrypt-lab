@@ -47,7 +47,8 @@ def event(status, **fields):
     print(json.dumps({"schema":"telegram-session-v1","status":status,**fields}),flush=True)
 
 class Controller:
-    def __init__(self, bot, github, owner, crypt, token, journal=None):
+    def __init__(self, bot, github, owner, crypt, token, journal=None, submission_limit=3):
+        self.submission_limit = submission_limit
         self.journal = journal
         self.bot,self.github,self.owner,self.crypt,self.token = bot,github,owner,crypt,token
         self.current = None
@@ -151,8 +152,8 @@ class Controller:
         if self.current:
             self.say("已有任务处理中，请用 /status 查询，或先 /cancel。")
             return
-        if self.submitted>=3:
-            self.say("本次测试会话已提交 3 个任务，请重新启动测试会话后继续。")
+        if self.submitted>=self.submission_limit:
+            self.say("已达到当前提交额度，请稍后再试。")
             return
         if self.submitted and time.monotonic()-self.last_submission<30:
             self.say("请稍候 30 秒再提交。")
