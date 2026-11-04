@@ -16,7 +16,8 @@ STATUSES = {"invalid_private_input", "request_preparation_failed", "request_time
     "native_process_failed", "private_handoff_failed"}
 BOOLS = {"authorization_request_attempted", "ephemeral_account", "session_identity_verified",
     "redirect_blocked", "response_oversized", "error_present", "apple_failure_present",
-    "dialog_present", "keybag_present", "keybag_import_succeeded", "redirect_seen"}
+    "dialog_present", "keybag_present", "keybag_import_succeeded", "redirect_seen",
+    "redirect_query_supported", "redirect_method_post", "redirect_https"}
 
 def clean(value):
     r = {"schema": "ipa-lab-machine-enrollment-v1", "status": "probe_failed",
@@ -27,6 +28,12 @@ def clean(value):
         r["status"] = value["status"]
     for key in BOOLS:
         if type(value.get(key)) is bool:
+            r[key] = value[key]
+    for key, choices in {
+        "redirect_host_kind": {"buy", "pod_buy", "finance_app", "other"},
+        "redirect_path_kind": {"authorize_exact", "authorize_slash", "legacy", "legacy_slash", "other"},
+    }.items():
+        if type(value.get(key)) is str and value[key] in choices:
             r[key] = value[key]
     if type(value.get("approved_redirect_count")) is int and 0 <= value["approved_redirect_count"] <= 1:
         r["approved_redirect_count"] = value["approved_redirect_count"]

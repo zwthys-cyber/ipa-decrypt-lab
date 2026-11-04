@@ -211,7 +211,8 @@ def main():
          "architecture": arch if arch in {"arm64", "x86_64"} else "other",
          "cases": [probe(mode) for mode in ("interfaces", "context", "kbsync", "parameters", "public_bag", "request")],
          "account_login_attempted": False, "enrollment_created": False, "decryption_proven": False}
-    r["public_route"] = public_route()
+    if "--public-route" in sys.argv:
+        r["public_route"] = public_route()
     print(json.dumps(r, sort_keys=True))
     if any(c["status"] in {"probe_failed", "native_process_failed", "probe_timeout", "native_exception"}
            for c in r["cases"]):

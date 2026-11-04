@@ -10,6 +10,7 @@
 @property(nonatomic,strong) NSError *error;
 @property(nonatomic) BOOL redirected;
 @property(nonatomic) BOOL redirectSeen;
+@property(nonatomic,strong) NSDictionary *redirectSummary;
 @property(nonatomic) NSUInteger redirectCount;
 @property(nonatomic,strong) NSURLRequest *originalRequest;
 @property(nonatomic,strong) NSNumber *dsid;
@@ -34,6 +35,20 @@
 }
 - (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task willPerformHTTPRedirection:(NSHTTPURLResponse *)response newRequest:(NSURLRequest *)request completionHandler:(void (^)(NSURLRequest *))handler {
  self.redirectSeen=YES;
+ NSURLComponents *c=[NSURLComponents componentsWithURL:request.URL resolvingAgainstBaseURL:NO];
+ NSString *hostKind=@"other",*pathKind=@"other";
+ if([c.host isEqual:@"buy.itunes.apple.com"])hostKind=@"buy";
+ else if(c.host.length && [c.host rangeOfString:@"^p[0-9]{1,3}-buy\\.itunes\\.apple\\.com$" options:NSRegularExpressionSearch].location!=NSNotFound)hostKind=@"pod_buy";
+ else if([c.host isEqual:@"finance-app.itunes.apple.com"])hostKind=@"finance_app";
+ NSDictionary *paths=@{@"/commerce/machine/authorize":@"authorize_exact",@"/commerce/machine/authorize/":@"authorize_slash",
+   @"/WebObjects/MZFinance.woa/wa/authorizeMachine":@"legacy",@"/WebObjects/MZFinance.woa/wa/authorizeMachine/":@"legacy_slash"};
+ pathKind=paths[c.path]?:@"other";
+ BOOL queryOK=YES;
+ for(NSURLQueryItem *item in c.queryItems)
+   if(![item.name isEqual:@"guid"] || ![item.value.uppercaseString isEqual:self.guid.uppercaseString])queryOK=NO;
+ self.redirectSummary=@{@"redirect_host_kind":hostKind,@"redirect_path_kind":pathKind,
+   @"redirect_query_supported":B(queryOK),@"redirect_method_post":B([request.HTTPMethod isEqual:@"POST"]),
+   @"redirect_https":B([c.scheme isEqual:@"https"] && (!c.port || c.port.integerValue==443) && !c.user && !c.password && !c.fragment)};
  BOOL status=response.statusCode==307 || response.statusCode==308;
  NSMutableURLRequest *next=[self.originalRequest mutableCopy];next.URL=request.URL;
  BOOL safe=status && self.redirectCount==0 && [request.HTTPMethod isEqual:@"POST"]
@@ -97,6 +112,7 @@ static void Authorize(NSDictionary *input,NSMutableDictionary *r) {
  BOOL done=dispatch_semaphore_wait(delegate.done,dispatch_time(DISPATCH_TIME_NOW,45*NSEC_PER_SEC))==0;
  [session invalidateAndCancel];
  if(!done){r[@"status"]=@"request_timeout";return;}
+ if(delegate.redirectSummary)[r addEntriesFromDictionary:delegate.redirectSummary];
  r[@"redirect_seen"]=B(delegate.redirectSeen);r[@"approved_redirect_count"]=@(delegate.redirectCount);
  r[@"redirect_blocked"]=B(delegate.redirected);r[@"response_oversized"]=B(delegate.oversized);
  if(delegate.response)r[@"http_status"]=@(delegate.response.statusCode);
