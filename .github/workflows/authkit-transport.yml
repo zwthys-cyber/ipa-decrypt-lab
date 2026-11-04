@@ -1,0 +1,32 @@
+name: Account-free AuthKit transport diagnosis
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: account-free-authkit-transport
+  cancel-in-progress: false
+jobs:
+  probe:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Test error classification and account isolation
+        run: python3 -m unittest discover -s tests -p 'test_authkit_transport.py' -v
+      - name: Build ordinary command-line and own app-bundle clients
+        timeout-minutes: 2
+        run: |
+          clang -fobjc-arc -framework Foundation tools/AuthKitTransport.m -o authkit-transport
+          mkdir -p AuthKitTransport.app/Contents/MacOS
+          cp authkit-transport AuthKitTransport.app/Contents/MacOS/AuthKitTransport
+          python3 -c "import plistlib; plistlib.dump({'CFBundleIdentifier': 'org.ipa-lab.AuthKitTransport', 'CFBundleExecutable': 'AuthKitTransport', 'CFBundleName': 'AuthKitTransport', 'CFBundlePackageType': 'APPL', 'CFBundleVersion': '1'}, open('AuthKitTransport.app/Contents/Info.plist', 'wb'))"
+          codesign --force --sign - AuthKitTransport.app
+      - name: Fetch public URL bag without an Apple account and classify daemon errors
+        timeout-minutes: 2
+        run: |
+          ulimit -c 0
+          python3 tools/authkit_transport.py
