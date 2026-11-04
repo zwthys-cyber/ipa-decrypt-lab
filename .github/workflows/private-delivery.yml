@@ -1,0 +1,141 @@
+name: Private verified IPA delivery
+run-name: delivery-${{ inputs.request_id }}
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Build only, or export verified IPA as age ciphertext
+        type: choice
+        default: preflight
+        options: [preflight, export]
+      app_id:
+        description: Free US App Store numeric ID
+        type: string
+        default: '6599842047'
+      request_id:
+        description: Opaque 32-character lowercase hex request ID
+        type: string
+        default: '00000000000000000000000000000001'
+permissions:
+  contents: read
+concurrency:
+  group: private-ipa-delivery
+  cancel-in-progress: false
+jobs:
+  native:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: DrWhax/unfairplay
+          ref: 26a099fcb2292eaacd9e0ce89793cdbc88e516d1
+          path: native-source/unfairplay
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: Lakr233/ApplePackage
+          ref: 391bfe6ee6598d73e4f94b88b38b50bd6f6ec67b
+          path: native-source/ApplePackage
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: majd/ipatool
+          ref: d9c0247daea564d3ec7d04a9b015d0a29af66b04
+          path: native-source/ipatool
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: native-source/ipatool/go.mod
+          cache: true
+          cache-dependency-path: native-source/ipatool/go.sum
+      - name: Build and test bounded kbsync helper
+        run: |
+          mkdir -p native-source/ipatool/cmd/lab-kbsync
+          cp tools/kbsync_main.go native-source/ipatool/cmd/lab-kbsync/main.go
+          cp tests/kbsync_main_test.go native-source/ipatool/cmd/lab-kbsync/main_test.go
+          cd native-source/ipatool
+          go test ./cmd/lab-kbsync
+          go build -o ../../lab-kbsync ./cmd/lab-kbsync
+      - name: Build and test offline backend
+        working-directory: native-source/unfairplay
+        run: |
+          go test -p 2 -timeout 180s ./internal/fairplay ./cmd/unfairplay
+          go build -p 2 -trimpath -o ../../offline-engine ./cmd/unfairplay
+      - name: Test Python orchestrator before native compilation
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Check Swift toolchain and correct ambiguous diagnostics
+        run: |
+          swift --version
+          python3 tools/patch_swift_diagnostics.py native-source/ApplePackage
+          python3 tools/patch_ent_download.py native-source/ApplePackage
+      - name: Restore public-source Swift build cache
+        id: swift-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: native-source/ApplePackage/.build
+          key: swift-macos15-arm64-xcode26.2-391bfe6-${{ hashFiles('tools/patch_swift_diagnostics.py', 'tools/patch_ent_download.py', 'tools/LabEntDownload.swift', 'tests/LabEntDownloadTests.swift') }}
+          restore-keys: |
+            swift-macos15-arm64-xcode26.2-391bfe6-
+      - name: Test independent signing request construction
+        working-directory: native-source/ApplePackage
+        run: swift test -j 2 --filter 'SAPAuthenticationRequestTests|LabEntDownloadTests'
+      - name: Build independent native client
+        working-directory: native-source/ApplePackage
+        run: swift build -j 2 --product ApplePackageTool
+      - name: Save public-source build cache before credentials are supplied
+        if: steps.swift-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: native-source/ApplePackage/.build
+          key: ${{ steps.swift-cache.outputs.cache-primary-key }}
+      - name: Prepare pinned Apple assets without account credentials
+        timeout-minutes: 4
+        run: ./lab-kbsync --prewarm
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: FiloSottile/age
+          ref: b74dce4cdbe35b5e5f66c06d9612b72f89028758
+          path: native-source/age
+          persist-credentials: false
+      - name: Build and test private delivery encryption
+        run: |
+          mkdir -p native-source/age/cmd/lab-delivery-crypt
+          cp tools/delivery_crypto.go native-source/age/cmd/lab-delivery-crypt/main.go
+          cp tests/delivery_crypto_test.go native-source/age/cmd/lab-delivery-crypt/main_test.go
+          cd native-source/age
+          go test -p 2 -timeout 120s ./cmd/lab-delivery-crypt
+          go build -p 2 -trimpath -o ../../delivery-crypt ./cmd/lab-delivery-crypt
+      - name: Export only after complete plaintext verification
+        if: inputs.mode == 'export'
+        env:
+          FAIRPLAY_MODEL_B64: ${{ secrets.FAIRPLAY_MODEL_B64 }}
+          LAB_KBSYNC_HELPER: ${{ github.workspace }}/lab-kbsync
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_2FA_CODE: ${{ secrets.APPLE_2FA_CODE }}
+          DELIVERY_APP_ID: ${{ inputs.app_id }}
+          DELIVERY_REQUEST_ID: ${{ inputs.request_id }}
+        run: |
+          ulimit -c 0
+          python3 tools/private_export.py --binary native-source/ApplePackage/.build/debug/ApplePackageTool --engine offline-engine --crypt delivery-crypt
+      - name: Retain encrypted delivery for at most one day
+        if: success() && inputs.mode == 'export'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: delivery-${{ inputs.request_id }}
+          path: |
+            delivery-out/package.ipa.age
+            delivery-out/receipt.json
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+      - name: Remove any delivery workspace
+        if: always()
+        run: rm -rf -- delivery-out
