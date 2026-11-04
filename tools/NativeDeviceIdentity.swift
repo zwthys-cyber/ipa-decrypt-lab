@@ -4,7 +4,7 @@ struct IdentityError: Error {}
 func ensure(_ value: Bool, _ message: String) throws {
     if !value { throw IdentityError() }
 }
-func ensureFailed(_ message: String) throws { throw IdentityError() }
+func ensureFailed(_ message: String) throws -> Never { throw IdentityError() }
 @main struct LabDeviceIdentity {
     static func main() {
         guard ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" else { exit(2) }
