@@ -20,13 +20,19 @@ jobs:
         with:
           persist-credentials: false
       - name: Check bounded service reply and privacy contracts
-        run: python3 -m unittest discover -s tests -p 'test_native_commerce_keybag.py' -v
+        run: python3 -m unittest discover -s tests -p 'test_native_commerce*.py' -v
       - name: Build account-free service client and error contract
         run: |
-          clang -fobjc-arc -framework Foundation tools/NativeCommerceKeybag.m -o native-commerce-keybag
+          clang -g -fobjc-arc -framework Foundation tools/NativeCommerceKeybag.m -o native-commerce-keybag
           ./native-commerce-keybag --error-contract
       - name: Compare fixed synthetic values under runner and root
         timeout-minutes: 3
         run: |
           ulimit -c 0
           python3 tools/native_commerce_keybag.py
+      - name: Inspect a failed synthetic process without arguments or memory
+        if: failure()
+        timeout-minutes: 2
+        run: |
+          ulimit -c 0
+          python3 tools/native_commerce_debug.py
