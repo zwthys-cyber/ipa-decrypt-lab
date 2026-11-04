@@ -54,3 +54,5 @@
 - Queued jobs may attempt one alternate pool only after safe termination/no-execution proof; never blindly retry an assigned/executed job, a user cancellation, or an ambiguous dispatch. Keep at most two automatic logical runs and protect artifacts/Secrets.
 - Use 4 Swift jobs on Intel, 2 on ARM; isolate OS/architecture/Xcode/source caches. Verified exact cache reuse may skip repeated native compilation/tests; Python/Go checks remain required. ARM 26 preflight did not obtain capacity; do not claim it verified.
 - Early readiness/archive integrity probe 41879112828 passed 305 Python tests (1 environment skip) and read back the real encrypted sample without plaintext or Telegram transmission.
+
+- Latest regression/probe run 41882955218 passed 308 Python tests (1 environment skip) and real ciphertext readiness/archive-digest verification. Prefer verified worker/native-check stages over delayed queued metadata; before queue cancellation cross-check that the bound native Check is actually queued. New Telegram sessions replace old bounded sessions, not IPA worker workflows.
