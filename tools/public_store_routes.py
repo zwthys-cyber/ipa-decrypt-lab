@@ -47,7 +47,7 @@ def route(value):
                                    if KEY.fullmatch(k)})[:16])
 
 def inspect(obj):
-    found, interesting_keys = [], set()
+    found, interesting_keys, shapes = [], set(), []
     visited = 0
     def walk(value, depth=0):
         nonlocal visited
@@ -60,6 +60,16 @@ def inspect(obj):
                     continue
                 if INTEREST.search(k):
                     interesting_keys.add(k)
+                    shape = {"key": k, "kind": type(v).__name__}
+                    if isinstance(v, dict):
+                        shape["child_keys"] = sorted(x for x in v if isinstance(x, str) and KEY.fullmatch(x))[:40]
+                    if isinstance(v, str):
+                        p = urllib.parse.urlsplit(v)
+                        shape["scheme"] = p.scheme if re.fullmatch(r"[a-zA-Z][a-zA-Z0-9+.-]{0,30}", p.scheme) else "absent"
+                        shape["relative_path"] = bool(v.startswith("/"))
+                        shape["contains_placeholder"] = "{" in v or "$" in v
+                        shape["template_url"] = route(v.replace("{$pitspd-}", "").replace("{$pitspd}", ""))
+                    shapes.append(shape)
                     endpoint = route(v)
                     if endpoint:
                         found.append(dict(key=k, **endpoint))
@@ -75,7 +85,7 @@ def inspect(obj):
                 walk(item, depth + 1)
     walk(obj)
     return dict(routes=sorted(found, key=lambda r: (r["key"], r["host"], r["path"]))[:80],
-                interesting_keys=sorted(interesting_keys)[:160], traversal_limit=visited >= 12000)
+                interesting_keys=sorted(interesting_keys)[:160], shapes=shapes[:160], traversal_limit=visited >= 12000)
 
 def main():
     if os.environ.get("GITHUB_ACTIONS") != "true" or os.environ.get("APPLE_ID") or os.environ.get("APPLE_PASSWORD"):
