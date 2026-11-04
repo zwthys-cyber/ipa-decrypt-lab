@@ -53,7 +53,7 @@ def inspect_text(raw):
             urls.add(urllib.parse.urlunsplit((p.scheme, p.netloc, p.path, "", "")))
     contexts = []
     for match in INTEREST.finditer(text):
-        if len(contexts) >= 80:
+        if len(contexts) >= 12:
             break
         fragment = text[max(0, match.start()-250):min(len(text), match.end()+700)]
         fragment = " ".join(fragment.split())
@@ -68,7 +68,7 @@ def inspect_text(raw):
     for pattern in patterns:
         refs.extend(re.findall(pattern, text))
     modules = {}
-    for module_id in (9783, 86014, 33905):
+    for module_id in (99064, 35510, 87795):
         marker = re.search(r"(?<![0-9])" + str(module_id) + r":(?:\(|function)", text)
         if marker:
             tail = text[marker.start():marker.start()+18000]
