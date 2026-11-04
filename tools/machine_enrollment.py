@@ -17,7 +17,8 @@ STATUSES = {"invalid_private_input", "request_preparation_failed", "request_time
 BOOLS = {"authorization_request_attempted", "ephemeral_account", "session_identity_verified",
     "redirect_blocked", "response_oversized", "error_present", "apple_failure_present",
     "dialog_present", "keybag_present", "keybag_import_succeeded", "redirect_seen",
-    "redirect_query_supported", "redirect_method_post", "redirect_https"}
+    "redirect_query_supported", "redirect_method_post", "redirect_https", "storefront_header_present",
+    "message_mentions_sign_in", "message_mentions_password", "message_mentions_verification_code", "message_mentions_computer_limit"}
 
 def clean(value):
     r = {"schema": "ipa-lab-machine-enrollment-v1", "status": "probe_failed",
@@ -35,6 +36,8 @@ def clean(value):
     }.items():
         if type(value.get(key)) is str and value[key] in choices:
             r[key] = value[key]
+    if type(value.get("session_cookie_count")) is int and 0 <= value["session_cookie_count"] <= 128:
+        r["session_cookie_count"] = value["session_cookie_count"]
     if type(value.get("approved_redirect_count")) is int and 0 <= value["approved_redirect_count"] <= 1:
         r["approved_redirect_count"] = value["approved_redirect_count"]
     for key in ("error_code", "apple_failure_code", "fairplay_status"):

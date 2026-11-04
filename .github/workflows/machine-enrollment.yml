@@ -45,6 +45,7 @@ jobs:
           path: native-source/ApplePackage/.build
           key: swift-machine-enrollment-391bfe6-${{ hashFiles('tools/patch_machine_enrollment.py') }}
           restore-keys: |
+            swift-machine-enrollment-391bfe6-
             swift-macos15-arm64-xcode26.2-391bfe6-
       - name: Build and check private login client
         working-directory: native-source/ApplePackage

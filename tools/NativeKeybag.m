@@ -188,6 +188,64 @@ static BOOL ApplySessionHeadersWithRouting(NSMutableURLRequest *request,NSNumber
 static BOOL ApplySessionHeaders(NSMutableURLRequest *request,NSNumber *dsid,NSString *token,NSString *guid) {
  return ApplySessionHeadersWithRouting(request,dsid,token,guid,NO);
 }
+
+static NSUInteger ApplyStoreContext(NSMutableURLRequest *request,NSDictionary *input) {
+ [request setValue:nil forHTTPHeaderField:@"Cookie"];
+ NSURLComponents *url=[NSURLComponents componentsWithURL:request.URL resolvingAgainstBaseURL:NO];
+ if(![url.scheme isEqual:@"https"] || !url.host.length)return 0;
+ NSMutableArray *pairs=[NSMutableArray array];
+ NSArray *cookies=input[@"cookies"];
+ if([cookies isKindOfClass:NSArray.class] && cookies.count<=128) {
+   for(id item in cookies) {
+     if(![item isKindOfClass:NSDictionary.class])continue;
+     NSString *name=item[@"name"],*value=item[@"value"],*domain=item[@"domain"],*path=item[@"path"];
+     if(![name isKindOfClass:NSString.class] || [name rangeOfString:@"^[A-Za-z0-9_-]{1,128}$" options:NSRegularExpressionSearch].location==NSNotFound ||
+        ![value isKindOfClass:NSString.class] || !value.length || value.length>8192 ||
+        [value rangeOfCharacterFromSet:[NSCharacterSet controlCharacterSet]].location!=NSNotFound ||
+        [value containsString:@";"] || ![domain isKindOfClass:NSString.class] || !domain.length ||
+        ![path isKindOfClass:NSString.class] || ![path hasPrefix:@"/"])continue;
+     domain=domain.lowercaseString;
+     while([domain hasPrefix:@"."])domain=[domain substringFromIndex:1];
+     if(![domain isEqual:@"apple.com"] && ![domain hasSuffix:@".apple.com"])continue;
+     NSString *host=url.host.lowercaseString;
+     if(![host isEqual:domain] && ![host hasSuffix:[@"." stringByAppendingString:domain]])continue;
+     NSString *targetPath=url.path.length?url.path:@"/";
+     BOOL matches=[path isEqual:@"/"] || [targetPath isEqual:path] ||
+       ([targetPath hasPrefix:path] && ([path hasSuffix:@"/"] ||
+        (targetPath.length>path.length && [targetPath characterAtIndex:path.length]=='/')));
+     if(!matches)continue;
+     id expiry=item[@"expiresAt"];
+     if(expiry && expiry!=NSNull.null && (![expiry isKindOfClass:NSNumber.class] || [expiry doubleValue]<=[NSDate date].timeIntervalSince1970))continue;
+     [pairs addObject:[NSString stringWithFormat:@"%@=%@",name,value]];
+   }
+ }
+ NSString *header=[pairs componentsJoinedByString:@"; "];
+ if(header.length>16384){[pairs removeAllObjects];header=@"";}
+ if(header.length)[request setValue:header forHTTPHeaderField:@"Cookie"];
+ NSString *front=input[@"storefront"];
+ if([front isKindOfClass:NSString.class] && front.length>0 && front.length<=256 &&
+    [front rangeOfCharacterFromSet:[NSCharacterSet controlCharacterSet]].location==NSNotFound)
+   [request setValue:front forHTTPHeaderField:@"X-Apple-Store-Front"];
+ return pairs.count;
+}
+static BOOL CookiePolicy(void) {
+ NSArray *cookies=@[
+  @{@"name":@"parent",@"value":@"synthetic",@"domain":@".itunes.apple.com",@"path":@"/"},
+  @{@"name":@"root",@"value":@"synthetic",@"domain":@"buy.itunes.apple.com",@"path":@"/"},
+  @{@"name":@"pod",@"value":@"synthetic",@"domain":@"p17-buy.itunes.apple.com",@"path":@"/"},
+  @{@"name":@"wrong",@"value":@"synthetic",@"domain":@"example.invalid",@"path":@"/"},
+  @{@"name":@"expired",@"value":@"synthetic",@"domain":@".itunes.apple.com",@"path":@"/",@"expiresAt":@1},
+  @{@"name":@"path",@"value":@"synthetic",@"domain":@".itunes.apple.com",@"path":@"/commerce/other"},
+  @{@"name":@"inject",@"value":@"bad\r\nInjected: yes",@"domain":@".itunes.apple.com",@"path":@"/"}
+ ];
+ NSDictionary *input=@{@"cookies":cookies,@"storefront":@"143441-1"};
+ NSMutableURLRequest *r=[NSMutableURLRequest requestWithURL:[NSURL URLWithString:@"https://buy.itunes.apple.com/commerce/machine/authorize"]];
+ BOOL ok=ApplyStoreContext(r,input)==2 && [[r valueForHTTPHeaderField:@"Cookie"] isEqual:@"parent=synthetic; root=synthetic"];
+ r.URL=[NSURL URLWithString:@"https://p17-buy.itunes.apple.com/commerce/machine/authorize?routing=synthetic"];
+ ok=ok && ApplyStoreContext(r,input)==2 && [[r valueForHTTPHeaderField:@"Cookie"] isEqual:@"parent=synthetic; pod=synthetic"];
+ return ok;
+}
+
 static void Request(NSMutableDictionary *r) {
  Class ac=NSClassFromString(@"ACAccount"); SEL create=NSSelectorFromString(@"ams_createEphemeralAccount");
  if(!ABI(ac,create,@"@",@[]))return;
@@ -252,6 +310,7 @@ static void Request(NSMutableDictionary *r) {
    pod.URL=[NSURL URLWithString:@"https://p17-buy.itunes.apple.com/commerce/machine/authorize?guid=not-a-guid"];
    routed=routed && !ApplySessionHeadersWithRouting(pod,@1234567,@"ipa-lab-synthetic-token",guid,YES);
    r[@"redirect_policy_verified"]=B(routed);
+   r[@"cookie_policy_verified"]=B(CookiePolicy());
    r[@"session_policy_verified"]=B(negative);
    r[@"session_headers_applied"]=B(ApplySessionHeaders(request,@1234567,@"ipa-lab-synthetic-token",guid));
    NSURLComponents *url=[NSURLComponents componentsWithURL:request.URL resolvingAgainstBaseURL:NO];

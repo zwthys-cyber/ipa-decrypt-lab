@@ -11,6 +11,8 @@
 @property(nonatomic) BOOL redirected;
 @property(nonatomic) BOOL redirectSeen;
 @property(nonatomic,strong) NSDictionary *redirectSummary;
+@property(nonatomic,strong) NSDictionary *storeContext;
+@property(nonatomic) NSUInteger cookieCount;
 @property(nonatomic) NSUInteger redirectCount;
 @property(nonatomic,strong) NSURLRequest *originalRequest;
 @property(nonatomic,strong) NSNumber *dsid;
@@ -55,7 +57,7 @@
  NSMutableURLRequest *next=[self.originalRequest mutableCopy];next.URL=request.URL;
  BOOL safe=status && self.redirectCount==0 && [request.HTTPMethod isEqual:@"POST"]
    && ApplySessionHeadersWithRouting(next,self.dsid,self.token,self.guid,YES);
- if(safe){self.redirectCount++;handler(next);return;}
+ if(safe){self.cookieCount=ApplyStoreContext(next,self.storeContext);self.redirectCount++;handler(next);return;}
  self.redirected=YES;self.response=response;handler(nil);
 }
 - (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didCompleteWithError:(NSError *)error {
@@ -93,6 +95,8 @@ static NSURLRequest *PreparedRequest(NSDictionary *input,NSMutableDictionary *re
  BOOL valid=ApplySessionHeaders(request,dsid,token,guid);
  report[@"session_identity_verified"]=B(valid);
  if(!valid)return nil;
+ report[@"session_cookie_count"]=@(ApplyStoreContext(request,input));
+ report[@"storefront_header_present"]=B([request valueForHTTPHeaderField:@"X-Apple-Store-Front"].length>0);
  request.timeoutInterval=30;
  return request;
 }
@@ -102,7 +106,8 @@ static void Authorize(NSDictionary *input,NSMutableDictionary *r) {
  if(!request){r[@"status"]=@"request_preparation_failed";return;}
  LabEnrollmentResponse *delegate=[LabEnrollmentResponse new];
  delegate.originalRequest=request;delegate.dsid=@([input[@"dsid"] longLongValue]);
- delegate.token=input[@"token"];delegate.guid=input[@"guid"];
+ delegate.token=input[@"token"];delegate.guid=input[@"guid"];delegate.storeContext=input;
+ delegate.cookieCount=[r[@"session_cookie_count"] unsignedIntegerValue];
  NSURLSessionConfiguration *config=[NSURLSessionConfiguration ephemeralSessionConfiguration];
  config.URLCache=nil;config.HTTPCookieStorage=nil;config.URLCredentialStorage=nil;
  config.HTTPShouldSetCookies=NO;config.timeoutIntervalForRequest=30;config.timeoutIntervalForResource=40;
@@ -114,6 +119,7 @@ static void Authorize(NSDictionary *input,NSMutableDictionary *r) {
  BOOL done=dispatch_semaphore_wait(delegate.done,dispatch_time(DISPATCH_TIME_NOW,45*NSEC_PER_SEC))==0;
  [session invalidateAndCancel];
  if(!done){r[@"status"]=@"request_timeout";return;}
+ r[@"session_cookie_count"]=@(delegate.cookieCount);
  if(delegate.redirectSummary)[r addEntriesFromDictionary:delegate.redirectSummary];
  r[@"redirect_seen"]=B(delegate.redirectSeen);r[@"approved_redirect_count"]=@(delegate.redirectCount);
  r[@"redirect_blocked"]=B(delegate.redirected);r[@"response_oversized"]=B(delegate.oversized);
@@ -128,6 +134,17 @@ static void Authorize(NSDictionary *input,NSMutableDictionary *r) {
  r[@"apple_failure_present"]=B(hasFailure);
  if([failure isKindOfClass:NSString.class] && [failure rangeOfString:@"^-?[0-9]{1,6}$" options:NSRegularExpressionSearch].location!=NSNotFound)r[@"apple_failure_code"]=@([failure integerValue]);
  r[@"dialog_present"]=B(body[@"dialog"]!=nil || body[@"dialogTitle"]!=nil);
+ NSMutableArray *messages=[NSMutableArray array];
+ for(NSString *key in @[@"customerMessage",@"dialogTitle"])if([body[key] isKindOfClass:NSString.class])[messages addObject:body[key]];
+ if([body[@"dialog"] isKindOfClass:NSDictionary.class])for(NSString *key in @[@"explanation",@"message",@"title"])
+   if([body[@"dialog"][key] isKindOfClass:NSString.class])[messages addObject:body[@"dialog"][key]];
+ NSString *message=[[messages componentsJoinedByString:@" "] lowercaseString];
+ if(message.length<8192) {
+   r[@"message_mentions_sign_in"]=B([message containsString:@"sign in"] || [message containsString:@"sign-in"]);
+   r[@"message_mentions_password"]=B([message containsString:@"password"]);
+   r[@"message_mentions_verification_code"]=B([message containsString:@"verification code"]);
+   r[@"message_mentions_computer_limit"]=B([message containsString:@"five computers"] || [message containsString:@"5 computers"]);
+ }
  id blob=body[@"keybag"];
  BOOL keybag=[blob isKindOfClass:NSData.class] && [blob length]>0 && [blob length]<=2097152;
  r[@"keybag_present"]=B(keybag);
