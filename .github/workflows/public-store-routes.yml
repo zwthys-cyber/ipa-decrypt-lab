@@ -1,0 +1,22 @@
+name: Public Apple Store account-route discovery
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: public-store-routes
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Check bounded route parsing and reporting
+        run: python3 -m unittest discover -s tests -p 'test_public_store_routes.py' -v
+      - name: Inspect public bag without account credentials
+        timeout-minutes: 1
+        run: python3 tools/public_store_routes.py
