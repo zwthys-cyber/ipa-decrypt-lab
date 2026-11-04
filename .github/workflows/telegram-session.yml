@@ -8,6 +8,10 @@ on:
         type: choice
         default: check
         options: [check, deliver, session]
+      migrate_from_cloud:
+        description: One-time cloud logout; leave false after successful local migration
+        type: boolean
+        default: false
       minutes:
         description: Session duration (1 to 45 minutes)
         type: number
@@ -65,6 +69,7 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_OWNER_ID: ${{ secrets.TELEGRAM_OWNER_ID }}
+          TELEGRAM_MIGRATE_FROM_CLOUD: ${{ inputs.migrate_from_cloud && '1' || '0' }}
           TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
           TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
           DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}

@@ -31,16 +31,13 @@ def local_bot(binary):
     api_id, api_hash = os.environ.get("TELEGRAM_API_ID",""), os.environ.get("TELEGRAM_API_HASH","")
     if not re.fullmatch(r"[1-9][0-9]{4,10}",api_id) or not re.fullmatch(r"[a-fA-F0-9]{32}",api_hash):
         raise APIError("missing_or_invalid_telegram_app_credentials")
-    cloud = Telegram(token)
-    try:
+    # Migration is performed once. Rechecking cloud after logOut may be rejected
+    # during Telegram's cooldown even though local login is permitted.
+    if os.environ.get("TELEGRAM_MIGRATE_FROM_CLOUD") == "1":
+        cloud = Telegram(token)
         cloud.check()
         if cloud.call("logOut") is not True:
             raise APIError("cloud_logout_unconfirmed")
-    except APIError as exc:
-        # Cloud login is unavailable for 10 minutes after a successful migration.
-        # Local getMe must independently authenticate before any owner message.
-        if exc.status != "telegram_rate_limited":
-            raise
     with tempfile.TemporaryDirectory(prefix="telegram-local-private-") as directory:
         root = Path(directory)
         root.chmod(0o700)
