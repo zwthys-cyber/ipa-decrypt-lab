@@ -24,6 +24,7 @@ METHODS = (
     "-[AMSFairPlayContext _validateFairPlayPath]",
     "__48-[AMSAuthorizeMachineTask _performAuthorization]_block_invoke_2",
     "-[AMSKeybag importDiversityBagWithData:error:]",
+    "__46-[AMSKeybag importDiversityBagWithData:error:]_block_invoke",
 )
 LINE = re.compile(r"^\s*(?:->\s*)?0x[0-9a-fA-F]+\s+<\+([0-9]+)>:\s+(.+)$")
 HEADER = re.compile(r"^([^\s\x60]+)\x60(.+):$")
