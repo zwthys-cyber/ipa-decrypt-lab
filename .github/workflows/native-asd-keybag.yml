@@ -22,8 +22,10 @@ jobs:
       - name: Check local service report privacy and evidence
         run: python3 -m unittest discover -s tests -p 'test_native_asd_keybag.py' -v
       - name: Build account-free native service client
-        run: clang -fobjc-arc -framework Foundation tools/NativeASDKeybag.m -o native-asd-keybag
-      - name: Generate a local request for synthetic account zero
+        run: |
+          clang -fobjc-arc -framework Foundation tools/NativeASDKeybag.m -o native-asd-keybag
+          ./native-asd-keybag --error-contract
+      - name: Generate local requests for two fixed synthetic accounts
         timeout-minutes: 2
         run: |
           ulimit -c 0

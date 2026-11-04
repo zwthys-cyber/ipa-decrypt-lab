@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).parents[1] / "tools"))
 import native_asd_keybag as mod
 
@@ -23,6 +24,16 @@ class ASDFairPlayContracts(unittest.TestCase):
             bad = dict(good)
             del bad[key]
             self.assertEqual(mod.clean(bad)["status"], "probe_failed")
+
+    def test_error_classes_are_bounded_and_private_inputs_cannot_be_requested(self):
+        result = mod.clean({"underlying_error_domain": "NSCocoaErrorDomain", "underlying_error_code": 4099,
+            "error_mentions_entitlement": True, "error_mentions_permission": "PRIVATE",
+            "underlying_description": "PRIVATE"})
+        self.assertEqual(result["underlying_error_code"], 4099)
+        self.assertNotIn("PRIVATE", json.dumps(result))
+        with patch.object(mod.subprocess, "Popen") as process:
+            self.assertEqual(mod.probe("123456789")["status"], "probe_failed")
+            process.assert_not_called()
 
     def test_untrusted_types_and_values_are_omitted(self):
         for value in (None, [], "PRIVATE"):
