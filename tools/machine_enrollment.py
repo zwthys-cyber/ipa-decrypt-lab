@@ -26,6 +26,35 @@ LOGIN_FLAGS = {f"login_{scope}_{suffix}" for scope in ("md", "amd") for suffix i
 def clean_login_summary(value):
     return {key: value[key] for key in LOGIN_FLAGS if type(value.get(key)) is bool} if type(value) is dict else {}
 
+IO_OPERATIONS = {"open", "openat", "fopen", "stat", "lstat", "access", "mkdir",
+    "unlink", "rename", "read", "write", "pread", "pwrite", "fsync", "fclose",
+    "fread", "fwrite", "flock", "ftruncate"}
+
+def clean_io(value):
+    if (type(value) is not dict or value.get("schema") != "bounded-import-io-v1"
+            or type(value.get("capped")) is not bool or type(value.get("entries")) is not list
+            or len(value["entries"]) > 38):
+        return None
+    entries, seen = [], set()
+    for entry in value["entries"]:
+        if type(entry) is not dict:
+            return None
+        area, op = entry.get("area"), entry.get("operation")
+        if (type(area) is not str or area not in {"shared_sc_info", "fpsd_sc_info"}
+                or type(op) is not str or op not in IO_OPERATIONS or (area, op) in seen):
+            return None
+        counters = ("calls", "failures", "last_errno", "permission_failures", "missing_failures")
+        if any(type(entry.get(k)) is not int or not 0 <= entry[k] <= 100000 for k in counters):
+            return None
+        if (not entry["calls"] or entry["failures"] > entry["calls"] or entry["last_errno"] > 256
+                or entry["permission_failures"] > entry["failures"] or entry["missing_failures"] > entry["failures"]
+                or (not value["capped"] and entry["permission_failures"] + entry["missing_failures"] > entry["failures"])
+                or (not entry["failures"] and entry["last_errno"])):
+            return None
+        seen.add((area, op))
+        entries.append(dict(area=area, operation=op, **{k: entry[k] for k in counters}))
+    return {"schema": "bounded-import-io-v1", "capped": value["capped"], "entries": entries}
+
 def clean(value):
     r = {"schema": "ipa-lab-machine-enrollment-v1", "status": "probe_failed",
          "enrollment_created": False, "decryption_proven": False}
@@ -60,6 +89,10 @@ def clean(value):
     for key in ("error_domain", "initial_error_domain", "diversity_error_domain"):
         if type(value.get(key)) is str and value[key] in DOMAINS:
             r[key] = value[key]
+    for key in ("io_trace", "initial_io_trace", "diversity_io_trace"):
+        trace = clean_io(value.get(key))
+        if trace is not None:
+            r[key] = trace
     for key in ("state_before", "state_after"):
         if type(value.get(key)) is dict:
             r[key] = {k: value[key][k] for k in STATE_KEYS if type(value[key].get(k)) is bool}
@@ -102,6 +135,8 @@ def trial(login_binary, native_binary, purpose="signIn", session_context="token"
         env = {"PATH": "/usr/bin:/bin", "GITHUB_ACTIONS": "true"}
         if os.environ.get("HOME"):
             env["HOME"] = os.environ["HOME"]
+        if os.environ.get("LAB_IMPORT_IO") == "true":
+            env["LAB_IMPORT_IO"] = "1"
         login_env = dict(env, APPLEPACKAGE_PASSWORD=password, LAB_ENROLLMENT_INPUT_PATH=str(handoff), LAB_AUTHORIZATION_PURPOSE=purpose)
         try:
             code, out, err = run_private([login_binary, "login", email], login_env, timeout=120)

@@ -9,6 +9,27 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "tools"))
 import machine_enrollment as mod
 
 class MachineEnrollmentContracts(unittest.TestCase):
+    def test_io_trace_is_bounded_and_never_emits_paths_or_payloads(self):
+        cell = dict(area="shared_sc_info", operation="open", calls=3, failures=2,
+                    last_errno=13, permission_failures=1, missing_failures=1)
+        trace = dict(schema="bounded-import-io-v1", capped=False, entries=[cell])
+        for key in ("io_trace", "initial_io_trace", "diversity_io_trace"):
+            result = mod.clean({key: dict(trace, secret="PRIVATE",
+                entries=[dict(cell, path="/PRIVATE", payload="PRIVATE")])})
+            self.assertEqual(result[key], trace)
+            self.assertNotIn("PRIVATE", json.dumps(result))
+        invalid = [None, {}, dict(trace, capped=1), dict(trace, entries=[cell] * 39),
+                   dict(trace, entries=[cell, cell]), dict(trace, entries=["PRIVATE"])]
+        for field, bad in [("area", "PRIVATE"), ("operation", "PRIVATE"), ("calls", True),
+                           ("calls", 100001), ("failures", 4), ("last_errno", 257),
+                           ("permission_failures", 2), ("missing_failures", -1)]:
+            invalid.append(dict(trace, entries=[dict(cell, **{field: bad})]))
+        for value in invalid:
+            with self.subTest(value=value):
+                self.assertIsNone(mod.clean_io(value))
+                self.assertNotIn("io_trace", mod.clean({"io_trace": value}))
+        self.assertEqual(mod.clean_io(dict(trace, entries=[]))["entries"], [])
+
     def test_private_fields_never_publish(self):
         r = mod.clean({"status": "keybag_not_issued", "token": "SECRET", "dsid": "SECRET",
             "guid": "SECRET", "keybag": "SECRET", "error_domain": "SECRET", "description": "SECRET",

@@ -14,7 +14,7 @@ def run():
     binary = str(Path("native-machine-enrollment").resolve())
     with tempfile.TemporaryDirectory(prefix="ipa-lab-import-") as tmp:
         report = Path(tmp) / "report.json"
-        env = {"PATH": "/usr/bin:/bin", "GITHUB_ACTIONS": "true", "HOME": os.environ.get("HOME", tmp)}
+        env = {"PATH": "/usr/bin:/bin", "GITHUB_ACTIONS": "true", "LAB_IMPORT_IO": "1", "HOME": os.environ.get("HOME", tmp)}
         child = subprocess.Popen([binary, "--import-probe", str(report)], env=env,
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         try:

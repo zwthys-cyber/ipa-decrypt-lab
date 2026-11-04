@@ -23,7 +23,9 @@ jobs:
         run: python3 -m unittest discover -s tests -p 'test_machine_enrollment.py' -v
       - name: Compile native client and run synthetic error contracts
         run: |
-          clang -fobjc-arc -framework Foundation tools/NativeMachineEnrollment.m -o native-machine-enrollment
+          clang -dynamiclib -Wall -Wextra tools/NativeImportIO.c -install_name @rpath/libNativeImportIO.dylib -o libNativeImportIO.dylib
+          clang -fobjc-arc -DLAB_IMPORT_IO -framework Foundation tools/NativeMachineEnrollment.m -L. -lNativeImportIO -Wl,-rpath,@executable_path -o native-machine-enrollment
+          ./native-machine-enrollment --io-contract
           ./native-machine-enrollment --response-contract
       - name: Check fixed invalid keybag rejection without account requests
         timeout-minutes: 3

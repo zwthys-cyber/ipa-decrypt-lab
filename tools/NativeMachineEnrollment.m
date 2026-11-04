@@ -4,6 +4,81 @@
 #include "NativeKeybag.m"
 #undef main
 
+#ifdef LAB_IMPORT_IO
+#include "NativeImportIO.h"
+#include <sys/stat.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
+static NSDictionary *IOReport(LabIOSnapshot snapshot) {
+ NSMutableArray *entries=[NSMutableArray array];
+ NSArray *areas=@[@"shared_sc_info",@"fpsd_sc_info"];
+ for(unsigned int a=0;a<LAB_IO_AREAS;a++)for(unsigned int op=0;op<LAB_IO_OPS;op++) {
+   LabIOCell c=snapshot.cells[a][op];if(!c.calls)continue;
+   [entries addObject:@{@"area":areas[a],@"operation":@(LabImportIOOperation(op)),@"calls":@(c.calls),
+     @"failures":@(c.failures),@"last_errno":@(c.last_errno),@"permission_failures":@(c.permission_failures),
+     @"missing_failures":@(c.missing_failures)}];
+ }
+ return @{@"schema":@"bounded-import-io-v1",@"capped":B(snapshot.capped!=0),@"entries":entries};
+}
+static BOOL IOEnabled(void) {
+ const char *enabled=getenv("LAB_IMPORT_IO");return enabled && !strcmp(enabled,"1");
+}
+static BOOL IOContract(void) {
+ const char *root="/Users/Shared/SC Info";struct stat rootStat;
+ if(lstat(root,&rootStat)!=0) {if(errno!=ENOENT || mkdir(root,0755)!=0)return NO;}
+ if(lstat(root,&rootStat)!=0 || !S_ISDIR(rootStat.st_mode) || S_ISLNK(rootStat.st_mode))return NO;
+ char directory[]="/Users/Shared/SC Info/ipa-lab-io-XXXXXX";
+ if(!mkdtemp(directory))return NO;
+ char file[1024],renamed[1024],missing[1024];
+ snprintf(file,sizeof(file),"%s/fixture",directory);snprintf(renamed,sizeof(renamed),"%s/moved",directory);
+ snprintf(missing,sizeof(missing),"%s/missing",directory);
+ BOOL ok=YES;LabIOSnapshot snapshot;
+ LabImportIOBegin();
+ int fd=open(file,O_CREAT|O_EXCL|O_RDWR,0600);
+ if(fd<0)ok=NO;
+ else {
+   const char bytes[]="PRIVATE_SYNTHETIC";char readback[sizeof(bytes)]={0};
+   ok=write(fd,bytes,sizeof(bytes))==sizeof(bytes) && ok;
+   ok=pread(fd,readback,sizeof(readback),0)==sizeof(bytes) && !memcmp(bytes,readback,sizeof(bytes)) && ok;
+   ok=pwrite(fd,bytes,sizeof(bytes),0)==sizeof(bytes) && ok;
+   ok=fsync(fd)==0 && ok;ok=ftruncate(fd,sizeof(bytes))==0 && ok;
+   ok=flock(fd,LOCK_EX)==0 && ok;ok=flock(fd,LOCK_UN)==0 && ok;close(fd);
+ }
+ errno=0;int missingFD=open(missing,O_RDONLY);ok=missingFD==-1 && errno==ENOENT && ok;if(missingFD>=0)close(missingFD);
+ errno=0;ok=mkdir(directory,0700)==-1 && errno==EEXIST && ok;
+ struct stat st;ok=stat(file,&st)==0 && lstat(file,&st)==0 && access(file,R_OK)==0 && ok;
+ int directoryFD=open(directory,O_RDONLY);
+ if(directoryFD<0)ok=NO;
+ else {fd=openat(directoryFD,"fixture",O_RDONLY);if(fd<0)ok=NO;
+   else {char byte;ok=read(fd,&byte,1)==1 && ok;errno=0;
+     ok=write(fd,"x",1)==-1 && errno==EBADF && ok;close(fd);}close(directoryFD);}
+ FILE *stream=fopen(file,"r+");
+ if(!stream)ok=NO;
+ else {char byte;ok=fread(&byte,1,1,stream)==1 && fwrite("x",1,1,stream)==1 && fclose(stream)==0 && ok;}
+ ok=rename(file,renamed)==0 && unlink(renamed)==0 && ok;
+ fd=open("/dev/null",O_RDONLY);if(fd>=0)close(fd);
+ LabImportIOEnd(&snapshot);
+ NSDictionary *report=IOReport(snapshot);
+ NSMutableSet *seen=[NSMutableSet set];BOOL missingSeen=NO,writeFailureSeen=NO;
+ for(NSDictionary *entry in report[@"entries"]) {
+   if(![entry[@"area"] isEqual:@"shared_sc_info"])ok=NO;
+   [seen addObject:entry[@"operation"]];
+   if([entry[@"operation"] isEqual:@"open"])missingSeen=[entry[@"missing_failures"] unsignedIntValue]==1;
+   if([entry[@"operation"] isEqual:@"write"])writeFailureSeen=[entry[@"failures"] unsignedIntValue]==1 && [entry[@"last_errno"] intValue]==EBADF;
+ }
+ ok=seen.count==LAB_IO_OPS && missingSeen && writeFailureSeen && !snapshot.capped && ok;
+ NSString *json=[[NSString alloc] initWithData:[NSJSONSerialization dataWithJSONObject:report options:0 error:NULL] encoding:NSUTF8StringEncoding];
+ ok=![json containsString:@"PRIVATE"] && ![json containsString:@"fixture"] && ![json containsString:@"/Users"] && ok;
+ // Disabled tracing must leave the frozen snapshot unchanged.
+ fd=open(missing,O_RDONLY);if(fd>=0)close(fd);LabIOSnapshot inactive;LabImportIOEnd(&inactive);
+ ok=!memcmp(&snapshot,&inactive,sizeof(snapshot)) && ok;
+ unlink(file);unlink(renamed);rmdir(directory);
+ return ok;
+}
+#endif
+
+
 
 static NSDictionary *AnisetteResponseFields(NSHTTPURLResponse *response) {
  NSMutableDictionary *headers=[NSMutableDictionary dictionary],*result=[NSMutableDictionary dictionary];
@@ -261,13 +336,19 @@ static NSDictionary *ImportOneBag(id bag,NSData *data,BOOL diversity) {
  result[@"interface_available"]=B(available);
  if(!available){result[@"import_succeeded"]=@NO;result[@"error_present"]=@YES;return result;}
  NSError *error=nil;
+#ifdef LAB_IMPORT_IO
+ BOOL tracing=IOEnabled();LabIOSnapshot snapshot;if(tracing)LabImportIOBegin();
+#endif
  BOOL imported=((BOOL(*)(id,SEL,id,NSError *__autoreleasing *))objc_msgSend)(bag,selector,data,&error);
+ #ifdef LAB_IMPORT_IO
+ if(tracing){LabImportIOEnd(&snapshot);result[@"io_trace"]=IOReport(snapshot);}
+#endif
  ErrorFields(result,error);ImportErrorFields(result,error);
  result[@"import_succeeded"]=B(imported && !error);
  return result;
 }
 static void RecordBagResult(NSMutableDictionary *report,NSDictionary *result,NSString *prefix) {
- for(NSString *field in @[@"error_present",@"error_domain",@"error_code",@"import_fairplay_status"]) {
+ for(NSString *field in @[@"error_present",@"error_domain",@"error_code",@"import_fairplay_status",@"io_trace"]) {
    NSString *key=[prefix stringByAppendingString:field];
    [report removeObjectForKey:key];
    if(result[field])report[key]=result[field];
@@ -366,19 +447,16 @@ static void InvalidImportProbe(NSMutableDictionary *r) {
  r[@"status"]=@"import_interface_unavailable";r[@"state_before"]=State();
  id bag=SharedKeybag();unsigned int context=ContextIdentifier(bag);
  r[@"context_ready_before_request"]=B(context!=0);SharedPathFields(r);
- SEL import=NSSelectorFromString(@"importKeybagWithData:error:");
- if(!(ABI(bag,import,@"B",@[@"@",@"^@"])||ABI(bag,import,@"c",@[@"@",@"^@"])))return;
  NSData *invalid=[@"ipa-lab-invalid-keybag" dataUsingEncoding:NSUTF8StringEncoding];
- NSError *error=nil;
- BOOL ok=((BOOL(*)(id,SEL,id,NSError *__autoreleasing *))objc_msgSend)(bag,import,invalid,&error);
- ErrorFields(r,error);ImportErrorFields(r,error);
- r[@"expected_invalid_keybag_rejected"]=B(!ok && error!=nil);
- r[@"context_stable_after_rejection"]=B(context!=0 && context==ContextIdentifier(bag));
+ NSDictionary *primary=ImportOneBag(bag,invalid,NO);RecordBagResult(r,primary,@"");
+ BOOL rejected=[primary[@"interface_available"] boolValue] && ![primary[@"import_succeeded"] boolValue] && [primary[@"error_present"] boolValue];
+ r[@"expected_invalid_keybag_rejected"]=B(rejected);
  NSDictionary *diversity=ImportOneBag(bag,invalid,YES);
  RecordBagResult(r,diversity,@"diversity_");
  r[@"diversity_import_attempted"]=B([diversity[@"interface_available"] boolValue]);
- r[@"expected_invalid_diversity_rejected"]=B(![diversity[@"import_succeeded"] boolValue] && [diversity[@"error_present"] boolValue]);
- r[@"status"]=!ok && error?@"invalid_keybag_rejected":@"invalid_keybag_unexpected_result";
+ r[@"expected_invalid_diversity_rejected"]=B([diversity[@"interface_available"] boolValue] && ![diversity[@"import_succeeded"] boolValue] && [diversity[@"error_present"] boolValue]);
+ r[@"context_stable_after_rejection"]=B(context!=0 && context==ContextIdentifier(bag));
+ r[@"status"]=rejected?@"invalid_keybag_rejected":@"invalid_keybag_unexpected_result";
 }
 
 static void Authorize(NSDictionary *input,NSMutableDictionary *r) {
@@ -442,6 +520,11 @@ static void Authorize(NSDictionary *input,NSMutableDictionary *r) {
 }
 int main(int argc,const char **argv) { @autoreleasepool {
  if((argc!=2 && argc!=3) || !getenv("GITHUB_ACTIONS") || strcmp(getenv("GITHUB_ACTIONS"),"true"))return 2;
+#ifdef LAB_IMPORT_IO
+ if(!strcmp(argv[1],"--io-contract")) {
+   BOOL ok=IOContract();puts(ok?"bounded I/O contract passed":"bounded I/O contract failed");return ok?0:4;
+ }
+#endif
  if(!strcmp(argv[1],"--response-contract")) {
    BOOL ok=ResponseContract() && ClientContextContract() && ImportErrorContract() && KeybagShapeContract() && BagOrderContract();puts(ok?"response and client context contracts passed":"response and client context contracts failed");return ok?0:4;
  }

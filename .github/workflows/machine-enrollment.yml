@@ -2,6 +2,10 @@ name: Private native machine enrollment trial
 on:
   workflow_dispatch:
     inputs:
+      trace_io:
+        description: Count bounded file operations during local imports (no paths or payloads)
+        type: boolean
+        default: false
       purpose:
         description: Store authentication purpose for this bounded trial
         type: choice
@@ -57,7 +61,9 @@ jobs:
         timeout-minutes: 2
         run: |
           clang -fobjc-arc -framework Foundation tools/NativeKeybag.m -o native-keybag
-          clang -fobjc-arc -framework Foundation tools/NativeMachineEnrollment.m -o native-machine-enrollment
+          clang -dynamiclib -Wall -Wextra tools/NativeImportIO.c -install_name @rpath/libNativeImportIO.dylib -o libNativeImportIO.dylib
+          clang -fobjc-arc -DLAB_IMPORT_IO -framework Foundation tools/NativeMachineEnrollment.m -L. -lNativeImportIO -Wl,-rpath,@executable_path -o native-machine-enrollment
+          ./native-machine-enrollment --io-contract
           ./native-machine-enrollment --response-contract
       - name: Verify synthetic prerequisites before exposing account secrets
         timeout-minutes: 3
@@ -88,6 +94,7 @@ jobs:
       - name: Authenticate once and attempt one machine authorization request
         timeout-minutes: 4
         env:
+          LAB_IMPORT_IO: ${{ inputs.trace_io }}
           LAB_CLIENT_CONTEXT: ${{ inputs.client_context }}
           LAB_SESSION_CONTEXT: ${{ inputs.session_context }}
           LAB_PURPOSE: ${{ inputs.purpose }}
