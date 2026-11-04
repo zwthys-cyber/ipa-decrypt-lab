@@ -39,10 +39,17 @@
 
 官方本地 Bot API 的上传上限为 2000 MB；本项目目前将 IPA 限为 1 GiB，并保留审计器的成员数量、Mach-O 大小和读取预算。超过当前审计范围会拒绝。完整 IPA 直接在私聊中发送，不拆分文件，也不发布公开明文下载链接。[Telegram 官方说明](https://core.telegram.org/bots/api#using-a-local-bot-api-server)。
 
+## 中文菜单
+
+每次启动均向管理员私聊注册中文指令（默认语言及 zh），并将菜单按钮设为指令列表。配置后使用 getMyCommands 和 getChatMenuButton 逐项读回确认；菜单保存在 Telegram，测试会话结束后仍显示，执行指令需要会话在线。
+
+可单独运行 telegram-session.yml / mode=menu 更新并验证菜单，不下载 IPA，也不创建任务。管理员私聊之外不注册操作菜单。若客户端尚未显示，请退出机器人聊天后重新打开。
+
 ## 私聊指令
 
 | 输入 | 行为 |
 | --- | --- |
+| /decrypt | 提示输入应用链接或 ID |
 | App Store HTTPS 链接或数字 ID | 创建下载与解密任务 |
 | /help 或 /start | 显示使用方式 |
 | /id | 显示自己的数字 ID |

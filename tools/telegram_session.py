@@ -11,6 +11,7 @@ import urllib.parse
 from telegram_api import APIError, private_message
 from telegram_queue import GitHub, QueueError, request_id
 from telegram_runtime import local_bot
+from telegram_menu import configure as configure_menu
 
 HELP = ("发送美区免费 App Store 链接或数字 App ID，创建下载与解密任务。\n"
         "/status 查看当前任务\n/cancel 取消当前任务\n"
@@ -70,6 +71,9 @@ class Controller:
         command = text.split(" ",1)[0].split("@",1)[0]
         if command in ("/start","/help"):
             self.say(HELP)
+            return
+        if command=="/decrypt":
+            self.say("请发送应用的 App Store 链接或数字 App ID。当前支持美区免费应用。")
             return
         if command=="/id":
             self.say("你的 Telegram 数字用户 ID："+str(self.owner))
@@ -163,7 +167,7 @@ class Controller:
 
 def main():
     p=argparse.ArgumentParser()
-    p.add_argument("--mode",choices=("check","session","deliver"),default="check")
+    p.add_argument("--mode",choices=("check","menu","session","deliver"),default="check")
     p.add_argument("--minutes",type=int,default=30)
     p.add_argument("--request-id",default="")
     p.add_argument("--server",required=True)
@@ -181,6 +185,9 @@ def main():
         with local_bot(args.server) as bot:
             controller=Controller(bot,github,owner,crypt,os.environ["TELEGRAM_BOT_TOKEN"])
             event("local_bot_authenticated")
+            event(**configure_menu(bot,owner))
+            if args.mode=="menu":
+                return 0
             if args.mode=="check":
                 controller.say("大文件上传通道已连接，管理员身份限制已生效。")
                 event("owner_message_confirmed")

@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: Check local server, deliver a completed task, or start bounded polling
+        description: Check server, configure menu, deliver a task, or start bounded polling
         type: choice
         default: check
-        options: [check, deliver, session]
+        options: [check, menu, deliver, session]
       migrate_from_cloud:
         description: One-time cloud logout; leave false after successful local migration
         type: boolean
