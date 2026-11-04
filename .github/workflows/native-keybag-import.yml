@@ -32,3 +32,8 @@ jobs:
         run: |
           ulimit -c 0
           python3 tools/native_import_probe.py
+      - name: Compare fixed invalid imports as root without account requests
+        timeout-minutes: 3
+        run: |
+          ulimit -c 0
+          python3 tools/native_import_probe.py --native-user root

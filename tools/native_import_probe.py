@@ -1,4 +1,5 @@
 """Classify rejection of a fixed invalid keybag; no login or server authorization."""
+import argparse
 import json
 import os
 from pathlib import Path
@@ -6,16 +7,16 @@ import signal
 import subprocess
 import sys
 import tempfile
-from machine_enrollment import clean
+from machine_enrollment import clean, native_command
 
-def run():
+def run(user="runner"):
     if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "darwin":
         return clean(None)
     binary = str(Path("native-machine-enrollment").resolve())
     with tempfile.TemporaryDirectory(prefix="ipa-lab-import-") as tmp:
         report = Path(tmp) / "report.json"
         env = {"PATH": "/usr/bin:/bin", "GITHUB_ACTIONS": "true", "LAB_IMPORT_IO": "1", "HOME": os.environ.get("HOME", tmp)}
-        child = subprocess.Popen([binary, "--import-probe", str(report)], env=env,
+        child = subprocess.Popen(native_command(binary, report, env, user, probe=True), env=env,
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         try:
             child.wait(timeout=45)
@@ -32,10 +33,16 @@ def run():
             child.wait()
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--native-user", choices=("runner", "root"), default="runner")
+    args = parser.parse_args()
     try:
-        result = run()
+        result = run(args.native_user)
     except Exception:
         result = clean(None)
+    result["native_user"] = args.native_user
+    if args.native_user == "root" and result.get("running_as_root") is not True:
+        result["status"] = "probe_failed"
     result["account_login_attempted"] = False
     print(json.dumps(result, sort_keys=True))
     raise SystemExit(0 if result["status"] == "invalid_keybag_rejected"

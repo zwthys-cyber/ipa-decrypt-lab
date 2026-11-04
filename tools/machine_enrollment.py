@@ -14,7 +14,7 @@ STATUSES = {"invalid_diversitybag", "diversitybag_import_failed", "keybag_contex
     "keybag_imported_model_unverified", "keybag_import_failed", "native_exception", "probe_failed",
     "missing_credentials", "login_failed", "login_ambiguous", "login_timeout", "native_timeout",
     "native_process_failed", "private_handoff_failed"}
-BOOLS = {"diversitybag_present", "diversity_import_attempted", "diversity_import_succeeded", "diversity_error_present", "initial_import_succeeded", "initial_error_present", "keybag_import_attempted", "keybag_retry_attempted", "context_stable_after_diversity", "expected_invalid_diversity_rejected", "keybag_gzip", "keybag_binary_plist", "keybag_xml", "keybag_base64_text", "shared_directory_present", "shared_directory_writable", "shared_directory_symlink", "context_stable_after_rejection", "context_ready_before_request", "context_stable_before_import", "expected_invalid_keybag_rejected", "client_agent_bound", "client_agent_changed", "md_data_present", "md_data_valid", "amd_data_present", "amd_data_valid", "authorization_request_attempted", "ephemeral_account", "session_identity_verified", "body_token_bound",
+BOOLS = {"running_as_root", "diversitybag_present", "diversity_import_attempted", "diversity_import_succeeded", "diversity_error_present", "initial_import_succeeded", "initial_error_present", "keybag_import_attempted", "keybag_retry_attempted", "context_stable_after_diversity", "expected_invalid_diversity_rejected", "keybag_gzip", "keybag_binary_plist", "keybag_xml", "keybag_base64_text", "shared_directory_present", "shared_directory_writable", "shared_directory_symlink", "context_stable_after_rejection", "context_ready_before_request", "context_stable_before_import", "expected_invalid_keybag_rejected", "client_agent_bound", "client_agent_changed", "md_data_present", "md_data_valid", "amd_data_present", "amd_data_valid", "authorization_request_attempted", "ephemeral_account", "session_identity_verified", "body_token_bound",
     "redirect_blocked", "response_oversized", "error_present", "apple_failure_present",
     "dialog_present", "keybag_present", "keybag_import_succeeded", "redirect_seen",
     "redirect_query_supported", "redirect_method_post", "redirect_https", "storefront_header_present",
@@ -123,8 +123,17 @@ def run_private(argv, env, *, data=None, timeout=120):
         p.communicate()
         raise
 
-def trial(login_binary, native_binary, purpose="signIn", session_context="token", client_context="native"):
-    if client_context not in {"native", "login_agent"} or purpose not in {"signIn", "machineAuthorize", "machineSession", "booleanSession"} or session_context not in {"token", "cookies", "storefront", "store"}:
+def native_command(binary, report, env, user="runner", probe=False):
+    if user not in {"runner", "root"}:
+        raise ValueError("unsupported native execution user")
+    argv = [binary] + (["--import-probe"] if probe else []) + [str(report)]
+    if user == "root":
+        forwarded = [f"{key}={env[key]}" for key in ("PATH", "GITHUB_ACTIONS", "HOME", "LAB_IMPORT_IO") if key in env]
+        argv = ["/usr/bin/sudo", "-n", "--", "/usr/bin/env", "-i"] + forwarded + argv
+    return argv
+
+def trial(login_binary, native_binary, purpose="signIn", session_context="token", client_context="native", native_user="runner"):
+    if native_user not in {"runner", "root"} or client_context not in {"native", "login_agent"} or purpose not in {"signIn", "machineAuthorize", "machineSession", "booleanSession"} or session_context not in {"token", "cookies", "storefront", "store"}:
         return clean({"status": "invalid_private_input"})
     email, password = os.environ.get("APPLE_ID"), os.environ.get("APPLE_PASSWORD")
     if not email or not password:
@@ -164,7 +173,7 @@ def trial(login_binary, native_binary, purpose="signIn", session_context="token"
         del payload
         del private
         try:
-            code, _, _ = run_private([native_binary, str(report)], env, data=data, timeout=75)
+            code, _, _ = run_private(native_command(native_binary, report, env, native_user), env, data=data, timeout=75)
         except subprocess.TimeoutExpired:
             return clean({"status": "native_timeout"})
         finally:
@@ -174,6 +183,9 @@ def trial(login_binary, native_binary, purpose="signIn", session_context="token"
         if not report.is_file() or report.stat().st_size > 65536:
             return clean({"status": "private_handoff_failed"})
         result = clean(json.loads(report.read_text()))
+        result["native_user"] = native_user
+        if native_user == "root" and result.get("running_as_root") is not True:
+            result["status"] = "probe_failed"
         result.update(login_summary)
         result["store_session_authenticated"] = True
         result["authentication_purpose"] = purpose
@@ -187,6 +199,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--login-binary", required=True)
     parser.add_argument("--native-binary", required=True)
+    parser.add_argument("--native-user", choices=("runner", "root"), default="runner")
     parser.add_argument("--purpose", choices=("signIn", "machineAuthorize", "machineSession", "booleanSession"), default="signIn")
     parser.add_argument("--session-context", choices=("token", "cookies", "storefront", "store"), default="cookies")
     parser.add_argument("--client-context", choices=("native", "login_agent"), default="login_agent")
@@ -194,7 +207,7 @@ def main():
     if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "darwin":
         raise SystemExit("GitHub-hosted macOS required")
     try:
-        r = trial(str(Path(args.login_binary).resolve()), str(Path(args.native_binary).resolve()), args.purpose, args.session_context, args.client_context)
+        r = trial(str(Path(args.login_binary).resolve()), str(Path(args.native_binary).resolve()), args.purpose, args.session_context, args.client_context, args.native_user)
     except Exception:
         r = clean({"status": "probe_failed"})
     print(json.dumps(r, sort_keys=True))

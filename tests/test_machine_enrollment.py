@@ -9,6 +9,42 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "tools"))
 import machine_enrollment as mod
 
 class MachineEnrollmentContracts(unittest.TestCase):
+    def test_native_root_command_forwards_only_nonsecret_context(self):
+        env = {"PATH": "/usr/bin:/bin", "HOME": "/synthetic/home", "GITHUB_ACTIONS": "true",
+               "LAB_IMPORT_IO": "1", "APPLE_PASSWORD": "PRIVATE", "TOKEN": "PRIVATE"}
+        argv = mod.native_command("/synthetic/native", "/synthetic/report", env, "root")
+        self.assertEqual(argv[:5], ["/usr/bin/sudo", "-n", "--", "/usr/bin/env", "-i"])
+        self.assertEqual(argv[-2:], ["/synthetic/native", "/synthetic/report"])
+        self.assertNotIn("PRIVATE", " ".join(argv))
+        self.assertIn("GITHUB_ACTIONS=true", argv)
+        self.assertEqual(mod.native_command("native", "report", env), ["native", "report"])
+        self.assertEqual(mod.native_command("native", "report", env, probe=True),
+                         ["native", "--import-probe", "report"])
+        with self.assertRaises(ValueError):
+            mod.native_command("native", "report", env, "PRIVATE")
+
+    def test_root_trial_requires_observed_root_execution(self):
+        for observed in (None, False, True):
+            def fake_run(argv, env, **kwargs):
+                if argv[0] == "login":
+                    handoff = Path(env["LAB_ENROLLMENT_INPUT_PATH"])
+                    handoff.write_text(json.dumps({"dsid": "123", "token": "PRIVATE", "guid": "001122334455"}))
+                    handoff.chmod(0o600)
+                else:
+                    self.assertEqual(argv[0], "/usr/bin/sudo")
+                    self.assertNotIn("PRIVATE", " ".join(argv))
+                    self.assertNotIn("APPLE_PASSWORD", env)
+                    report = {"status": "keybag_not_issued"}
+                    if observed is not None:
+                        report["running_as_root"] = observed
+                    Path(argv[-1]).write_text(json.dumps(report))
+                return (0, b"", b"")
+            with patch.dict("os.environ", {"APPLE_ID": "test@example.invalid", "APPLE_PASSWORD": "PRIVATE"}, clear=True):
+                with patch.object(mod, "run_private", side_effect=fake_run):
+                    result = mod.trial("login", "native", native_user="root")
+            self.assertEqual(result["status"], "keybag_not_issued" if observed else "probe_failed")
+            self.assertNotIn("PRIVATE", json.dumps(result))
+
     def test_io_trace_is_bounded_and_never_emits_paths_or_payloads(self):
         cell = dict(area="shared_sc_info", operation="open", calls=3, failures=2,
                     last_errno=13, permission_failures=1, missing_failures=1)
