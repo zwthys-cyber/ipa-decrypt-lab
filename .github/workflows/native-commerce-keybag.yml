@@ -1,0 +1,32 @@
+name: Account-free CommerceKit keybag prerequisite
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-commerce-keybag
+  cancel-in-progress: false
+jobs:
+  probe:
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Check bounded service reply and privacy contracts
+        run: python3 -m unittest discover -s tests -p 'test_native_commerce_keybag.py' -v
+      - name: Build account-free service client and error contract
+        run: |
+          clang -fobjc-arc -framework Foundation tools/NativeCommerceKeybag.m -o native-commerce-keybag
+          ./native-commerce-keybag --error-contract
+      - name: Compare fixed synthetic values under runner and root
+        timeout-minutes: 3
+        run: |
+          ulimit -c 0
+          python3 tools/native_commerce_keybag.py
