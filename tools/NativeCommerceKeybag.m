@@ -1,4 +1,4 @@
-// Account-free local CommerceKit request generation. Never authorizes or imports.
+// Account-free CommerceKit helpers; this executable only generates synthetic sync data.
 #define main KeybagPrerequisitesMain
 #include "NativeKeybag.m"
 #undef main
@@ -118,18 +118,19 @@ static void CommerceRequest(BOOL nonzero,NSMutableDictionary *r) {
  Checkpoint(r,@"account_constructed");
  NSLock *lock=[NSLock new];dispatch_semaphore_t done=dispatch_semaphore_create(0);
  __block BOOL finished=NO;
+ NSMutableDictionary *reply=[NSMutableDictionary dictionary];
  void (^finish)(BOOL,BOOL,id,BOOL,id)=^(BOOL transport,BOOL success,id data,BOOL needDiv,id suppliedError) {
    [lock lock];
    if(!finished) {
      finished=YES;
      BOOL errorValid=!suppliedError || [suppliedError isKindOfClass:NSError.class];
      NSError *error=errorValid?suppliedError:nil;
-     r[@"reply_received"]=B(!transport);r[@"transport_error_received"]=B(transport);
-     r[@"service_success"]=B(success);r[@"need_diversitybag"]=B(needDiv);
+     reply[@"reply_received"]=B(!transport);reply[@"transport_error_received"]=B(transport);
+     reply[@"service_success"]=B(success);reply[@"need_diversitybag"]=B(needDiv);
      BOOL present=[data isKindOfClass:NSData.class] && [data length]>0 && [data length]<=2097152;
-     r[@"synthetic_sync_present"]=B(present);
-     ErrorFields(r,error);ServiceErrorFields(r,error);
-     r[@"status"]=!errorValid?@"malformed_service_reply":
+     reply[@"synthetic_sync_present"]=B(present);
+     ErrorFields(reply,error);ServiceErrorFields(reply,error);
+     reply[@"status"]=!errorValid?@"malformed_service_reply":
        !transport && success && present && !error?@"synthetic_sync_ready":@"service_request_failed";
      dispatch_semaphore_signal(done);
    }
@@ -147,9 +148,11 @@ static void CommerceRequest(BOOL nonzero,NSMutableDictionary *r) {
    ^(char success,NSData *data,char needDiv,NSError *error){finish(NO,success!=0,data,needDiv!=0,error);});
  BOOL completed=dispatch_semaphore_wait(done,dispatch_time(DISPATCH_TIME_NOW,15*NSEC_PER_SEC))==0;
  [lock lock];
- if(!completed && !finished){finished=YES;r[@"status"]=@"service_reply_timeout";}
+ if(!completed && !finished){finished=YES;reply[@"status"]=@"service_reply_timeout";}
+ [r addEntriesFromDictionary:reply];
  [lock unlock];
 }
+#ifndef LAB_COMMERCE_LIBRARY
 int main(int argc,const char **argv) { @autoreleasepool {
  if(!getenv("GITHUB_ACTIONS") || strcmp(getenv("GITHUB_ACTIONS"),"true"))return 2;
  signal(SIGALRM,Deadline);alarm(30);
@@ -168,3 +171,5 @@ int main(int argc,const char **argv) { @autoreleasepool {
  NSData *out=[NSJSONSerialization dataWithJSONObject:r options:0 error:NULL];
  return out && [out writeToFile:@(argv[1]) options:NSDataWritingAtomic error:NULL]?0:3;
 }}
+
+#endif // LAB_COMMERCE_LIBRARY
