@@ -37,6 +37,27 @@ class TransportTests(unittest.TestCase):
         raw["service_name"] = "com.apple.ak.private-identifier"
         self.assertNotIn("service_name", transport.clean(raw))
 
+    def test_reason_terms_and_signature_declarations_are_strict(self):
+        raw = {"status": "transport_rejected", "invalidation_reason_terms": ["peer", "private-account", "peer", 1, {}],
+               "declared_internal_authkit_entitlement": True, "signature_metadata_available": 1}
+        result = transport.clean(raw)
+        self.assertEqual(result["invalidation_reason_terms"], ["peer"])
+        self.assertIs(result["declared_internal_authkit_entitlement"], True)
+        self.assertNotIn("signature_metadata_available", result)
+        self.assertNotIn("private", json.dumps(result))
+
+    def test_native_launch_rejection_is_reported_without_native_text(self):
+        with patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}), patch.object(
+            transport.sys, "platform", "darwin"
+        ), patch.object(transport.subprocess, "run", return_value=SimpleNamespace(
+            returncode=-9, stdout="private-output", stderr="private-error"
+        )):
+            result = transport.probe("/synthetic", "named")
+            self.assertEqual(result["status"], "native_process_failed")
+            self.assertEqual(result["native_exit_code"], -9)
+            self.assertTrue(result["native_process_signalled"])
+            self.assertNotIn("private", json.dumps(result))
+
     def test_bag_success_requires_completed_nonempty_error_free_response(self):
         value = {"status": "bag_fetch_succeeded", "callback_completed": True,
                  "bag_result_present": True, "error_present": False}

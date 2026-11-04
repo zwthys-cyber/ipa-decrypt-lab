@@ -5,6 +5,7 @@
 #include <dlfcn.h>
 #include <string.h>
 #import <xpc/xpc.h>
+#import <Security/Security.h>
 
 static BOOL method(Class cls, NSString *name, unsigned int count) {
     Method m = cls ? class_getInstanceMethod(cls, NSSelectorFromString(name)) : NULL;
@@ -58,7 +59,7 @@ static NSDictionary *transportDetail(NSXPCConnection *connection, xpc_connection
     }
     r[@"service_name_recognized"] = @((BOOL)(name && [allowedServices containsObject:name]));
     if (name && [allowedServices containsObject:name]) r[@"service_name"] = name;
-    if (rawConnection) r[@"peer_pid_available"] = @(xpc_connection_get_pid(rawConnection) > 0);
+    if (rawConnection) r[@"peer_pid_available"] = @((BOOL)(xpc_connection_get_pid(rawConnection) > 0));
     char *(*copyReason)(xpc_connection_t) = dlsym(RTLD_DEFAULT, "xpc_connection_copy_invalidation_reason");
     r[@"invalidation_reason_api_present"] = @((BOOL)(copyReason != NULL));
     char *reason = copyReason && rawConnection ? copyReason(rawConnection) : NULL;
@@ -73,10 +74,41 @@ static NSDictionary *transportDetail(NSXPCConnection *connection, xpc_connection
             @"service_missing", @"connection_invalidated", @"sandbox_denied", @"connection_rejected"])
             r[[@"reason_" stringByAppendingString:key]] = flags[key];
         NSString *lower = text.lowercaseString;
+        NSSet *words = [NSSet setWithArray:[lower componentsSeparatedByCharactersInSet:NSCharacterSet.letterCharacterSet.invertedSet]];
+        NSMutableArray *terms = [NSMutableArray array];
+        for (NSString *term in @[@"peer", @"cancelled", @"canceled", @"client", @"server", @"signature",
+            @"entitlement", @"requirement", @"identity", @"connection", @"invalid", @"terminated", @"rejected",
+            @"lookup", @"endpoint", @"process", @"exited", @"code", @"signing", @"sandbox", @"bootstrap",
+            @"interrupted", @"transport", @"authorization", @"authentication", @"permission", @"denied",
+            @"error", @"unavailable", @"unsupported", @"resume", @"current", @"remote", @"closed", @"unknown"])
+            if ([words containsObject:term]) [terms addObject:term];
+        r[@"invalidation_reason_terms"] = terms;
         r[@"reason_internal_authkit_entitlement_named"] = @([lower containsString:@"com.apple.authkit.client.internal"]);
-        r[@"reason_peer_code_requirement"] = @([lower containsString:@"peer"] && [lower containsString:@"requirement"]);
-        r[@"reason_peer_cancelled"] = @([lower containsString:@"cancel"] && ([lower containsString:@"peer"] || [lower containsString:@"remote"]));
+        r[@"reason_peer_code_requirement"] = @((BOOL)([lower containsString:@"peer"] && [lower containsString:@"requirement"]));
+        r[@"reason_peer_cancelled"] = @((BOOL)([lower containsString:@"cancel"] && ([lower containsString:@"peer"] || [lower containsString:@"remote"])));
     }
+    return r;
+}
+
+
+static NSDictionary *signatureDetail(void) {
+    NSMutableDictionary *r = [@{@"signature_metadata_available": @NO,
+        @"declared_internal_authkit_entitlement": @NO} mutableCopy];
+    SecCodeRef code = NULL;
+    SecStaticCodeRef diskCode = NULL;
+    CFDictionaryRef info = NULL;
+    if (SecCodeCopySelf(kSecCSDefaultFlags, &code) == errSecSuccess &&
+        SecCodeCopyStaticCode(code, kSecCSDefaultFlags, &diskCode) == errSecSuccess &&
+        SecCodeCopySigningInformation(diskCode, kSecCSSigningInformation, &info) == errSecSuccess) {
+        r[@"signature_metadata_available"] = @YES;
+        NSDictionary *values = (__bridge NSDictionary *)info;
+        NSDictionary *entitlements = values[(__bridge NSString *)kSecCodeInfoEntitlementsDict];
+        r[@"declared_internal_authkit_entitlement"] = @((BOOL)([entitlements isKindOfClass:NSDictionary.class] &&
+            [entitlements[@"com.apple.authkit.client.internal"] isEqual:@YES]));
+    }
+    if (info) CFRelease(info);
+    if (diskCode) CFRelease(diskCode);
+    if (code) CFRelease(code);
     return r;
 }
 
@@ -91,6 +123,7 @@ int main(int argc, const char **argv) {
             @"bundle_identifier_present": @((BOOL)(NSBundle.mainBundle.bundleIdentifier.length > 0)),
             @"account_login_attempted": @NO, @"enrollment_created": @NO, @"decryption_proven": @NO} mutableCopy];
         @try {
+            [r addEntriesFromDictionary:signatureDetail()];
             dlopen("/System/Library/PrivateFrameworks/AuthKit.framework/AuthKit", RTLD_LAZY | RTLD_LOCAL);
             Class cls = NSClassFromString(@"AKAppleIDAuthenticationController");
             NSString *selector = method(cls, @"fetchURLBagWithCompletion:", 3) ? @"fetchURLBagWithCompletion:" :

@@ -16,13 +16,16 @@ BOOLS = {"explicit_client_identifier", "bundle_identifier_present", "bag_selecto
          "reason_missing_entitlement", "reason_code_signing_requirement", "reason_lookup_failed",
          "reason_service_missing", "reason_connection_invalidated", "reason_sandbox_denied",
          "reason_connection_rejected", "reason_internal_authkit_entitlement_named",
-         "reason_peer_code_requirement", "reason_peer_cancelled"}
+         "reason_peer_code_requirement", "reason_peer_cancelled",
+         "signature_metadata_available", "declared_internal_authkit_entitlement", "native_process_signalled"}
 STATUSES = {"interface_unavailable", "transport_timeout", "transport_rejected", "bag_fetch_succeeded",
-            "empty_result", "native_exception", "probe_failed", "requires_github_macos"}
+            "empty_result", "native_exception", "probe_failed", "requires_github_macos", "native_process_failed"}
 DOMAINS = {"NSCocoaErrorDomain", "AKAuthenticationError", "AKAuthenticationServerError",
            "NSPOSIXErrorDomain", "NSURLErrorDomain"}
 SERVICES = {"com.apple.ak.auth.xpc", "com.apple.ak.anisette.xpc",
             "com.apple.ak.authorizationservices.xpc", "com.apple.akd"}
+
+REASON_TERMS = set("peer cancelled canceled client server signature entitlement requirement identity connection invalid terminated rejected lookup endpoint process exited code signing sandbox bootstrap interrupted transport authorization authentication permission denied error unavailable unsupported resume current remote closed unknown".split())
 
 def clean(value):
     result = {"schema": "ipa-lab-authkit-transport-v1", "status": "probe_failed",
@@ -38,6 +41,11 @@ def clean(value):
         code = value.get("error_code")
         if type(code) is int and -999999 <= code <= 999999:
             result.update(error_domain=value["error_domain"], error_code=code)
+    if type(value.get("invalidation_reason_terms")) is list:
+        result["invalidation_reason_terms"] = sorted({term for term in value["invalidation_reason_terms"]
+            if type(term) is str and term in REASON_TERMS})
+    if type(value.get("native_exit_code")) is int and -128 <= value["native_exit_code"] <= 255:
+        result["native_exit_code"] = value["native_exit_code"]
     if type(value.get("service_name")) is str and value["service_name"] in SERVICES:
         result["service_name"] = value["service_name"]
     if value.get("sdk_xpc_invalid_code") == 4099:
@@ -103,7 +111,10 @@ def probe(binary, mode):
     try:
         run = subprocess.run([str(Path(binary).resolve()), mode], stdin=subprocess.DEVNULL,
                              capture_output=True, text=True, timeout=20, env=environment())
-        if run.returncode or len(run.stdout) > 8192:
+        if run.returncode:
+            return clean({"status": "native_process_failed", "native_exit_code": run.returncode,
+                          "native_process_signalled": run.returncode < 0})
+        if len(run.stdout) > 8192:
             return clean({})
         result = clean(json.loads(run.stdout))
         result["stderr_classification"] = classify_connection_text(run.stderr)
@@ -132,6 +143,7 @@ def service_metadata():
     for label, path in {
         "app_store": "/System/Applications/App Store.app",
         "client": "./AuthKitTransport.app",
+        "declared_client": "./AuthKitDeclared.app",
     }.items():
         try:
             run = subprocess.run(["/usr/bin/codesign", "-d", "--entitlements", ":-", path],
@@ -151,7 +163,8 @@ def main():
         return 2
     rows = []
     for label, binary in (("command_line", "./authkit-transport"),
-                          ("own_app_bundle", "./AuthKitTransport.app/Contents/MacOS/AuthKitTransport")):
+                          ("own_app_bundle", "./AuthKitTransport.app/Contents/MacOS/AuthKitTransport"),
+                          ("declared_internal_permission", "./AuthKitDeclared.app/Contents/MacOS/AuthKitTransport")):
         for mode in ("default", "named"):
             row = probe(binary, mode)
             row["container"] = label
