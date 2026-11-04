@@ -9,7 +9,7 @@ import sys
 import tempfile
 from native_keybag import DOMAINS, STATE_KEYS
 
-STATUSES = {"invalid_diversitybag", "diversitybag_import_failed", "keybag_context_changed", "keybag_context_unavailable", "invalid_keybag_rejected", "invalid_keybag_unexpected_result", "invalid_private_input", "request_preparation_failed", "request_timeout", "request_stopped",
+STATUSES = {"commerce_request_prepared", "commerce_import_unverified", "commerce_service_failed", "commerce_connection_changed", "invalid_diversitybag", "diversitybag_import_failed", "keybag_context_changed", "keybag_context_unavailable", "invalid_keybag_rejected", "invalid_keybag_unexpected_result", "invalid_private_input", "request_preparation_failed", "request_timeout", "request_stopped",
     "response_not_plist", "keybag_not_issued", "import_interface_unavailable",
     "keybag_imported_model_unverified", "keybag_import_failed", "native_exception", "probe_failed",
     "missing_credentials", "login_failed", "login_ambiguous", "login_timeout", "native_timeout",
@@ -19,6 +19,15 @@ BOOLS = {"running_as_root", "diversitybag_present", "diversity_import_attempted"
     "dialog_present", "keybag_present", "keybag_import_succeeded", "redirect_seen",
     "redirect_query_supported", "redirect_method_post", "redirect_https", "storefront_header_present",
     "message_mentions_sign_in", "message_mentions_password", "message_mentions_verification_code", "message_mentions_computer_limit"}
+
+COMMERCE_READY = {"commerce_connection_present", "commerce_connection_stable", "commerce_import_interface_verified",
+    "session_identity_verified", "body_token_bound", "client_agent_bound", "account_dsid_verified",
+    "account_token_verified", "native_guid_matches_login", "session_bound", "session_user_agent_bound",
+    "session_owner_bound", "session_dsid_headers_bound", "session_token_header_bound", "native_guid_preserved",
+    "sync_preserved_after_binding", "token_preserved_after_binding", "needdiv_preserved_after_binding",
+    "content_length_matches", "bound_route_valid", "anisette_preserved_after_binding"}
+BOOLS |= COMMERCE_READY | {"commerce_import_call_returned", "commerce_followup_sync_ready",
+    "commerce_followup_needs_diversitybag", "commerce_state_changed", "commerce_transport_error_received"}
 
 LOGIN_FLAGS = {f"login_{scope}_{suffix}" for scope in ("md", "amd") for suffix in
     ("action_present", "provision_requested", "sync_requested", "reset_requested", "data_present", "data_valid")}
@@ -110,6 +119,31 @@ def clean(value):
         and r.get("apple_failure_present") is False and r.get("redirect_blocked") is False
         and r.get("response_oversized") is False):
         r["status"] = "probe_failed"
+    backend = value.get("backend")
+    if type(backend) is str and backend in {"ams", "commerce"}:
+        r["backend"] = backend
+    elif backend is not None:
+        r["status"] = "probe_failed"
+    if backend == "commerce":
+        r["import_verified"] = False
+        r["keybag_import_succeeded"] = False
+        r["diversity_import_succeeded"] = False
+    if r["status"] in {"commerce_request_prepared", "commerce_import_unverified"}:
+        valid = (backend == "commerce" and r.get("running_as_root") is False
+            and all(r.get(k) is True for k in COMMERCE_READY)
+            and r.get("commerce_transport_error_received") is False and r.get("error_present") is False)
+        if r["status"] == "commerce_request_prepared":
+            valid &= (r.get("authorization_request_attempted") is False
+                and r.get("keybag_import_attempted") is False)
+        else:
+            valid &= (all(r.get(k) is True for k in ("authorization_request_attempted", "keybag_present",
+                "keybag_import_attempted", "commerce_import_call_returned", "commerce_followup_sync_ready"))
+                and r.get("http_status") == 200 and r.get("apple_failure_present") is False
+                and r.get("redirect_blocked") is False and r.get("response_oversized") is False
+                and type(r.get("diversitybag_present")) is bool
+                and (r["diversitybag_present"] is False or r.get("diversity_import_attempted") is True))
+        if not valid:
+            r["status"] = "probe_failed"
     return r
 
 def stop_private_group(process, elevated=False):
@@ -145,8 +179,11 @@ def native_command(binary, report, env, user="runner", probe=False):
         argv = ["/usr/bin/sudo", "-n", "--", "/usr/bin/env", "-i"] + forwarded + argv
     return argv
 
-def trial(login_binary, native_binary, purpose="signIn", session_context="token", client_context="native", native_user="runner"):
+def trial(login_binary, native_binary, purpose="signIn", session_context="token", client_context="native", native_user="runner", backend="ams"):
     if native_user not in {"runner", "root"} or client_context not in {"native", "login_agent"} or purpose not in {"signIn", "machineAuthorize", "machineSession", "booleanSession"} or session_context not in {"token", "cookies", "storefront", "store"}:
+        return clean({"status": "invalid_private_input"})
+    if backend not in {"ams", "commerce"} or (backend == "commerce" and
+            (native_user != "runner" or client_context != "login_agent" or session_context != "cookies")):
         return clean({"status": "invalid_private_input"})
     email, password = os.environ.get("APPLE_ID"), os.environ.get("APPLE_PASSWORD")
     if not email or not password:
@@ -182,6 +219,8 @@ def trial(login_binary, native_binary, purpose="signIn", session_context="token"
         if client_context == "login_agent":
             payload["client_context"] = client_context
             payload["user_agent"] = private.get("user_agent")
+        if backend == "commerce":
+            payload.update(backend=backend, apple_id=email)
         data = json.dumps(payload).encode()
         del payload
         del private
@@ -212,6 +251,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--login-binary", required=True)
     parser.add_argument("--native-binary", required=True)
+    parser.add_argument("--backend", choices=("ams", "commerce"), default="ams")
     parser.add_argument("--native-user", choices=("runner", "root"), default="runner")
     parser.add_argument("--purpose", choices=("signIn", "machineAuthorize", "machineSession", "booleanSession"), default="signIn")
     parser.add_argument("--session-context", choices=("token", "cookies", "storefront", "store"), default="cookies")
@@ -220,7 +260,7 @@ def main():
     if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "darwin":
         raise SystemExit("GitHub-hosted macOS required")
     try:
-        r = trial(str(Path(args.login_binary).resolve()), str(Path(args.native_binary).resolve()), args.purpose, args.session_context, args.client_context, args.native_user)
+        r = trial(str(Path(args.login_binary).resolve()), str(Path(args.native_binary).resolve()), args.purpose, args.session_context, args.client_context, args.native_user, args.backend)
     except Exception:
         r = clean({"status": "probe_failed"})
     print(json.dumps(r, sort_keys=True))

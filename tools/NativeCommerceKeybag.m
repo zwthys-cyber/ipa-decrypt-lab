@@ -1,7 +1,9 @@
 // Account-free CommerceKit helpers; this executable only generates synthetic sync data.
+#ifndef LAB_KEYBAG_SUPPORT_PROVIDED
 #define main KeybagPrerequisitesMain
 #include "NativeKeybag.m"
 #undef main
+#endif
 #include <signal.h>
 #include <unistd.h>
 static void ServiceErrorFields(NSMutableDictionary *r,NSError *error) {
@@ -73,7 +75,7 @@ static BOOL InitializationContract(void) {
    && [client[@"fixture"] isEqual:@"synthetic"] && [account[@"fixture"] isEqual:@"synthetic"];
 }
 
-static id SyntheticAccount(BOOL nonzero,NSMutableDictionary *r) {
+static id CommerceAccount(NSNumber *expected,NSString *appleID,NSMutableDictionary *r) {
  Class clientClass=NSClassFromString(@"CKStoreClient"),accountClass=NSClassFromString(@"CKStoreAccount");
  r[@"client_class_present"]=B(clientClass!=Nil);r[@"account_class_present"]=B(accountClass!=Nil);
  SEL factory=NSSelectorFromString(@"storeClientForIdentifier:");
@@ -83,18 +85,51 @@ static id SyntheticAccount(BOOL nonzero,NSMutableDictionary *r) {
  if(!clientABI || !accountABI)return nil;
  id client=((id(*)(id,SEL,id))objc_msgSend)(clientClass,factory,@"com.apple.configurator.ui");
  r[@"client_created"]=B(client!=nil);if(!client)return nil;
- NSNumber *expected=nonzero?@1234567:@0;
  id account=[(id<LabCommerceInitializing>)[accountClass alloc] _initWithStoreClient:client
-   plist:@{@"dsPersonID":expected,@"appleId":@"ipa-lab@example.invalid"}];
+   plist:@{@"dsPersonID":expected,@"appleId":appleID}];
  r[@"account_created"]=B(account!=nil);
  SEL dsid=NSSelectorFromString(@"dsID");
  BOOL getter=ABI(account,dsid,@"@",@[]);r[@"account_getter_abi_verified"]=B(getter);
  if(!getter)return nil;
  id observed=((id(*)(id,SEL))objc_msgSend)(account,dsid);
  BOOL verified=[observed isKindOfClass:NSNumber.class] && [observed isEqual:expected];
- r[@"synthetic_account_verified"]=B(verified);
+ r[@"account_dsid_verified"]=B(verified);
  return verified?account:nil;
 }
+static id SyntheticAccount(BOOL nonzero,NSMutableDictionary *r) {
+ id account=CommerceAccount(nonzero?@1234567:@0,@"ipa-lab@example.invalid",r);
+ r[@"synthetic_account_verified"]=B(account!=nil);
+ return account;
+}
+static NSDictionary *CommerceSyncObservation(id service,id account) {
+ NSLock *lock=[NSLock new];dispatch_semaphore_t done=dispatch_semaphore_create(0);
+ __block BOOL finished=NO;
+ NSMutableDictionary *reply=[@{@"status":@"service_reply_timeout"} mutableCopy];
+ SEL generate=NSSelectorFromString(@"kbSyncForTransactionType:account:reply:");
+ ((void(*)(id,SEL,unsigned char,id,id))objc_msgSend)(service,generate,2,account,
+   ^(char success,NSData *data,char needDiv,NSError *suppliedError){
+     [lock lock];
+     if(!finished){
+       finished=YES;
+       BOOL valid=!suppliedError || [suppliedError isKindOfClass:NSError.class];
+       NSError *error=valid?suppliedError:nil;
+       BOOL present=[data isKindOfClass:NSData.class] && data.length>0 && data.length<=2097152;
+       reply[@"reply_received"]=@YES;reply[@"service_success"]=B(success!=0);
+       reply[@"synthetic_sync_present"]=B(present);reply[@"need_diversitybag"]=B(needDiv!=0);
+       ErrorFields(reply,error);ServiceErrorFields(reply,error);
+       reply[@"status"]=!valid?@"malformed_service_reply":
+         success && present && !error?@"synthetic_sync_ready":@"service_request_failed";
+       dispatch_semaphore_signal(done);
+     }
+     [lock unlock];
+   });
+ dispatch_semaphore_wait(done,dispatch_time(DISPATCH_TIME_NOW,8*NSEC_PER_SEC));
+ [lock lock];finished=YES;NSDictionary *result=[reply copy];[lock unlock];return result;
+}
+static BOOL CommerceSyncReady(NSDictionary *reply) {
+ return [reply[@"status"] isEqual:@"synthetic_sync_ready"];
+}
+
 static NSString *CheckpointPath;
 static void Checkpoint(NSMutableDictionary *r,NSString *phase) {
  r[@"native_phase"]=phase;

@@ -2,6 +2,13 @@ name: Private native machine enrollment trial
 on:
   workflow_dispatch:
     inputs:
+      backend:
+        description: Use direct AMS import or the separately validated CommerceKit service path
+        type: choice
+        default: ams
+        options:
+          - ams
+          - commerce
       native_user:
         description: Native authorization process user (login remains the runner user)
         type: choice
@@ -101,6 +108,7 @@ jobs:
       - name: Authenticate once and attempt one machine authorization request
         timeout-minutes: 4
         env:
+          LAB_BACKEND: ${{ inputs.backend }}
           LAB_NATIVE_USER: ${{ inputs.native_user }}
           LAB_IMPORT_IO: ${{ inputs.trace_io }}
           LAB_CLIENT_CONTEXT: ${{ inputs.client_context }}
@@ -110,4 +118,4 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
         run: |
           ulimit -c 0
-          python3 tools/machine_enrollment.py --login-binary native-source/ApplePackage/.build/debug/ApplePackageTool --native-binary native-machine-enrollment --native-user "$LAB_NATIVE_USER" --purpose "$LAB_PURPOSE" --session-context "$LAB_SESSION_CONTEXT" --client-context "$LAB_CLIENT_CONTEXT"
+          python3 tools/machine_enrollment.py --login-binary native-source/ApplePackage/.build/debug/ApplePackageTool --native-binary native-machine-enrollment --backend "$LAB_BACKEND" --native-user "$LAB_NATIVE_USER" --purpose "$LAB_PURPOSE" --session-context "$LAB_SESSION_CONTEXT" --client-context "$LAB_CLIENT_CONTEXT"

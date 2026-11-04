@@ -276,5 +276,47 @@ class MachineEnrollmentContracts(unittest.TestCase):
         for key in ("error_domain", "error_code", "keybag_import_succeeded", "http_status"):
             self.assertNotIn(key, r)
 
+    def test_commerce_preparation_needs_identity_and_no_submission(self):
+        value = {key: True for key in mod.COMMERCE_READY}
+        value.update(backend="commerce", status="commerce_request_prepared", running_as_root=False,
+            commerce_transport_error_received=False, error_present=False,
+            authorization_request_attempted=False, keybag_import_attempted=False)
+        self.assertEqual(mod.clean(value)["status"], "commerce_request_prepared")
+        for key in mod.COMMERCE_READY | {"backend", "running_as_root", "commerce_transport_error_received",
+                "error_present", "authorization_request_attempted", "keybag_import_attempted"}:
+            changed = dict(value)
+            changed.pop(key)
+            self.assertEqual(mod.clean(changed)["status"], "probe_failed", key)
+
+    def test_commerce_one_way_import_never_proves_success(self):
+        value = {key: True for key in mod.COMMERCE_READY}
+        value.update(backend="commerce", status="commerce_import_unverified", running_as_root=False,
+            commerce_transport_error_received=False, error_present=False, authorization_request_attempted=True,
+            keybag_present=True, keybag_import_attempted=True, commerce_import_call_returned=True,
+            commerce_followup_sync_ready=True, http_status=200, apple_failure_present=False,
+            redirect_blocked=False, response_oversized=False, diversitybag_present=True, diversity_import_attempted=True,
+            import_verified=True, keybag_import_succeeded=True, diversity_import_succeeded=True,
+            enrollment_created=True, decryption_proven=True, token="PRIVATE", guid="PRIVATE", apple_id="PRIVATE")
+        result = mod.clean(value)
+        self.assertEqual(result["status"], "commerce_import_unverified")
+        for key in ("import_verified", "keybag_import_succeeded", "diversity_import_succeeded",
+                    "enrollment_created", "decryption_proven"):
+            self.assertIs(result[key], False)
+        self.assertNotIn("PRIVATE", json.dumps(result))
+        for key in ("keybag_present", "commerce_import_call_returned", "commerce_followup_sync_ready",
+                    "diversity_import_attempted", "http_status", "backend"):
+            changed = dict(value)
+            changed.pop(key)
+            self.assertEqual(mod.clean(changed)["status"], "probe_failed", key)
+
+    def test_commerce_context_rejected_before_any_login(self):
+        with patch.object(mod, "run_private") as run:
+            for user, client, session in (("root", "login_agent", "cookies"),
+                    ("runner", "native", "cookies"), ("runner", "login_agent", "token")):
+                result = mod.trial("login", "native", native_user=user, client_context=client,
+                    session_context=session, backend="commerce")
+                self.assertEqual(result["status"], "invalid_private_input")
+            run.assert_not_called()
+
 if __name__ == "__main__":
     unittest.main()

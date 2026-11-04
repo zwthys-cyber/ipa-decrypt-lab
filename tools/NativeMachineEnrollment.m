@@ -3,6 +3,9 @@
 #define main KeybagPrerequisitesMain
 #include "NativeKeybag.m"
 #undef main
+#define LAB_KEYBAG_SUPPORT_PROVIDED 1
+#define LAB_COMMERCE_REQUEST_LIBRARY 1
+#include "NativeCommerceRequest.m"
 #include <signal.h>
 static void LabNativeDeadline(int value) { (void)value;_exit(124); }
 
@@ -461,12 +464,98 @@ static void InvalidImportProbe(NSMutableDictionary *r) {
  r[@"status"]=rejected?@"invalid_keybag_rejected":@"invalid_keybag_unexpected_result";
 }
 
+
+@interface LabCommerceRun : NSObject
+@property(strong) id service;
+@property(strong) id account;
+@property(strong) id connection;
+@property(strong) NSLock *lock;
+@property(strong) NSMutableDictionary *transport;
+@end
+@implementation LabCommerceRun
+@end
+static id CommerceConnection(void) {
+ Class cls=NSClassFromString(@"ServiceProxy");SEL s=NSSelectorFromString(@"_commerceConnection");
+ return ABI(cls,s,@"@",@[])?((id(*)(id,SEL))objc_msgSend)(cls,s):nil;
+}
+static NSDictionary *CommerceTransport(LabCommerceRun *context) {
+ [context.lock lock];NSDictionary *snapshot=[context.transport copy];[context.lock unlock];return snapshot;
+}
+static NSMutableURLRequest *PreparedCommerceSession(NSDictionary *input,NSMutableDictionary *r,LabCommerceRun *__autoreleasing *out) {
+ if(geteuid()!=0 && [input[@"client_context"] isEqual:@"login_agent"]
+   && dlopen("/System/Library/PrivateFrameworks/CommerceKit.framework/CommerceKit",RTLD_NOW|RTLD_GLOBAL)) {
+   LabCommerceRun *context=[LabCommerceRun new];context.lock=[NSLock new];context.transport=[NSMutableDictionary dictionary];
+   context.connection=CommerceConnection();
+   r[@"commerce_connection_present"]=B(context.connection!=nil);
+   if(!context.connection)return nil;
+   Class cls=NSClassFromString(@"ServiceProxy");SEL get=NSSelectorFromString(@"commerceServiceWithErrorHandler:");
+   if(!ABI(cls,get,@"@",@[@"@?"]))return nil;
+   __weak LabCommerceRun *weakContext=context;
+   context.service=((id(*)(id,SEL,id))objc_msgSend)(cls,get,^(NSError *error){
+     LabCommerceRun *current=weakContext;if(!current)return;
+     [current.lock lock];current.transport[@"commerce_transport_error_received"]=@YES;
+     if([error isKindOfClass:NSError.class]){ErrorFields(current.transport,error);ServiceErrorFields(current.transport,error);}
+     [current.lock unlock];
+   });
+   SEL sync=NSSelectorFromString(@"kbSyncForTransactionType:account:reply:");
+   BOOL abi=ABI(context.service,NSSelectorFromString(@"importKeyBag:diversityBag:"),@"v",@[@"@",@"@"])
+     && (ABI(context.service,sync,@"v",@[@"C",@"@",@"@?"]) || ABI(context.service,sync,@"v",@[@"c",@"@",@"@?"]));
+   r[@"commerce_import_interface_verified"]=B(abi);if(!abi)return nil;
+   id account=nil;NSMutableURLRequest *request=PrepareCommerceRequest(input,r,&account);context.account=account;
+   BOOL stable=context.connection==CommerceConnection();
+   r[@"commerce_connection_stable"]=B(stable);
+   [r addEntriesFromDictionary:CommerceTransport(context)];
+   if(!request || !account || !stable || [r[@"commerce_transport_error_received"] boolValue])return nil;
+   r[@"session_identity_verified"]=@YES;r[@"body_token_bound"]=r[@"token_preserved_after_binding"];
+   r[@"client_agent_bound"]=r[@"session_user_agent_bound"];
+   r[@"session_cookie_count"]=@(ApplyStoreContext(request,input));
+   r[@"storefront_header_present"]=B([request valueForHTTPHeaderField:@"X-Apple-Store-Front"].length>0);
+   request.timeoutInterval=30;
+   if(out)*out=context;
+   return request;
+ }
+ return nil;
+}
+static void ImportCommerceBags(NSDictionary *body,LabCommerceRun *context,NSMutableDictionary *r) {
+ id bag=body[@"keybag"],diversity=body[@"diversitybag"];
+ r[@"diversitybag_present"]=B(diversity!=nil);r[@"keybag_retry_attempted"]=@NO;
+ if(!ValidBag(bag) || (diversity && !ValidBag(diversity))){r[@"status"]=@"invalid_diversitybag";return;}
+ BOOL stable=context.connection && context.connection==CommerceConnection();
+ r[@"commerce_connection_stable"]=B(stable);
+ if(!stable){r[@"status"]=@"commerce_connection_changed";return;}
+ SEL selector=NSSelectorFromString(@"importKeyBag:diversityBag:");
+ r[@"keybag_import_attempted"]=@YES;r[@"diversity_import_attempted"]=B(diversity!=nil);
+ ((void(*)(id,SEL,id,id))objc_msgSend)(context.service,selector,bag,diversity);
+ r[@"commerce_import_call_returned"]=@YES;
+ NSDictionary *followup=CommerceSyncObservation(context.service,context.account);
+ r[@"commerce_followup_sync_ready"]=B(CommerceSyncReady(followup));
+ if(followup[@"need_diversitybag"])r[@"commerce_followup_needs_diversitybag"]=followup[@"need_diversitybag"];
+ [NSThread sleepForTimeInterval:1.0];r[@"state_after"]=State();
+ BOOL changed=NO;
+ for(NSString *key in @[@"shared_sidb",@"shared_sids",@"fpsd_sidb",@"fpsd_sids"])
+   changed=changed || (![r[@"state_before"][key] boolValue] && [r[@"state_after"][key] boolValue]);
+ r[@"commerce_state_changed"]=B(changed);
+ [r addEntriesFromDictionary:CommerceTransport(context)];
+ r[@"status"]=[r[@"commerce_transport_error_received"] boolValue] || !CommerceSyncReady(followup)?
+   @"commerce_service_failed":@"commerce_import_unverified";
+ // The one-way import has no completion result; no field or log here proves import success.
+}
 static void Authorize(NSDictionary *input,NSMutableDictionary *r) {
  r[@"state_before"]=State();
- id initialKeybag=SharedKeybag();unsigned int initialContext=ContextIdentifier(initialKeybag);
- r[@"context_ready_before_request"]=B(initialContext!=0);SharedPathFields(r);
- if(!initialContext){r[@"status"]=@"keybag_context_unavailable";return;}
- NSURLRequest *request=PreparedRequest(input,r);
+ NSString *backend=input[@"backend"]?:@"ams";
+ if(![backend isEqual:@"ams"] && ![backend isEqual:@"commerce"]){r[@"status"]=@"invalid_private_input";return;}
+ BOOL commerce=[backend isEqual:@"commerce"];r[@"backend"]=backend;
+ id initialKeybag=nil;unsigned int initialContext=0;LabCommerceRun *commerceRun=nil;
+ NSURLRequest *request=nil;
+ if(commerce) {
+   r[@"commerce_transport_error_received"]=@NO;
+   request=PreparedCommerceSession(input,r,&commerceRun);
+ } else {
+   initialKeybag=SharedKeybag();initialContext=ContextIdentifier(initialKeybag);
+   r[@"context_ready_before_request"]=B(initialContext!=0);SharedPathFields(r);
+   if(!initialContext){r[@"status"]=@"keybag_context_unavailable";return;}
+   request=PreparedRequest(input,r);
+ }
  if(!request){r[@"status"]=@"request_preparation_failed";return;}
  LabEnrollmentResponse *delegate=[LabEnrollmentResponse new];
  delegate.originalRequest=request;delegate.dsid=@([input[@"dsid"] longLongValue]);
@@ -514,6 +603,7 @@ static void Authorize(NSDictionary *input,NSMutableDictionary *r) {
  r[@"keybag_present"]=B(keybag);
  if(keybag)[r addEntriesFromDictionary:KeybagShape(blob)];
  if(delegate.response.statusCode!=200 || hasFailure || !keybag) {r[@"status"]=@"keybag_not_issued";return;}
+ if(commerce){ImportCommerceBags(body,commerceRun,r);return;}
  ProcessBags(body,r,^NSDictionary *(NSData *data,BOOL diversity) {
    return ImportOneBag(initialKeybag,data,diversity);
  },^BOOL {
@@ -529,15 +619,28 @@ int main(int argc,const char **argv) { @autoreleasepool {
  }
 #endif
  if(!strcmp(argv[1],"--response-contract")) {
-   BOOL ok=ResponseContract() && ClientContextContract() && ImportErrorContract() && KeybagShapeContract() && BagOrderContract();puts(ok?"response and client context contracts passed":"response and client context contracts failed");return ok?0:4;
+   BOOL ok=ResponseContract() && ClientContextContract() && ImportErrorContract() && KeybagShapeContract() && BagOrderContract() && LabCommerceBindingContract();puts(ok?"response and client context contracts passed":"response and client context contracts failed");return ok?0:4;
  }
  NSMutableDictionary *r=[@{@"schema":@"ipa-lab-machine-enrollment-v1",@"status":@"invalid_private_input",
-   @"running_as_root":B(geteuid()==0),@"authorization_request_attempted":@NO,@"enrollment_created":@NO,@"decryption_proven":@NO} mutableCopy];
+   @"running_as_root":B(geteuid()==0),@"authorization_request_attempted":@NO,@"keybag_import_attempted":@NO,@"enrollment_created":@NO,@"decryption_proven":@NO} mutableCopy];
  @try {
    dlopen("/System/Library/PrivateFrameworks/AppleMediaServices.framework/AppleMediaServices",RTLD_NOW|RTLD_GLOBAL);
    dlopen("/System/Library/Frameworks/Accounts.framework/Accounts",RTLD_NOW|RTLD_GLOBAL);
    if(argc==3 && !strcmp(argv[1],"--import-probe")) {
      InvalidImportProbe(r);
+   } else if(argc==3 && !strcmp(argv[1],"--prepare-probe")) {
+     NSData *data=[[NSFileHandle fileHandleWithStandardInput] readDataOfLength:4097];
+     id input=data.length<=4096?[NSJSONSerialization JSONObjectWithData:data options:0 error:NULL]:nil;
+     if([input isKindOfClass:NSDictionary.class]) {
+       NSMutableDictionary *fixed=[input mutableCopy];
+       fixed[@"dsid"]=@"1234567";fixed[@"token"]=@"ipa-lab-fixed-not-a-real-token";fixed[@"apple_id"]=@"ipa-lab@example.invalid";
+       fixed[@"backend"]=@"commerce";fixed[@"client_context"]=@"login_agent";
+       fixed[@"cookies"]=@[@{@"name":@"fixture",@"value":@"fixed",@"domain":@"apple.com",@"path":@"/"}];
+       [fixed removeObjectForKey:@"storefront"];
+       r[@"backend"]=@"commerce";r[@"state_before"]=State();r[@"commerce_transport_error_received"]=@NO;
+       LabCommerceRun *context=nil;NSURLRequest *request=PreparedCommerceSession(fixed,r,&context);
+       r[@"status"]=request?@"commerce_request_prepared":@"request_preparation_failed";
+     }
    } else if(argc==2) {
      NSData *data=[[NSFileHandle fileHandleWithStandardInput] readDataOfLength:65537];
      id input=data.length<=65536?[NSJSONSerialization JSONObjectWithData:data options:0 error:NULL]:nil;

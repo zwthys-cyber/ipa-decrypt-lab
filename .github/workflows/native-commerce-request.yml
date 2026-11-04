@@ -26,14 +26,20 @@ jobs:
           path: identity-source/ApplePackage
           persist-credentials: false
       - name: Check bounded request and privacy contracts
-        run: python3 -m unittest discover -s tests -p 'test_native_commerce*.py' -v
+        run: |
+          python3 -m unittest discover -s tests -p 'test_native_commerce*.py' -v
+          python3 -m unittest discover -s tests -p 'test_native_keybag.py' -v
+          python3 -m unittest discover -s tests -p 'test_machine_enrollment.py' -v
       - name: Build the synthetic request constructor
         run: |
           swiftc identity-source/ApplePackage/Sources/ApplePackage/Configuration/DeviceIdentifier.swift tools/NativeDeviceIdentity.swift -o native-device-identity
           clang -g -fobjc-arc -framework Foundation tools/NativeCommerceRequest.m -o native-commerce-request
           ./native-commerce-request --binding-contract
+          clang -g -fobjc-arc -framework Foundation tools/NativeMachineEnrollment.m -o native-machine-enrollment
+          ./native-machine-enrollment --response-contract
       - name: Construct without submitting a server authorization request
         timeout-minutes: 1
         run: |
           ulimit -c 0
           python3 tools/native_commerce_request.py
+          python3 tools/commerce_enrollment_preflight.py

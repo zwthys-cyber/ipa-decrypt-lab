@@ -13,7 +13,7 @@ SCHEMA = "ipa-lab-commerce-request-v1"
 STATUSES = {"interface_unavailable", "framework_unavailable", "synthetic_account_unavailable",
     "body_unverified", "request_unavailable", "request_shape_unverified", "request_constructed",
     "native_exception", "native_timeout", "native_process_failed", "probe_failed",
-    "session_binding_failed", "private_identity_unavailable", "synthetic_session_bound"}
+    "session_binding_failed", "private_identity_unavailable", "synthetic_session_bound", "commerce_account_unavailable"}
 REQUIRED = {"framework_loaded", "synthetic_account_verified", "synthetic_token_verified",
     "body_abi_verified", "body_created", "body_sync_present", "body_token_matches",
     "body_needdiv_valid", "body_parameter_names_valid", "request_abi_verified",
@@ -25,7 +25,7 @@ BINDING = {"native_guid_matches_login", "session_bound", "session_user_agent_bou
     "sync_preserved_after_binding", "token_preserved_after_binding", "needdiv_preserved_after_binding",
     "content_length_matches", "bound_route_valid", "anisette_preserved_after_binding"}
 LOGIN_AGENT = "Configurator/2.17 (Macintosh; OS X 15.2; 24C5089c) AppleWebKit/0620.1.16.11.6"
-FLAGS = REQUIRED | BINDING | {"body_owner_present"} | {"body_machine_name_present", "need_diversitybag", "request_user_agent_configurator",
+FLAGS = REQUIRED | BINDING | {"body_owner_present", "body_owner_matches_account", "account_dsid_verified", "account_token_verified"} | {"body_machine_name_present", "need_diversitybag", "request_user_agent_configurator",
     "request_ds_header_matches", "request_has_anisette", "body_owner_matches_synthetic",
     "body_guid_is_six_bytes"}
 

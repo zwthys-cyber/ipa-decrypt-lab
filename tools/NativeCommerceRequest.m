@@ -5,25 +5,30 @@
 @protocol LabStoreRequestInitializing <NSObject>
 - (instancetype)initWithStoreClient:(id)client URL:(id)URL;
 @end
-static void BuildCommerceRequest(NSDictionary *input,NSMutableDictionary *r) {
+static NSMutableURLRequest *PrepareCommerceRequest(NSDictionary *input,NSMutableDictionary *r,id __autoreleasing *accountOut) {
+ NSString *dsidText=input[@"dsid"],*token=input[@"token"],*appleID=input[@"apple_id"];
+ if(![dsidText isKindOfClass:NSString.class] || [dsidText rangeOfString:@"^[1-9][0-9]{0,17}$" options:NSRegularExpressionSearch].location==NSNotFound
+   || ![token isKindOfClass:NSString.class] || !token.length || token.length>8192 || [token isEqual:@"0"]
+   || [token rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location!=NSNotFound
+   || ![appleID isKindOfClass:NSString.class] || !appleID.length || appleID.length>512)return nil;
+ NSNumber *expected=@(dsidText.longLongValue);
  BOOL loaded=dlopen("/System/Library/PrivateFrameworks/CommerceKit.framework/CommerceKit",RTLD_NOW|RTLD_GLOBAL)!=NULL;
- r[@"framework_loaded"]=B(loaded);if(!loaded){r[@"status"]=@"framework_unavailable";return;}
- id account=SyntheticAccount(YES,r);
- if(!account){r[@"status"]=@"synthetic_account_unavailable";return;}
+ r[@"framework_loaded"]=B(loaded);if(!loaded){r[@"status"]=@"framework_unavailable";return nil;}
+ id account=CommerceAccount(expected,appleID,r);
+ if(!account){r[@"status"]=@"commerce_account_unavailable";return nil;}
  Class clientClass=NSClassFromString(@"CKStoreClient"),contextClass=NSClassFromString(@"CKMachineAuthorizationContext");
  SEL clientFactory=NSSelectorFromString(@"storeClientForIdentifier:");
  SEL contextFactory=NSSelectorFromString(@"machineAuthorizationContextWithStoreClient:");
  SEL setToken=NSSelectorFromString(@"_setToken:"),getToken=NSSelectorFromString(@"_token");
  if(!ABI(clientClass,clientFactory,@"@",@[@"@"]) || !ABI(contextClass,contextFactory,@"@",@[@"@"])
-     || !ABI(account,setToken,@"v",@[@"@"]) || !ABI(account,getToken,@"@",@[]))return;
+     || !ABI(account,setToken,@"v",@[@"@"]) || !ABI(account,getToken,@"@",@[]))return nil;
  id client=((id(*)(id,SEL,id))objc_msgSend)(clientClass,clientFactory,@"com.apple.configurator.ui");
  id context=((id(*)(id,SEL,id))objc_msgSend)(contextClass,contextFactory,client);
- NSString *token=@"ipa-lab-fixed-not-a-real-token";
  ((void(*)(id,SEL,id))objc_msgSend)(account,setToken,token);
- r[@"synthetic_token_verified"]=B([((id(*)(id,SEL))objc_msgSend)(account,getToken) isEqual:token]);
+ r[@"account_token_verified"]=B([((id(*)(id,SEL))objc_msgSend)(account,getToken) isEqual:token]);
  SEL bodySelector=NSSelectorFromString(@"_requestBodyForAccount:bagURLKey:");
  r[@"body_abi_verified"]=B(ABI(context,bodySelector,@"@",@[@"@",@"@"]));
- if(![r[@"body_abi_verified"] boolValue] || ![r[@"synthetic_token_verified"] boolValue])return;
+ if(![r[@"body_abi_verified"] boolValue] || ![r[@"account_token_verified"] boolValue])return nil;
  Checkpoint(r,@"building_body");
  id supplied=((id(*)(id,SEL,id,id))objc_msgSend)(context,bodySelector,account,@"authorizeMachine");
  NSDictionary *body=[supplied isKindOfClass:NSDictionary.class]?supplied:nil;
@@ -39,22 +44,22 @@ static void BuildCommerceRequest(NSDictionary *input,NSMutableDictionary *r) {
  r[@"body_parameter_names_valid"]=B(body && [[NSSet setWithArray:body.allKeys]
    isEqualToSet:[NSSet setWithArray:@[@"machineName",@"kbsync",@"needDiv",@"xToken"]]]);
  if(![r[@"body_sync_present"] boolValue] || ![r[@"body_token_matches"] boolValue] || !divValid
-     || ![r[@"body_parameter_names_valid"] boolValue]){r[@"status"]=@"body_unverified";return;}
+     || ![r[@"body_parameter_names_valid"] boolValue]){r[@"status"]=@"body_unverified";return nil;}
  Class requestClass=NSClassFromString(@"CKStoreRequest");
  SEL initializer=@selector(initWithStoreClient:URL:);
- if(!InstanceABI(requestClass,initializer,@"@",@[@"@",@"@"]))return;
+ if(!InstanceABI(requestClass,initializer,@"@",@[@"@",@"@"]))return nil;
  id request=[(id<LabStoreRequestInitializing>)[requestClass alloc] initWithStoreClient:client
    URL:[NSURL URLWithString:@"https://buy.itunes.apple.com/commerce/machine/authorize"]];
  SEL setBody=NSSelectorFromString(@"setBodyPlist:"),build=NSSelectorFromString(@"_URLRequestWithError:");
  r[@"request_abi_verified"]=B(ABI(request,setBody,@"v",@[@"@"]) && ABI(request,build,@"@",@[@"^@"]));
- if(![r[@"request_abi_verified"] boolValue])return;
+ if(![r[@"request_abi_verified"] boolValue])return nil;
  ((void(*)(id,SEL,id))objc_msgSend)(request,setBody,body);
  Checkpoint(r,@"building_request");
  NSError *error=nil;
  id candidate=((id(*)(id,SEL,NSError *__autoreleasing *))objc_msgSend)(request,build,&error);
  ErrorFields(r,error);ServiceErrorFields(r,error);
  NSURLRequest *urlRequest=[candidate isKindOfClass:NSURLRequest.class]?candidate:nil;
- r[@"request_created"]=B(urlRequest!=nil);if(!urlRequest || error){r[@"status"]=@"request_unavailable";return;}
+ r[@"request_created"]=B(urlRequest!=nil);if(!urlRequest || error){r[@"status"]=@"request_unavailable";return nil;}
  NSURL *url=urlRequest.URL;
  r[@"request_https"]=B([url.scheme isEqual:@"https"]);
  r[@"request_host_allowed"]=B([url.host isEqual:@"buy.itunes.apple.com"]);
@@ -62,7 +67,7 @@ static void BuildCommerceRequest(NSDictionary *input,NSMutableDictionary *r) {
  r[@"request_is_post"]=B([urlRequest.HTTPMethod isEqual:@"POST"]);
  NSString *agent=[urlRequest valueForHTTPHeaderField:@"User-Agent"];
  r[@"request_user_agent_configurator"]=B([agent hasPrefix:@"Configurator/"]);
- r[@"request_ds_header_matches"]=B([[urlRequest valueForHTTPHeaderField:@"X-Dsid"] isEqual:@"1234567"]);
+ r[@"request_ds_header_matches"]=B([[urlRequest valueForHTTPHeaderField:@"X-Dsid"] isEqual:expected.stringValue]);
  r[@"request_has_anisette"]=B([urlRequest valueForHTTPHeaderField:@"X-Apple-I-MD"].length>0
    && [urlRequest valueForHTTPHeaderField:@"X-Apple-I-MD-M"].length>0);
  NSData *wire=urlRequest.HTTPBody;
@@ -74,23 +79,23 @@ static void BuildCommerceRequest(NSDictionary *input,NSMutableDictionary *r) {
  r[@"body_token_preserved"]=B([wireBody[@"xToken"] isEqual:token]);
  r[@"body_needdiv_preserved"]=B([wireBody[@"needDiv"] isEqual:needDiv]);
  r[@"body_owner_present"]=B(wireBody[@"ownerDsid"]!=nil);
- r[@"body_owner_matches_synthetic"]=B([wireBody[@"ownerDsid"] isEqual:@1234567] || [wireBody[@"ownerDsid"] isEqual:@"1234567"]);
+ r[@"body_owner_matches_account"]=B([wireBody[@"ownerDsid"] isEqual:expected] || [wireBody[@"ownerDsid"] isEqual:expected.stringValue]);
  id guid=wireBody[@"guid"];
  r[@"body_guid_is_six_bytes"]=B([guid isKindOfClass:NSString.class]
    && [guid rangeOfString:@"^[A-Fa-f0-9]{12}$" options:NSRegularExpressionSearch].location!=NSNotFound);
  BOOL good=YES;for(NSString *key in @[@"request_https",@"request_host_allowed",@"request_path_allowed",
      @"request_is_post",@"request_body_is_plist",@"body_sync_preserved",@"body_token_preserved",@"body_needdiv_preserved"])
    good=good && [r[key] boolValue];
- if(!good){r[@"status"]=@"request_shape_unverified";return;}
+ if(!good){r[@"status"]=@"request_shape_unverified";return nil;}
  r[@"native_guid_matches_login"]=B([guid isKindOfClass:NSString.class] && [guid isEqual:input[@"guid"]]);
- NSMutableURLRequest *bound=LabBindCommerceSession(urlRequest,@1234567,token,input[@"guid"],input[@"user_agent"]);
+ NSMutableURLRequest *bound=LabBindCommerceSession(urlRequest,expected,token,input[@"guid"],input[@"user_agent"]);
  r[@"session_bound"]=B(bound!=nil);
- if(!bound){r[@"status"]=@"session_binding_failed";return;}
+ if(!bound){r[@"status"]=@"session_binding_failed";return nil;}
  NSDictionary *boundBody=[NSPropertyListSerialization propertyListWithData:bound.HTTPBody options:NSPropertyListImmutable format:NULL error:NULL];
  r[@"session_user_agent_bound"]=B([[bound valueForHTTPHeaderField:@"User-Agent"] isEqual:input[@"user_agent"]]);
- r[@"session_owner_bound"]=B([boundBody[@"ownerDsid"] isEqual:@1234567]);
- r[@"session_dsid_headers_bound"]=B([[bound valueForHTTPHeaderField:@"X-Dsid"] isEqual:@"1234567"]
-   && [[bound valueForHTTPHeaderField:@"iCloud-DSID"] isEqual:@"1234567"]);
+ r[@"session_owner_bound"]=B([boundBody[@"ownerDsid"] isEqual:expected]);
+ r[@"session_dsid_headers_bound"]=B([[bound valueForHTTPHeaderField:@"X-Dsid"] isEqual:expected.stringValue]
+   && [[bound valueForHTTPHeaderField:@"iCloud-DSID"] isEqual:expected.stringValue]);
  r[@"session_token_header_bound"]=B([[bound valueForHTTPHeaderField:@"X-Token"] isEqual:token]);
  r[@"native_guid_preserved"]=B([boundBody[@"guid"] isEqual:guid]);
  r[@"sync_preserved_after_binding"]=B([boundBody[@"kbsync"] isEqual:sync]);
@@ -104,8 +109,11 @@ static void BuildCommerceRequest(NSDictionary *input,NSMutableDictionary *r) {
    headersPreserved=headersPreserved && ((!before && !after) || [before isEqual:after]);
  }
  r[@"anisette_preserved_after_binding"]=B(headersPreserved);
- r[@"status"]=@"synthetic_session_bound";
+ r[@"status"]=@"commerce_request_prepared";
+ if(accountOut)*accountOut=account;
+ return bound;
 }
+#ifndef LAB_COMMERCE_REQUEST_LIBRARY
 int main(int argc,const char **argv) { @autoreleasepool {
  if(!getenv("GITHUB_ACTIONS") || strcmp(getenv("GITHUB_ACTIONS"),"true") || argc!=2)return 2;
  signal(SIGALRM,Deadline);alarm(25);
@@ -121,9 +129,20 @@ int main(int argc,const char **argv) { @autoreleasepool {
  BOOL valid=[input isKindOfClass:NSDictionary.class] && [input[@"guid"] isKindOfClass:NSString.class]
    && [input[@"guid"] rangeOfString:@"^[A-F0-9]{12}$" options:NSRegularExpressionSearch].location!=NSNotFound
    && [input[@"user_agent"] isKindOfClass:NSString.class];
- @try {if(valid)BuildCommerceRequest(input,r);else r[@"status"]=@"private_identity_unavailable";}
+ @try {
+   if(valid) {
+     NSMutableDictionary *fixed=[input mutableCopy];
+     fixed[@"dsid"]=@"1234567";fixed[@"token"]=@"ipa-lab-fixed-not-a-real-token";fixed[@"apple_id"]=@"ipa-lab@example.invalid";
+     NSMutableURLRequest *request=PrepareCommerceRequest(fixed,r,NULL);
+     r[@"synthetic_account_verified"]=r[@"account_dsid_verified"]?:@NO;
+     r[@"synthetic_token_verified"]=r[@"account_token_verified"]?:@NO;
+     if(request)r[@"status"]=@"synthetic_session_bound";
+   } else r[@"status"]=@"private_identity_unavailable";
+ }
  @catch(NSException *exception){r[@"status"]=@"native_exception";}
  r[@"state_after"]=State();
  NSData *out=[NSJSONSerialization dataWithJSONObject:r options:0 error:NULL];
  return out && [out writeToFile:@(argv[1]) options:NSDataWritingAtomic error:NULL]?0:3;
 }}
+
+#endif // LAB_COMMERCE_REQUEST_LIBRARY
