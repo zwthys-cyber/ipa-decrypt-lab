@@ -692,3 +692,18 @@ Earlier research returned keybag data in five separate trials. Those disposable-
 Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41778381405 at a521dd5c418abdf12ec7a8d40651f0a88b97bef8 passed on both architectures with 55 Python tests each, the native binding contract and the response/client-context contracts. Both public probes again reported only synthetic binding and no-submit preparation.
 
 The CommerceKit backend always reports import_verified=false and cannot reuse the direct AMS backend's keybag_imported_model_unverified success status. Even a returned import call, follow-up sync response, changed file flag or success wording in a log is insufficient to establish a recovered enrollment model or verified decryption.
+
+## Account-management entry points without a personal computer (2026-11-04)
+
+The owner has no available computer. The existing project constraint remains GitHub-hosted execution only; this research does not require the owner's iPhone or a separate Mac as project infrastructure.
+
+Read-only static inspection https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41779680901 at 43eae55b06455719058cc08f8df99ba2eb75e13f found all six selected methods on ARM and Intel. The workflow loaded system frameworks into its own account-free process and disassembled the allowlisted methods. It did not invoke those methods or use account secrets.
+
+- CKAccountStore.viewAccount formats a store URL scheme with action=modifyAccount and calls NSWorkspace.openURL:. It is a UI entry point, not a count-returning API.
+- CKMachineAuthorizationContext.deauthorizeMachineWithCompletionHandler: constructs an authentication dialog and calls authenticateWithDialog:completionHandler:. This inspection does not establish an API for deauthorizing every computer and did not execute any deauthorization.
+- AMSAccountDeviceInfoTask._requestWithURL: creates a POST request with an sn query item. The observed update method stores isBundleOwner on the local account. This evidence is insufficient to treat that task as a computer-authorization inventory or to invoke it merely because its name contains DeviceInfo.
+- No search result or inspected interface established a working direct deauthorize-all capability. Failure to find one is not proof that no such internal interface exists.
+
+Apple's published self-service steps currently use Music/Apple TV on Mac or Windows: https://support.apple.com/zh-cn/118292. The documentation does not establish an equivalent iPhone self-service control. Mobile users can contact Apple Support through https://support.apple.com/zh-cn/contact to ask an adviser to verify the authorization count and available options; assistance or a reset is not guaranteed.
+
+The GitHub automation for account-wide removal remains unimplemented and unverified. No authorization count was retrieved, no device was removed, no all-device reset was performed, and no new enrollment request was sent. Any future account-wide removal must have explicit scope approval because it affects existing computers and the published all-device operation has an annual limit.

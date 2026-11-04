@@ -46,6 +46,8 @@
 
 [未发送请求的构造检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41776353497)在双架构各通过 17 项测试：系统服务构造了目标地址正确的 HTTPS POST，保留固定同步数据、测试令牌和 needDiv，并加入六字节格式 GUID。但目标账号的 ownerDsid、X-Dsid 和 Configurator User-Agent 检查尚未通过；ARM 存在两项预期 Anisette 头，Intel 不同时具备。这些字段的存在不证明认证有效。这项较早的构造检查尚未绑定真实会话；后续绑定和真实服务器结果以上方最新记录为准。
 
+用户目前没有可用电脑。[无账号账户管理代码检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41779680901)在 ARM、Intel 均完成：CKAccountStore.viewAccount 只是通过 URL scheme 打开账户界面；AMS 的设备信息任务使用序列号请求并更新本地 isBundleOwner，未提供已确认的电脑授权数量读取能力。现有代码尚不能自动读取数量或“全部解除授权”，本轮没有登录账号或调用撤销方法。手机端可通过 [Apple 支持](https://support.apple.com/zh-cn/contact)请求人工核对与协助；不保证支持人员能够重置限制。
+
 ## 当前阻塞：新授权被拒绝，需核对电脑授权名额
 
 现有下载器创建临时账号会话并生成下载用 kbsync；这条代码路径不创建离线引擎需要的系统 FairPlay enrollment 状态。
