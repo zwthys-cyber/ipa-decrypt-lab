@@ -1,4 +1,7 @@
 import importlib.util
+import io
+import tracemalloc
+from unittest.mock import patch
 from pathlib import Path
 import plistlib
 import struct
@@ -130,6 +133,69 @@ class ArchiveTests(unittest.TestCase):
                 audit.audit(self.path)
         finally:
             audit.READ_LIMIT=original
+
+    def test_large_member_has_bounded_python_memory(self):
+        # A real member larger than the previous 512 MiB limit, constructed
+        # incrementally; no large fixture or account material is committed.
+        self.make()
+        size=513*1024*1024
+        with zipfile.ZipFile(self.path,"a",compression=zipfile.ZIP_DEFLATED,compresslevel=1) as z:
+            with z.open("Payload/Demo.app/Demo","w",force_zip64=True) as writer:
+                header=image()
+                writer.write(header)
+                remaining=size-len(header)
+                block=b"\\0"*(1024*1024)
+                while remaining:
+                    amount=min(len(block),remaining)
+                    writer.write(block[:amount])
+                    remaining-=amount
+        tracemalloc.start()
+        try:
+            result=audit.audit(self.path)
+            peak=tracemalloc.get_traced_memory()[1]
+        finally:
+            tracemalloc.stop()
+        self.assertEqual(result["encrypted_slice_count"],1)
+        self.assertLess(peak,16*1024*1024)
+
+    def test_stream_read_requests_bounded_and_fat_equivalent(self):
+        class Bounded(io.BytesIO):
+            def read(self,size=-1):
+                if not 0 <= size <= audit.STREAM_CHUNK:
+                    raise AssertionError("unbounded read")
+                return super().read(size)
+        for data in (image(),fat()):
+            stream=Bounded(data)
+            magic=stream.read(4)
+            self.assertEqual(audit.streamed_macho(stream,magic,len(data)),audit.macho(data))
+
+    def test_stream_truncation_and_extra_bytes_rejected(self):
+        data=image()
+        for payload in (data[:-1],data+b"x"):
+            stream=io.BytesIO(payload)
+            with self.assertRaisesRegex(audit.AuditError,"member length mismatch"):
+                audit.streamed_macho(stream,stream.read(4),len(data))
+
+    def test_scratch_is_closed_on_parse_error(self):
+        scratch=tempfile.TemporaryFile()
+        data=bytearray(image())
+        struct.pack_into("<I",data,20,len(data))
+        stream=io.BytesIO(data)
+        with patch.object(audit.tempfile,"TemporaryFile",return_value=scratch):
+            with self.assertRaises(audit.AuditError):
+                audit.streamed_macho(stream,stream.read(4),len(data))
+        self.assertTrue(scratch.closed)
+
+    def test_large_member_crc_still_checked(self):
+        self.make(image())
+        with zipfile.ZipFile(self.path) as z:
+            entry=z.getinfo("Payload/Demo.app/Demo")
+            offset=entry.header_offset+30+len(entry.filename.encode())+len(entry.extra)
+        with self.path.open("r+b") as f:
+            f.seek(offset+8000)
+            f.write(b"x")
+        with self.assertRaises(zipfile.BadZipFile):
+            audit.audit(self.path)
 
     def test_invalid_plist_rejected(self):
         with zipfile.ZipFile(self.path, "w") as z:

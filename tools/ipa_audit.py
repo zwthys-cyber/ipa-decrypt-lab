@@ -1,6 +1,8 @@
-"""Read-only IPA structural audit. Does not decrypt, extract, or validate plaintext."""
+"""Read-only IPA structural audit; bounded private scratch for large Mach-O members."""
 import argparse
 import json
+import mmap
+import tempfile
 from pathlib import PurePosixPath
 import plistlib
 import stat
@@ -8,7 +10,8 @@ import struct
 import sys
 import zipfile
 
-MEMBER_LIMIT = 512 * 1024 * 1024
+MEMBER_LIMIT = 1024 * 1024 * 1024
+STREAM_CHUNK = 1024 * 1024
 READ_LIMIT = 2 * 1024 * 1024 * 1024
 ENTRY_LIMIT = 32768
 MAGICS = {
@@ -79,11 +82,32 @@ def macho(data):
                 "FAT slice outside file or overlaps table")
         require(all(offset + size <= start or offset >= stop for start, stop in ranges), "overlapping FAT slices")
         ranges.append((offset, offset + size))
-        parsed = thin(data[offset:offset + size])
+        # A view avoids copying an entire FAT slice from the mapped member.
+        with memoryview(data)[offset:offset + size] as view:
+            parsed = thin(view)
         require(parsed["cpu_type"] == cpu and parsed["cpu_subtype"] == subtype, "FAT architecture mismatch")
         parsed["fat_offset"] = offset
         slices.append(parsed)
     return slices
+
+def streamed_macho(stream, magic, size):
+    require(4 <= size <= MEMBER_LIMIT, "Mach-O member size limit exceeded")
+    # TemporaryFile is private and removed on every exit, including parser errors.
+    # Read the full ZIP member to retain its CRC/length checks; only headers are
+    # touched through the mapping, so Python memory does not scale with size.
+    with tempfile.TemporaryFile(prefix="ipa-audit-") as scratch:
+        scratch.write(magic)
+        remaining = size - len(magic)
+        while remaining:
+            block = stream.read(min(STREAM_CHUNK, remaining))
+            require(bool(block) and len(block) <= remaining, "member length mismatch")
+            scratch.write(block)
+            remaining -= len(block)
+        require(stream.read(1) == b"", "member length mismatch")
+        scratch.flush()
+        with mmap.mmap(scratch.fileno(), 0, access=mmap.ACCESS_READ) as mapped:
+            with memoryview(mapped) as data:
+                return macho(data)
 
 def audit(path):
     read_bytes = 0
@@ -122,11 +146,10 @@ def audit(path):
                 if magic not in MAGICS and magic not in FAT_MAGICS:
                     continue
                 require(entry.file_size <= MEMBER_LIMIT, "Mach-O member size limit exceeded")
-                require(read_bytes + entry.file_size <= READ_LIMIT, "audit read budget exceeded")
-                data = magic + stream.read(MEMBER_LIMIT + 1)
-                read_bytes += len(data) - len(magic)
-            require(len(data) == entry.file_size and len(data) <= MEMBER_LIMIT, "member length mismatch")
-            binaries.append({"path": entry.filename, "slices": macho(data)})
+                require(read_bytes + entry.file_size - len(magic) <= READ_LIMIT, "audit read budget exceeded")
+                slices = streamed_macho(stream, magic, entry.file_size)
+                read_bytes += entry.file_size - len(magic)
+            binaries.append({"path": entry.filename, "slices": slices})
         require(any(b["path"] == main_path for b in binaries), "root executable is not a supported Mach-O")
         encrypted = sum(1 for b in binaries for s in b["slices"]
                         if s["encryption"] is not None and s["encryption"]["cryptid"] != 0)
