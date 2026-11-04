@@ -13,6 +13,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 from telegram_api import NoRedirect, APIError
+from app_preflight import check_app, MESSAGES, STEP_NAMES
 from ipa_audit import audit
 from delivery_scheduler import matches, retryable, alternate, MAX_RUNS, PRIMARY_RUNNER
 
@@ -108,6 +109,9 @@ class GitHub:
                 return run
         return runs[0] if runs else None
 
+    def preflight_app(self, app):
+        return check_app(app)
+
     def dispatch(self, app, rid):
         request_id(rid)
         require(re.fullmatch(r"[1-9][0-9]{4,19}", app or ""), "invalid_app_id")
@@ -197,6 +201,7 @@ class GitHub:
             "IPA exceeds 2000 MB capacity": "IPA 超过当前容量上限：2000 MB（2,000,000,000 字节），或解压后的程序规模超出检查预算。",
             "Insufficient private workspace": "处理所需磁盘空间不足，任务已停止，请稍后重试。",
         }
+        messages.update({name:MESSAGES[code] for code,name in STEP_NAMES.items() if name not in messages})
         for job in self.jobs(run):
             for step in job.get("steps",[]):
                 if step.get("conclusion") == "failure" and step.get("name") in messages:

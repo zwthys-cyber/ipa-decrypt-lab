@@ -7,6 +7,7 @@ import time
 import urllib.parse
 from telegram_api import APIError, private_message
 from telegram_queue import QueueError
+from app_preflight import PreflightError, MESSAGES
 from task_progress import ProgressCard, LABELS
 from delivery_scheduler import app_from_run, queued_too_long, retryable, MAX_RUNS
 
@@ -155,6 +156,12 @@ class Controller:
         rid = opaque_id(self.token,self.owner,update_number,app)
         if self.journal is not None and rid in self.journal.records:
             self.say("这个请求已记录，请用 /status 或 /get 查询。")
+            return
+        self.say("正在检查美区上架情况、价格和容量…")
+        try:
+            self.github.preflight_app(app)
+        except PreflightError as exc:
+            self.say(MESSAGES[exc.status]+"\n未创建任务，不占用提交额度。")
             return
         self.record(rid,"pending",app)
         # Record before dispatch: an ambiguous network outcome must not cause a duplicate POST.

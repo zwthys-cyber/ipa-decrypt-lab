@@ -39,6 +39,31 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+      - name: Check App Store eligibility before any native build
+        id: eligibility
+        if: inputs.mode == 'export'
+        timeout-minutes: 1
+        env:
+          DELIVERY_APP_ID: ${{ inputs.app_id }}
+        run: python3 tools/app_preflight.py
+      - name: App unavailable in US storefront
+        if: failure() && steps.eligibility.outputs.eligibility == 'app_not_found_in_us'
+        run: exit 1
+      - name: Paid app unsupported
+        if: failure() && steps.eligibility.outputs.eligibility == 'paid_app_not_supported'
+        run: exit 1
+      - name: IPA exceeds 2000 MB capacity
+        if: failure() && steps.eligibility.outputs.eligibility == 'source_too_large'
+        run: exit 1
+      - name: App Store lookup unavailable
+        if: failure() && steps.eligibility.outputs.eligibility == 'metadata_network_failed'
+        run: exit 1
+      - name: App Store metadata invalid
+        if: failure() && steps.eligibility.outputs.eligibility == 'metadata_invalid_response'
+        run: exit 1
+      - name: Invalid App Store ID
+        if: failure() && steps.eligibility.outputs.eligibility == 'invalid_app_id'
+        run: exit 1
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: DrWhax/unfairplay
