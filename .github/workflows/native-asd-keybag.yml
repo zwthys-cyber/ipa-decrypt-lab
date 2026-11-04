@@ -1,0 +1,30 @@
+name: Account-free App Store FairPlay service probe
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-asd-keybag
+  cancel-in-progress: false
+jobs:
+  probe:
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Check local service report privacy and evidence
+        run: python3 -m unittest discover -s tests -p 'test_native_asd_keybag.py' -v
+      - name: Build account-free native service client
+        run: clang -fobjc-arc -framework Foundation tools/NativeASDKeybag.m -o native-asd-keybag
+      - name: Generate a local request for synthetic account zero
+        timeout-minutes: 2
+        run: |
+          ulimit -c 0
+          python3 tools/native_asd_keybag.py
