@@ -12,7 +12,7 @@ from public_store_routes import AGENT, BAG_URL, NoRedirect, decode
 MAX_FILE = 3 * 1024 * 1024
 MAX_TOTAL = 12 * 1024 * 1024
 MAX_ASSETS = 12
-INTEREST = re.compile(r"DeauthAllMachines|deauthAllMachines|deauthorize|deauthorise|account/settings|account-settings|AccountSettings", re.I)
+INTEREST = re.compile(r"DeauthAllMachines|deauthAllMachines|deauthorize|deauthorise|AuthorizationList", re.I)
 
 def fetch(url):
     request = urllib.request.Request(url, headers={"User-Agent": AGENT, "Accept-Encoding": "identity"})
@@ -74,7 +74,8 @@ def inspect_text(raw):
             tail = text[marker.start():marker.start()+18000]
             following = re.search(r"},[0-9]{2,6}:(?:\(|function)", tail[20:])
             modules[str(module_id)] = tail[:20+following.start()+1] if following else tail
-    runtime = text[:30000] if re.search(r"\.u=[a-zA-Z]=>", text) and len(text) < 30000 else None
+    runtime_match = re.search(r"\.u\s*=\s*", text)
+    runtime = text[runtime_match.start():runtime_match.start()+30000] if runtime_match else None
     return dict(known_api_urls=sorted(urls)[:40], static_code_contexts=contexts, request_modules=modules, runtime_loader=runtime), refs
 
 def main():
