@@ -12,7 +12,7 @@ on:
         description: GitHub-hosted macOS pool
         type: choice
         default: macos-15-intel
-        options: [macos-15-intel, macos-15]
+        options: [macos-26-intel, macos-26, macos-15-intel, macos-15]
       app_id:
         description: Free US App Store numeric ID
         type: string
@@ -25,14 +25,15 @@ permissions:
   contents: read
   checks: write
 concurrency:
-  group: private-ipa-delivery
+  group: ${{ inputs.mode == 'preflight' && format('delivery-preflight-{0}', inputs.runner) || 'private-ipa-delivery' }}
   cancel-in-progress: false
 jobs:
   native:
     if: github.ref == 'refs/heads/main'
-    runs-on: ${{ inputs.runner == 'macos-15' && 'macos-15' || 'macos-15-intel' }}
+    runs-on: ${{ contains(fromJSON('["macos-26-intel","macos-26","macos-15-intel","macos-15"]'), inputs.runner) && inputs.runner || 'macos-15-intel' }}
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+      LAB_BUILD_JOBS: ${{ endsWith(inputs.runner, '-intel') && '4' || '2' }}
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -86,15 +87,15 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: native-source/ApplePackage/.build
-          key: swift-macos15-${{ runner.arch }}-xcode26.2-391bfe6-${{ hashFiles('tools/patch_swift_diagnostics.py', 'tools/patch_ent_download.py', 'tools/LabEntDownload.swift', 'tests/LabEntDownloadTests.swift') }}
+          key: swift-macos${{ startsWith(inputs.runner, 'macos-26') && '26' || '15' }}-${{ runner.arch }}-xcode26.2-391bfe6-${{ hashFiles('tools/patch_swift_diagnostics.py', 'tools/patch_ent_download.py', 'tools/LabEntDownload.swift', 'tests/LabEntDownloadTests.swift') }}
           restore-keys: |
-            swift-macos15-${{ runner.arch }}-xcode26.2-391bfe6-
+            swift-macos${{ startsWith(inputs.runner, 'macos-26') && '26' || '15' }}-${{ runner.arch }}-xcode26.2-391bfe6-
       - name: Test independent signing request construction
         working-directory: native-source/ApplePackage
-        run: swift test -j 2 --filter 'SAPAuthenticationRequestTests|LabEntDownloadTests'
+        run: swift test -j "$LAB_BUILD_JOBS" --filter 'SAPAuthenticationRequestTests|LabEntDownloadTests'
       - name: Build independent native client
         working-directory: native-source/ApplePackage
-        run: swift build -j 2 --product ApplePackageTool
+        run: swift build -j "$LAB_BUILD_JOBS" --product ApplePackageTool
       - name: Save public-source build cache before credentials are supplied
         if: steps.swift-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
