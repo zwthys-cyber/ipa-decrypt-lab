@@ -16,7 +16,7 @@ int main(void) { @autoreleasepool {
  Method dictionaryMethod=class_getInstanceMethod(NSDictionary.class,NSSelectorFromString(@"ams_secureToken"));
  lab_store_token_impl=storeMethod?(void *)method_getImplementation(storeMethod):NULL;
  lab_dictionary_token_impl=dictionaryMethod?(void *)method_getImplementation(dictionaryMethod):NULL;
- if(!dlopen("/System/Library/PrivateFrameworks/CommerceKit.framework/CommerceKit",RTLD_NOW|RTLD_GLOBAL))return 5;
+ dlopen("/System/Library/PrivateFrameworks/CommerceKit.framework/CommerceKit",RTLD_NOW|RTLD_GLOBAL);
  // StoreFoundation may be a nested CommerceKit framework and load transitively.
  dlopen("/System/Library/PrivateFrameworks/StoreFoundation.framework/StoreFoundation",RTLD_NOW|RTLD_GLOBAL);
  lab_frameworks_loaded();

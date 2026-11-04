@@ -76,15 +76,20 @@ static BOOL InitializationContract(void) {
 static id SyntheticAccount(BOOL nonzero,NSMutableDictionary *r) {
  Class clientClass=NSClassFromString(@"CKStoreClient"),accountClass=NSClassFromString(@"CKStoreAccount");
  r[@"client_class_present"]=B(clientClass!=Nil);r[@"account_class_present"]=B(accountClass!=Nil);
- if(!InstanceABI(clientClass,@selector(initWithClientIdentifier:),@"@",@[@"@"]) ||
-    !InstanceABI(accountClass,@selector(_initWithStoreClient:plist:),@"@",@[@"@",@"@"]))return nil;
- id client=[(id<LabCommerceInitializing>)[clientClass alloc] initWithClientIdentifier:@"com.apple.AppStore"];
- if(!client)return nil;
+ SEL factory=NSSelectorFromString(@"storeClientForIdentifier:");
+ BOOL clientABI=ABI(clientClass,factory,@"@",@[@"@"]);
+ BOOL accountABI=InstanceABI(accountClass,@selector(_initWithStoreClient:plist:),@"@",@[@"@",@"@"]);
+ r[@"client_factory_abi_verified"]=B(clientABI);r[@"account_initializer_abi_verified"]=B(accountABI);
+ if(!clientABI || !accountABI)return nil;
+ id client=((id(*)(id,SEL,id))objc_msgSend)(clientClass,factory,@"com.apple.AppStore");
+ r[@"client_created"]=B(client!=nil);if(!client)return nil;
  NSNumber *expected=nonzero?@1234567:@0;
  id account=[(id<LabCommerceInitializing>)[accountClass alloc] _initWithStoreClient:client
    plist:@{@"dsPersonID":expected,@"appleId":@"ipa-lab@example.invalid"}];
+ r[@"account_created"]=B(account!=nil);
  SEL dsid=NSSelectorFromString(@"dsID");
- if(!ABI(account,dsid,@"@",@[]))return nil;
+ BOOL getter=ABI(account,dsid,@"@",@[]);r[@"account_getter_abi_verified"]=B(getter);
+ if(!getter)return nil;
  id observed=((id(*)(id,SEL))objc_msgSend)(account,dsid);
  BOOL verified=[observed isKindOfClass:NSNumber.class] && [observed isEqual:expected];
  r[@"synthetic_account_verified"]=B(verified);

@@ -1,6 +1,14 @@
 name: Account-free native authorization code inspection
 on:
   workflow_dispatch:
+    inputs:
+      scope:
+        description: Framework implementation subset to inspect without account operations
+        type: choice
+        default: ams
+        options:
+          - ams
+          - commerce
 permissions:
   contents: read
 concurrency:
@@ -23,8 +31,10 @@ jobs:
         run: python3 -m unittest discover -s tests -p 'test_native_authorization_code.py' -v
       - name: Build our account-free framework loader
         run: clang -g -O0 -fobjc-arc -framework Foundation tools/NativeAuthorizationCode.m -o native-authorization-code
-      - name: Inspect parameter and request builders without account operations
+      - name: Inspect selected framework methods without account operations
         timeout-minutes: 2
+        env:
+          LAB_CODE_SCOPE: ${{ inputs.scope }}
         run: |
           ulimit -c 0
-          python3 tools/native_authorization_code.py
+          python3 tools/native_authorization_code.py --scope "$LAB_CODE_SCOPE"

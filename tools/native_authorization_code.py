@@ -1,4 +1,5 @@
 """Read two native method implementations in an account-free disposable process."""
+import argparse
 import json
 import os
 from pathlib import Path
@@ -28,6 +29,10 @@ METHODS = (
     "__46-[AMSKeybag importDiversityBagWithData:error:]_block_invoke",
 )
 COMMERCE_METHODS = (
+    "-[CKStoreClient initWithClientIdentifier:]",
+    "+[CKStoreClient storeClientForIdentifier:]",
+    "-[CKStoreClient initWithClientIdentifier:serverType:]",
+    "-[CKStoreAccount _initWithStoreClient:plist:]",
     "-[CKMachineAuthorizationContext _requestBodyForAccount:bagURLKey:]",
     "-[CKMachineAuthorizationContext _runRequestWithAccount:bagURLKey:authenticationContext:completionHandler:]",
     "+[ServiceProxy _commerceConnection]",
@@ -74,6 +79,10 @@ def extract(output):
     return result
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--scope", choices=("ams", "commerce"), default="ams")
+    args = parser.parse_args()
+    methods = COMMERCE_METHODS if args.scope == "commerce" else tuple(name for name in METHODS if name not in COMMERCE_METHODS)
     if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "darwin":
         raise SystemExit("GitHub-hosted macOS required")
     report = {"schema": "ipa-lab-native-authorization-code-v1",
@@ -83,8 +92,8 @@ def main():
     commands = ["settings set target.disable-aslr false",
                 "breakpoint set --name lab_frameworks_loaded", "run"]
     commands += ["script lldb.debugger.HandleCommand(" + repr('disassemble --name "' + name + '"') + ")"
-                 for name in METHODS[:2] + METHODS[4:]]
-    for variable in ("lab_store_token_impl", "lab_dictionary_token_impl"):
+                 for name in methods if name not in ("-[ACAccountStore ams_secureTokenForAccount:]", "-[NSDictionary ams_secureToken]")]
+    for variable in (("lab_store_token_impl", "lab_dictionary_token_impl") if args.scope == "ams" else ()):
         commands.append("script import json; t=lldb.debugger.GetSelectedTarget(); "
             "v=t.FindFirstGlobalVariable('" + variable + "'); "
             "a=v.GetValueAsUnsigned(); s=t.ResolveLoadAddress(a).GetSymbol(); "
@@ -107,8 +116,10 @@ def main():
             report["status"] = "debugger_timeout"
         else:
             output = out.decode("utf-8", errors="replace")
+            report["inspection_scope"] = args.scope
+            report["output_size_exceeded"] = len(output)>524288
             report["methods"] = extract(output)
-            report["status"] = "code_inspected" if len(report["methods"]) == len(METHODS) else "code_unavailable"
+            report["status"] = "code_inspected" if set(report["methods"]) == set(methods) else "code_unavailable"
             report["debugger_exit_code"] = process.returncode
             # Never print debugger errors, process output, paths, heap/register data or environment.
             report["launch_denied"] = b"not allowed to attach" in err + out

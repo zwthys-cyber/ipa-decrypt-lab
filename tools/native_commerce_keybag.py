@@ -11,7 +11,7 @@ from native_keybag import DOMAINS, STATE_KEYS
 STATUSES = {"framework_unavailable", "interface_unavailable", "synthetic_account_unavailable",
     "service_request_failed", "service_reply_timeout", "synthetic_sync_ready",
     "malformed_service_reply", "native_exception", "native_timeout", "native_process_failed", "probe_failed"}
-BOOLS = {"framework_loaded", "service_class_present", "client_class_present", "account_class_present",
+BOOLS = {"client_factory_abi_verified", "account_initializer_abi_verified", "client_created", "account_created", "account_getter_abi_verified", "framework_loaded", "service_class_present", "client_class_present", "account_class_present",
     "synthetic_account_verified", "abi_verified", "synthetic_request_attempted", "reply_received",
     "transport_error_received", "service_success", "need_diversitybag", "synthetic_sync_present",
     "error_present", "error_mentions_entitlement", "error_mentions_permission", "error_mentions_account",
