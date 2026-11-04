@@ -11,6 +11,8 @@ import tempfile
 METHODS = (
     "-[AMSAuthorizeMachineTask _buildRequestParametersWithError:]",
     "-[AMSAuthorizeMachineTask _buildRequest]",
+    "-[ACAccountStore ams_secureTokenForAccount:]",
+    "-[NSDictionary ams_secureToken]",
 )
 LINE = re.compile(r"^\s*(?:->\s*)?0x[0-9a-fA-F]+\s+<\+([0-9]+)>:\s+(.+)$")
 HEADER = re.compile(r"^([^\s\x60]+)\x60(.+):$")
@@ -24,7 +26,8 @@ def extract(output):
     for line in output.splitlines():
         header = HEADER.fullmatch(line.strip())
         if header:
-            current = header[2] if header[1] == "AppleMediaServices" and header[2] in METHODS else None
+            name = re.sub(r"\([^)]*\)", "", header[2])
+            current = name if header[1] == "AppleMediaServices" and name in METHODS else None
             continue
         match = LINE.fullmatch(line)
         if current and match and len(match[2]) <= 1024:
@@ -44,7 +47,7 @@ def extract(output):
         result[name] = {
             "instruction_count": len(rows),
             "calls": calls[:100],
-            "field_context": [rows[i] for i in sorted(selected)][:180],
+            "field_context": (rows if "ams_secureToken" in name else [rows[i] for i in sorted(selected)])[:180],
         }
     return result
 
@@ -57,7 +60,12 @@ def main():
     binary = str(Path("native-authorization-code").resolve())
     commands = ["settings set target.disable-aslr false",
                 "breakpoint set --name lab_frameworks_loaded", "run"]
-    commands += ['disassemble --name "' + name + '"' for name in METHODS]
+    commands += ['disassemble --name "' + name + '"' for name in METHODS[:2]]
+    for variable in ("lab_store_token_impl", "lab_dictionary_token_impl"):
+        commands.append("script import json; t=lldb.debugger.GetSelectedTarget(); "
+            "v=t.FindFirstGlobalVariable('" + variable + "'); "
+            "a=v.GetValueAsUnsigned(); s=t.ResolveLoadAddress(a).GetSymbol(); "
+            "lldb.debugger.HandleCommand('disassemble --name ' + json.dumps(s.GetName())) if a and s.IsValid() else None")
     commands += ["process kill", "quit"]
     argv = ["xcrun", "lldb", "--batch", binary]
     for command in commands:

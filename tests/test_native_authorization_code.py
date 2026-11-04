@@ -41,3 +41,14 @@ class AuthorizationCodeContracts(unittest.TestCase):
         value = mod.extract(sample)
         self.assertNotIn("SECRET", json.dumps(value))
         self.assertEqual(value[mod.METHODS[1]]["instruction_count"], 1)
+
+    def test_category_names_are_normalized_only_for_allowed_methods(self):
+        sample = "\n".join([
+            "AppleMediaServices\x60-[NSDictionary(AppleMediaServices) ams_secureToken]:",
+            "  0x1000 <+0>: bl 0x2000 ; objectForKey:",
+            "AppleMediaServices\x60-[NSDictionary(UnknownCategory) unrelated]:",
+            "  0x1000 <+0>: SECRET",
+        ])
+        value = mod.extract(sample)
+        self.assertEqual(value["-[NSDictionary ams_secureToken]"]["instruction_count"], 1)
+        self.assertNotIn("SECRET", json.dumps(value))
