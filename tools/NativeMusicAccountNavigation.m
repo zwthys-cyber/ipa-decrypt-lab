@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <math.h>
 
 static id ReadAttribute(AXUIElementRef element, CFStringRef attribute) {
     CFTypeRef value = NULL;
@@ -186,6 +187,43 @@ static BOOL DismissWelcome(AXUIElementRef app, NSMutableDictionary *report) {
     report[@"dismiss_welcome"]=@"no_recognized_welcome_sheet";
     return NO;
 }
+static BOOL ClickNotNowText(AXUIElementRef element,NSMutableDictionary *report) {
+    if (![Role(ReadAttribute(element,kAXRoleAttribute)) isEqual:@"AXStaticText"] ||
+        ![Label(ReadAttribute(element,kAXValueAttribute)) isEqual:@"not_now"]) return NO;
+    BOOL allowed=CGPreflightPostEventAccess();
+    report[@"post_event_access"]=allowed?@YES:@NO;
+    if (!allowed) return NO;
+    id position=ReadAttribute(element,kAXPositionAttribute), size=ReadAttribute(element,kAXSizeAttribute);
+    if (!position || !size || CFGetTypeID((__bridge CFTypeRef)position)!=AXValueGetTypeID() ||
+        CFGetTypeID((__bridge CFTypeRef)size)!=AXValueGetTypeID()) return NO;
+    CGPoint origin={0}; CGSize extent={0};
+    if (!AXValueGetValue((__bridge AXValueRef)position,kAXValueCGPointType,&origin) ||
+        !AXValueGetValue((__bridge AXValueRef)size,kAXValueCGSizeType,&extent) ||
+        !isfinite(origin.x) || !isfinite(origin.y) || !isfinite(extent.width) || !isfinite(extent.height) ||
+        extent.width<=0 || extent.width>500 || extent.height<=0 || extent.height>100) return NO;
+    CGPoint point=CGPointMake(origin.x+extent.width/2,origin.y+extent.height/2);
+    if (!CGRectContainsPoint(CGDisplayBounds(CGMainDisplayID()),point)) return NO;
+    AXUIElementRef system=AXUIElementCreateSystemWide(), hit=NULL;
+    AXError error=AXUIElementCopyElementAtPosition(system,point.x,point.y,&hit);
+    CFRelease(system);
+    pid_t originalPid=0, hitPid=0;
+    BOOL same=error==kAXErrorSuccess && hit &&
+        AXUIElementGetPid(element,&originalPid)==kAXErrorSuccess &&
+        AXUIElementGetPid(hit,&hitPid)==kAXErrorSuccess && originalPid==hitPid &&
+        [Role(ReadAttribute(hit,kAXRoleAttribute)) isEqual:@"AXStaticText"] &&
+        [Label(ReadAttribute(hit,kAXValueAttribute)) isEqual:@"not_now"];
+    if (hit) CFRelease(hit);
+    report[@"not_now_hit_test_verified"]=same?@YES:@NO;
+    if (!same) return NO;
+    CGEventRef down=CGEventCreateMouseEvent(NULL,kCGEventLeftMouseDown,point,kCGMouseButtonLeft);
+    CGEventRef up=CGEventCreateMouseEvent(NULL,kCGEventLeftMouseUp,point,kCGMouseButtonLeft);
+    if (!down || !up) {if(down)CFRelease(down);if(up)CFRelease(up);return NO;}
+    CGEventPost(kCGHIDEventTap,down); CGEventPost(kCGHIDEventTap,up);
+    CFRelease(down); CFRelease(up);
+    report[@"not_now_coordinate_click_posted"]=@YES;
+    report[@"decline_optional_sheet"]=@"click_posted";
+    return YES;
+}
 static BOOL DeclineOptionalSheet(AXUIElementRef app,NSMutableDictionary *report) {
     id windows=ReadAttribute(app,kAXWindowsAttribute);
     if (![windows isKindOfClass:NSArray.class]) return NO;
@@ -216,6 +254,7 @@ static BOOL DeclineOptionalSheet(AXUIElementRef app,NSMutableDictionary *report)
                 element=ReadAttribute(target,kAXParentAttribute);
                 if (element && CFGetTypeID((__bridge CFTypeRef)element)!=AXUIElementGetTypeID()) break;
             }
+            if (ClickNotNowText((__bridge AXUIElementRef)targets[0][@"element"],report)) return YES;
             report[@"decline_optional_sheet"]=@"no_bounded_pressable_target";
             return NO;
         }
