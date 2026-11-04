@@ -29,7 +29,7 @@ static NSString *Label(id raw) {
         @"apple account":@"apple_account", @"apple id":@"apple_account",
         @"email or phone number":@"apple_account", @"email address":@"apple_account",
         @"password":@"password", @"cancel":@"cancel", @"continue":@"continue",
-        @"welcome to music":@"welcome", @"welcome to apple music":@"welcome",
+        @"welcome to music":@"welcome", @"welcome to apple music":@"welcome", @"start listening":@"welcome_start",
         @"music and privacy":@"privacy", @"apple music and privacy":@"privacy",
         @"upgrade account security":@"security_upgrade", @"don't upgrade":@"decline_upgrade",
         @"not now":@"not_now", @"verification code":@"verification",
@@ -61,6 +61,8 @@ static BOOL CanPress(NSString *action, NSString *role, NSString *label, BOOL ena
     if (!enabled) return NO;
     if ([action isEqual:@"open_account_menu"])
         return [role isEqual:@"AXMenuBarItem"] && [label isEqual:@"account"];
+    if ([action isEqual:@"dismiss_welcome"])
+        return [role isEqual:@"AXButton"] && [label isEqual:@"welcome_start"];
     if ([action isEqual:@"open_signin_dialog"])
         return [role isEqual:@"AXMenuItem"] && [label isEqual:@"sign_in"];
     return NO;
@@ -129,33 +131,6 @@ static NSDictionary *WindowSnapshot(AXUIElementRef app) {
     }
     return PublicSnapshot(all);
 }
-// Only fixed first-run sheet button captions, in this credential-free executable.
-static NSArray *WelcomeCaptions(AXUIElementRef app) {
-    id windows = ReadAttribute(app,kAXWindowsAttribute);
-    NSMutableArray *captions = [NSMutableArray array];
-    if (![windows isKindOfClass:NSArray.class]) return captions;
-    for (id window in windows) {
-        if (CFGetTypeID((__bridge CFTypeRef)window)!=AXUIElementGetTypeID()) continue;
-        for (NSDictionary *node in Nodes((__bridge AXUIElementRef)window)) {
-            if (![node[@"role"] isEqual:@"AXSheet"]) continue;
-            NSArray *sheet = Nodes((__bridge AXUIElementRef)node[@"element"]);
-            if (![PublicSnapshot(sheet)[@"labels"][@"welcome"] unsignedIntegerValue]) continue;
-            for (NSDictionary *control in sheet) {
-                if (![control[@"role"] isEqual:@"AXButton"] || captions.count>=4) continue;
-                NSMutableDictionary *caption=[NSMutableDictionary dictionary];
-                AXUIElementRef element=(__bridge AXUIElementRef)control[@"element"];
-                for (NSString *attribute in @[@"AXTitle",@"AXDescription",@"AXValue"]) {
-                    NSString *value=Text(ReadAttribute(element,(__bridge CFStringRef)attribute));
-                    if (value.length>0 && value.length<=64 &&
-                        [value rangeOfString:@"^[A-Za-z][A-Za-z ’'….,!?-]*$" options:NSRegularExpressionSearch].location!=NSNotFound)
-                        caption[attribute]=value;
-                }
-                [captions addObject:caption];
-            }
-        }
-    }
-    return captions;
-}
 static BOOL Press(NSArray *nodes, NSString *action, NSMutableDictionary *report) {
     NSMutableArray *matches = [NSMutableArray array];
     for (NSDictionary *node in nodes)
@@ -170,7 +145,34 @@ static void Pump(NSTimeInterval seconds) {
     while (end.timeIntervalSinceNow>0)
         [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
 }
+static BOOL WelcomeContext(NSDictionary *snapshot) {
+    NSDictionary *labels=snapshot[@"labels"], *roles=snapshot[@"roles"];
+    if ([labels[@"welcome"] unsignedIntegerValue]!=1 || [roles[@"AXTextField"] unsignedIntegerValue]) return NO;
+    for (NSString *label in @[@"security_upgrade",@"verification",@"terms",@"agree",@"subscribe",@"password",
+                             @"apple_account",@"sign_in",@"sign_in_heading"])
+        if ([labels[label] unsignedIntegerValue]) return NO;
+    return YES;
+}
+static BOOL DismissWelcome(AXUIElementRef app, NSMutableDictionary *report) {
+    id windows=ReadAttribute(app,kAXWindowsAttribute);
+    if (![windows isKindOfClass:NSArray.class]) return NO;
+    for (id window in windows) {
+        if (CFGetTypeID((__bridge CFTypeRef)window)!=AXUIElementGetTypeID()) continue;
+        for (NSDictionary *node in Nodes((__bridge AXUIElementRef)window)) {
+            if (![node[@"role"] isEqual:@"AXSheet"]) continue;
+            NSArray *sheet=Nodes((__bridge AXUIElementRef)node[@"element"]);
+            if (!WelcomeContext(PublicSnapshot(sheet))) continue;
+            return Press(sheet,@"dismiss_welcome",report);
+        }
+    }
+    report[@"dismiss_welcome"]=@"no_recognized_welcome_sheet";
+    return NO;
+}
 static BOOL Contract(void) {
+    if (!WelcomeContext(@{@"labels":@{@"welcome":@1},@"roles":@{}}) ||
+        WelcomeContext(@{@"labels":@{@"welcome":@1,@"security_upgrade":@1},@"roles":@{}}) ||
+        WelcomeContext(@{@"labels":@{@"welcome":@1},@"roles":@{@"AXTextField":@1}}) ||
+        WelcomeContext(@{@"labels":@{},@"roles":@{}})) return NO;
     if (!CanPress(@"open_account_menu",@"AXMenuBarItem",Label(@"Account"),YES) ||
         !CanPress(@"open_signin_dialog",@"AXMenuItem",Label(@"Sign In…"),YES)) return NO;
     for (NSString *forbidden in @[@"Deauthorize All",@"Deauthorize This Computer…",@"Authorize This Computer…",
@@ -221,8 +223,14 @@ int main(int argc, const char **argv) { @autoreleasepool {
             report[@"music_launch_succeeded"]=@YES;
             AXUIElementRef target=AXUIElementCreateApplication(app.processIdentifier);
             AXUIElementSetMessagingTimeout(target,1.0);
-            Pump(2);
-            report[@"before_navigation"]=WindowSnapshot(target);
+            NSDate *startupDeadline=[NSDate dateWithTimeIntervalSinceNow:8];
+            do {
+                report[@"before_navigation"]=WindowSnapshot(target);
+                if ([report[@"before_navigation"][@"labels"][@"welcome"] unsignedIntegerValue]) break;
+                Pump(0.5);
+            } while (startupDeadline.timeIntervalSinceNow>0);
+            if (DismissWelcome(target,report)) Pump(3);
+            report[@"after_welcome"]=WindowSnapshot(target);
             id menu=ReadAttribute(target,kAXMenuBarAttribute);
             if (menu && CFGetTypeID((__bridge CFTypeRef)menu)==AXUIElementGetTypeID()) {
                 NSArray *nodes=Nodes((__bridge AXUIElementRef)menu);
@@ -238,7 +246,6 @@ int main(int argc, const char **argv) { @autoreleasepool {
                 } else report[@"status"]=@"account_menu_unavailable";
             }
             report[@"after_navigation"]=WindowSnapshot(target);
-            report[@"first_run_button_captions"]=WelcomeCaptions(target);
             CFRelease(target);
             [app terminate];
         }
