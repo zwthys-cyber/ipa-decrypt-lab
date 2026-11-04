@@ -20,11 +20,11 @@ jobs:
         with:
           persist-credentials: false
       - name: Compile bounded official Music navigation probe
-        run: clang -Wall -Wextra -Werror -fobjc-arc -framework Foundation -framework AppKit -framework ApplicationServices tools/NativeMusicAccountNavigation.m -o account-management-capabilities
+        run: clang -Wall -Wextra -Werror -fobjc-arc -framework Foundation -framework AppKit -framework ApplicationServices tools/NativeMusicAccountNavigation.m -o music-account-navigation
       - name: Verify forbidden actions and private-value reporting contract
         run: ./music-account-navigation --contract
       - name: Open official sign-in dialog without credentials
         timeout-minutes: 1
         run: |
           ulimit -c 0
-          ./account-management-capabilities
+          ./music-account-navigation
