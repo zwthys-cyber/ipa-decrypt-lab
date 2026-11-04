@@ -112,6 +112,19 @@ def clean(value):
         r["status"] = "probe_failed"
     return r
 
+def stop_private_group(process, elevated=False):
+    if type(process.pid) is not int or process.pid <= 1:
+        raise ValueError("invalid private process group")
+    if elevated:
+        subprocess.run(["/usr/bin/sudo", "-n", "--", "/bin/kill", "-KILL", "--", f"-{process.pid}"],
+            env={"PATH": "/usr/bin:/bin"}, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, timeout=5, check=False)
+    else:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
 def run_private(argv, env, *, data=None, timeout=120):
     p = subprocess.Popen(argv, env=env, stdin=subprocess.PIPE if data is not None else subprocess.DEVNULL,
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
@@ -119,8 +132,8 @@ def run_private(argv, env, *, data=None, timeout=120):
         out, err = p.communicate(input=data, timeout=timeout)
         return p.returncode, out, err
     except subprocess.TimeoutExpired:
-        os.killpg(p.pid, signal.SIGKILL)
-        p.communicate()
+        stop_private_group(p, elevated=argv[:2] == ["/usr/bin/sudo", "-n"])
+        p.communicate(timeout=5)
         raise
 
 def native_command(binary, report, env, user="runner", probe=False):

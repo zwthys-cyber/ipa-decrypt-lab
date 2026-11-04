@@ -1,5 +1,7 @@
 import importlib.util
 import json
+import os
+import subprocess
 from pathlib import Path
 import sys
 import unittest
@@ -9,6 +11,36 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "tools"))
 import machine_enrollment as mod
 
 class MachineEnrollmentContracts(unittest.TestCase):
+    def test_root_cleanup_uses_only_the_child_group_and_a_clean_environment(self):
+        from types import SimpleNamespace
+        with patch.object(mod.subprocess, "run") as run:
+            mod.stop_private_group(SimpleNamespace(pid=123456), elevated=True)
+            argv = run.call_args.args[0]
+            self.assertEqual(argv, ["/usr/bin/sudo", "-n", "--", "/bin/kill", "-KILL", "--", "-123456"])
+            self.assertEqual(run.call_args.kwargs["env"], {"PATH": "/usr/bin:/bin"})
+            self.assertEqual(run.call_args.kwargs["timeout"], 5)
+            for invalid in (0, 1, -1, True, "PRIVATE"):
+                with self.assertRaises(ValueError):
+                    mod.stop_private_group(SimpleNamespace(pid=invalid), elevated=True)
+            self.assertEqual(run.call_count, 1)
+
+    @unittest.skipUnless(os.environ.get("GITHUB_ACTIONS") == "true" and sys.platform == "darwin",
+                         "requires account-free GitHub macOS runner")
+    def test_real_root_worker_timeout_closes_its_pipes(self):
+        real_popen = subprocess.Popen
+        started = []
+        def capture(*args, **kwargs):
+            process = real_popen(*args, **kwargs)
+            started.append(process)
+            return process
+        with patch.object(mod.subprocess, "Popen", side_effect=capture):
+            with self.assertRaises(subprocess.TimeoutExpired) as error:
+                mod.run_private(["/usr/bin/sudo", "-n", "--", "/bin/sleep", "30"],
+                                {"PATH": "/usr/bin:/bin"}, timeout=0.25)
+        # A second communicate timeout would be 5 seconds and means a worker survived.
+        self.assertEqual(error.exception.timeout, 0.25)
+        self.assertIsNotNone(started[0].returncode)
+
     def test_native_root_command_forwards_only_nonsecret_context(self):
         env = {"PATH": "/usr/bin:/bin", "HOME": "/synthetic/home", "GITHUB_ACTIONS": "true",
                "LAB_IMPORT_IO": "1", "APPLE_PASSWORD": "PRIVATE", "TOKEN": "PRIVATE"}

@@ -3,6 +3,8 @@
 #define main KeybagPrerequisitesMain
 #include "NativeKeybag.m"
 #undef main
+#include <signal.h>
+static void LabNativeDeadline(int value) { (void)value;_exit(124); }
 
 #ifdef LAB_IMPORT_IO
 #include "NativeImportIO.h"
@@ -520,6 +522,7 @@ static void Authorize(NSDictionary *input,NSMutableDictionary *r) {
 }
 int main(int argc,const char **argv) { @autoreleasepool {
  if((argc!=2 && argc!=3) || !getenv("GITHUB_ACTIONS") || strcmp(getenv("GITHUB_ACTIONS"),"true"))return 2;
+ signal(SIGALRM,LabNativeDeadline);alarm(70);
 #ifdef LAB_IMPORT_IO
  if(!strcmp(argv[1],"--io-contract")) {
    BOOL ok=IOContract();puts(ok?"bounded I/O contract passed":"bounded I/O contract failed");return ok?0:4;

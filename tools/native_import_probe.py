@@ -7,7 +7,7 @@ import signal
 import subprocess
 import sys
 import tempfile
-from machine_enrollment import clean, native_command
+from machine_enrollment import clean, native_command, stop_private_group
 
 def run(user="runner"):
     if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "darwin":
@@ -26,11 +26,9 @@ def run(user="runner"):
         except subprocess.TimeoutExpired:
             return clean({"status": "native_timeout"})
         finally:
-            try:
-                os.killpg(child.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            child.wait()
+            if child.poll() is None:
+                stop_private_group(child, elevated=user == "root")
+            child.wait(timeout=5)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
