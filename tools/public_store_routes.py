@@ -66,6 +66,8 @@ def inspect(obj):
                     if isinstance(v, str):
                         p = urllib.parse.urlsplit(v)
                         shape["scheme"] = p.scheme if re.fullmatch(r"[a-zA-Z][a-zA-Z0-9+.-]{0,30}", p.scheme) else "absent"
+                        shape["host"] = p.hostname if p.hostname and re.fullmatch(r"[a-zA-Z0-9.-]{1,253}", p.hostname) else "unclassified"
+                        shape["path"] = p.path if re.fullmatch(r"[A-Za-z0-9_./%()-]{0,512}", p.path) else "unclassified"
                         shape["relative_path"] = bool(v.startswith("/"))
                         shape["contains_placeholder"] = "{" in v or "$" in v
                         shape["template_url"] = route(v.replace("{$pitspd-}", "").replace("{$pitspd}", ""))
