@@ -162,3 +162,13 @@
 修复后，下载与校验期间保持 pending，仅在即将上传时持久化 sending；交付异常在任务内处理，区分“尚未上传”和“发送结果未知”。产物 GET 传输失败最多尝试两次，不重试 Telegram 文件发送或任务提交。错误诊断仅记录固定阶段、分类和允许名单中的异常类型，不记录异常正文、凭据或签名下载地址。已处于历史 sending 状态的任务仍需管理员确认后使用 /get，不自动重发。
 
 [发布与部署 41927868761](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41927868761)在 Ubuntu 和 Debian 13 各完成 378 项 Python 测试（1 项跳过），部署健康检查通过。线上版本为 `36be288c4315962d91d32ff38b1cc16dc8a29be1`；部署后检查 active/running，NRestarts=0。此记录不代表该历史任务已重新交付。
+
+## 历史版本实时下载已接入（2026-11-04）
+
+代码 `f897310bd0c92860ed2c27cb4001dce1da444398` 新增管理员私聊 `/version AppID或商店链接 版本号`，也可指定 Apple externalVersionID。使用现有账号和 Apple 历史元数据，不依赖第三方解密或历史 IPA 缓存。查询最多核对较新的 120 个历史标识，请求间检查 180 秒预算；明确区分查询/下载失败，不回退最新版。详细边界见 [Telegram 使用说明](TELEGRAM.md)。
+
+[真实运行 41931938986](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41931938986)成功取得 QQ（444934666）9.3.55。下载响应绑定 Apple 版本标识，原始及清理后的 IPA 显示版本均通过精确核对；20 个加密切片、126580 页明文校验通过。IPA 为 324952532 字节，plaintext_verified=true，runtime_verified=false。公开产物仅包含 age 密文和非敏感收据，保留至 2026-11-05 23:20:34 UTC。任务编号 `935501a1a8d66e691dc2470d84f6eade` 可由管理员使用 /get 取回；本轮未确认 Telegram 实际发送。
+
+该运行完成 386 项 Python 测试（1 项跳过）和 10 项所选 Swift 测试。[部署 41932870509](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41932870509)在 Ubuntu 与 Debian 13 各完成 386 项 Python 测试（1 项跳过）、2000 MB age 流式验证、真实 systemd 凭据挂载与服务健康检查，部署成功。VPS 菜单配置包含 version 指令。重启恢复及备用运行器保留版本绑定，VPS 在发送前再次核对收据和 IPA 实际版本。
+
+第一版仍限美区免费应用、管理员私聊、2000 MB 实际 IPA；未开放 Bundle ID 输入、多用户或收费。一个旧版成功不代表所有历史版本都可取得，也不代表已验证安装运行。
