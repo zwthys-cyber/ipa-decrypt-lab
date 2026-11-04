@@ -42,13 +42,26 @@ static NSString *Label(id raw) {
         @"authorizations":@"authorizations", @"authorize this computer":@"authorize",
         @"deauthorize this computer":@"deauthorize", @"deauthorize all":@"deauthorize_all"
     };
-    return labels[s] ?: @"unknown";
+    if(labels[s])return labels[s];
+    if([s containsString:@"verification code"])return @"verification";
+    if([s containsString:@"account"] && ([s containsString:@"is locked"] || [s containsString:@"has been locked"]))return @"account_locked";
+    if([s containsString:@"account"] && ([s containsString:@"is disabled"] || [s containsString:@"has been disabled"]))return @"account_disabled";
+    if([s containsString:@"incorrect"] && [s containsString:@"password"])return @"credentials_rejected";
+    if([s containsString:@"has not yet been used"] || [s containsString:@"review your account"])return @"store_account_review";
+    if([s containsString:@"error connecting"] || [s containsString:@"could not connect"] || [s containsString:@"cannot connect"])return @"connection_error";
+    if([s containsString:@"could not sign in"] || [s containsString:@"couldn't sign in"] ||
+       [s containsString:@"unable to sign in"] || [s containsString:@"error signing in"])return @"signin_error";
+    if([s containsString:@"unknown error"])return @"unknown_error";
+    if([s containsString:@"try again later"])return @"try_later";
+    if([s containsString:@"upgrade"] && [s containsString:@"account"] && [s containsString:@"security"])return @"security_upgrade";
+    if([s containsString:@"two-factor authentication"])return @"two_factor_mention";
+    return @"unknown";
 }
 static NSString *Role(id raw) {
     NSString *role = Text(raw);
     NSArray *known = @[@"AXApplication",@"AXWindow",@"AXSheet",@"AXDialog",@"AXGroup",@"AXButton",
         @"AXTextField",@"AXStaticText",@"AXMenuBar",@"AXMenuBarItem",@"AXMenu",@"AXMenuItem",
-        @"AXCheckBox",@"AXRadioButton",@"AXWebArea",@"AXScrollArea",@"AXLink",@"AXImage"];
+        @"AXCheckBox",@"AXRadioButton",@"AXProgressIndicator",@"AXWebArea",@"AXScrollArea",@"AXLink",@"AXImage"];
     return [known containsObject:role] ? role : @"other";
 }
 static NSString *ErrorCategory(AXError error) {

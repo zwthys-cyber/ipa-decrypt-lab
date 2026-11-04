@@ -88,6 +88,12 @@ static NSNumber *ReadComputerCount(AXUIElementRef app,NSMutableDictionary *repor
 }
 static void Screen(AXUIElementRef app,NSMutableDictionary *report,NSString *stage) {
     NSDictionary *snapshot=WindowSnapshot(app);
+    id windows=ReadAttribute(app,kAXWindowsAttribute);
+    if([windows isKindOfClass:NSArray.class])for(id window in windows){
+        if(CFGetTypeID((__bridge CFTypeRef)window)!=AXUIElementGetTypeID())continue;
+        NSDictionary *candidate=PublicSnapshot(Nodes((__bridge AXUIElementRef)window));
+        if([candidate[@"labels"][@"sign_in_heading"] unsignedIntegerValue]){snapshot=candidate;break;}
+    }
     NSMutableDictionary *screens=report[@"screens"];
     if(!screens){screens=[NSMutableDictionary dictionary];report[@"screens"]=screens;}
     screens[stage]=@{@"roles":snapshot[@"roles"],@"labels":snapshot[@"labels"]};
@@ -98,6 +104,7 @@ static BOOL QueryContract(void) {
         !ExplicitComputerCount(@"You can authorize up to 5 computers.") &&
         !ExplicitComputerCount(@"10 devices are associated with your Apple Account.") &&
         !ExplicitComputerCount(@"Private value 5 computers") &&
+        [Label(@"Unable to sign in for private@example.invalid") isEqual:@"signin_error"] &&
         !CanPress(@"open_account_settings",@"AXMenuItem",@"deauthorize_all",YES);
 }
 static void Query(AXUIElementRef app,NSDictionary *private,NSMutableDictionary *report) {
@@ -117,11 +124,25 @@ static void Query(AXUIElementRef app,NSDictionary *private,NSMutableDictionary *
     if(!Fill(passwordForm,private[@"password"])){report[@"status"]=@"password_fill_failed";return;}
     if(!Submit(passwordForm)){report[@"status"]=@"password_submit_failed";return;}
     report[@"password_submit_attempted"]=@YES;
-    deadline=[NSDate dateWithTimeIntervalSinceNow:25];
+    deadline=[NSDate dateWithTimeIntervalSinceNow:60];
     BOOL signedIn=NO;
-    do {Pump(0.5);signedIn=SignedIn(app);if(signedIn)break;} while(deadline.timeIntervalSinceNow>0);
+    do {
+        Pump(0.5);signedIn=SignedIn(app);if(signedIn)break;
+        Screen(app,report,@"after_password");
+        NSDictionary *labels=report[@"screens"][@"after_password"][@"labels"];
+        BOOL prompt=NO;
+        for(NSString *key in @[@"credentials_rejected",@"account_locked",@"account_disabled",@"store_account_review",
+                              @"connection_error",@"signin_error",@"unknown_error",@"try_later",@"verification",@"security_upgrade"])
+            if([labels[key] unsignedIntegerValue])prompt=YES;
+        if(prompt)break;
+    } while(deadline.timeIntervalSinceNow>0);
     Screen(app,report,@"after_password");
-    if(!signedIn){report[@"status"]=@"signin_unconfirmed";return;}
+    if(!signedIn){
+        report[@"status"]=@"signin_unconfirmed";
+        if([report[@"screens"][@"after_password"][@"roles"][@"AXProgressIndicator"] unsignedIntegerValue])
+            report[@"status"]=@"signin_still_processing";
+        return;
+    }
     report[@"signed_in_menu_observed"]=@YES;
     id menu=ReadAttribute(app,kAXMenuBarAttribute);
     if(!menu || CFGetTypeID((__bridge CFTypeRef)menu)!=AXUIElementGetTypeID()) {report[@"status"]=@"account_menu_unavailable";return;}

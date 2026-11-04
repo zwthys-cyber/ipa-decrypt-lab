@@ -12,7 +12,7 @@ STATUSES = {
     "navigation_failed", "preflight_ready", "preflight_failed", "missing_credentials",
     "email_form_unavailable", "email_fill_failed", "email_submit_failed",
     "password_form_unavailable", "password_fill_failed", "password_submit_failed",
-    "signin_unconfirmed", "account_menu_unavailable", "account_settings_unavailable",
+    "signin_unconfirmed", "signin_still_processing", "account_menu_unavailable", "account_settings_unavailable",
     "count_not_observed", "count_retrieved", "native_timeout", "native_failed",
     "invalid_report", "unexpected_account_mutation",
 }
@@ -36,9 +36,10 @@ LABELS = {
     "sign_in", "sign_in_heading", "sign_out", "apple_account", "password", "cancel",
     "continue", "not_now", "verification", "security_upgrade", "decline_upgrade",
     "terms", "agree", "subscribe", "credentials_rejected", "computer_authorizations",
-    "authorized_devices", "deauthorize_all", "account_settings",
+    "authorized_devices", "deauthorize_all", "account_settings", "account_locked", "account_disabled",
+    "store_account_review", "connection_error", "signin_error", "unknown_error", "try_later", "two_factor_mention",
 }
-ROLES = {"AXWindow", "AXSheet", "AXDialog", "AXTextField", "AXButton", "AXStaticText", "AXWebArea"}
+ROLES = {"AXWindow", "AXSheet", "AXDialog", "AXTextField", "AXButton", "AXStaticText", "AXWebArea", "AXProgressIndicator"}
 STAGES = {"navigation", "preflight", "after_email", "after_password", "account_settings"}
 
 def clean(raw):
