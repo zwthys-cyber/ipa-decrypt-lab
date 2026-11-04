@@ -43,6 +43,7 @@ install -m 0644 "$destination/deploy/ipazake.service" /etc/systemd/system/ipazak
 systemctl daemon-reload
 systemctl enable ipazake.service
 rm -f /var/lib/ipazake/health.json
+systemctl reset-failed ipazake.service || true
 systemctl restart ipazake.service
 rm -f "$config" "$bundle"
 echo prebuilt_service_installed
