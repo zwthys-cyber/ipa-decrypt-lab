@@ -1,42 +1,46 @@
 # IPA Decrypt Lab
 
-面向 Telegram IPA 服务的研发原型。**已验证原始 IPA 下载；尚未验证真实砸壳，也没有可收费的 TG 服务。**
+**已在 GitHub-hosted macOS 上恢复 FairPlay 模型，并验证指定应用的原始 IPA 解密。** Telegram 接入、应用安装运行及收费服务尚未完成。
 
 ## 当前结果
 
-**已在 GitHub-hosted Mac 上生成非空 SIDB 系统授权状态文件；尚未恢复并验证可用模型，也没有已验证的砸壳产物。**
+[完整成功试验 41846142942](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41846142942)在全新 GitHub 运行器上完成：
 
-[增强后的 CommerceKit 试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41839179045)通过 95 项 Python、11 项 Swift 测试及原生检查。真实请求获得 keybag 和 diversitybag，HTTP 200、无业务失败码；服务端导入调用返回，后续同步从需要 diversitybag 变为不需要。管理员只读检查确认 `/private/var/db/fpsd/SC Info/SC Info.sidb` 从不存在变为非空普通文件。普通用户对该路径无读取权限，先前统一为 false 的检查无法区分权限不足和不存在，现已修正。
+1. 下载 App ID **6599842047** 的原始 IPA，并检查许可格式。
+2. 提交一次 CommerceKit 电脑授权，取得 keybag / diversitybag，并生成受保护的 SIDB。
+3. 从系统授权状态和提取的候选应用包恢复模型。
+4. 使用恢复出的模型再次检查完整 IPA：**62 个加密切片、12,524 个页面通过明文校验**。
+5. 将模型及有界的授权检查点分别封装为仓库公钥密文，保存到 `FAIRPLAY_MODEL_B64` 与 `FAIRPLAY_STATE_B64` GitHub Secrets。
 
-授权数量已纳入前后检查：最新完整试验 **2 → 3 台**，当前已确认占用 3 个名额。此前经用户明确同意，[单次全部解除授权](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41837099155)已确认 **5 → 0 台**；之后三次受控试验共占用了三个名额。不会把全部解除授权作为重复试验的清理方式。Apple 的五台上限与一年一次全部解除限制仍适用。[官方说明](https://support.apple.com/en-us/118292)。
+最终状态为 `model_recovered_and_verified`，`model_recovered=true`、`decryption_proven=true`、`plaintext_verified=true`。恢复器自身检查和独立完整 IPA 复核均通过；不是仅修改 `cryptid` 或以编译成功代替解密成功。
 
-| 环节 | 已验证结果 | 仍待完成 |
+成功流程通过 140 项 Python、20 项 Swift 测试及 Go/原生检查。私有检查点另通过 [GitHub Linux 上的 29 项 Python 和加密合约测试](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41845171020)。
+
+[全新运行器复用验证 41846974302](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41846974302)也已通过：读取保存的模型、重新下载原始 IPA，再次校验 **62 个加密切片、12,524 页**。该流程不调用机器授权；同时通过 273 项 Python、9 项 Swift、4 项 C 测试及 Go 检查。
+
+| 环节 | 已验证结果 | 边界 |
 | --- | --- | --- |
-| Swift 下载器登录 | 签名登录成功，真实账户摘要可读 | 原生 Music/AuthKit 登录失败仍是独立问题 |
-| 电脑授权管理 | 实际数量读取成功；用户批准后单次解除成功；新授权前后检查已接入 | 不提高或绕过 Apple 的服务端数量上限 |
-| CommerceKit 机器授权 | GUID、账号、令牌、User-Agent、Cookie 绑定通过；keybag 和 diversitybag 已取得 | 单向导入调用本身没有完成结果 |
-| 系统授权状态 | 管理员确认 SIDB 从缺失变为非空；只读库存检查已区分权限和缺失 | 尚未确认 SIDB 格式、账号记录及 IPA 许可能用于模型恢复 |
-| 原始 IPA | App ID 6599842047 已成功下载，检查到 62 个加密 Mach-O 切片 | 原始包仍是加密包 |
-| 离线引擎 | 固定版本 UnfairPlay 已构建并通过合成测试 | 尚无匹配模型通过完整真实 IPA 校验 |
-| Telegram / 收费服务 | 暂不接入 | 没有可交付的收费砸壳服务 |
+| 原始下载 | Swift 签名登录与真实 IPA 下载成功 | 需要账号对目标应用拥有下载许可 |
+| 电脑授权 | 真实数量读取、经批准单次全部解除、新授权均成功 | 最新实测 **3 → 4 台**；不提高服务端上限 |
+| 授权状态 | 管理员读取到非空 SIDB，并用于成功模型恢复 | CommerceKit 单向导入调用本身仍没有完成回执 |
+| 模型恢复 | GitHub macOS 上真实恢复并保存加密模型 | 未声称已安装或运行候选应用 |
+| IPA 解密校验 | 指定原始 IPA 的 62 个加密切片、12,524 页通过 | 尚未独立验证 Apple CMS 信任或应用安装运行 |
+| 模型复用 | 已在全新运行器使用 Secret 再次完成真实 IPA 校验 | 不推断所有账号、应用、版本都兼容 |
+| Telegram / 收费服务 | 按当前要求暂不接入 | 没有已部署的收费服务 |
 
-[首次完整流程](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41841347693)通过 122 项 Python、20 项 Swift 测试及 Go/原生检查，实际完成一次授权、生成非空 SIDB、下载原始 IPA、提取候选应用包，但返回 `model_recovery_rejected`。没有产生模型、模型 Secret 或已验证砸壳包。旧错误摘要混入了恢复进度中的 SIDB/SINF 关键词，不能据此确定具体失败阶段。
+此前经用户明确批准，[单次全部解除授权](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41837099155)已确认 **5 → 0 台**，之后四次授权试验合计占用四个名额。不会把全部解除授权作为重复清理方式。Apple 的五台上限和一年一次全部解除限制仍适用。[官方说明](https://support.apple.com/en-us/118292)。
 
-后续已改为**下载并检查全部 IPA 许可后，再决定是否授权**；新增 `input-inspection` 模式只检查输入，不调用电脑授权。错误报告仅输出固定错误类别及阶段，不公开上游错误正文。传给恢复器的仍是 IPA 解出的候选应用包，没有声称它已安装或运行；上游格式与认证检查不被放宽。[仅检查输入的运行](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41843509689)已经通过：原始 IPA 清单与许可解析有效，检查到的 1 份许可符合当前格式，未提交新的电脑授权。剩余问题仍在授权状态与恢复算法的实际匹配。
+## 验证范围与私有数据
 
-原始账号、SINF、SIDB、IPA、模型及候选明文不会以明文进入仓库、日志或 artifacts。模型仅在完整 IPA 校验通过后才封装为仓库公钥加密的 `FAIRPLAY_MODEL_B64` Secret 传输数据。另已准备有界的授权状态检查点 `FAIRPLAY_STATE_B64`，用于复用同一次授权排查失败；它可以在模型验证前加密保存，但不代表模型有效。两类密文用途隔离，均不公开明文。目前检查点仍在无账号预检，尚未配置这两个 Secret。
+成功路径使用 GitHub-hosted macOS、CommerceKit 系统服务和从原始 IPA 提取的候选应用包。没有使用个人 iPhone / TrollStore、单独的实体 Mac、原生 App Store UI 登录或第三方解密服务。
 
-[完整研究记录与局限](OFFLINE-BACKEND.md)。较早的 AMS 直接导入错误、原生解密 EPERM、AuthKit/Music 登录失败以及 CommerceKit 3002 记录均作为历史证据保留，不代替上方最新结果。
+模型与授权检查点的明文只在 GitHub 运行器私有临时目录中处理。公开日志仅包含固定结果和 GitHub 仓库公钥密文；只有 GitHub 保存的私钥能解开这些传输数据。两种 Secret 的用途和格式分别校验，模型必须通过完整 IPA 复核后才保存。
 
-## 当前阻塞：SIDB 与原始 IPA 已取得，但模型恢复被拒绝
+`FAIRPLAY_STATE_B64` 仅包含固定 SIDB/SIDS 文件和必要硬件标识，不包含 IPA、Apple 密码或登录会话。它用于复用授权状态研究兼容性，不能单独当作已验证模型。实际检查点捕获和加密已成功；从该 Secret 重建状态的真实重放正在验证中。
 
-现有下载器创建临时账号会话并生成下载用 kbsync；这条代码路径不创建离线引擎需要的系统 FairPlay enrollment 状态。
+本次候选明文在验证后删除，没有公开可下载的砸壳 IPA；`runtime_verified=false`。源码中已有真实解密后端，但生产交付、私有下载存储、计费及 Telegram 接入是后续工作。
 
-接入的 UnfairPlay 从已有的 Mac App Store 注册状态恢复模型。已核对的获取流程需要：在项目用 Mac 上登录原生 App Store，安装并打开一个兼容的 iPhone/iPad 应用，再使用匹配的原始 IPA 恢复模型。模型生成后可用于 Linux 离线解密；这不意味着模型的初次生成已能在无注册状态的 Linux 或 GitHub 运行器上完成。
-
-Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直接作为该模型传入。同一 Apple ID 也不能代替对实际 IPA 与 enrollment 是否匹配的验证。
-
-目前没有经过真实 IPA 校验的匹配模型。原生 UI 登录及独立 AuthKit 路径此前未成功；AMS 直接导入曾失败，但后续 CommerceKit 服务路径已经取得授权数据并生成 SIDB。生成文件仍不等于完整首次注册或模型恢复完成。keybag 返回、原生导入、模型恢复和真实 IPA 完整验证是分别检查的阶段，前一阶段成功不能代替后续证据。[源码依据与验收条件](OFFLINE-BACKEND.md#enrollment-bootstrap-source-review)。
+较早的同运行器试验曾返回 `model_recovery_rejected`。成功版本调整了下载/授权顺序、改进了诊断并加入检查点，也更换了运行器；这些不是单变量对照，尚不能把第一次失败归因于某一个变化。[完整研究记录](OFFLINE-BACKEND.md)。
 
 ## GitHub 验证入口
 
@@ -60,7 +64,7 @@ Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直�
 | Account-free official Music sign-in navigation | 识别欢迎页和可选提示，进入官方登录窗口，报告固定界面标签 | 不使用账号或提交凭据；不点击订阅、授权或安全升级 |
 | Public Apple account frontend inspection | 从 Apple 公共配置跟踪账户摘要前端及只读查询格式 | 无账号，不执行前端脚本，不调用账户变更接口 |
 | Confirmed all-computer deauthorization | 默认无网络预览；另设需明确确认的单次全部解除操作及前后数量检查 | 用户明确同意后真实执行一次，已确认数量从 5 变为 0；影响所有电脑且有一年一次限制 |
-| Private Store computer authorization count | 默认无账号预检；查询模式使用下载器签名登录会话，只读当前电脑授权数量 | 已实际读到 5 台；不会解除授权，账号会话和响应正文不公开 |
+| Private Store computer authorization count | 默认无账号预检；查询模式只读当前电脑授权数量 | 查询机制已验证；最新完整授权试验读到 4 台，原始账号会话和响应正文不公开 |
 | Private official Music account count | 默认无账号预检；查询模式单次完成邮箱、密码提交并尝试读取明确的当前授权数量 | 真实登录目前返回未知错误；未读到数量，不执行任何解除授权，不输出原始界面或认证日志 |
 | Account-free official account-management UI capability | 启动官方音乐应用，检查 URL 处理程序、现有界面访问权限及固定菜单标签 | 无 Secrets、不登录、不点击菜单操作、不申请权限；界面可访问不等于已完成账户管理 |
 | Account-free CommerceKit keybag prerequisite | 双架构固定测试值、普通用户/root 对照；检查客户端初始化与系统服务回复 | 不传入 Apple 账号，不提交服务器授权或导入；不输出同步数据 |
@@ -68,19 +72,19 @@ Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直�
 | Account-free CommerceKit request construction | 构造固定测试身份的请求，检查地址、方法与字段保留 | 无账号；不发送返回的授权请求 |
 | Account-free keybag import rejection probe | 双架构无效 keybag/diversitybag、文件访问、普通用户/root 与超时清理检查 | 不传入账号、不发送授权请求 |
 | Account-free FairPlay state visibility | 只读比较普通用户和管理员视角的固定状态文件及有界目录库存 | 无账号，不读取文件正文，报告缺失、权限不足及扫描限制 |
-| Private same-runner model bootstrap | `preflight` 无账号测试；`input-inspection` 检查许可；`trial` 授权并恢复；`checkpoint-replay` 复用私有状态 | 最新真实恢复被拒绝；输入检查已通过；检查点仍在预检；只有完整校验成功才生成模型密文 |
-| Private native machine enrollment trial | 最多一次授权请求；可选 AMS 直接导入或 CommerceKit 系统服务；后者要求普通用户、登录 User-Agent 和 Cookie | 先运行无账号预检，最后一步使用 Apple Secrets；服务调用返回不代表导入成功 |
+| Private same-runner model bootstrap | `preflight` 无账号测试；`input-inspection` 检查许可；`trial` 授权并恢复；`checkpoint-replay` 复用私有状态 | 真实恢复和完整 IPA 校验已通过，模型及状态 Secret 已保存；真实检查点重放尚待验证 |
+| Private native machine enrollment trial | 最多一次授权请求；可选 AMS 或 CommerceKit 系统服务 | 单独授权试验不验证模型；优先使用已保存模型，避免重复占用名额 |
 
 在 Independent Swift Store trial 中选择：
 
 - `native`：下载原始 IPA 并执行 macOS 原生诊断。工作流成功可以只表示下载和诊断完成，不能据此认定砸壳成功。
-- `offline`：下载后调用离线验证器。必须先配置匹配模型的 `FAIRPLAY_MODEL_B64` Secret；缺少模型时在登录、下载与依赖编译前退出。通过编码检查也不等于模型匹配。
+- `offline`：使用已配置的 `FAIRPLAY_MODEL_B64`，下载后调用离线验证器。若 Secret 缺失，会在登录、下载与依赖编译前退出；实际成功仍必须通过完整 IPA 校验。
 
-真实 IPA、模型、账号信息和候选明文在运行器内部处理，不发布为仓库文件、公开日志或 Actions artifact。当前试验没有可领取的 IPA 下载产物；已准备的模型和授权检查点传输仅为不可由公众解密的 GitHub Secret 密文，不是公开模型或 IPA artifact。
+真实 IPA、模型、账号信息和候选明文在运行器内部处理，不以明文发布为仓库文件、公开日志或 Actions artifact。当前没有可领取的 IPA 下载产物；模型和授权检查点已通过仓库公钥密文传输并保存为 GitHub Secrets。
 
-较早的原生 UI、AuthKit、Anisette、路由、Cookie、会话创建与正文令牌对照保留在 [OFFLINE-BACKEND.md](OFFLINE-BACKEND.md)。这些历史试验尚未获得 keybag；最新进展以上方真实机器授权记录为准。
+较早的原生 UI、AuthKit、Anisette、路由、Cookie、会话创建与正文令牌对照保留在 [OFFLINE-BACKEND.md](OFFLINE-BACKEND.md)。这些早期失败不能代替上方最新成功的模型恢复与完整 IPA 校验记录。
 
-用户提供的 [fairplay-decrypt](https://github.com/EthanArbuckle/fairplay-decrypt) 是可在 Linux / macOS 使用的离线解密器，但其凭据获取工具要求越狱设备及已安装应用；仅编译工具不能生成匹配的 16 字节账号凭据。它没有补齐当前 GitHub-only 首次授权缺口。
+用户提供的 [fairplay-decrypt](https://github.com/EthanArbuckle/fairplay-decrypt) 是可在 Linux / macOS 使用的离线解密器，但其凭据获取工具要求越狱设备及已安装应用；仅编译工具不能生成匹配的 16 字节账号凭据。它未用于本次已验证的 GitHub-only 模型恢复路径。
 
 ## 固定约束
 

@@ -1,5 +1,13 @@
 # Offline decryption backend
 
+## Current verified status (2026-11-04)
+
+**A real model has now been recovered entirely on GitHub-hosted macOS and validated against the complete original IPA.** [Successful bootstrap 41846142942](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41846142942) verified 62 encrypted slices and 12,524 plaintext pages. The model and private native-state checkpoint were saved as GitHub Secrets at 14:22:53 UTC; neither plaintext nor a decrypted IPA artifact was published.
+
+The latest measured computer count is 4 of 5. The user's approved all-computer deauthorization was performed once earlier (5 -> 0); four subsequent controlled enrollments account for the current measurement. The independent cross-runner reuse check [41846974302](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41846974302) also passed with 62 encrypted slices and 12,524 verified pages, using the stored model and a freshly downloaded IPA. It does not invoke machine authorization.
+
+Installation/runtime behavior, independent Apple CMS trust, real checkpoint replay, other accounts/apps, and a production Telegram service remain unverified or out of the current scope. See [the successful recovery record](#first-verified-github-only-model-recovery-2026-11-04) below. Earlier blocker/failed-run sections are historical evidence, not the current outcome.
+
 ## What is wired
 
 The manual native-store workflow now offers:
@@ -14,7 +22,7 @@ A zero exit code or cryptid=0 is not enough. Success requires the expected repor
 
 No account, model, real IPA or decrypted artifact is used in offline-engine.yml. Its build and test success is synthetic evidence only.
 
-## Credential prerequisite remains unresolved
+## Historical credential prerequisite blocker
 
 The user states target app 6599842047 had not previously been downloaded. Generic purchase 5002 remains unconfirmed rather than proof of ownership.
 
@@ -24,9 +32,9 @@ Source review:
 - DrWhax/unfairplay 26a099fcb2292eaacd9e0ce89793cdbc88e516d1 can decrypt on Linux after a model has been recovered. Its documented setup requires an enrolled native Mac App Store state and matching installed app/IPA.
 - The pinned ipatool kbsync helper used here does not create that enrollment state: the examined shim only opens CoreFP.icxs and rejects other open requests. API login and kbsync generation do not constitute enrollment-model recovery.
 
-There is no matching private model configured in this repository at the time of this implementation. This update does not claim to have recovered one, and does not perform a new failed remap experiment. The user's personal phone and Debian server are not used.
+At this earlier implementation stage, no matching private model was configured and no recovery was claimed. That blocker was resolved by the later successful GitHub-only bootstrap recorded above. The user's personal phone and Debian server have not been used.
 
-## Verified CI result
+## Historical synthetic CI baseline
 
 Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41737576446 completed successfully on commit 0d659ffb969370f8189b0f107075bb64dc8402e3.
 
@@ -36,7 +44,7 @@ Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41737576446 com
 - The no-model probe returned missing_enrollment_model, with decryption_proven=false, plaintext_verified=false and runtime_verified=false.
 - No Apple login, real IPA, enrollment collection or private-model recovery occurred in this run.
 
-The engine compilation and adapter are verified under these synthetic conditions; real offline decryption remains gated on matching enrollment material. No paid Telegram decryption service is ready.
+That baseline established compilation and synthetic adapter behavior only. Later real-model and complete IPA evidence is recorded in the current-status section. No paid Telegram service has been deployed.
 
 ## Pinned engine and notices
 
@@ -922,3 +930,48 @@ Commit d672630bf175644d2d508f18fd7561d37af83f32 prepares a private `FAIRPLAY_STA
 The checkpoint is different from a verified model. Because it is needed to diagnose a failed recovery, it may be sealed **before** model verification, but only with the same fixed GitHub repository public key and a separate fixed Secret name/schema. Raw checkpoint bytes are never printed or uploaded as artifacts. The pending regression includes fixed-purpose sealed-box routing and replay tests that reject any attempt to call enrollment. The existing verified-model gate remains unchanged.
 
 Replay downloads a fresh personalized IPA and uses the pinned engine's explicit archived-state and IOMAC inputs through `collect` and `recover`; upstream structural/authentication checks and complete IPA validation still apply. A stored checkpoint is not evidence of a working model or portable decryption. The only dispatched checkpoint workflow so far is `preflight`, without Apple credentials; no real checkpoint Secret or fourth authorization exists yet.
+
+
+### Checkpoint preflight verified
+
+[Portable contracts 41845171020](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41845171020) passed 29 Python tests on GitHub Ubuntu plus the sealed-box roundtrip/tamper/fixed-purpose Go tests. [macOS preflight 41844426287](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41844426287) passed 140 Python tests, 20 Swift tests, Go/native checks and the administrator observer, without Apple credentials. The protected native capture path itself still needs real state; synthetic tests do not establish successful real capture or recovery.
+
+After those checks passed, a single checkpoint-bearing trial was dispatched at 2026-11-04T14:17:45Z from main at b668df099334706a9f02e6bcaf56ff553b023c8b. The core files are identical to the checked macOS commit d672630bf175644d2d508f18fd7561d37af83f32; only documents and the independent contract workflow differ. Its result is pending. The last confirmed authorized-computer count is 3; do not assume it remains 3 if this new trial reaches authorization. Do not dispatch another trial without reading its report.
+
+
+## First verified GitHub-only model recovery (2026-11-04)
+
+**[Run 41846142942](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41846142942) succeeded** at b668df099334706a9f02e6bcaf56ff553b023c8b. It passed 140 Python tests, 20 Swift tests and the Go/native checks before the private trial. The original IPA download and supported-layout inspection completed before the one machine authorization.
+
+The signed CommerceKit request returned HTTP 200 with keybag and diversitybag and no business error. Protected fpsd SIDB became nonempty. The independent account summary confirmed **3 -> 4** authorized computers. There was one new authorization and no deauthorization in this run.
+
+The exact success report records:
+
+- `status=model_recovered_and_verified`, `model_recovered=true`.
+- Setup: 62 encrypted images, 12,524 decrypted pages, `setup_plaintext_verified=true`.
+- Independent complete IPA verification: `offline_plaintext_verified`, 62 encrypted images, 12,524 pages, `decryption_proven=true`, `plaintext_verified=true`.
+- `runtime_verified=false`, `plaintext_retained=false`, `model_plaintext_published=false`.
+- `state_checkpoint_status=checkpoint_sealed`; both model and state ciphertext emitted through their fixed repository key/schema/Secret bindings.
+
+The candidate app was extracted from the original IPA. It was not represented as an installed or running Mac app. Neither the underlying recovery/authentication checks nor full IPA validation was relaxed. The independent verifier compared the audited encrypted-slice count against the engine report and required the available pre-encryption CodeDirectory page hashes to match. This is real cryptographic plaintext validation for this sample; it is not independent Apple CMS trust validation or an installation/runtime test.
+
+The inner CommerceKit report still says `commerce_import_unverified` / `import_verified=false`, because its one-way import call has no receipt. The outer result establishes the stronger downstream evidence separately: the generated native state produced a model that passed complete IPA validation. Do not rewrite the native call's own semantics merely to make all intermediate statuses green.
+
+The older trial 41841347693 was rejected, while this version downloaded before enrollment, added checkpoint capture/diagnostics, and ran on a different host. This is not a single-variable experiment. The current evidence does not isolate a unique cause for the old rejection.
+
+### Private Secret persistence and independent reuse
+
+After checking that the repository public key was unchanged and neither destination Secret existed, the already-sealed ciphertext was submitted through the GitHub Secrets REST API. `FAIRPLAY_MODEL_B64` and `FAIRPLAY_STATE_B64` were both created at **2026-11-04T14:22:53Z**. Plaintext model/state material never entered this editing workspace, the repository or public logs. No broad write token was given to the macOS job; only the repository public key was needed by the sealer.
+
+The state checkpoint contains only the fixed native state files plus captured IOMAC bytes, not the complete IPA or an exact archived app. Replay uses a fresh personalized IPA and still requires compatibility and complete validation. Its real replay has not yet been tested. The model itself can be tested directly without another authorization.
+
+Accordingly, [fresh-runner offline verification 41846974302](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41846974302) was dispatched with the existing `native-store.yml` workflow and `decryption_backend=offline`. This reads the saved model Secret, signs in to download a fresh original IPA, and performs complete verification without invoking machine enrollment. Its result is pending. No fifth authorization is authorized by this dispatch and none is requested by its code path.
+
+
+### Verified fresh-runner model reuse
+
+[Run 41846974302](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41846974302) completed successfully at b668df099334706a9f02e6bcaf56ff553b023c8b. GitHub decrypted the stored `FAIRPLAY_MODEL_B64` Secret correctly: initial readiness accepted its encoding, and the final real download/verification reported `offline_plaintext_verified`, `authenticated=true`, `downloaded=true`, `decryption_proven=true`, `plaintext_verified=true`, 62 encrypted images and 12,524 decrypted pages. Plaintext was deleted and runtime remained unverified.
+
+The run passed all 273 Python tests, 9 Swift tests, 4 C tests and the Go helper/engine tests. It used a fresh GitHub-hosted macOS runner and did not invoke machine enrollment. This establishes saved-model reuse beyond the original enrollment host for the tested account/application; other applications/accounts and actual Linux-hosted decryption are not claimed tested.
+
+A further `checkpoint-replay` job has been dispatched solely to exercise the newly implemented archived-state path with `FAIRPLAY_STATE_B64`. Its code explicitly skips enrollment; it will attempt model derivation from the saved SIDB/IOMAC inputs and independently verify a fresh original IPA. This is an unresolved integration check for the optional recovery checkpoint, not another machine authorization or a repeat of the successful model Secret check.
