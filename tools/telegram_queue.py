@@ -141,7 +141,7 @@ class GitHub:
             stage=parse_stage(check,rid,run["id"])
             if stage:
                 return stage
-        build_steps={"Build and test bounded kbsync helper","Build and test offline backend",
+        build_steps={"Compile native client and test targets","Build and test bounded kbsync helper","Build and test offline backend",
                      "Test independent signing request construction","Build independent native client",
                      "Build and test private delivery encryption"}
         for job in self.jobs(run):
