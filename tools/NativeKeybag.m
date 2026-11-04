@@ -156,7 +156,7 @@ static void PublicBag(NSMutableDictionary *r) {
 
 static BOOL ApplySessionHeadersWithRouting(NSMutableURLRequest *request,NSNumber *dsid,NSString *token,NSString *guid,BOOL allowPod) {
  if(![request isKindOfClass:NSMutableURLRequest.class] || ![dsid isKindOfClass:NSNumber.class] ||
-    dsid.longLongValue<=0 || ![token isKindOfClass:NSString.class] || !token.length || token.length>8192 ||
+    dsid.longLongValue<=0 || ![token isKindOfClass:NSString.class] || !token.length || [token isEqual:@"0"] || token.length>8192 ||
     [token rangeOfCharacterFromSet:[NSCharacterSet controlCharacterSet]].location!=NSNotFound ||
     ![guid isKindOfClass:NSString.class] || [guid rangeOfString:@"^[A-Fa-f0-9]{12}$" options:NSRegularExpressionSearch].location==NSNotFound)return NO;
  NSURLComponents *url=[NSURLComponents componentsWithURL:request.URL resolvingAgainstBaseURL:NO];
@@ -176,9 +176,20 @@ static BOOL ApplySessionHeadersWithRouting(NSMutableURLRequest *request,NSNumber
  NSDictionary *body=request.HTTPBody?[NSPropertyListSerialization propertyListWithData:request.HTTPBody options:NSPropertyListImmutable format:NULL error:NULL]:nil;
  if(![body isKindOfClass:NSDictionary.class] || ![body[@"ownerDsid"] isEqual:dsid] ||
     ![body[@"guid"] isKindOfClass:NSString.class] || ![body[@"guid"] isEqual:guid.uppercaseString] ||
-    ![body[@"xToken"] isEqual:@"0"] || ![body[@"kbsync"] isKindOfClass:NSString.class])return NO;
+    (![body[@"xToken"] isEqual:@"0"] && ![body[@"xToken"] isEqual:token]) || ![body[@"kbsync"] isKindOfClass:NSString.class])return NO;
  NSData *sync=[[NSData alloc] initWithBase64EncodedString:body[@"kbsync"] options:0];
  if(!sync.length || sync.length>1048576)return NO;
+ // The native builder uses "0" only when ACAccountStore has no stored passwordToken.
+ // Bind our private authenticated session without persisting a native Store account.
+ if([body[@"xToken"] isEqual:@"0"]) {
+   if([request valueForHTTPHeaderField:@"X-Apple-ActionSignature"].length)return NO;
+   NSMutableDictionary *bound=[body mutableCopy];bound[@"xToken"]=token;
+   NSError *error=nil;
+   NSData *encoded=[NSPropertyListSerialization dataWithPropertyList:bound format:NSPropertyListXMLFormat_v1_0 options:0 error:&error];
+   if(!encoded || error || encoded.length>1048576)return NO;
+   request.HTTPBody=encoded;
+   [request setValue:[NSString stringWithFormat:@"%lu",(unsigned long)encoded.length] forHTTPHeaderField:@"Content-Length"];
+ }
  [request setValue:dsid.stringValue forHTTPHeaderField:@"X-Dsid"];
  [request setValue:dsid.stringValue forHTTPHeaderField:@"iCloud-DSID"];
  [request setValue:token forHTTPHeaderField:@"X-Token"];
@@ -291,6 +302,24 @@ static void Request(NSMutableDictionary *r) {
    }
    if(ApplySessionHeaders([request mutableCopy],@7654321,@"ipa-lab-synthetic-token",guid))negative=NO;
    if(ApplySessionHeaders([request mutableCopy],@1234567,@"",guid))negative=NO;
+   negative=negative && !ApplySessionHeaders([request mutableCopy],@1234567,@"0",guid);
+   NSMutableURLRequest *signedUnbound=[request mutableCopy];
+   [signedUnbound setValue:@"synthetic-signature" forHTTPHeaderField:@"X-Apple-ActionSignature"];
+   negative=negative && !ApplySessionHeaders(signedUnbound,@1234567,@"ipa-lab-synthetic-token",guid);
+   NSMutableURLRequest *conflict=[request mutableCopy];
+   NSMutableDictionary *conflictBody=[initialBody mutableCopy];conflictBody[@"xToken"]=@"different-synthetic-token";
+   conflict.HTTPBody=[NSPropertyListSerialization dataWithPropertyList:conflictBody format:NSPropertyListXMLFormat_v1_0 options:0 error:NULL];
+   negative=negative && !ApplySessionHeaders(conflict,@1234567,@"ipa-lab-synthetic-token",guid);
+   NSMutableURLRequest *idempotent=[request mutableCopy];
+   BOOL bound=ApplySessionHeaders(idempotent,@1234567,@"ipa-lab-synthetic-token",guid);
+   NSData *boundBytes=idempotent.HTTPBody;
+   bound=bound && ApplySessionHeaders(idempotent,@1234567,@"ipa-lab-synthetic-token",guid)
+     && [boundBytes isEqual:idempotent.HTTPBody]
+     && [[idempotent valueForHTTPHeaderField:@"Content-Length"] longLongValue]==(long long)boundBytes.length;
+   NSDictionary *boundBody=[NSPropertyListSerialization propertyListWithData:boundBytes options:NSPropertyListImmutable format:NULL error:NULL];
+   NSMutableDictionary *restored=[boundBody mutableCopy];restored[@"xToken"]=initialBody[@"xToken"];
+   bound=bound && [restored isEqual:initialBody] && [boundBody[@"xToken"] isEqual:@"ipa-lab-synthetic-token"];
+   r[@"body_binding_policy_verified"]=B(bound);
    NSMutableURLRequest *pod=[request mutableCopy];
    pod.URL=[NSURL URLWithString:@"https://p17-buy.itunes.apple.com/commerce/machine/authorize"];
    BOOL routed=ApplySessionHeadersWithRouting(pod,@1234567,@"ipa-lab-synthetic-token",guid,YES);

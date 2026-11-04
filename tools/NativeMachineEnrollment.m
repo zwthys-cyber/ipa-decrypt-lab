@@ -93,6 +93,11 @@ static NSURLRequest *PreparedRequest(NSDictionary *input,NSMutableDictionary *re
  if(error || ![value isKindOfClass:NSURLRequest.class])return nil;
  NSMutableURLRequest *request=[value mutableCopy];
  BOOL valid=ApplySessionHeaders(request,dsid,token,guid);
+ NSDictionary *boundBody=request.HTTPBody?[NSPropertyListSerialization propertyListWithData:request.HTTPBody options:NSPropertyListImmutable format:NULL error:NULL]:nil;
+ BOOL bound=[boundBody isKindOfClass:NSDictionary.class] && [boundBody[@"xToken"] isEqual:token]
+   && [[request valueForHTTPHeaderField:@"Content-Length"] longLongValue]==(long long)request.HTTPBody.length;
+ report[@"body_token_bound"]=B(valid && bound);
+ valid=valid && bound;
  report[@"session_identity_verified"]=B(valid);
  if(!valid)return nil;
  report[@"session_cookie_count"]=@(ApplyStoreContext(request,input));

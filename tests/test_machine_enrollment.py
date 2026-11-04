@@ -19,7 +19,7 @@ class MachineEnrollmentContracts(unittest.TestCase):
 
     def test_import_requires_observed_response_and_native_success(self):
         good = {"status": "keybag_imported_model_unverified", "http_status": 200,
-            "authorization_request_attempted": True, "session_identity_verified": True,
+            "authorization_request_attempted": True, "session_identity_verified": True, "body_token_bound": True,
             "keybag_present": True, "keybag_import_succeeded": True,
             "error_present": False, "apple_failure_present": False,
             "redirect_blocked": False, "response_oversized": False}

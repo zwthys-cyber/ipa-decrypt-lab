@@ -14,7 +14,7 @@ STATUSES = {"invalid_private_input", "request_preparation_failed", "request_time
     "keybag_imported_model_unverified", "keybag_import_failed", "native_exception", "probe_failed",
     "missing_credentials", "login_failed", "login_ambiguous", "login_timeout", "native_timeout",
     "native_process_failed", "private_handoff_failed"}
-BOOLS = {"authorization_request_attempted", "ephemeral_account", "session_identity_verified",
+BOOLS = {"authorization_request_attempted", "ephemeral_account", "session_identity_verified", "body_token_bound",
     "redirect_blocked", "response_oversized", "error_present", "apple_failure_present",
     "dialog_present", "keybag_present", "keybag_import_succeeded", "redirect_seen",
     "redirect_query_supported", "redirect_method_post", "redirect_https", "storefront_header_present",
@@ -51,7 +51,7 @@ def clean(value):
         if type(value.get(key)) is dict:
             r[key] = {k: value[key][k] for k in STATE_KEYS if type(value[key].get(k)) is bool}
     if r["status"] == "keybag_imported_model_unverified" and not (
-        all(r.get(k) is True for k in ("authorization_request_attempted", "session_identity_verified",
+        all(r.get(k) is True for k in ("authorization_request_attempted", "session_identity_verified", "body_token_bound",
                                       "keybag_present", "keybag_import_succeeded"))
         and r.get("http_status") == 200 and r.get("error_present") is False
         and r.get("apple_failure_present") is False and r.get("redirect_blocked") is False
