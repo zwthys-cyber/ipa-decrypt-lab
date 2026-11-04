@@ -13,10 +13,12 @@ from telegram_runtime import local_bot
 from telegram_controller import Controller, owner_id, event
 from telegram_menu import configure
 from persistent_journal import PersistentJournal
+from capacity import MIN_FREE_BYTES
 
 KEYS={"TELEGRAM_BOT_TOKEN","TELEGRAM_OWNER_ID","TELEGRAM_API_ID",
       "TELEGRAM_API_HASH","DELIVERY_AGE_IDENTITY","GH_TOKEN"}
 HELP=("发送美区免费 App Store 链接或数字 App ID创建任务。\n"
+      "IPA 最大 2000 MB，超过上限不支持直接交付。\n"
       "/status 查看进度\n/get 任务编号 取回文件\n/cancel 取消当前任务\n/id 查看身份\n"
       "当前仅向管理员开放；尚未开放付费服务。")
 
@@ -68,7 +70,7 @@ class ServerController(Controller):
 
     def deliver(self,rid):
         scratch=Path(os.environ["TMPDIR"])
-        if shutil.disk_usage(scratch).free<6*1024**3:
+        if shutil.disk_usage(scratch).free<MIN_FREE_BYTES:
             self.say("可用磁盘空间不足，已暂停文件交付；请保留任务编号。")
             return False
         return super().deliver(rid)

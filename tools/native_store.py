@@ -68,9 +68,9 @@ def download_diagnostics(result):
         diagnostic["purchase_5002_unconfirmed"] = True
     return diagnostic
 
-def run(binary, args, env):
+def run(binary, args, env, timeout=300):
     return subprocess.run([binary] + args, env=env, stdin=subprocess.DEVNULL,
-                          capture_output=True, text=True, timeout=300)
+                          capture_output=True, text=True, timeout=timeout)
 
 def trial(binary, engine, target, offline_binary=None):
     if offline_binary:

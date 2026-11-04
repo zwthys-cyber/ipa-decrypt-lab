@@ -61,12 +61,12 @@ jobs:
           cp tools/delivery_crypto.go native-source/age/cmd/lab-delivery-crypt/main.go
           cp tests/delivery_crypto_test.go native-source/age/cmd/lab-delivery-crypt/main_test.go
           cd native-source/age
-          go test -p 2 -timeout 120s ./cmd/lab-delivery-crypt
+          LAB_LARGE_CAPACITY_TEST=1 go test -p 2 -timeout 300s ./cmd/lab-delivery-crypt
           CGO_ENABLED=0 go build -p 2 -trimpath -o ../../package/bin/delivery-crypt ./cmd/lab-delivery-crypt
       - name: Assemble public runtime bundle
         run: |
           cp dist/telegram-bot-api package/bin/
-          for module in telegram_daemon persistent_journal telegram_controller telegram_runtime telegram_api telegram_menu telegram_queue task_progress delivery_scheduler ipa_audit; do
+          for module in capacity telegram_daemon persistent_journal telegram_controller telegram_runtime telegram_api telegram_menu telegram_queue task_progress delivery_scheduler ipa_audit; do
             cp "tools/$module.py" package/tools/
           done
           cp deploy/ipazake.service deploy/install.sh package/deploy/

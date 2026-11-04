@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import shutil
 import tempfile
 import urllib.error
 import urllib.parse
@@ -17,7 +18,9 @@ from delivery_scheduler import matches, retryable, alternate, MAX_RUNS, PRIMARY_
 
 REPOSITORY = "zwthys-cyber/ipa-decrypt-lab"
 WORKFLOW = "private-delivery.yml"
-MAX_FILE = 1024 * 1024 * 1024
+from capacity import (MAX_IPA_BYTES, MAX_CIPHER_BYTES, MAX_ARTIFACT_BYTES,
+                      MIN_FREE_BYTES, CRYPTO_TIMEOUT, TELEGRAM_TIMEOUT)
+MAX_FILE = MAX_IPA_BYTES
 class QueueError(RuntimeError):
     pass
 
@@ -189,6 +192,17 @@ class GitHub:
                 return "preparing"
         return None
 
+    def failure_reason(self,run):
+        messages = {
+            "IPA exceeds 2000 MB capacity": "IPA 超过当前容量上限：2000 MB（2,000,000,000 字节），或解压后的程序规模超出检查预算。",
+            "Insufficient private workspace": "处理所需磁盘空间不足，任务已停止，请稍后重试。",
+        }
+        for job in self.jobs(run):
+            for step in job.get("steps",[]):
+                if step.get("conclusion") == "failure" and step.get("name") in messages:
+                    return messages[step["name"]]
+        return ""
+
     def cancel(self, rid):
         run = self.find(rid)
         require(run is not None, "run_not_found")
@@ -225,7 +239,7 @@ class GitHub:
                     if not block:
                         break
                     total += len(block)
-                    require(total <= MAX_FILE + 4*1024*1024, "artifact_too_large")
+                    require(total <= MAX_ARTIFACT_BYTES, "artifact_too_large")
                     output.write(block)
                 require(total > 0, "empty_artifact")
         except (OSError, http.client.HTTPException):
@@ -250,7 +264,7 @@ class GitHub:
                     and a.get("expired") is False]
         return (len(candidates)==1 and type(candidates[0].get("id")) is int and candidates[0]["id"]>0
                 and type(candidates[0].get("size_in_bytes")) is int
-                and 0<candidates[0]["size_in_bytes"]<=MAX_FILE+4*1024*1024
+                and 0<candidates[0]["size_in_bytes"]<=MAX_ARTIFACT_BYTES
                 and isinstance(candidates[0].get("digest"),str)
                 and re.fullmatch(r"sha256:[a-f0-9]{64}",candidates[0]["digest"]) is not None)
 
@@ -269,6 +283,7 @@ class GitHub:
         with tempfile.TemporaryDirectory(prefix="tg-private-delivery-") as directory:
             root = Path(directory)
             root.chmod(0o700)
+            require(shutil.disk_usage(root).free >= MIN_FREE_BYTES, "insufficient_delivery_disk")
             bundle = root/"encrypted.zip"
             self.archive(found[0]["id"], bundle)
             archive_digest=found[0].get("digest")
@@ -282,7 +297,7 @@ class GitHub:
                 require(len(entries) == 2 and {e.filename for e in entries} ==
                         {"package.ipa.age","receipt.json"}, "unexpected_artifact_members")
                 require(z.getinfo("receipt.json").file_size <= 16384
-                        and z.getinfo("package.ipa.age").file_size <= MAX_FILE+1024*1024,
+                        and z.getinfo("package.ipa.age").file_size <= MAX_CIPHER_BYTES,
                         "invalid_artifact_sizes")
                 receipt = json.loads(z.read("receipt.json"))
                 validate_receipt(receipt, rid, run_id, run["head_sha"])
@@ -293,8 +308,9 @@ class GitHub:
                         block = src.read(1024*1024)
                         if not block: break
                         total += len(block)
-                        require(total <= MAX_FILE+1024*1024, "ciphertext_too_large")
+                        require(total <= MAX_CIPHER_BYTES, "ciphertext_too_large")
                         dst.write(block)
+            bundle.unlink()
             require(encrypted.stat().st_size == receipt["ciphertext_bytes"]
                     and sha256(encrypted) == receipt["ciphertext_sha256"], "ciphertext_digest_mismatch")
             progress("delivery_verifying")
@@ -303,10 +319,11 @@ class GitHub:
             if os.environ.get("GITHUB_ACTIONS")=="true":
                 env["GITHUB_ACTIONS"] = "true"
             completed = subprocess.run([crypt,"decrypt",str(encrypted),str(output)], env=env,
-                stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+                stdin=subprocess.DEVNULL, capture_output=True, timeout=CRYPTO_TIMEOUT)
             require(completed.returncode == 0 and output.is_file(), "delivery_decryption_rejected")
             require(output.stat().st_size == receipt["plaintext_bytes"]
                     and sha256(output) == receipt["plaintext_sha256"], "plaintext_digest_mismatch")
+            encrypted.unlink()
             # Independent Linux archive/Mach-O structural check after authenticated decryption.
             info = audit(output)
             require(info["encrypted_slice_count"] == 0, "delivery_contains_encrypted_images")
@@ -314,10 +331,11 @@ class GitHub:
                 require(not any(personalized(e.filename) for e in z.infolist()), "account_member_retained")
             require(bot.base == "http://127.0.0.1:8081", "large_file_server_required")
             # Local server reads private local file; no multipart buffering and no public link.
+            require(output.stat().st_size <= MAX_FILE, "telegram_file_exceeds_2000mb")
             progress("uploading")
             reply = bot.call("sendDocument", {"chat_id":owner, "document":output.as_uri(),
                 "caption":"IPA 已完成明文校验；已移除账号元数据。\n需要重签名后安装，尚未验证实际运行。\n任务：" + rid,
-                "disable_content_type_detection":True}, timeout=600)
+                "disable_content_type_detection":True}, timeout=TELEGRAM_TIMEOUT)
             require(isinstance(reply, dict) and type(reply.get("message_id")) is int
                     and reply.get("chat",{}).get("id") == owner
                     and reply.get("document",{}).get("file_size") == output.stat().st_size,
@@ -339,6 +357,6 @@ def validate_receipt(r, rid, run_id, commit):
         "invalid_delivery_receipt")
     require(re.fullmatch(r"[1-9][0-9]{4,19}", r.get("app_id","")), "invalid_delivery_app")
     for key in ("plaintext_bytes","ciphertext_bytes"):
-        require(type(r.get(key)) is int and 0 < r[key] <= MAX_FILE+1024*1024, "invalid_delivery_size")
+        require(type(r.get(key)) is int and 0 < r[key] <= (MAX_FILE if key=="plaintext_bytes" else MAX_CIPHER_BYTES), "invalid_delivery_size")
     for key in ("plaintext_sha256","ciphertext_sha256"):
         require(re.fullmatch(r"[a-f0-9]{64}",r.get(key,"")), "invalid_delivery_digest")

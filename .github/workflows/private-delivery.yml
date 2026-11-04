@@ -34,7 +34,7 @@ jobs:
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
       LAB_BUILD_JOBS: ${{ endsWith(inputs.runner, '-intel') && '4' || '2' }}
-    timeout-minutes: 40
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -131,6 +131,7 @@ jobs:
           go test -p 2 -timeout 120s ./cmd/lab-delivery-crypt
           go build -p 2 -trimpath -o ../../delivery-crypt ./cmd/lab-delivery-crypt
       - name: Export only after complete plaintext verification
+        id: export
         if: inputs.mode == 'export'
         env:
           FAIRPLAY_MODEL_B64: ${{ secrets.FAIRPLAY_MODEL_B64 }}
@@ -144,6 +145,12 @@ jobs:
         run: |
           ulimit -c 0
           python3 tools/private_export.py --binary native-source/ApplePackage/.build/debug/ApplePackageTool --engine offline-engine --crypt delivery-crypt
+      - name: IPA exceeds 2000 MB capacity
+        if: failure() && steps.export.outputs.capacity_failure == 'size_limit'
+        run: exit 1
+      - name: Insufficient private workspace
+        if: failure() && steps.export.outputs.capacity_failure == 'disk_limit'
+        run: exit 1
       - name: Retain encrypted delivery for at most one day
         if: success() && inputs.mode == 'export'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

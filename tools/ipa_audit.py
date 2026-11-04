@@ -10,9 +10,11 @@ import struct
 import sys
 import zipfile
 
-MEMBER_LIMIT = 1024 * 1024 * 1024
+from capacity import MAX_IPA_BYTES, MAX_EXPANDED_BYTES
+
+MEMBER_LIMIT = MAX_IPA_BYTES
 STREAM_CHUNK = 1024 * 1024
-READ_LIMIT = 2 * 1024 * 1024 * 1024
+READ_LIMIT = 2 * MAX_IPA_BYTES
 ENTRY_LIMIT = 32768
 MAGICS = {
     b"\xce\xfa\xed\xfe": ("<", 28),
@@ -114,6 +116,7 @@ def audit(path):
     with zipfile.ZipFile(path) as archive:
         entries = archive.infolist()
         require(len(entries) <= ENTRY_LIMIT, "archive entry limit exceeded")
+        require(sum(e.file_size for e in entries) <= MAX_EXPANDED_BYTES, "archive expansion limit exceeded")
         names = set()
         for entry in entries:
             name = entry.filename

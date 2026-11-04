@@ -286,10 +286,8 @@ class Controller:
             except QueueError:
                 pass
             if reported=="failed":
-                self.record(rid,"closed")
-                self.current=None
-                self.card(rid).update("failed",force=True)
-                self.say("下载或校验未完成。任务编号："+rid)
+                # Wait for final Actions steps so capacity failure messages are available.
+                self.card(rid).update("failed")
                 return
             try:
                 if self.github.artifact_ready(run,rid) is True:
@@ -309,7 +307,14 @@ class Controller:
                     self.deliver(rid)
             else:
                 self.record(rid,"closed")
-                self.say("任务未完成："+str(run.get("conclusion","unknown"))+"\n任务编号："+rid)
+                reason=""
+                try:
+                    value=self.github.failure_reason(run)
+                    if isinstance(value,str):
+                        reason=value
+                except QueueError:
+                    pass
+                self.say((reason or "任务未完成："+str(run.get("conclusion","unknown")))+"\n任务编号："+rid)
                 self.card(rid).update("failed",force=True)
                 event("worker_not_successful",request_id=rid)
         else:

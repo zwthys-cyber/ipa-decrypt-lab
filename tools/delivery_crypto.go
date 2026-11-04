@@ -14,7 +14,7 @@ import (
  "golang.org/x/crypto/nacl/box"
 )
 
-const maxBytes int64 = 1024*1024*1024
+const maxBytes int64 = 2000000000
 const repositoryKey = "smSbVehBpVp8xXXQxSzjJyoZG5UJd+/m26YlP7sEa1g="
 const repositoryKeyID = "3380204578043523366"
 
@@ -28,7 +28,7 @@ func source(path string, limit int64) (*os.File, error) {
 // Link publishes without overwriting an existing output, including a symlink.
 func transform(input, output string, decrypt bool, key string) (err error) {
  limit:=maxBytes
- if decrypt { limit+=1024*1024 }
+ if decrypt { limit+=4*1024*1024 }
  src,err:=source(input,limit); if err!=nil { return err }; defer src.Close()
  tmp,err:=os.CreateTemp(filepath.Dir(output),".delivery-*"); if err!=nil { return err }
  defer func(){ tmp.Close(); os.Remove(tmp.Name()) }()

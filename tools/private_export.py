@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import shutil
 import tempfile
 import zipfile
 import urllib.error
@@ -16,7 +17,9 @@ from native_store import classify, classify_download, run
 from offline_verify import readiness
 from store_download import app_id, metadata
 
-MAX_BYTES = 1024 * 1024 * 1024
+from capacity import (MAX_IPA_BYTES, MAX_EXPANDED_BYTES, MIN_FREE_BYTES,
+                      DOWNLOAD_TIMEOUT, DECRYPT_TIMEOUT, CRYPTO_TIMEOUT)
+MAX_BYTES = MAX_IPA_BYTES
 class ExportError(RuntimeError):
     pass
 
@@ -34,6 +37,14 @@ def audit_failure(exc):
         "root executable is not a supported Mach-O": "root_macho_unsupported",
     }
     return reasons.get(str(exc), "ipa_structure_rejected")
+
+def check_capacity(info, directory):
+    declared = info.get("fileSizeBytes") if isinstance(info, dict) else None
+    if isinstance(declared, str) and declared.isdecimal():
+        declared = int(declared)
+    if type(declared) is int:
+        require(0 < declared <= MAX_BYTES, "source_too_large")
+    require(shutil.disk_usage(directory).free >= MIN_FREE_BYTES, "insufficient_export_disk")
 
 def require(condition, status):
     if not condition:
@@ -127,7 +138,7 @@ def verify_output(path, before):
             and after["encrypted_slice_count"] == 0
             and set(inventory(after)) == set(inventory(before)), "output_inventory_mismatch")
     with zipfile.ZipFile(path) as archive:
-        require(sum(x.file_size for x in archive.infolist()) <= 2 * MAX_BYTES,
+        require(sum(x.file_size for x in archive.infolist()) <= MAX_EXPANDED_BYTES,
                 "archive_expansion_limit")
         require(not any(account_member(x.filename) for x in archive.infolist()),
                 "personalized_member_retained")
@@ -156,6 +167,7 @@ def export(binary, engine, crypt, target, request_id, recipient, output_dir, pro
         raise ExportError(status) from None
     except (TimeoutError, urllib.error.URLError):
         raise ExportError("metadata_network_failed") from None
+    check_capacity(info, output_dir.parent)
     email = os.environ["APPLE_ID"].strip()
     # Only native downloader receives the Store password, never the delivery key.
     env = {k: os.environ[k] for k in ("HOME", "PATH", "LANG", "LAB_KBSYNC_HELPER") if k in os.environ}
@@ -172,7 +184,7 @@ def export(binary, engine, crypt, target, request_id, recipient, output_dir, pro
             root.chmod(0o700)
             original, candidate, cleaned = root/"source.ipa", root/"candidate.ipa", root/"delivery.ipa"
             progress("downloading")
-            result = run(binary, ["download", email, info["bundleId"], "--output", str(original)], env)
+            result = run(binary, ["download", email, info["bundleId"], "--output", str(original)], env, timeout=DOWNLOAD_TIMEOUT)
             require(result.returncode == 0 and original.is_file(), classify_download(result))
             require(0 < original.stat().st_size <= MAX_BYTES, "source_too_large")
             progress("auditing")
@@ -188,7 +200,7 @@ def export(binary, engine, crypt, target, request_id, recipient, output_dir, pro
             completed = subprocess.run([engine, "decrypt", "--input", str(original),
                 "--output", str(candidate), "--report", str(report_path), "--model", str(model),
                 "--strip-account-data"], stdin=subprocess.DEVNULL, capture_output=True,
-                env=child_env, timeout=300)
+                env=child_env, timeout=DECRYPT_TIMEOUT)
             require(completed.returncode == 0 and candidate.is_file() and report_path.is_file(),
                     "decryption_rejected")
             require(report_path.stat().st_size <= 8 * 1024 * 1024, "report_too_large")
@@ -197,11 +209,13 @@ def export(binary, engine, crypt, target, request_id, recipient, output_dir, pro
             images, pages = validate_report(report, before, candidate)
             scrub_archive(candidate, cleaned)
             verify_output(cleaned, before)
+            original.unlink()
+            candidate.unlink()
             progress("encrypting")
             sealed = root/"package.ipa.age"
             completed = subprocess.run([crypt, "encrypt", str(cleaned), str(sealed), recipient],
                 stdin=subprocess.DEVNULL, capture_output=True, env=dict(child_env, GITHUB_ACTIONS="true"),
-                timeout=120)
+                timeout=CRYPTO_TIMEOUT)
             require(completed.returncode == 0 and sealed.is_file(), "delivery_encryption_failed")
             receipt = {
                 "schema": "ipa-private-delivery-v1", "status": "encrypted_artifact_ready",
@@ -259,6 +273,13 @@ def main():
         status = "private_export_timeout"
     except Exception:
         status = "private_export_failed"
+    # Only fixed failure categories become Actions outputs for bot-facing messages.
+    category = ("size_limit" if status in ("source_too_large","invalid_output_size","member_too_large",
+                 "macho_member_limit","audit_read_limit","archive_expansion_limit") else
+                "disk_limit" if status == "insufficient_export_disk" else "")
+    if category and os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("GITHUB_OUTPUT"):
+        with open(os.environ["GITHUB_OUTPUT"],"a") as stream:
+            stream.write("capacity_failure="+category+"\n")
     progress.advance("failed")
     # An incomplete output directory is never uploaded by the workflow.
     import shutil

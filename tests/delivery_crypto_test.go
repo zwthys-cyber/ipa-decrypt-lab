@@ -1,6 +1,8 @@
 package main
 import(
  "bytes"
+ "crypto/sha256"
+ "io"
  "os"
  "path/filepath"
  "testing"
@@ -63,4 +65,21 @@ func TestVPSRuntimeOnlyDecrypts(t *testing.T){
  got,e:=os.ReadFile(output);if e!=nil||!bytes.Equal(got,plain){t.Fatal("VPS decrypt mismatch")}
  t.Setenv("LAB_RUNTIME","")
  if run([]string{"decrypt",encrypted,filepath.Join(dir,"forbidden")})==nil{t.Fatal("unconfigured runtime accepted")}
+}
+
+func TestLargeCapacityRoundTrip(t *testing.T) {
+ if os.Getenv("LAB_LARGE_CAPACITY_TEST")!="1" { t.Skip("large stream test is enabled in the release workflow") }
+ dir:=t.TempDir()
+ input:=filepath.Join(dir,"boundary.ipa"); encrypted:=filepath.Join(dir,"boundary.age"); output:=filepath.Join(dir,"restored.ipa")
+ f,e:=os.OpenFile(input,os.O_CREATE|os.O_RDWR,0600); if e!=nil {t.Fatal(e)}
+ if e=f.Truncate(maxBytes); e!=nil {t.Fatal(e)}
+ if _,e=f.WriteAt([]byte("boundary-marker"),maxBytes-15); e!=nil {t.Fatal(e)}
+ f.Close()
+ key,e:=age.GenerateX25519Identity(); if e!=nil {t.Fatal(e)}
+ if e=transform(input,encrypted,false,key.Recipient().String()); e!=nil {t.Fatal(e)}
+ if e=transform(encrypted,output,true,key.String()); e!=nil {t.Fatal(e)}
+ hash:=func(path string) []byte { f,e:=os.Open(path); if e!=nil {t.Fatal(e)}; defer f.Close(); h:=sha256.New(); n,e:=io.Copy(h,f); if e!=nil || n!=maxBytes {t.Fatal("size mismatch")}; return h.Sum(nil) }
+ if !bytes.Equal(hash(input),hash(output)) {t.Fatal("large stream digest mismatch")}
+ if e=os.Truncate(input,maxBytes+1); e!=nil {t.Fatal(e)}
+ if e=transform(input,filepath.Join(dir,"forbidden.age"),false,key.Recipient().String()); e==nil {t.Fatal("accepted oversized plaintext")}
 }
