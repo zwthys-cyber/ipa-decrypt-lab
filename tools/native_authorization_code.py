@@ -19,10 +19,11 @@ METHODS = (
     "-[AMSAuthorizeMachineTask initWithUsername:authorizeReason:bag:presentationDelegate:]",
     "-[AMSKeybag importKeybagWithData:error:]",
     "__40-[AMSKeybag importKeybagWithData:error:]_block_invoke",
+    "-[AMSFairPlayContext fairplayContextIDWithError:]",
 )
 LINE = re.compile(r"^\s*(?:->\s*)?0x[0-9a-fA-F]+\s+<\+([0-9]+)>:\s+(.+)$")
 HEADER = re.compile(r"^([^\s\x60]+)\x60(.+):$")
-FOCUS = re.compile(r"xToken|needDiv|ownerDsid|kbsync|setAnisetteType|ams_.*(?:[Tt]oken|[Pp]assword)|[Aa]uthentication|[Aa]nisette|MDM|AMD|[Ee]phemeral|setCredentialSource|setAuthenticationType|[Ii]mport|[Ss]tatus|AMSError|ha0d|[Ff]air[Pp]lay")
+FOCUS = re.compile(r"xToken|needDiv|ownerDsid|kbsync|setAnisetteType|ams_.*(?:[Tt]oken|[Pp]assword)|[Aa]uthentication|[Aa]nisette|MDM|AMD|[Ee]phemeral|setCredentialSource|setAuthenticationType|[Ii]mport|[Ss]tatus|AMSError|ha0d|[Ff]air[Pp]lay|[Cc]ontext|SC Info|fpsd|Shared|XtCq|directory|Directory")
 
 def extract(output):
     methods = {}
