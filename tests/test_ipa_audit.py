@@ -1,4 +1,5 @@
 import importlib.util
+import sys
 import io
 import tracemalloc
 from unittest.mock import patch
@@ -8,6 +9,8 @@ import struct
 import tempfile
 import unittest
 import zipfile
+
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"tools"))
 
 spec = importlib.util.spec_from_file_location("ipa_audit", Path(__file__).parents[1] / "tools" / "ipa_audit.py")
 audit = importlib.util.module_from_spec(spec)

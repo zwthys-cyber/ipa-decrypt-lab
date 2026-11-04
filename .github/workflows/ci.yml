@@ -58,5 +58,6 @@ jobs:
             reports/native-selftest.json
             reports/native-controls.jsonl
             tools/ipa_audit.py
+            tools/capacity.py
           retention-days: 3
           if-no-files-found: error
