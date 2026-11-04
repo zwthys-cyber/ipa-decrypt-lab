@@ -1,0 +1,90 @@
+name: Confirmed all-computer deauthorization
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Preview by default; deauthorization affects ALL computer purchase authorizations
+        type: choice
+        default: preview
+        options:
+          - preview
+          - deauthorize
+      confirmation:
+        description: Only after explicit account-owner approval, type DEAUTHORIZE ALL 5 COMPUTERS
+        type: string
+        required: false
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: confirmed-store-deauthorization
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Test read-only route, identity, cookies, redirects and result privacy
+        run: |
+          python3 -m unittest discover -s tests -p 'test_store_account_summary.py' -v
+          python3 -m unittest discover -s tests -p 'test_store_deauthorization.py' -v
+      - name: Preview operation with no account credentials or network requests
+        timeout-minutes: 1
+        run: python3 tools/store_deauthorization.py --mode preview
+  deauthorize:
+    if: inputs.mode == 'deauthorize' && inputs.confirmation == 'DEAUTHORIZE ALL 5 COMPUTERS' && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: macos-15
+    timeout-minutes: 15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: Lakr233/ApplePackage
+          ref: 391bfe6ee6598d73e4f94b88b38b50bd6f6ec67b
+          path: native-source/ApplePackage
+          persist-credentials: false
+      - name: Check read-only client on macOS
+        run: python3 -m unittest discover -s tests -p 'test_store_account_summary.py' -v
+      - name: Patch ephemeral login handoff
+        run: python3 tools/patch_machine_enrollment.py native-source/ApplePackage
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: swift-cache
+        with:
+          path: native-source/ApplePackage/.build
+          key: swift-machine-enrollment-391bfe6-${{ hashFiles('tools/patch_machine_enrollment.py') }}
+          restore-keys: |
+            swift-machine-enrollment-391bfe6-
+            swift-macos15-arm64-xcode26.2-391bfe6-
+      - name: Build and test existing signed login
+        working-directory: native-source/ApplePackage
+        run: |
+          swift test -j 2 --filter SAPAuthenticationRequestTests
+          swift build -j 2 --product ApplePackageTool
+      - name: Cache public build products before exposing credentials
+        if: steps.swift-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: native-source/ApplePackage/.build
+          key: ${{ steps.swift-cache.outputs.cache-primary-key }}
+      - name: Perform one explicitly confirmed operation and recheck current count
+        timeout-minutes: 4
+        env:
+          LAB_CONFIRMATION: ${{ inputs.confirmation }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        run: |
+          ulimit -c 0
+          python3 tools/store_deauthorization.py --mode deauthorize --login-binary native-source/ApplePackage/.build/debug/ApplePackageTool

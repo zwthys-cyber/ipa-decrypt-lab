@@ -68,10 +68,7 @@ def valid_endpoint(url):
             and not parsed.query and not parsed.fragment)
 
 
-def cookie_header(cookies, url, now=None):
-    if not valid_endpoint(url):
-        raise ValueError("unapproved_endpoint")
-    parsed = urllib.parse.urlsplit(url)
+def scoped_cookie_header(cookies, hostname, request_path, now=None):
     now = time.time() if now is None else now
     items = []
     for item in cookies:
@@ -85,10 +82,10 @@ def cookie_header(cookies, url, now=None):
         domain = domain.lower().lstrip(".")
         if not domain or not (domain == "apple.com" or domain.endswith(".apple.com")):
             continue
-        if parsed.hostname != domain and not parsed.hostname.endswith("." + domain):
+        if hostname != domain and not hostname.endswith("." + domain):
             continue
-        if parsed.path != path and not (parsed.path.startswith(path)
-                and (path.endswith("/") or parsed.path[len(path):].startswith("/"))):
+        if request_path != path and not (request_path.startswith(path)
+                and (path.endswith("/") or request_path[len(path):].startswith("/"))):
             continue
         expires = item.get("expiresAt")
         if expires is not None and (type(expires) not in (int, float)
@@ -99,6 +96,13 @@ def cookie_header(cookies, url, now=None):
     if len(result) > 16384:
         raise ValueError("cookie_header_too_large")
     return result
+
+
+def cookie_header(cookies, url, now=None):
+    if not valid_endpoint(url):
+        raise ValueError("unapproved_endpoint")
+    parsed = urllib.parse.urlsplit(url)
+    return scoped_cookie_header(cookies, parsed.hostname, parsed.path, now)
 
 
 def make_request(url, session=None):
