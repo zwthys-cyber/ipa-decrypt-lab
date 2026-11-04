@@ -12,7 +12,7 @@ from telegram_api import APIError, private_message
 from telegram_queue import GitHub, QueueError, request_id
 from telegram_runtime import local_bot
 from telegram_menu import configure as configure_menu
-from task_progress import ProgressCard
+from task_progress import ProgressCard, LABELS
 from delivery_scheduler import app_from_run, queued_too_long, retryable, MAX_RUNS
 
 HELP = ("发送美区免费 App Store 链接或数字 App ID，创建下载与解密任务。\n"
@@ -233,7 +233,19 @@ class Controller:
                 self.say("未能确认 GitHub 任务状态，请稍后用 /get "+rid+" 查询已完成产物。")
                 self.current=None
             return
+        reported=None
         if run.get("status")!="completed" and type(run.get("id")) is int:
+            try:
+                reported=self.github.progress(run,rid)
+                if not isinstance(reported,str) or reported not in LABELS:
+                    reported=None
+            except QueueError:
+                pass
+            if reported=="failed":
+                self.current=None
+                self.card(rid).update("failed",force=True)
+                self.say("下载或校验未完成。任务编号："+rid)
+                return
             try:
                 if self.github.artifact_ready(run,rid) is True:
                     self.current=None
@@ -242,7 +254,7 @@ class Controller:
                     return
             except QueueError:
                 pass
-        if self.failover(run):
+        if reported is None and self.failover(run):
             return
         state=run.get("status","unknown")
         if state=="completed":
@@ -257,13 +269,8 @@ class Controller:
         else:
             self.current["state"]=state
             stage="queued" if state in ("queued","waiting","pending","requested") else "processing"
-            if state=="in_progress":
-                try:
-                    reported=self.github.progress(run,rid)
-                    if isinstance(reported,str):
-                        stage=reported
-                except QueueError:
-                    stage=self.current.get("stage","processing")
+            if reported is not None:
+                stage=reported
             self.current["stage"]=stage
             self.card(rid,self.current["app"]).update(stage)
 

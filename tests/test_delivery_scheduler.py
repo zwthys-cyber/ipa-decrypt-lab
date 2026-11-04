@@ -118,6 +118,25 @@ class SchedulerTests(unittest.TestCase):
         api.deliver.assert_called_once()
         self.assertIsNone(c.current)
 
+    def test_real_stage_overrides_stale_queued_run_without_cancelling(self):
+        bot,api=Mock(),Mock()
+        api.find.return_value=dict(old(),status="queued",conclusion=None)
+        api.progress.return_value="downloading"
+        api.artifact_ready.return_value=False
+        c=Controller(bot,api,123,"/crypt","synthetic")
+        c.current={"rid":RID,"app":"1530340312","state":"queued"}
+        c.tick()
+        self.assertEqual(c.current["stage"],"downloading")
+        api.cancel.assert_not_called()
+        api.retry.assert_not_called()
+
+    def test_native_check_progress_overrides_empty_delayed_jobs(self):
+        api=GitHub("synthetic")
+        api.jobs=Mock(return_value=[{"id":55,"steps":[]}])
+        api.call=Mock(side_effect=[{"check_runs":[]},
+            {"status":"in_progress","head_sha":"f"*40,"app":{"slug":"github-actions"}}])
+        self.assertEqual(api.progress({"id":10,"head_sha":"f"*40},RID),"preparing")
+
     def test_stale_actions_metadata_cannot_cancel_a_running_native_check(self):
         api=GitHub("synthetic")
         run=dict(old(),head_sha="f"*40)

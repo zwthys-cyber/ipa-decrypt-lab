@@ -164,6 +164,14 @@ class GitHub:
             for step in job.get("steps",[]):
                 if step.get("status")=="in_progress" and step.get("name") in build_steps:
                     return "building"
+            identifier=job.get("id")
+            if type(identifier) is int and identifier>0:
+                check=self.call("/check-runs/"+str(identifier))
+                if (isinstance(check,dict) and isinstance(check.get("app"),dict)
+                        and check["app"].get("slug")=="github-actions"
+                        and check.get("head_sha")==run.get("head_sha")
+                        and check.get("status")=="in_progress"):
+                    return "preparing"
         return None
 
     def cancel(self, rid):
