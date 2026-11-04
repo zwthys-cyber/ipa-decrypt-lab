@@ -10,6 +10,8 @@ The latest measured computer count is 4 of 5. The user's approved all-computer d
 
 Real checkpoint replay also passed in [41847775765](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41847775765): a third fresh runner derived a model from the saved SIDB/IOMAC data and verified the complete newly downloaded IPA without invoking enrollment. Installation/runtime behavior, independent Apple CMS trust, other accounts/apps and a production Telegram service remain unverified or out of the current scope. See [the successful recovery record](#first-verified-github-only-model-recovery-2026-11-04) below. Earlier blocker/failed-run sections are historical evidence, not the current outcome.
 
+Private verified IPA export is now also proven in [41856194867](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41856194867): all 62 slices and 12,524 pages passed, Store account metadata was removed, and the 92,118,013-byte output was retained only as age ciphertext with a one-day lifetime. Owner-only Telegram identity round-trip, queue contracts, and [real 92 MB private delivery 41864719056](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41864719056) are verified; see [Telegram private delivery tests](docs/TELEGRAM.md) for live delivery evidence and bounded-session operation.
+
 ## What is wired
 
 The manual native-store workflow now offers:
@@ -84,7 +86,7 @@ A successful future model recovery would remove one prerequisite; it would not i
 
 ## GitHub-only native enrollment trial
 
-Current user direction: continue researching enrollment entirely within GitHub-hosted Actions. Do not start Telegram integration or assume permission to use a separate Mac or personal phone.
+Direction during this historical trial: research enrollment entirely within GitHub-hosted Actions and defer Telegram. The user resumed owner-only Telegram integration on 2026-11-04; GitHub-only execution and the personal-phone restriction continue to apply.
 
 This experiment uses the real App Store application on a disposable hosted Mac. It is separate from the already-working Swift download-client login.
 

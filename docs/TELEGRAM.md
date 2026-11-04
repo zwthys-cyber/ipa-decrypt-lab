@@ -29,10 +29,11 @@
 
 1. 运行 telegram-server-build.yml，编译固定版本的官方本地 Bot API，并缓存公开二进制。该步骤不接触 Telegram 或 Apple Secret。
 2. 运行 delivery-contracts.yml / test，完成 Python 边界、任务状态及 age 篡改拒绝测试。
-3. 打开 [Telegram private IPA test session](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/workflows/telegram-session.yml)，分支 main。
-4. mode=check 验证本地服务并向管理员发送一条确认消息；mode=session 开启限时轮询。
-5. minutes 默认 30，允许 1–45。可选 request_id 用于启动后发送一个已经完成的交付任务。
-6. 已完成文件也可用 mode=deliver 和 request_id 单独取回；该模式不重复下载或恢复模型。
+3. 首次从云端迁移时，将 migrate_from_cloud 设为 true；已成功迁移的本仓库机器人保持 false。正常重启只连接本地服务，避免在云端退出冷却期内重复登录。
+4. 打开 [Telegram private IPA test session](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/workflows/telegram-session.yml)，分支 main。
+5. mode=check 验证本地服务并向管理员发送一条确认消息；mode=session 开启限时轮询。
+6. minutes 默认 30，允许 1–45。可选 request_id 用于启动后发送一个已经完成的交付任务。
+7. 已完成文件也可用 mode=deliver 和 request_id 单独取回；该模式不重复下载或恢复模型。
 
 所有 Telegram 会话使用同一个并发组，不能同时在其他服务轮询同一机器人。首次迁移会调用云端 logOut，再由本地服务认证；结束时退出本地会话并清理私有状态。Telegram 规定从云端退出后 10 分钟内不能重新登录云端。存在 webhook 时会明确失败，不自动删除 webhook。
 
@@ -68,7 +69,11 @@
 - 加密与密钥封装 [41855730924](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41855730924)：277 项 Python 测试及 age 加密/解密、错误密钥、截断与篡改检查通过。
 - 真实私有导出 [41856194867](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41856194867)：App ID 6599842047，62 个切片、12,524 页校验通过；移除账号元数据后的 IPA 为 92,118,013 字节，公开产物仅有加密文件与收据。
 - Telegram 任务合约 [41861247714](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41861247714)：管理员过滤、重复更新、模糊提交结果、取消、发送结果未知不重试及收据校验通过。
-- 大文件发送仍需单独的真实回执确认；源码与合成测试通过不等同于实际交付成功。
+- 官方上传服务 [41860507368](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41860507368)：固定源码编译、版本检查与公开二进制缓存完成。
+- 真实大文件交付 [41864719056](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41864719056)：289 项 Python 测试（1 项跳过）、age 检查通过；本地服务认证成功，Linux 解密、摘要与结构复核后，Telegram 确认收到 92,118,013 字节完整 IPA。`plaintext_verified=true`、`runtime_verified=false`。
+- 限时交互会话 [41865319660](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41865319660)：用于真实私聊指令测试；单次文件交付成功不代表所有应用或生产服务均已验证。
+
+本轮修复了新运行器首次请求被冷却时间误拦截、手动取回后重复自动发送，本地服务临时目录未预建，以及完成迁移后重启仍检查云端登录的问题。任务合约使用合成消息；真实 Telegram 提交触发新下载任务仍需与对应运行记录分别核对。
 
 ## 尚未实现
 

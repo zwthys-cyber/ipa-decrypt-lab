@@ -26,3 +26,10 @@
 - Telegram job submission and file delivery must be restricted to the configured owner in a private chat. Identity bootstrap may reply only with the requesting private sender's own numeric ID; it cannot submit tasks or access Apple Secrets.
 - Verified IPA delivery may use authenticated age encryption for short-lived public ciphertext artifacts, followed by owner-only private transmission. Never publish plaintext IPA or raw decryption reports. Delivery keys remain in Secrets; cleanup plaintext on all exit paths.
 - Read the current-status documents before treating historical failed experiments as present blockers.
+
+## Verified private delivery milestone (2026-11-04)
+
+- Private export 41856194867 verified all 62 slices / 12,524 pages, removed Store account data, and retained only age ciphertext and a sanitized receipt for one day. Plaintext IPA size: 92,118,013 bytes.
+- Telegram delivery 41864719056 authenticated the pinned official local Bot API server, privately decrypted the ciphertext on GitHub Linux, independently checked digest and archive structure, and obtained a private-owner sendDocument acknowledgement for all 92,118,013 bytes. This is private delivery evidence, not proof of actual Linux FairPlay decryption or installation/runtime.
+- DELIVERY_AGE_IDENTITY and Telegram credentials are configured as Secrets. Do not regenerate/replace the delivery identity merely to retry an existing artifact. See docs/TELEGRAM.md for bounded session commands and limits.
+- Queue/owner/deduplication behavior has synthetic coverage. Record actual Telegram-request-to-workflow runs separately before claiming that live path verified.

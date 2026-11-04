@@ -1,6 +1,6 @@
 # IPA Decrypt Lab
 
-**已在 GitHub-hosted macOS 上恢复 FairPlay 模型，并验证指定应用的原始 IPA 解密。** 真实私有加密导出已通过，Telegram 管理员私聊任务与大文件交付正在集成测试。应用安装运行及收费服务尚未完成。
+**已在 GitHub-hosted macOS 上恢复 FairPlay 模型，并验证指定应用的原始 IPA 解密。** 真实私有加密导出已通过，Telegram 管理员私聊与 92 MB 完整 IPA 交付已通过实测。应用安装运行及收费服务尚未完成。
 
 ## 当前阶段与使用入口
 
@@ -36,7 +36,7 @@
 | 模型恢复 | GitHub macOS 上真实恢复并保存加密模型 | 未声称已安装或运行候选应用 |
 | IPA 解密校验 | 指定原始 IPA 的 62 个加密切片、12,524 页通过 | 尚未独立验证 Apple CMS 信任或应用安装运行 |
 | 模型与状态复用 | 直接使用保存的模型、从检查点重新恢复模型均在全新运行器通过真实 IPA 校验 | 两条复用路径均不调用机器授权；不推断所有账号、应用、版本都兼容 |
-| Telegram / 私有交付 | 私聊身份确认、真实加密导出及任务合约已通过；[限时测试入口](docs/TELEGRAM.md) | 大文件发送待真实回执；没有已部署的收费服务 |
+| Telegram / 私有交付 | 私聊身份确认、真实加密导出及 92 MB 大文件发送已通过；[限时测试入口](docs/TELEGRAM.md) | 指令合约已通过；没有已部署的收费服务 |
 
 此前经用户明确批准，[单次全部解除授权](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41837099155)已确认 **5 → 0 台**，之后四次授权试验合计占用四个名额。不会把全部解除授权作为重复清理方式。Apple 的五台上限和一年一次全部解除限制仍适用。[官方说明](https://support.apple.com/en-us/118292)。
 
@@ -48,7 +48,7 @@
 
 `FAIRPLAY_STATE_B64` 仅包含固定 SIDB/SIDS 文件和必要硬件标识，不包含 IPA、Apple 密码或登录会话。它用于复用授权状态研究兼容性，不能单独当作已验证模型。[真实检查点重放 41847775765](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41847775765)已在另一台全新运行器通过：从保存的状态重新恢复模型，随后完成相同的 62 个加密切片、12,524 页校验，且 `authorization_request_attempted=false`。归档状态只恢复到私有临时目录，不为新运行器注册电脑授权。
 
-原有验证流程仍删除候选明文。新增 [私有交付流程](docs/TELEGRAM.md) 已验证完整 IPA 导出，公开只保留一天 age 密文和收据；明文只在私有运行器目录处理，`runtime_verified=false`。Telegram 限时任务入口已接入，真实大文件回传正在验证；计费与常驻部署尚未完成。
+原有验证流程仍删除候选明文。新增 [私有交付流程](docs/TELEGRAM.md) 已验证完整 IPA 导出，公开只保留一天 age 密文和收据；明文只在私有运行器目录处理，`runtime_verified=false`。Telegram 限时任务入口已接入，[真实大文件回传](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41864719056)已确认；计费与常驻部署尚未完成。
 
 较早的同运行器试验曾返回 `model_recovery_rejected`。成功版本调整了下载/授权顺序、改进了诊断并加入检查点，也更换了运行器；这些不是单变量对照，尚不能把第一次失败归因于某一个变化。[完整研究记录](OFFLINE-BACKEND.md)。
 

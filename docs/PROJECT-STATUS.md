@@ -62,11 +62,11 @@
 
 ## 尚未完成的部分
 
-- **IPA 交付**：真实私有加密导出已通过 [41856194867](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41856194867)，移除账号元数据后的文件为 92,118,013 字节；只保留一天 age 密文，明文仍不公开。Telegram 大文件发送需要单独确认回执。
+- **IPA 交付**：真实私有加密导出已通过 [41856194867](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41856194867)，移除账号元数据后的文件为 92,118,013 字节；只保留一天 age 密文，明文仍不公开。[真实 Telegram 大文件交付 41864719056](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41864719056) 已确认完整发送该 IPA，发送前在 Linux 完成私有解密、摘要及结构复核。
 - **安装运行**：尚未验证重签名、安装和实际运行，`runtime_verified=false`。
 - **扩大兼容范围**：其他应用、账号、版本及真实 Linux 平台解密尚未完成实测；已有 Linux 构建与合成测试不能代替这些证据。
 - **独立签名信任验证**：页面哈希校验不等同于独立的 Apple CMS 信任验证。
-- **产品与部署**：用户已恢复 TG 接入。管理员私聊 /id 已完成真实收发；提交、查询、取消及私有文件回传代码和合约测试已接入。启动方法见 [Telegram 私有交付测试](TELEGRAM.md)。计费和常驻生产服务尚未完成。
+- **产品与部署**：用户已恢复 TG 接入。管理员私聊 /id 与 92 MB 完整文件回传已完成真实收发；提交、查询、取消代码及 289 项 Python 测试（1 项跳过）已接入。启动方法见 [Telegram 私有交付测试](TELEGRAM.md)。计费和常驻生产服务尚未完成。
 
 ## 进一步阅读
 
