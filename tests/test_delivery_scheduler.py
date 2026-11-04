@@ -118,6 +118,18 @@ class SchedulerTests(unittest.TestCase):
         api.deliver.assert_called_once()
         self.assertIsNone(c.current)
 
+    def test_stale_actions_metadata_cannot_cancel_a_running_native_check(self):
+        api=GitHub("synthetic")
+        run=dict(old(),head_sha="f"*40)
+        queued_job=dict(job(),id=55)
+        api.call=Mock(return_value={"status":"in_progress","head_sha":"f"*40,
+                                    "app":{"slug":"github-actions"}})
+        self.assertFalse(api.queued_confirmed(run,[queued_job]))
+        api.call.return_value["status"]="queued"
+        self.assertTrue(api.queued_confirmed(run,[queued_job]))
+        api.call.return_value["head_sha"]="e"*40
+        self.assertFalse(api.queued_confirmed(run,[queued_job]))
+
     def test_controller_does_not_repeat_ambiguous_retry_post(self):
         bot,api=Mock(),Mock()
         api.runs.return_value=[old()]

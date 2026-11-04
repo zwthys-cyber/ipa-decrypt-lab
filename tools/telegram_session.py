@@ -209,7 +209,7 @@ class Controller:
                 event("runner_failover_unconfirmed",request_id=rid)
                 self.say("备用线路提交结果尚未确认，正在核对；不会重复提交。")
             return True
-        if queued_too_long(run,jobs):
+        if queued_too_long(run,jobs) and self.github.queued_confirmed(run,jobs) is True:
             self.card(rid).update("switching")
             if current.get("cancel_attempted_for")!=run_id:
                 current["cancel_attempted_for"]=run_id

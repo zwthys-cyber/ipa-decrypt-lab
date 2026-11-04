@@ -109,6 +109,22 @@ class GitHub:
         require(isinstance(data,dict) and isinstance(data.get("jobs"),list),"invalid_job_list")
         return data["jobs"]
 
+    def queued_confirmed(self,run,jobs):
+        # Actions run/job metadata may lag. Cross-check the native Checks API
+        # before cancelling work that only appears unassigned in that view.
+        if not jobs or not isinstance(run.get("head_sha"),str):
+            return False
+        for job in jobs:
+            identifier=job.get("id")
+            if type(identifier) is not int or identifier<=0:
+                return False
+            check=self.call("/check-runs/"+str(identifier))
+            if (not isinstance(check,dict) or check.get("status")!="queued"
+                    or check.get("head_sha")!=run["head_sha"]
+                    or check.get("app",{}).get("slug")!="github-actions"):
+                return False
+        return True
+
     def retry(self,app,rid,old_id,cancel_requested=False):
         request_id(rid)
         require(re.fullmatch(r"[1-9][0-9]{4,19}",app or ""),"missing_retry_app")
