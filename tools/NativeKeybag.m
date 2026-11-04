@@ -3,6 +3,7 @@
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import <dlfcn.h>
+static NSNumber *B(BOOL v) { return v ? @YES : @NO; }
 static NSDictionary *Specs(void) {
  return @{
  @"AMSKeybag": @[@"+sharedInstance",@"-init",@"-fairplayContextWithError:",@"-keybagSyncDataWithAccountID:transactionType:error:",@"-keybagSyncData:transactionType:outError:",@"-importKeybagWithData:error:",@"-importKeybagData:outError:",@"-resetContext"],
@@ -20,12 +21,12 @@ static NSDictionary *State(void) {
  @"shared_sidb":@"/Users/Shared/SC Info/SC Info.sidb",@"shared_sids":@"/Users/Shared/SC Info/SC Info.sids"};
  for(NSString *key in paths) {
    NSDictionary *a=[[NSFileManager defaultManager] attributesOfItemAtPath:paths[key] error:NULL];
-   r[key]=@([a[NSFileType] isEqualToString:NSFileTypeRegular] && [a[NSFileSize] unsignedLongLongValue]>0);
+   r[key]=B([a[NSFileType] isEqualToString:NSFileTypeRegular] && [a[NSFileSize] unsignedLongLongValue]>0);
  }
  return r;
 }
 static void ErrorFields(NSMutableDictionary *r,NSError *e) {
- r[@"error_present"]=@(e!=nil); if(!e)return;
+ r[@"error_present"]=B(e!=nil); if(!e)return;
  NSSet *ds=[NSSet setWithArray:@[@"AMSErrorDomain",@"ASDErrorDomain",@"SSErrorDomain",@"NSCocoaErrorDomain",@"NSPOSIXErrorDomain",@"NSOSStatusErrorDomain",@"NSURLErrorDomain"]];
  r[@"error_domain"]=[ds containsObject:e.domain]?e.domain:@"other";
  if(e.code>=-999999 && e.code<=999999)r[@"error_code"]=@(e.code);
@@ -52,7 +53,7 @@ static NSDictionary *Interfaces(void) {
      const char *enc=m?method_getTypeEncoding(m):NULL;
      methods[entry]=enc?@(enc):(id)[NSNull null];
    }
-   r[name]=@{@"present":@(cls!=Nil),@"methods":methods};
+   r[name]=@{@"present":B(cls!=Nil),@"methods":methods};
  }
  return r;
 }
@@ -65,7 +66,7 @@ int main(int argc,const char **argv) { @autoreleasepool {
    void *ams=dlopen("/System/Library/PrivateFrameworks/AppleMediaServices.framework/AppleMediaServices",RTLD_NOW|RTLD_GLOBAL);
    dlopen("/System/Library/Frameworks/Accounts.framework/Accounts",RTLD_NOW|RTLD_GLOBAL);
    dlopen("/System/Library/PrivateFrameworks/AppStoreDaemon.framework/AppStoreDaemon",RTLD_NOW|RTLD_GLOBAL);
-   r[@"ams_loaded"]=@(ams!=NULL);
+   r[@"ams_loaded"]=B(ams!=NULL);
    if([mode isEqualToString:@"interfaces"]) {
      r[@"interfaces"]=Interfaces(); NSMutableDictionary *keys=[NSMutableDictionary dictionary];
      for(NSString *symbol in @[@"AMSBagKeyAuthorizeMachineURL",@"AMSBagKeyDeauthorizeMachineURL"]) {
@@ -76,10 +77,10 @@ int main(int argc,const char **argv) { @autoreleasepool {
      r[@"bag_keys"]=keys; r[@"status"]=@"interfaces_checked";
    } else if([mode isEqualToString:@"context"]) {
      id context=[[NSClassFromString(@"AMSFairPlayContext") alloc] init]; SEL s=NSSelectorFromString(@"fairplayContextIDWithError:");
-     BOOL ok=ABI(context,s,@"I",@[@"^@"]); r[@"abi_verified"]=@(ok);
+     BOOL ok=ABI(context,s,@"I",@[@"^@"]); r[@"abi_verified"]=B(ok);
      if(ok) {
        NSError *e=nil; unsigned int ident=((unsigned int(*)(id,SEL,NSError *__autoreleasing *))objc_msgSend)(context,s,&e);
-       ErrorFields(r,e); r[@"context_ready"]=@(ident!=0 && !e);
+       ErrorFields(r,e); r[@"context_ready"]=B(ident!=0 && !e);
        r[@"status"]=ident!=0 && !e?@"context_ready":@"context_failed";
      }
      if(ABI(context,NSSelectorFromString(@"destroyContext"),@"v",@[]))((void(*)(id,SEL))objc_msgSend)(context,NSSelectorFromString(@"destroyContext"));
@@ -87,12 +88,12 @@ int main(int argc,const char **argv) { @autoreleasepool {
      id bag=[[NSClassFromString(@"AMSKeybag") alloc] init];
      SEL s=NSSelectorFromString(@"keybagSyncDataWithAccountID:transactionType:error:");
      if(!ABI(bag,s,@"@",@[@"@",@"I",@"^@"]))s=NSSelectorFromString(@"keybagSyncData:transactionType:outError:");
-     BOOL ok=ABI(bag,s,@"@",@[@"@",@"I",@"^@"]);r[@"abi_verified"]=@(ok);
+     BOOL ok=ABI(bag,s,@"@",@[@"@",@"I",@"^@"]);r[@"abi_verified"]=B(ok);
      if(ok) {
        NSError *e=nil; id data=((id(*)(id,SEL,id,unsigned int,NSError *__autoreleasing *))objc_msgSend)(bag,s,@0,1,&e);
        ErrorFields(r,e);
        BOOL present=[data isKindOfClass:NSData.class] && [data length]>0 && [data length]<=1048576;
-       r[@"sync_data_present"]=@(present);if(present)r[@"sync_data_length"]=@([data length]);
+       r[@"sync_data_present"]=B(present);if(present)r[@"sync_data_length"]=@([data length]);
        r[@"synthetic_account_id"]=@YES;r[@"transaction_type"]=@1;
        r[@"status"]=present && !e?@"synthetic_sync_ready":@"synthetic_sync_failed";
      }
