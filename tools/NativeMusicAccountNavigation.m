@@ -67,6 +67,18 @@ static BOOL CanPress(NSString *action, NSString *role, NSString *label, BOOL ena
         return [role isEqual:@"AXMenuItem"] && [label isEqual:@"sign_in"];
     return NO;
 }
+static BOOL Pressable(AXUIElementRef element) {
+    CFArrayRef names=NULL;
+    AXError error=AXUIElementCopyActionNames(element,&names);
+    BOOL result=error==kAXErrorSuccess && names && [(__bridge NSArray *)names containsObject:(__bridge NSString *)kAXPressAction];
+    if (names) CFRelease(names);
+    return result;
+}
+static BOOL HasLabel(NSDictionary *node,NSString *label) {
+    for (NSString *key in @[@"title",@"description",@"text",@"placeholder"])
+        if ([node[key] isEqual:label]) return YES;
+    return NO;
+}
 static void Collect(AXUIElementRef element, NSUInteger depth, NSMutableArray *nodes) {
     if (!element || depth > 12 || nodes.count >= 320) return;
     NSString *role = Role(ReadAttribute(element,kAXRoleAttribute));
@@ -79,7 +91,8 @@ static void Collect(AXUIElementRef element, NSUInteger depth, NSMutableArray *no
     AXUIElementIsAttributeSettable(element,kAXValueAttribute,&settable);
     [nodes addObject:@{
         @"element":(__bridge id)element, @"role":role, @"title":title, @"description":description,
-        @"text":value, @"depth":@(depth), @"enabled":@([enabled isKindOfClass:NSNumber.class] && [enabled boolValue]),
+        @"text":value, @"placeholder":Label(ReadAttribute(element,CFSTR("AXPlaceholderValue"))),
+        @"pressable":Pressable(element)?@YES:@NO, @"depth":@(depth), @"enabled":@([enabled isKindOfClass:NSNumber.class] && [enabled boolValue]),
         @"secure":[subrole isEqual:@"AXSecureTextField"] ? @YES : @NO,
         @"value_settable":settable ? @YES : @NO
     }];
@@ -99,14 +112,19 @@ static NSArray *Nodes(AXUIElementRef root) {
 }
 static NSDictionary *PublicSnapshot(NSArray *nodes) {
     NSMutableDictionary *roles = [NSMutableDictionary dictionary], *labels = [NSMutableDictionary dictionary];
-    NSMutableArray *controls = [NSMutableArray array];
+    NSMutableArray *controls = [NSMutableArray array], *recognized = [NSMutableArray array];
     for (NSDictionary *node in nodes) {
         NSString *role = node[@"role"];
         roles[role] = @([roles[role] unsignedIntegerValue] + 1);
-        for (NSString *key in @[@"title",@"description",@"text"]) {
+        for (NSString *key in @[@"title",@"description",@"text",@"placeholder"]) {
             NSString *label = node[key];
-            if (![label isEqual:@"unknown"] && ![label isEqual:@"not_read"])
+            if (label && ![label isEqual:@"unknown"] && ![label isEqual:@"not_read"]) {
                 labels[label] = @([labels[label] unsignedIntegerValue]+1);
+                if (recognized.count<48) [recognized addObject:@{
+                    @"role":role,@"label":label,@"depth":node[@"depth"],
+                    @"enabled":node[@"enabled"],@"pressable":node[@"pressable"]?:@NO
+                }];
+            }
         }
         if (([role isEqual:@"AXTextField"] || [role isEqual:@"AXButton"] ||
              [role isEqual:@"AXSheet"] || [role isEqual:@"AXDialog"]) && controls.count < 48) {
@@ -116,7 +134,7 @@ static NSDictionary *PublicSnapshot(NSArray *nodes) {
         }
     }
     return @{@"node_count":@(nodes.count), @"traversal_cap_reached":nodes.count>=320 ? @YES:@NO,
-             @"roles":roles,@"labels":labels,@"controls":controls};
+             @"roles":roles,@"labels":labels,@"controls":controls,@"recognized":recognized};
 }
 static NSDictionary *WindowSnapshot(AXUIElementRef app) {
     id windows = ReadAttribute(app,kAXWindowsAttribute);
@@ -166,6 +184,43 @@ static BOOL DismissWelcome(AXUIElementRef app, NSMutableDictionary *report) {
         }
     }
     report[@"dismiss_welcome"]=@"no_recognized_welcome_sheet";
+    return NO;
+}
+static BOOL DeclineOptionalSheet(AXUIElementRef app,NSMutableDictionary *report) {
+    id windows=ReadAttribute(app,kAXWindowsAttribute);
+    if (![windows isKindOfClass:NSArray.class]) return NO;
+    for (id window in windows) {
+        if (CFGetTypeID((__bridge CFTypeRef)window)!=AXUIElementGetTypeID()) continue;
+        for (NSDictionary *node in Nodes((__bridge AXUIElementRef)window)) {
+            if (![node[@"role"] isEqual:@"AXSheet"]) continue;
+            NSArray *sheet=Nodes((__bridge AXUIElementRef)node[@"element"]);
+            NSDictionary *summary=PublicSnapshot(sheet);
+            if (![summary[@"labels"][@"not_now"] unsignedIntegerValue] ||
+                [summary[@"roles"][@"AXTextField"] unsignedIntegerValue]) continue;
+            NSMutableArray *targets=[NSMutableArray array];
+            for (NSDictionary *candidate in sheet) if (HasLabel(candidate,@"not_now")) [targets addObject:candidate];
+            if (targets.count!=1) {report[@"decline_optional_sheet"]=@"ambiguous";return NO;}
+            id element=targets[0][@"element"];
+            for (NSUInteger level=0;level<3 && element;level++) {
+                AXUIElementRef target=(__bridge AXUIElementRef)element;
+                NSDictionary *scope=PublicSnapshot(Nodes(target));
+                if (![scope[@"labels"][@"not_now"] unsignedIntegerValue] ||
+                    [scope[@"labels"][@"continue"] unsignedIntegerValue] ||
+                    [scope[@"labels"][@"subscribe"] unsignedIntegerValue] ||
+                    [scope[@"roles"][@"AXTextField"] unsignedIntegerValue]) break;
+                if (Pressable(target)) {
+                    AXError result=AXUIElementPerformAction(target,kAXPressAction);
+                    report[@"decline_optional_sheet"]=ErrorCategory(result);
+                    return result==kAXErrorSuccess;
+                }
+                element=ReadAttribute(target,kAXParentAttribute);
+                if (element && CFGetTypeID((__bridge CFTypeRef)element)!=AXUIElementGetTypeID()) break;
+            }
+            report[@"decline_optional_sheet"]=@"no_bounded_pressable_target";
+            return NO;
+        }
+    }
+    report[@"decline_optional_sheet"]=@"no_recognized_optional_sheet";
     return NO;
 }
 static BOOL Contract(void) {
@@ -231,6 +286,8 @@ int main(int argc, const char **argv) { @autoreleasepool {
             } while (startupDeadline.timeIntervalSinceNow>0);
             if (DismissWelcome(target,report)) Pump(3);
             report[@"after_welcome"]=WindowSnapshot(target);
+            if (DeclineOptionalSheet(target,report)) Pump(2);
+            report[@"after_optional_sheet"]=WindowSnapshot(target);
             id menu=ReadAttribute(target,kAXMenuBarAttribute);
             if (menu && CFGetTypeID((__bridge CFTypeRef)menu)==AXUIElementGetTypeID()) {
                 NSArray *nodes=Nodes((__bridge AXUIElementRef)menu);
