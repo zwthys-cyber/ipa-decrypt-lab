@@ -60,11 +60,19 @@
 
 最新直接测得的电脑授权数量为 **4/5**，来自首次成功恢复试验；这是记录值，不是实时查询。此前用户批准的全部解除授权只执行过一次（5 → 0），不会作为常规重试清理步骤。
 
+## Telegram 交付与 macOS 26 升级
+
+用户请求 cb7bc7f3d855680a4e5cf55548507d3a 对应 App ID 1530340312。原 ARM 运行因 hosted runner 容量不足未开始执行；[Intel 恢复运行 41869909475](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41869909475)验证 6 个加密切片、164 页。[Telegram 会话 41870902876](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41870902876)确认发送 2,035,796 字节，用户确认收到。
+
+新交付默认使用 macOS 26 Intel，备用为 macOS 15 Intel。26 的无账号预检和 [真实下载解密样本 41876940427](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41876940427)已通过；同一模型在 26 上再次校验上述 6 个切片、164 页，精确命中已验证的 Swift 缓存后跳过重复构建。编译与测试分步限时，ARM/Intel、15/26 缓存互相隔离。
+
+已增加 3 分钟队列切换尝试、最多两次逻辑运行、执行前安全取消核对，以及“阶段已就绪 + finalized 密文产物”的及时交付门槛。305 项 Python 测试（1 项环境跳过）及真实密文归档摘要探针通过。详见 [运行说明](TELEGRAM.md)。
+
 ## 尚未完成的部分
 
 - **IPA 交付**：真实私有加密导出已通过 [41856194867](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41856194867)，移除账号元数据后的文件为 92,118,013 字节；只保留一天 age 密文，明文仍不公开。[真实 Telegram 大文件交付 41864719056](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41864719056) 已确认完整发送该 IPA，发送前在 Linux 完成私有解密、摘要及结构复核。
 - **安装运行**：尚未验证重签名、安装和实际运行，`runtime_verified=false`。
-- **扩大兼容范围**：其他应用、账号、版本及真实 Linux 平台解密尚未完成实测；已有 Linux 构建与合成测试不能代替这些证据。
+- **扩大兼容范围**：更多应用、其他账号/版本及真实 Linux 平台解密尚未完成实测；已有 Linux 构建与合成测试不能代替这些证据。
 - **独立签名信任验证**：页面哈希校验不等同于独立的 Apple CMS 信任验证。
 - **产品与部署**：用户已恢复 TG 接入。管理员私聊 /id 与 92 MB 完整文件回传已完成真实收发；提交、查询、取消代码及 289 项 Python 测试（1 项跳过）已接入。启动方法见 [Telegram 私有交付测试](TELEGRAM.md)。计费和常驻生产服务尚未完成。
 

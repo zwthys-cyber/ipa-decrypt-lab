@@ -12,6 +12,10 @@
 
 - **Telegram 私有测试**：见 [配置、指令与启动说明](docs/TELEGRAM.md)。
 
+下载交付已升级为 **macOS 26 Intel 默认、macOS 15 Intel 备用**。26 上的真实样本验证已通过，构建缓存复用、排队切换和不等待迟到总状态的安全交付已接入。[升级与实测记录](docs/TELEGRAM.md)。
+
+另一个实际用户请求 App ID 1530340312 已完成 6 个加密切片、164 页校验，2,035,796 字节完整文件通过 Telegram 发出，用户确认收到；该样本也在 macOS 26 上复核通过。
+
 ## 当前结果
 
 [完整成功试验 41846142942](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41846142942)在全新 GitHub 运行器上完成：

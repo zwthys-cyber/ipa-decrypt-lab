@@ -45,3 +45,12 @@
 - A trusted worker's request/run-bound artifact_ready check plus a finalized, non-expired encrypted artifact with a SHA-256 digest may release private delivery while the overall workflow status still lags. A completed failed/cancelled run does not qualify for this early path.
 - The controller must still verify artifact archive digest (when present), recipient-encrypted payload, receipt binding, plaintext digest and IPA structure before sending; the progress card reaches 100% only after Telegram acknowledges the file.
 - progress-contracts.yml may read Actions artifacts metadata and download only the fixed encrypted verification sample to test readiness/archive integrity. It receives no delivery identity or Apple/Telegram credentials and must not send files or expose plaintext.
+
+## macOS 26 and queue upgrade (2026-11-04)
+
+- The user requested macOS 26. Default private delivery is now macos-26-intel, fallback macos-15-intel; keep the explicit GitHub-hosted allowlist. No self-hosted or paid larger runner is authorized by this change.
+- 26 Intel preflight 41872589701 and real model/download/decryption sample 41876940427 verified the path. The latter verified 6 slices / 164 pages for App ID 1530340312 and reused the validated Swift build cache. It does not establish installation/runtime.
+- The user's original request was recovered on 15 Intel in 41869909475, delivered via Telegram session 41870902876 (2,035,796 bytes), and acknowledged by the user. This manual recovery is not an automatic-failover live test.
+- Queued jobs may attempt one alternate pool only after safe termination/no-execution proof; never blindly retry an assigned/executed job, a user cancellation, or an ambiguous dispatch. Keep at most two automatic logical runs and protect artifacts/Secrets.
+- Use 4 Swift jobs on Intel, 2 on ARM; isolate OS/architecture/Xcode/source caches. Verified exact cache reuse may skip repeated native compilation/tests; Python/Go checks remain required. ARM 26 preflight did not obtain capacity; do not claim it verified.
+- Early readiness/archive integrity probe 41879112828 passed 305 Python tests (1 environment skip) and read back the real encrypted sample without plaintext or Telegram transmission.

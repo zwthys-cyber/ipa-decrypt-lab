@@ -43,15 +43,32 @@
 
 实时进度验证：[295 项 Python 测试及 Telegram 单消息更新 41868108407](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41868108407) 已通过；[阶段通道写入与读回 41868334364](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41868334364) 已通过。两项演示不下载或解密真实应用。
 
+## macOS 26 升级与构建复用
+
+- 默认运行器为 macos-26-intel，Xcode 固定为 26.2；备用为 macos-15-intel。Intel 使用 4 路 Swift 构建，ARM 预检保持 2 路。
+- Swift 缓存按 macOS 大版本、架构、Xcode、固定上游版本及补丁/测试内容隔离。仅精确命中此前已通过验证的缓存时复用客户端；Python 和 Go 检查继续执行。
+- 冷构建与测试分步限时。无账号 preflight 使用独立并发组，可以预热工具链，不阻塞已在运行的交付任务。
+- [26 Intel 无账号预检 41872589701](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41872589701)通过 303 项 Python 测试（1 项环境跳过）、9 项 Swift 测试及 Go 检查，并保存构建缓存。
+- [26 Intel 真实样本 41876940427](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41876940427)成功下载 App ID 1530340312，验证 6 个加密切片、164 页，结果为 2,035,796 字节；运行中确认 Swift 编译、Swift 测试、客户端构建三个步骤因缓存命中而跳过。产物只以密文保存，没有再次给管理员发送同一验证文件。
+- 系统版本不保证固定提速倍数；本次直接验证了构建复用，排队时间仍取决于 GitHub 可用运行器。
+
 ## 排队与备用运行器
 
 原始 ARM 任务 cb7bc7f3d855680a4e5cf55548507d3a 在 [41866779185](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41866779185) 因 hosted runner 多次分配失败而终止，GitHub 注释明确提示 macOS ARM 容量不足。该任务没有执行步骤。使用同一逻辑任务编号的 Intel 恢复运行是 [41869909475](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41869909475)。
 
-新任务默认使用 macos-15-intel，备用为 macos-15；两者都是 GitHub-hosted macOS。Swift 缓存按 runner.arch 隔离。运行标题包含任务编号、App ID 和运行器，支持机器人重启后恢复追踪。
+新任务默认使用 macos-26-intel，备用为 macos-15-intel；两者都是 GitHub-hosted macOS。macos-26 ARM 仅作为手动预检选项，尚未完成验证，当前也遇到运行器容量不足。Swift 缓存按 runner.arch 隔离。运行标题包含任务编号、App ID 和运行器，支持机器人重启后恢复追踪。
 
 未分配运行器且排队超过 3 分钟时，机器人尝试取消旧运行；只有确认旧运行已结束且未执行任何步骤，才提交备用线路。因容量不足直接失败且没有分配运行器的任务也可切换。每个逻辑任务最多两次运行；已分配运行器、已进入下载/解密的失败不自动重跑，用户主动取消不自动重试。
 
 取消或提交结果不明确时，不盲目重发；备用提交 3 分钟仍未确认则停止自动尝试并提示保留任务编号。平台整体故障、两个池都无容量时，备用池也不能保证立即启动。进度卡会显示切换状态，平台错误不能被当成解密成功。
+
+## 已完成产物的及时交付
+
+GitHub 工作流总状态可能在文件已准备好之后仍显示运行中。此时只接受同一请求/运行/提交绑定的 artifact_ready check，以及已正式生成、未过期、带 SHA-256 摘要的加密产物；已结束且失败或取消的运行不走这条提前交付路径。
+
+交付仍核对归档摘要、密文摘要、收据归属、age 解密认证、明文摘要和 IPA 结构；Telegram 确认发送成功后才显示 100%。文件缺失、上传未完成或校验不符均拒绝发送。此机制不依赖迟到的总工作流状态，也不跳过任何文件验证。
+
+[41879112828](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41879112828)通过 305 项 Python 测试（1 项环境跳过），并对真实 26 Intel 加密样本验证就绪判定和归档摘要。探针未访问明文、未发送 Telegram 文件。
 
 ## 实时进度
 
@@ -113,3 +130,7 @@
 ## 尚未实现
 
 计费、多用户授权、持久化生产队列、常驻部署、会话间自动恢复、独立 Apple 签名信任验证和安装运行测试。GitHub Actions 不作为无限续期的托管服务。Debian 服务器未部署或执行本项目。
+
+### 本轮已确认的用户交付
+
+原始请求 cb7bc7f3d855680a4e5cf55548507d3a 在 ARM 分配失败后，经 Intel 恢复运行 41869909475 完成 App ID 1530340312 的真实验证；Telegram 会话 41870902876 于 17:02:29 UTC 获得完整 2,035,796 字节的 sendDocument 回执，用户也确认收到。自动备用规则另有合约覆盖，不能把本次人工恢复误记成自动切换实测。
