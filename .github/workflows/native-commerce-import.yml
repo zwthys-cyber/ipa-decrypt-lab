@@ -20,7 +20,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Check reporting, negative evidence and privacy
-        run: python3 -m unittest discover -s tests -p 'test_native_commerce*.py' -v
+        run: |
+          python3 -m unittest discover -s tests -p 'test_native_commerce*.py' -v
+          python3 -m unittest discover -s tests -p 'test_commerce_import_logs.py' -v
       - name: Build fixed synthetic controls
         run: |
           clang -g -fobjc-arc -framework Foundation tools/NativeCommerceKeybag.m -o native-commerce-keybag

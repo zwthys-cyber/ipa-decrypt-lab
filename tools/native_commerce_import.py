@@ -1,4 +1,5 @@
 """Fixed invalid-import observation. A no-reply IPC call never establishes import success."""
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -6,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 from machine_enrollment import run_private
+from commerce_import_logs import collect as collect_logs
 from native_commerce_keybag import clean as clean_sync, BOOLS
 from native_keybag import DOMAINS, STATE_KEYS
 
@@ -114,10 +116,13 @@ def main():
         raise SystemExit("GitHub-hosted macOS required")
     failed = False
     for fixture in ("baseline", "invalid-both"):
+        started = datetime.now(timezone.utc)
         try:
             result = probe(fixture)
         except Exception:
             result = clean(None, fixture)
+        ended = datetime.now(timezone.utc)
+        result["service_log_window"] = collect_logs(started, ended)
         print(json.dumps(result, sort_keys=True), flush=True)
         failed |= result["status"] not in {"baseline_complete", "submission_unverified"}
         if result["status"] != "baseline_complete" and fixture == "baseline":
