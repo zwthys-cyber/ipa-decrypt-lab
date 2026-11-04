@@ -1,0 +1,43 @@
+import importlib.util
+import json
+from pathlib import Path
+import unittest
+
+spec = importlib.util.spec_from_file_location("authorization_code",
+    Path(__file__).parents[1] / "tools/native_authorization_code.py")
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+
+class AuthorizationCodeContracts(unittest.TestCase):
+    def test_process_output_and_unapproved_functions_are_not_published(self):
+        sample = "\n".join([
+            "SECRET process/environment output",
+            "AppleMediaServices\x60-[AMSAuthorizeMachineTask _buildRequestParametersWithError:]:",
+            "  0x1000 <+0>: bl 0x2000 ; objc_msgSend$ams_secureToken",
+            "  0x1004 <+4>: mov x1, x0",
+            "(lldb) process kill",
+            "  0x2000 <+0>: SECRET",
+            "OtherModule\x60-[AMSAuthorizeMachineTask _buildRequest]:",
+            "  0x1000 <+0>: SECRET",
+            "AppleMediaServices\x60-[OtherClass unrelated]:",
+            "  0x1000 <+0>: SECRET",
+        ])
+        value = mod.extract(sample)
+        self.assertNotIn("SECRET", json.dumps(value))
+        self.assertEqual(value[mod.METHODS[0]]["instruction_count"], 2)
+        self.assertEqual(value[mod.METHODS[0]]["field_context"][0]["offset"], 0)
+
+    def test_bad_or_oversized_output_is_rejected(self):
+        for value in (None, [], "x" * 524289):
+            self.assertEqual(mod.extract(value), {})
+
+    def test_only_bounded_instruction_lines_are_included(self):
+        sample = "\n".join([
+            "AppleMediaServices\x60-[AMSAuthorizeMachineTask _buildRequest]:",
+            "  0x1000 <+0>: bl 0x2000 ; setAnisetteType",
+            "  0x1004 <+4>: " + "SECRET" * 300,
+            "  0x1008 <+99999>: SECRET",
+        ])
+        value = mod.extract(sample)
+        self.assertNotIn("SECRET", json.dumps(value))
+        self.assertEqual(value[mod.METHODS[1]]["instruction_count"], 1)

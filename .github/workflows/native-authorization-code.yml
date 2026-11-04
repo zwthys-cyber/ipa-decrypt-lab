@@ -1,0 +1,30 @@
+name: Account-free native authorization code inspection
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-authorization-code
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Check bounded static-code reporting
+        run: python3 -m unittest discover -s tests -p 'test_native_authorization_code.py' -v
+      - name: Build our account-free framework loader
+        run: clang -g -O0 -fobjc-arc -framework Foundation tools/NativeAuthorizationCode.m -o native-authorization-code
+      - name: Inspect parameter and request builders without account operations
+        timeout-minutes: 2
+        run: |
+          ulimit -c 0
+          python3 tools/native_authorization_code.py
