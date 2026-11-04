@@ -281,3 +281,58 @@ The workflow's success means the bounded diagnosis completed, not that the trans
 [Diagnostic follow-up 41750036044](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41750036044), commit b35229f935f3273940f121ed19237a7d0423297c, passed six tests and repeated the four account-free failures. Captured client stderr contained none of the fixed entitlement-denial, own-client or code-requirement phrases. A one-minute akd query filtered to entitlement/own-client terms returned zero matching events. This is absence of evidence from that filter/window, not proof that no access check occurred. The internal-entitlement hypothesis remains unconfirmed.
 
 The next research boundary is the AuthKit client-to-daemon path or a complete independent Store-enrollment protocol. Further unchanged credential retries are not justified by these results. Local callback success does not establish cross-process callback delivery, and a successful public bag request would still not establish authentication permissions. No FairPlay state or portable model has been recovered.
+
+## AuthKit service, signing and caller-scope controls (2026-11-04)
+
+All experiments in this section are account-free and run only on GitHub-hosted macos-15. No authentication controller login method, Apple credentials, Anisette provisioning, model recovery or real IPA is involved.
+
+### Inspecting the actual connection
+
+[Run 41750449196](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41750449196), commit cd37ff456fd5615af67bb3bd9c7f3b3f44699113, passed seven privacy/contract tests and native compilation. The retained NSXPCConnection and its underlying XPC connection were available. Its service was com.apple.ak.auth.xpc, which also appeared in the system akd launch agent's MachServices dictionary. The GUI akd registration check remained true. Four ordinary client combinations still returned NSCocoaErrorDomain 4099.
+
+The helper uses Apple's [xpc_connection_get_name](https://developer.apple.com/documentation/xpc/xpc_connection_get_name(_:)) and [xpc_connection_copy_invalidation_reason](https://developer.apple.com/documentation/xpc/xpc_connection_copy_invalidation_reason(_:)) APIs after obtaining the connection inside our own process. Only known service names, fixed reason classifications and boolean peer-availability metadata are published. Raw reason strings, process IDs, account names and hardware identifiers are discarded. Runtime presence is checked before using the private getters.
+
+An additional [in-process proxy observation run 41750914146](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41750914146), commit c36907e16a0c9866869ce5cba6f72b2a82da3061, passed ten tests and native compilation. Each of the four ordinary clients made one observed proxy request to the auth service and received one captured 4099 proxy error. The reason API returned a nonempty string, but only the allowlisted word connection matched; none of the specific cause classifiers matched. No positive peer PID was observed. These observations confirm the error occurred on the actual requested auth-service proxy, but do not identify the daemon's decision or prove it never processed the request.
+
+The observation wraps proxy error handlers only inside our own disposable helper, forwards each original call/callback and restores the original implementations. It neither attaches to nor modifies a system process. Reports bound captured failures to four and never recursively publish nested native objects.
+
+### Declaring the internal permission is not a working fix
+
+[Controlled signing run 41750678118](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41750678118), commit 51e4fe127d25908967583ccebf1425f78ab5f4ea, passed nine tests and native compilation. It compared the ordinary client with a copy signed ad hoc under our own bundle identity, declaring only com.apple.authkit.client.internal=true as the additional entitlement.
+
+The ordinary clients ran, reported no such entitlement in their own signature metadata, and returned 4099. The declared-entitlement copy's static signing metadata included the flag, but both of its attempted launches ended with signal 9 and no native report. No account request was attempted. This establishes that this ad-hoc declaration did not provide a usable client; the experiment did not identify which kernel/code-signing decision caused the termination.
+
+Apple's [code-signing guidance](https://developer.apple.com/forums/thread/751658) also distinguishes declaring entitlements from being able to use restricted entitlements under ad-hoc signing. The hosted result must not be described as a granted AuthKit permission. No Apple signing identity, provisioning profile, system binary or system security setting was changed. The failed variant has been removed from subsequent workflow runs.
+
+### Caller privilege and GUI bootstrap scope
+
+
+[Caller-scope run 41751197447](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41751197447), commit 740da3cb6d5a1edc2354f22c67ed3ebdc50ba5f4, passed eleven tests and native compilation. Four ordinary calls and two root calls using launchctl asuser all returned 4099. The two administrative helpers confirmed effective_user_is_root=true; every case observed one auth proxy request and captured its error.
+
+The historical container label own_app_root_in_user_gui was too strong: the command targeted the runner user's context with asuser, but did not independently verify adoption of a desktop process's Mach bootstrap namespace. Later code labels it own_app_root_via_asuser. This result shows that this root/asuser combination did not solve the problem; it does not establish that every GUI-context route was tested.
+
+
+[Mach lookup and desktop-context run 41751601120](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41751601120), commit 6d366dd57b002e74367b5e4b7cc33a9590f2575e, passed thirteen tests and native compilation:
+
+| Control | Executed helper | Auth-service Mach lookup | Public bag call |
+| --- | --- | --- | --- |
+| Ordinary CLI, default / named | yes / yes | found, code 0 / found, code 0 | 4099 / 4099 |
+| Own app bundle, default / named | yes / yes | found, code 0 / found, code 0 | 4099 / 4099 |
+| Root via asuser, default / named | yes / yes | found, code 0 / found, code 0 | 4099 / 4099 |
+| Adopt desktop process context with bsexec, then restore ordinary UID | no native report in either attempt | not measured | not measured |
+
+All six executed helpers obtained a valid send right for com.apple.ak.auth.xpc and then captured an error from the actual proxy. Failure to find that service is therefore not the cause of these six calls. A successful lookup alone does not prove that the server accepted the connection or request. Root privileges via the tested asuser command did not fix this path.
+
+The bsexec control locates exactly one Finder or Dock process owned by the runner user, privately validates its numeric PID, then requests that process's bootstrap context and restores the runner UID before execution. Both commands exited 1 without a native report. The report intentionally does not expose raw command errors or process IDs, so the specific command failure is not identified. These two cases do not establish a successful desktop-context transfer and must not be counted as additional AuthKit rejections. The earlier asuser label correction matters for that distinction.
+
+Apple's [launchctl manual source](https://github.com/apple-oss-distributions/launchd/blob/d448a1c8f70a61202f8705f94337f686b87c30c4/man/launchctl.1) motivated testing a process-specific bootstrap context; current behavior is judged from the hosted run rather than assumed from the historical manual.
+
+### Result and next boundary
+
+The tested native bridge remains unusable for first-time enrollment. A reachable service name, a local provider callback, administrator execution and an entitlement string in a signature are different conditions; none of these observations establishes successful account authentication or FairPlay state.
+
+No new account login was attempted during this follow-up. The pinned UnfairPlay upstream was rechecked and its current head remains 26a099fcb2292eaacd9e0ce89793cdbc88e516d1; it still consumes already-enrolled Mac state and does not supply a newly working first-enrollment path.
+
+Further work needs a supported client path that reaches the authentication service, or a separately implemented and verified Store/FairPlay registration protocol. Repeating the same account credentials, declaring the internal entitlement again, or treating the successful diagnostic workflow as a working authorization model is not justified. This does not prove that every GitHub-only implementation is impossible.
+
+All edits were made through GitHub APIs. All compilation, tests and process experiments ran on GitHub-hosted Actions. No external Mac, Debian execution, personal phone, TG integration, public credentials, account identifiers, headers, model material or real IPA artifacts were used.

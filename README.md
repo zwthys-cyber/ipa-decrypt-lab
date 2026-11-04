@@ -45,7 +45,7 @@ Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直�
 | Independent Anisette prerequisite probe | 独立初始化、私有状态复用；Mac 上另查 AuthKit 接口元数据 | 不传入 Apple 账号，不发布认证数据 |
 | Native Anisette callback contract | 用合成数据验证原生代理回调与缺失数据处理 | 不传入 Apple 账号 |
 | Native AuthKit independent Anisette trial | 一次临时认证调用；通过私有管道按需获取新数据 | 仅最后一步使用 Apple Secrets；拒绝可选安全升级 |
-| Account-free AuthKit transport diagnosis | 对照命令行 / App 包和默认 / 显式客户端标识，检查系统通信 | 不传入 Apple 账号 |
+| Account-free AuthKit transport diagnosis | 检查服务查找、客户端标识、进程权限与实际代理错误 | 不传入 Apple 账号；限时诊断 |
 
 在 Independent Swift Store trial 中选择：
 
@@ -56,7 +56,7 @@ Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直�
 
 [精确时间范围的原生诊断](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41746379142)：23 项检查和编译通过，登录仍被拒绝。[独立前置条件 Linux 试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41747047524)与[ARM Mac 复测](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41747343222)均成功，每次 7 项检查通过，均未使用 Apple 账号。后续[原生回调试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41748357798)已通过；[真实认证试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41749424573)的 16 项测试与编译通过，但认证调用返回 XPC 4099，提供器调用次数为 0。未启用双重认证升级，未得到 FairPlay 模型。[详细证据与边界](OFFLINE-BACKEND.md#native-callback-contract-and-private-authentication-trial-2026-11-04)。
 
-[不带账号的通信诊断](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41750036044)通过 6 项检查；命令行 / App 包及默认 / 显式标识四种组合均返回 XPC 4099。系统认证服务已注册，但尚未找到明确拒绝原因，不能把内部权限线索认定为根因。后续先研究系统通信边界，不重复提交相同登录请求。
+[最新通信诊断](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41751601120)通过 13 项检查与原生编译。普通用户及管理员的 6 次实际请求都成功找到认证服务端口，随后返回 XPC 4099；另 2 次桌面上下文启动命令未执行成功，不能算成有效认证对照。[内部权限声明试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41750678118)中，自有程序两次被 SIGKILL 终止，该变体已移出后续工作流。本轮没有重新提交账号登录，尚未找到可用的首次模型生成方案。[证据与局限](OFFLINE-BACKEND.md#authkit-service-signing-and-caller-scope-controls-2026-11-04)。
 
 ## 固定约束
 
