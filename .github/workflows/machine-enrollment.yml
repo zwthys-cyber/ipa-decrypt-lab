@@ -40,6 +40,7 @@ jobs:
       - name: Patch bounded private login handoff without saving account
         run: python3 tools/patch_machine_enrollment.py native-source/ApplePackage
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: swift-cache
         with:
           path: native-source/ApplePackage/.build
           key: swift-machine-enrollment-391bfe6-${{ hashFiles('tools/patch_machine_enrollment.py') }}
@@ -50,6 +51,12 @@ jobs:
         run: |
           swift test -j 2 --filter SAPAuthenticationRequestTests
           swift build -j 2 --product ApplePackageTool
+      - name: Cache public build products before supplying credentials
+        if: steps.swift-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: native-source/ApplePackage/.build
+          key: ${{ steps.swift-cache.outputs.cache-primary-key }}
       - name: Authenticate once and attempt one machine authorization request
         timeout-minutes: 4
         env:

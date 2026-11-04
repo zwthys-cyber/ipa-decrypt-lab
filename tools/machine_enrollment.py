@@ -16,7 +16,7 @@ STATUSES = {"invalid_private_input", "request_preparation_failed", "request_time
     "native_process_failed", "private_handoff_failed"}
 BOOLS = {"authorization_request_attempted", "ephemeral_account", "session_identity_verified",
     "redirect_blocked", "response_oversized", "error_present", "apple_failure_present",
-    "dialog_present", "keybag_present", "keybag_import_succeeded"}
+    "dialog_present", "keybag_present", "keybag_import_succeeded", "redirect_seen"}
 
 def clean(value):
     r = {"schema": "ipa-lab-machine-enrollment-v1", "status": "probe_failed",
@@ -28,6 +28,8 @@ def clean(value):
     for key in BOOLS:
         if type(value.get(key)) is bool:
             r[key] = value[key]
+    if type(value.get("approved_redirect_count")) is int and 0 <= value["approved_redirect_count"] <= 1:
+        r["approved_redirect_count"] = value["approved_redirect_count"]
     for key in ("error_code", "apple_failure_code", "fairplay_status"):
         if type(value.get(key)) is int and -999999 <= value[key] <= 999999:
             r[key] = value[key]

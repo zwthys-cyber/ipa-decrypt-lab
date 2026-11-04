@@ -154,13 +154,14 @@ static void PublicBag(NSMutableDictionary *r) {
 
 
 
-static BOOL ApplySessionHeaders(NSMutableURLRequest *request,NSNumber *dsid,NSString *token,NSString *guid) {
+static BOOL ApplySessionHeadersWithRouting(NSMutableURLRequest *request,NSNumber *dsid,NSString *token,NSString *guid,BOOL allowPod) {
  if(![request isKindOfClass:NSMutableURLRequest.class] || ![dsid isKindOfClass:NSNumber.class] ||
     dsid.longLongValue<=0 || ![token isKindOfClass:NSString.class] || !token.length || token.length>8192 ||
     [token rangeOfCharacterFromSet:[NSCharacterSet controlCharacterSet]].location!=NSNotFound ||
     ![guid isKindOfClass:NSString.class] || [guid rangeOfString:@"^[A-Fa-f0-9]{12}$" options:NSRegularExpressionSearch].location==NSNotFound)return NO;
  NSURLComponents *url=[NSURLComponents componentsWithURL:request.URL resolvingAgainstBaseURL:NO];
- if(![url.scheme isEqual:@"https"] || ![url.host isEqual:@"buy.itunes.apple.com"] ||
+ BOOL host=[url.host isEqual:@"buy.itunes.apple.com"] || (allowPod && [url.host rangeOfString:@"^p[0-9]{1,3}-buy\\.itunes\\.apple\\.com$" options:NSRegularExpressionSearch].location!=NSNotFound);
+ if(![url.scheme isEqual:@"https"] || !host ||
     ![url.path isEqual:@"/commerce/machine/authorize"] || url.user || url.password ||
     url.fragment || (url.port && url.port.integerValue!=443) ||
     ![request.HTTPMethod isEqual:@"POST"] || request.HTTPBody.length>1048576)return NO;
@@ -178,6 +179,9 @@ static BOOL ApplySessionHeaders(NSMutableURLRequest *request,NSNumber *dsid,NSSt
  return YES;
 }
 
+static BOOL ApplySessionHeaders(NSMutableURLRequest *request,NSNumber *dsid,NSString *token,NSString *guid) {
+ return ApplySessionHeadersWithRouting(request,dsid,token,guid,NO);
+}
 static void Request(NSMutableDictionary *r) {
  Class ac=NSClassFromString(@"ACAccount"); SEL create=NSSelectorFromString(@"ams_createEphemeralAccount");
  if(!ABI(ac,create,@"@",@[]))return;
@@ -223,6 +227,15 @@ static void Request(NSMutableDictionary *r) {
    }
    if(ApplySessionHeaders([request mutableCopy],@7654321,@"ipa-lab-synthetic-token",guid))negative=NO;
    if(ApplySessionHeaders([request mutableCopy],@1234567,@"",guid))negative=NO;
+   NSMutableURLRequest *pod=[request mutableCopy];
+   pod.URL=[NSURL URLWithString:@"https://p17-buy.itunes.apple.com/commerce/machine/authorize"];
+   BOOL routed=ApplySessionHeadersWithRouting(pod,@1234567,@"ipa-lab-synthetic-token",guid,YES);
+   pod.URL=[NSURL URLWithString:@"https://p17-buy.itunes.apple.com.evil.invalid/commerce/machine/authorize"];
+   routed=routed && !ApplySessionHeadersWithRouting(pod,@1234567,@"ipa-lab-synthetic-token",guid,YES);
+   pod.URL=[NSURL URLWithString:@"https://p17-buy.itunes.apple.com/commerce/machine/authorize"];
+   pod.HTTPMethod=@"GET";
+   routed=routed && !ApplySessionHeadersWithRouting(pod,@1234567,@"ipa-lab-synthetic-token",guid,YES);
+   r[@"redirect_policy_verified"]=B(routed);
    r[@"session_policy_verified"]=B(negative);
    r[@"session_headers_applied"]=B(ApplySessionHeaders(request,@1234567,@"ipa-lab-synthetic-token",guid));
    NSURLComponents *url=[NSURLComponents componentsWithURL:request.URL resolvingAgainstBaseURL:NO];

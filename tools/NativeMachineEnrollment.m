@@ -9,6 +9,12 @@
 @property(nonatomic,strong) NSHTTPURLResponse *response;
 @property(nonatomic,strong) NSError *error;
 @property(nonatomic) BOOL redirected;
+@property(nonatomic) BOOL redirectSeen;
+@property(nonatomic) NSUInteger redirectCount;
+@property(nonatomic,strong) NSURLRequest *originalRequest;
+@property(nonatomic,strong) NSNumber *dsid;
+@property(nonatomic,copy) NSString *token;
+@property(nonatomic,copy) NSString *guid;
 @property(nonatomic) BOOL oversized;
 @property(nonatomic,strong) dispatch_semaphore_t done;
 @end
@@ -27,6 +33,12 @@
  [self.data appendData:data];
 }
 - (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task willPerformHTTPRedirection:(NSHTTPURLResponse *)response newRequest:(NSURLRequest *)request completionHandler:(void (^)(NSURLRequest *))handler {
+ self.redirectSeen=YES;
+ BOOL status=response.statusCode==307 || response.statusCode==308;
+ NSMutableURLRequest *next=[self.originalRequest mutableCopy];next.URL=request.URL;
+ BOOL safe=status && self.redirectCount==0 && [request.HTTPMethod isEqual:@"POST"]
+   && ApplySessionHeadersWithRouting(next,self.dsid,self.token,self.guid,YES);
+ if(safe){self.redirectCount++;handler(next);return;}
  self.redirected=YES;self.response=response;handler(nil);
 }
 - (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didCompleteWithError:(NSError *)error {
@@ -72,6 +84,8 @@ static void Authorize(NSDictionary *input,NSMutableDictionary *r) {
  NSURLRequest *request=PreparedRequest(input,r);
  if(!request){r[@"status"]=@"request_preparation_failed";return;}
  LabEnrollmentResponse *delegate=[LabEnrollmentResponse new];
+ delegate.originalRequest=request;delegate.dsid=@([input[@"dsid"] longLongValue]);
+ delegate.token=input[@"token"];delegate.guid=input[@"guid"];
  NSURLSessionConfiguration *config=[NSURLSessionConfiguration ephemeralSessionConfiguration];
  config.URLCache=nil;config.HTTPCookieStorage=nil;config.URLCredentialStorage=nil;
  config.HTTPShouldSetCookies=NO;config.timeoutIntervalForRequest=30;config.timeoutIntervalForResource=40;
@@ -83,6 +97,7 @@ static void Authorize(NSDictionary *input,NSMutableDictionary *r) {
  BOOL done=dispatch_semaphore_wait(delegate.done,dispatch_time(DISPATCH_TIME_NOW,45*NSEC_PER_SEC))==0;
  [session invalidateAndCancel];
  if(!done){r[@"status"]=@"request_timeout";return;}
+ r[@"redirect_seen"]=B(delegate.redirectSeen);r[@"approved_redirect_count"]=@(delegate.redirectCount);
  r[@"redirect_blocked"]=B(delegate.redirected);r[@"response_oversized"]=B(delegate.oversized);
  if(delegate.response)r[@"http_status"]=@(delegate.response.statusCode);
  ErrorFields(r,delegate.error);

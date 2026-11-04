@@ -49,7 +49,7 @@ def clean(value):
                 "need_div_one", "request_present", "request_is_post", "request_body_is_plist",
                 "sap_header_present", "anisette_header_present", "secure_token_provider_used",
                 "x_token_is_string", "x_token_is_number", "x_token_is_one", "x_token_is_zero",
-                "x_token_is_empty", "token_header_is_synthetic", "session_policy_verified", "session_headers_applied"):
+                "x_token_is_empty", "token_header_is_synthetic", "session_policy_verified", "session_headers_applied", "redirect_policy_verified"):
         if type(value.get(key)) is bool:
             r[key] = value[key]
     if type(value.get("error_domain")) is str and value["error_domain"] in DOMAINS:
@@ -106,7 +106,7 @@ def clean(value):
     if r["status"] == "synthetic_request_ready" and not (
         all(r.get(k) is True for k in ("abi_verified", "ephemeral_account", "request_present",
             "request_is_post", "request_body_is_plist", "x_token_is_zero", "owner_is_synthetic", "endpoint_supported",
-            "session_policy_verified", "session_headers_applied", "token_header_is_synthetic"))
+            "session_policy_verified", "session_headers_applied", "token_header_is_synthetic", "redirect_policy_verified"))
         and r.get("error_present") is False):
         r["status"] = "probe_failed"
     if r["status"] == "synthetic_parameters_ready" and not (
