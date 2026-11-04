@@ -65,6 +65,8 @@ Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直�
 
 [机器授权路由试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41757256880)完成一次受限 Apple 跳转，收到 HTTP 200，但正文为业务错误 2002，未包含 keybag。[补齐 Cookie / 店面信息的试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41758396250)登录成功，授权接口返回 HTTP 500。两次均通过编译及 18 项 Python、7 项 Swift 检查，均未完成授权。[机器授权用途对照](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41758811569)通过 20 项 Python 与 8 项 Swift 检查，登录成功后仍收到 2002，未签发 keybag。[Cookie 单独携带](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41759197723)仍返回 2002；[店面信息单独携带](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41759651890)返回 HTTP 500。后续默认不复制该店面头；工作流保留独立对照选项。
 
+[创建机器会话的进一步对照](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41760174263)通过 20 项 Python、9 项 Swift 检查与编译。增加会话创建字段后登录成功，授权仍返回 2002，没有 keybag。当前仍未获得模型或验证真实砸壳，不能把测试通过当作项目完成。
+
 用户提供的 [fairplay-decrypt](https://github.com/EthanArbuckle/fairplay-decrypt) 是可在 Linux / macOS 使用的离线解密器，但其凭据获取工具要求越狱设备及已安装应用；仅编译工具不能生成匹配的 16 字节账号凭据。它没有补齐当前 GitHub-only 首次授权缺口。
 
 ## 固定约束

@@ -400,3 +400,22 @@ Cookie-only and storefront-only controls are available to separate the two sessi
 [Storefront-only trial 41759651890](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41759651890), commit 211ec0d, passed 20 Python contracts and 8 Swift tests. machineAuthorize login succeeded and one approved pod redirect completed. With the full login storefront header and no cookies, the authorization endpoint returned HTTP 500 and no parseable property list. Together with the cookie-only and token-only controls, this supports leaving this copied storefront header disabled in subsequent trials. The runs used separate fresh sessions and runners, so they are not proof of a universal server-side cause. No keybag import or model was produced.
 
 The machineSession experiment adds an independent synthetic test that verifies all changed fields are present in the exact SAP-signed bytes. It does not answer any server dialog, enable a security upgrade, request deauthorization, or export private session material.
+
+[Machine-session trial 41760174263](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41760174263), commit 83e1c6a, passed 20 Python contracts, 9 Swift SAP tests, native compilation and synthetic prerequisites. With createSession=true, attempt=1, the current machine name and the machineAuthorize why field signed together, Store login succeeded. The authorization request carried eight scoped cookies and no copied storefront header. It received HTTP 200 without a redirect, failureType 2002, a dialog and no keybag. Sign-in/password text classifiers matched; verification-code/computer-limit classifiers did not. The additional session-creation fields did not complete authorization in this trial.
+
+### Current result after the session controls
+
+| Store login variant | Authorization context | Observed final response | Keybag |
+| --- | --- | --- | --- |
+| signIn | token | HTTP 200, failureType 2002 after one pod redirect | none |
+| signIn | cookies and copied storefront | HTTP 500, not a parsed plist | not obtained |
+| machineAuthorize why only | token | HTTP 200, failureType 2002 after one pod redirect | none |
+| machineAuthorize why only | cookies | HTTP 200, failureType 2002, no redirect | none |
+| machineAuthorize why only | copied storefront | HTTP 500 after one pod redirect, not a parsed plist | not obtained |
+| machineSession fields | cookies | HTTP 200, failureType 2002, no redirect | none |
+
+All rows used bounded GitHub-hosted trials. Each authenticated request used its own fresh private session; the table does not isolate every possible server, runner or timing difference. The default authorization context is now token-only, matching a tested structured-response baseline; cookie and storefront variants remain explicitly selectable research controls.
+
+No row imported a keybag, recovered an enrollment model or verified IPA plaintext. A successful Store session and locally generated kbsync are still insufficient evidence of accepted FairPlay enrollment. The tested session controls have not identified the full machine-authorization authentication contract. Repeating these unchanged requests is not a demonstrated path forward. Further work requires new protocol evidence or a verified credential-bootstrap implementation, not another successful compilation.
+
+The reviewed fairplay-decrypt upstream supplies an offline decryptor and an iOS credential extractor; it supplies no verified fresh GitHub-only bootstrap. It has not been integrated or used to claim real decryption. No personal device, third-party decryption service, Telegram integration, local project execution or public private-material artifact was used.
