@@ -50,6 +50,20 @@ class ArchiveTests(unittest.TestCase):
         result = audit.audit(self.path)
         self.assertEqual(result["status"], "no_encrypted_flags_found")
         self.assertFalse(result["runtime_verified"])
+    def test_large_resource_archive_within_bounded_limit(self):
+        self.make(image(), [(f"Payload/Demo.app/resources/{i}.dat",b"x") for i in range(4096)])
+        self.assertEqual(audit.audit(self.path)["encrypted_slice_count"],1)
+
+    def test_entry_limit_remains_enforced(self):
+        self.make(image(), [("Payload/Demo.app/resource",b"x")])
+        original=audit.ENTRY_LIMIT
+        try:
+            audit.ENTRY_LIMIT=2
+            with self.assertRaisesRegex(audit.AuditError,"archive entry limit exceeded"):
+                audit.audit(self.path)
+        finally:
+            audit.ENTRY_LIMIT=original
+
     def test_missing_main_rejected(self):
         self.make()
         with self.assertRaises(audit.AuditError):

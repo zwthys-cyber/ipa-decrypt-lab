@@ -10,7 +10,7 @@ import zipfile
 
 MEMBER_LIMIT = 128 * 1024 * 1024
 READ_LIMIT = 512 * 1024 * 1024
-ENTRY_LIMIT = 4096
+ENTRY_LIMIT = 32768
 MAGICS = {
     b"\xce\xfa\xed\xfe": ("<", 28),
     b"\xcf\xfa\xed\xfe": ("<", 32),
