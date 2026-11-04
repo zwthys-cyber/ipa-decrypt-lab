@@ -7,7 +7,7 @@ from telegram_api import APIError
 
 LABELS = {
  "dispatch_pending":"正在确认任务提交", "queued":"排队中", "preparing":"准备运行环境",
- "metadata":"查询应用信息", "authenticating":"验证下载账号", "downloading":"下载原始 IPA",
+ "processing":"正在执行，等待阶段更新", "metadata":"查询应用信息", "authenticating":"验证下载账号", "downloading":"下载原始 IPA",
  "auditing":"检查原始文件", "decrypting":"解密并校验页面", "verifying":"复核完整 IPA",
  "encrypting":"加密保存结果", "artifact_ready":"准备文件交付",
  "retrieving":"取回加密文件", "delivery_verifying":"解密并复核交付文件",

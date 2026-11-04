@@ -23,6 +23,14 @@ class SessionTests(unittest.TestCase):
         gh.dispatch.return_value={"status":"queued"}
         return Controller(bot,gh,OWNER,"/private/crypt","synthetic-token"),bot,gh
 
+    def test_resume_keeps_running_job_without_resubmitting(self):
+        c,bot,gh=self.controller()
+        gh.find.return_value={"status":"in_progress"}
+        c.resume(RID)
+        self.assertEqual(c.current["rid"],RID)
+        gh.dispatch.assert_not_called()
+        gh.deliver.assert_not_called()
+
     def test_only_owner_private_messages_submit(self):
         c,bot,gh=self.controller()
         c.handle(update(55))

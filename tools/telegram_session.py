@@ -157,6 +157,16 @@ class Controller:
             self.say("暂时无法交付文件："+str(exc)+"\n任务编号："+rid)
         return False
 
+    def resume(self,rid):
+        run=self.github.find(rid)
+        if run and run.get("status")!="completed":
+            self.current={"rid":rid,"app":"","state":run.get("status","queued"),
+                          "stage":"processing","since":time.monotonic()}
+            self.card(rid).update("processing")
+            event("job_tracking_resumed",request_id=rid)
+        else:
+            self.deliver(rid)
+
     def tick(self):
         if not self.current:
             return
@@ -179,14 +189,14 @@ class Controller:
                 event("worker_not_successful",request_id=rid)
         else:
             self.current["state"]=state
-            stage="queued" if state in ("queued","waiting","pending","requested") else "preparing"
+            stage="queued" if state in ("queued","waiting","pending","requested") else "processing"
             if state=="in_progress":
                 try:
                     reported=self.github.progress(run,rid)
                     if isinstance(reported,str):
                         stage=reported
                 except QueueError:
-                    stage=self.current.get("stage","preparing")
+                    stage=self.current.get("stage","processing")
             self.current["stage"]=stage
             self.card(rid,self.current["app"]).update(stage)
 
@@ -229,7 +239,7 @@ def main():
                 return 0 if controller.deliver(request_id(args.request_id)) else 2
             controller.say("IPA 机器人限时测试已启动，约 "+str(args.minutes)+" 分钟。\n\n"+HELP)
             if args.request_id:
-                controller.deliver(request_id(args.request_id))
+                controller.resume(request_id(args.request_id))
             deadline=time.monotonic()+args.minutes*60
             offset=0
             while time.monotonic()<deadline:
