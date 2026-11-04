@@ -12,7 +12,7 @@ from public_store_routes import AGENT, BAG_URL, NoRedirect, decode
 MAX_FILE = 3 * 1024 * 1024
 MAX_TOTAL = 12 * 1024 * 1024
 MAX_ASSETS = 12
-INTEREST = re.compile(r"deauthoriz|deauthoris|deauth|revokeAll|authorizedComputers", re.I)
+INTEREST = re.compile(r"DeauthAllMachines|deauthAllMachines|deauthorize|deauthorise|account/settings|account-settings|AccountSettings", re.I)
 
 def fetch(url):
     request = urllib.request.Request(url, headers={"User-Agent": AGENT, "Accept-Encoding": "identity"})
@@ -53,7 +53,7 @@ def inspect_text(raw):
             urls.add(urllib.parse.urlunsplit((p.scheme, p.netloc, p.path, "", "")))
     contexts = []
     for match in INTEREST.finditer(text):
-        if len(contexts) >= 12:
+        if len(contexts) >= 24:
             break
         fragment = text[max(0, match.start()-250):min(len(text), match.end()+700)]
         fragment = " ".join(fragment.split())
@@ -68,13 +68,14 @@ def inspect_text(raw):
     for pattern in patterns:
         refs.extend(re.findall(pattern, text))
     modules = {}
-    for module_id in (39513,):
+    for module_id in ():
         marker = re.search(r"(?<![0-9])" + str(module_id) + r":(?:\(|function)", text)
         if marker:
             tail = text[marker.start():marker.start()+18000]
             following = re.search(r"},[0-9]{2,6}:(?:\(|function)", tail[20:])
             modules[str(module_id)] = tail[:20+following.start()+1] if following else tail
-    return dict(known_api_urls=sorted(urls)[:40], static_code_contexts=contexts, request_modules=modules), refs
+    runtime = text[:30000] if re.search(r"\.u=[a-zA-Z]=>", text) and len(text) < 30000 else None
+    return dict(known_api_urls=sorted(urls)[:40], static_code_contexts=contexts, request_modules=modules, runtime_loader=runtime), refs
 
 def main():
     if os.environ.get("GITHUB_ACTIONS") != "true" or os.environ.get("APPLE_ID") or os.environ.get("APPLE_PASSWORD"):
