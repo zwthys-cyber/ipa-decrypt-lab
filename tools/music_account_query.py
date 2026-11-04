@@ -39,7 +39,7 @@ LABELS = {
     "authorized_devices", "deauthorize_all", "account_settings",
 }
 ROLES = {"AXWindow", "AXSheet", "AXDialog", "AXTextField", "AXButton", "AXStaticText", "AXWebArea"}
-STAGES = {"preflight", "after_email", "after_password", "account_settings"}
+STAGES = {"navigation", "preflight", "after_email", "after_password", "account_settings"}
 
 def clean(raw):
     if not isinstance(raw, dict):
@@ -61,6 +61,18 @@ def clean(raw):
         or any(raw.get(k) is not False for k in ("credentials_used", "email_submit_attempted", "password_submit_attempted"))
     ):
         r["status"] = "invalid_report"
+    navigation = raw.get("navigation")
+    if isinstance(navigation, dict):
+        permitted_values = {"success", "signin_menu_invoked", "signin_menu_unavailable",
+            "account_menu_unavailable", "no_recognized_welcome_sheet", "no_recognized_optional_sheet",
+            "no_bounded_pressable_target", "click_posted", "ambiguous", "not_uniquely_available",
+            "accessibility_disabled", "cannot_complete", "action_unsupported", "other"}
+        permitted_keys = {"status", "dismiss_welcome", "decline_optional_sheet", "open_account_menu", "open_signin_dialog"}
+        r["navigation"] = {k: v for k, v in navigation.items()
+                           if k in permitted_keys and type(v) is str and v in permitted_values}
+        for key in ("post_event_access", "not_now_hit_test_verified", "not_now_coordinate_click_posted"):
+            if type(navigation.get(key)) is bool:
+                r["navigation"][key] = navigation[key]
     screens = raw.get("screens")
     if isinstance(screens, dict):
         sanitized = {}

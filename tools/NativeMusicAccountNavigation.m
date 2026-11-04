@@ -309,9 +309,23 @@ static NSRunningApplication *NavigateToSignIn(NSMutableDictionary *report) {
                 if ([report[@"before_navigation"][@"labels"][@"welcome"] unsignedIntegerValue]) break;
                 Pump(0.5);
             } while (startupDeadline.timeIntervalSinceNow>0);
-            if (DismissWelcome(target,report)) Pump(3);
+            if (DismissWelcome(target,report)) {
+                NSDate *optionalDeadline=[NSDate dateWithTimeIntervalSinceNow:10];
+                do {
+                    report[@"after_welcome"]=WindowSnapshot(target);
+                    if([report[@"after_welcome"][@"labels"][@"not_now"] unsignedIntegerValue])break;
+                    Pump(0.3);
+                }while(optionalDeadline.timeIntervalSinceNow>0);
+            }
             report[@"after_welcome"]=WindowSnapshot(target);
-            if (DeclineOptionalSheet(target,report)) Pump(2);
+            if (DeclineOptionalSheet(target,report)) {
+                NSDate *dismissDeadline=[NSDate dateWithTimeIntervalSinceNow:6];
+                do {
+                    Pump(0.3);
+                    report[@"after_optional_sheet"]=WindowSnapshot(target);
+                    if(![report[@"after_optional_sheet"][@"labels"][@"not_now"] unsignedIntegerValue])break;
+                }while(dismissDeadline.timeIntervalSinceNow>0);
+            }
             report[@"after_optional_sheet"]=WindowSnapshot(target);
             id menu=ReadAttribute(target,kAXMenuBarAttribute);
             if (menu && CFGetTypeID((__bridge CFTypeRef)menu)==AXUIElementGetTypeID()) {
@@ -319,7 +333,15 @@ static NSRunningApplication *NavigateToSignIn(NSMutableDictionary *report) {
                 report[@"menus_before"]=PublicSnapshot(nodes);
                 if (Press(nodes,@"open_account_menu",report)) {
                     Pump(0.3);
-                    nodes=Nodes((__bridge AXUIElementRef)menu);
+                    NSDate *signinDeadline=[NSDate dateWithTimeIntervalSinceNow:8];
+                    do {
+                        nodes=Nodes((__bridge AXUIElementRef)menu);
+                        BOOL ready=NO;
+                        for(NSDictionary *node in nodes)
+                            if(CanPress(@"open_signin_dialog",node[@"role"],node[@"title"],[node[@"enabled"] boolValue]))ready=YES;
+                        if(ready)break;
+                        Pump(0.3);
+                    }while(signinDeadline.timeIntervalSinceNow>0);
                     report[@"menus_open"]=PublicSnapshot(nodes);
                     if (Press(nodes,@"open_signin_dialog",report)) {
                         report[@"status"]=@"signin_menu_invoked";

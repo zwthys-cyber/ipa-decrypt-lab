@@ -173,9 +173,15 @@ int main(int argc,const char **argv){@autoreleasepool{
     // Navigation metadata is separate; account screens never become arbitrary log text.
     NSMutableDictionary *navigation=[@{@"accessibility_trusted":report[@"accessibility_trusted"]} mutableCopy];
     NSRunningApplication *application=NavigateToSignIn(navigation);
+    NSMutableDictionary *navigationStatus=[NSMutableDictionary dictionary];
+    for(NSString *key in @[@"status",@"dismiss_welcome",@"decline_optional_sheet",@"open_account_menu",@"open_signin_dialog",
+                          @"post_event_access",@"not_now_hit_test_verified",@"not_now_coordinate_click_posted"])
+        if(navigation[key])navigationStatus[key]=navigation[key];
+    report[@"navigation"]=navigationStatus;
     if(application){
         AXUIElementRef app=AXUIElementCreateApplication(application.processIdentifier);
         AXUIElementSetMessagingTimeout(app,1.0);
+        Screen(app,report,@"navigation");
         if([navigation[@"status"] isEqual:@"signin_menu_invoked"]){
             if(preflight){
                 NSDictionary *form=FindForm(app,NO);
@@ -191,6 +197,8 @@ int main(int argc,const char **argv){@autoreleasepool{
             }else Query(app,private,report);
         }
         CFRelease(app);[application terminate];
+        Pump(1);
+        if(!application.terminated)[application forceTerminate];
     }
     NSData *output=[NSJSONSerialization dataWithJSONObject:report options:NSJSONWritingSortedKeys error:nil];
     if(!output)return 3;
