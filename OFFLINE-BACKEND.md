@@ -403,7 +403,7 @@ The machineSession experiment adds an independent synthetic test that verifies a
 
 [Machine-session trial 41760174263](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41760174263), commit 83e1c6a, passed 20 Python contracts, 9 Swift SAP tests, native compilation and synthetic prerequisites. With createSession=true, attempt=1, the current machine name and the machineAuthorize why field signed together, Store login succeeded. The authorization request carried eight scoped cookies and no copied storefront header. It received HTTP 200 without a redirect, failureType 2002, a dialog and no keybag. Sign-in/password text classifiers matched; verification-code/computer-limit classifiers did not. The additional session-creation fields did not complete authorization in this trial.
 
-### Current result after the session controls
+### Earlier session controls before the body-token correction
 
 | Store login variant | Authorization context | Observed final response | Keybag |
 | --- | --- | --- | --- |
@@ -414,8 +414,58 @@ The machineSession experiment adds an independent synthetic test that verifies a
 | machineAuthorize why only | copied storefront | HTTP 500 after one pod redirect, not a parsed plist | not obtained |
 | machineSession fields | cookies | HTTP 200, failureType 2002, no redirect | none |
 
-All rows used bounded GitHub-hosted trials. Each authenticated request used its own fresh private session; the table does not isolate every possible server, runner or timing difference. The default authorization context is now token-only, matching a tested structured-response baseline; cookie and storefront variants remain explicitly selectable research controls.
+All rows above used the then-incomplete body with xToken="0"; see the later correction and post-correction trials below. They used bounded GitHub-hosted trials. Each authenticated request used its own fresh private session; the table does not isolate every possible server, runner or timing difference. The default authorization context is now token-only, matching a tested structured-response baseline; cookie and storefront variants remain explicitly selectable research controls.
 
 No row imported a keybag, recovered an enrollment model or verified IPA plaintext. A successful Store session and locally generated kbsync are still insufficient evidence of accepted FairPlay enrollment. The tested session controls have not identified the full machine-authorization authentication contract. Repeating these unchanged requests is not a demonstrated path forward. Further work requires new protocol evidence or a verified credential-bootstrap implementation, not another successful compilation.
 
 The reviewed fairplay-decrypt upstream supplies an offline decryptor and an iOS credential extractor; it supplies no verified fresh GitHub-only bootstrap. It has not been integrated or used to claim real decryption. No personal device, third-party decryption service, Telegram integration, local project execution or public private-material artifact was used.
+
+## Native authorization body token correction (2026-11-04)
+
+Earlier private trials authenticated a Store session and added X-Token, X-Dsid and iCloud-DSID request headers, but left the native machine-authorization body xToken at its ephemeral-account default "0". Treating that default as a complete authenticated body was incorrect.
+
+Account-free [code inspection 41761114120](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41761114120), commit d6c685e, passed three bounded-report tests on each GitHub-hosted ARM/Intel Mac and inspected two native AppleMediaServices builders. Both architectures showed that _buildRequestParametersWithError: gets the account-store secure token and inserts it as xToken; only a missing token falls back to "0". The ARM implementation also supplied transaction type 2 on the inspected native builder path; the separate synthetic account-0 transaction-1 prerequisite must not be confused with that actual builder.
+
+[Accessor inspection 41761399542](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41761399542), commit efb8759, passed four report tests per architecture. Runtime method metadata resolved ACAccountStore ams_secureTokenForAccount: and NSDictionary ams_secureToken without invoking either with a real account. The latter reads the passwordToken response key on both architectures. The reviewed [AMSVerifyCredentialsTask](https://github.com/EthanArbuckle/iPhone17-1_18.2_22C152_Restore/blob/e26ed4563f78871c59d2d96856756a65d62517e5/System/Library/Accounts/Authentication/AMSAccountAuthenticationPlugin.bundle/AMSVerifyCredentialsTask.m) also stores that response token through ams_setSecureToken:forAccount:error:. A temporary ACAccount whose session has never been persisted therefore cannot supply the token through the original account-store lookup merely because our external login succeeded.
+
+These inspections launched only our framework-loading process under LLDB. They did not authenticate, construct real-account requests, execute the inspected methods for a real account, read heap/register/account data, attach to system daemons or submit authorization. Captured debugger output is filtered to bounded instruction records from an explicit method/module allowlist; raw debugger/process output is discarded.
+
+The adapter now binds the existing private passwordToken to body xToken after checking the exact destination, account, GUID and kbsync. It rejects a conflicting existing body token and refuses to rewrite a body that already carries an action signature. It updates Content-Length after serialization and applies the same session token to the header. A repeated binding is byte-stable; routed requests retain and revalidate the bound body.
+
+[Dual-architecture binding validation 41761683677](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41761683677), commit c4a2274, passed 12 Python contracts per runner, native compilation and synthetic binding/routing cases. The synthetic tests reject a zero token, a conflicting token, an unbound signed body and the existing invalid destination/identity cases. They verify unchanged semantic parameters except xToken, correct content length, header/body agreement and idempotent rebinding. Private success reports additionally require body_token_bound=true.
+
+The earlier 2002 results remain valid observations for incomplete requests. They do not establish that a correctly bound session will fail, that the password is incorrect, or that GitHub-only enrollment is impossible. A real response and successful import are still necessary, followed by separate model recovery and full IPA plaintext validation.
+
+### Private results after binding the actual body token
+
+The following fresh trials independently verified body_token_bound=true and session_identity_verified=true. The earlier unbound trials are not used as proof of these outcomes.
+
+| Run | Signed Store login | Forwarded context | Authorization result |
+| --- | --- | --- | --- |
+| [41761847159](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41761847159), c4a2274 | signIn | token | HTTP 200, failureType 2002, one approved pod redirect, no keybag |
+| [41762179734](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41762179734), c4a2274 | signIn | eight scoped cookies | HTTP 200, failureType 2002, no redirect, no keybag |
+| [41762648147](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41762648147), 3d92a1d | machineAuthorize | eight scoped cookies | HTTP 200, failureType 2002, no redirect, no keybag |
+| [41762837405](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41762837405), 91c63af | booleanSession | eight scoped cookies | HTTP 200, failureType 2002, no redirect, no keybag |
+
+Each run passed 20 Python contracts, native compilation and synthetic prerequisites before exposing secrets. The first three passed 9 Swift SAP tests; the booleanSession run passed 10. Store login succeeded in all four. No keybag import, recovered model or plaintext verification occurred. The four fixed state-path metadata checks remained false; they do not prove the absence of every possible system FairPlay state.
+
+The new booleanSession control retains the historical machineSession fields but encodes createSession as a plist boolean, following the type observed in the reviewed native AMSVerifyCredentialsTask source. The legacy control retains its original string for comparison. A Swift test verifies the boolean plist type, unchanged identity fields and exact equality of the serialized body and SAP-signed bytes. This experiment changes a specific wire type; it does not claim to reproduce every field or behavior of the native authentication plugin.
+
+## Native Anisette scope and provisioning response evidence (2026-11-04)
+
+[Account-free dual-architecture inspection 41762566901](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41762566901), commit 3d92a1d, passed four bounded-report tests per runner and inspected seven allowlisted AppleMediaServices methods without account credentials. Both ARM and Intel implementations confirm:
+
+- AMSAuthorizeMachineTask selects Anisette type 1.
+- AMSURLRequestDecoration skips Anisette decoration when the account is ephemeral and the type is not 2.
+- AMSAnisette maps type 1 to the account DSID, while type 2 uses the unsigned -1 sentinel.
+- The header generator selects AMSHTTPHeaderXAppleMD / MDM for the account path and AMD / AMDM for type 2.
+
+The independent provider previously tested by this project uses unsigned -2 and returns X-Apple-I-MD / X-Apple-I-MD-M by default ([pinned Anisette.py source](https://github.com/malmeloo/Anisette.py/blob/a61cddfb2275187822ad0c3999af747b8c9a4f9a/src/anisette/anisette.py)). Its successful AuthKit-style provisioning therefore does not prove that its output is interchangeable with the native machine-authorization data. No header renaming, account-ID substitution or unverified private-state transplant was performed.
+
+The reviewed [AMSAnisetteProvisionTask](https://github.com/EthanArbuckle/iPhone17-1_18.2_22C152_Restore/blob/e26ed4563f78871c59d2d96856756a65d62517e5/System/Library/PrivateFrameworks/AppleMediaServices.framework/AMSAnisetteProvisionTask.m) starts from server-supplied challenge data. Its account-scoped finish request uses md-finish-provisioning with clientData, GUID, DSID and transaction-1 kbsync. The type-2 path uses amd-finish-provisioning. The finish response can contain transportKey, settingInfo and keybag. This is a distinct protocol from merely adding existing login headers.
+
+The [response category source](https://github.com/EthanArbuckle/iPhone17-1_18.2_22C152_Restore/blob/e26ed4563f78871c59d2d96856756a65d62517e5/System/Library/PrivateFrameworks/AppleMediaServices.framework/NSHTTPURLResponse%28AMSAnisette%29.m) identifies X-Apple-MD-Action/Data and X-Apple-AMD-Action/Data. The private client now classifies only fixed SP/SM/RP/none/other action values and data-present/base64-valid booleans, case-insensitively. It never publishes the headers, challenge bytes, cookies or arbitrary values. A synthetic native response test covers empty headers, mixed case, both valid scopes, malformed data and unknown private action text. Python report tests reject arbitrary action values and fields.
+
+[Challenge-classification trial 41763040212](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41763040212), commit 790e2f8, passed 21 Python tests, 10 Swift SAP tests, native compilation, the native response privacy contract and synthetic prerequisites. signIn login succeeded and the authorization request verified body-token binding and eight scoped cookies. The final response was HTTP 200 / failureType 2002 with no keybag. Both md_action and amd_action were none; all four challenge data presence/validity flags were false. Thus this authorization response contained no observed SP/SM/RP instruction to execute. This measurement covers the final authorization response, not earlier login responses.
+
+These findings narrow the missing contract but do not prove GitHub-only enrollment feasible or impossible. A successful first enrollment still needs an actual accepted server exchange, native import, matching model recovery and full IPA plaintext validation. Neither compilation, a Store login nor an Anisette prerequisite substitutes for those results.

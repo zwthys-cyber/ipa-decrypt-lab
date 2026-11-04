@@ -68,6 +68,7 @@ class MachineEnrollmentContracts(unittest.TestCase):
                         handoff = Path(env["LAB_ENROLLMENT_INPUT_PATH"])
                         handoff.write_text(json.dumps({"dsid": "123", "token": "SECRET", "guid": "001122334455",
                             "cookies": [{"name": "private", "value": "SECRET"}], "storefront": "SECRET",
+                            "login_provisioning": {"login_md_action_present": True, "login_md_provision_requested": False, "raw_header": "SECRET"},
                             "unexpected_private_field": "SECRET"}))
                         handoff.chmod(0o600)
                     else:
@@ -82,6 +83,8 @@ class MachineEnrollmentContracts(unittest.TestCase):
                 self.assertEqual(run.call_count, 2)
                 self.assertEqual(result["authentication_purpose"], "machineAuthorize")
                 self.assertEqual(result["session_context"], context)
+                self.assertIs(result["login_md_action_present"], True)
+                self.assertIs(result["login_md_provision_requested"], False)
                 self.assertNotIn("SECRET", json.dumps(result))
 
     def test_response_challenges_publish_only_fixed_action_classes_and_flags(self):
@@ -96,6 +99,13 @@ class MachineEnrollmentContracts(unittest.TestCase):
         r = mod.clean({"md_action": "SECRET", "amd_action": [], "md_data_valid": 1})
         for key in ("md_action", "amd_action", "md_data_valid"):
             self.assertNotIn(key, r)
+
+    def test_login_summary_rejects_private_text_and_non_boolean_values(self):
+        r = mod.clean_login_summary({"login_md_action_present": True, "login_md_data_valid": 1,
+            "login_amd_data_present": "SECRET", "raw_headers": "SECRET"})
+        self.assertEqual(r, {"login_md_action_present": True})
+        for invalid in (None, [], "SECRET"):
+            self.assertEqual(mod.clean_login_summary(invalid), {})
 
     def test_boolean_numbers_and_unknown_types_rejected(self):
         r = mod.clean({"status": [], "error_domain": [], "error_code": True,

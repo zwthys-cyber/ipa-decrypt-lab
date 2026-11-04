@@ -186,3 +186,88 @@ after = """    func testBooleanMachineSessionPreservesNativePlistTypeAndSignatur
 if source_tests.count(before) != 1:
     raise SystemExit("pinned boolean session test changed")
 tests.write_text(source_tests.replace(before, after))
+
+# Observe fixed challenge flags across login responses without publishing values.
+source = auth.read_text()
+challenge_changes = [
+    ('    private var labStoreFront: String?',
+     '    private var labStoreFront: String?\n    private var labProvisioningSummary: [String: Bool] = [:]'),
+    ('        labStoreFront = response.headers.first(name: "x-set-apple-store-front") ?? labStoreFront',
+     '''        for (key, present) in Self.provisioningChallengeSummary(response.headers) {
+            labProvisioningSummary[key] = (labProvisioningSummary[key] ?? false) || present
+        }
+        labStoreFront = response.headers.first(name: "x-set-apple-store-front") ?? labStoreFront'''),
+    ('        account.labStoreFront = labStoreFront',
+     '        account.labStoreFront = labStoreFront\n        account.labProvisioningSummary = labProvisioningSummary'),
+    ('    static func approvedEndpoint(_ url: URL) throws -> URL {', r'''    static func provisioningChallengeSummary(_ headers: HTTPHeaders) -> [String: Bool] {
+        var result: [String: Bool] = [:]
+        for scope in ["md", "amd"] {
+            let action = headers.first(name: "x-apple-\(scope)-action") ?? ""
+            let encoded = headers.first(name: "x-apple-\(scope)-data") ?? ""
+            let prefix = "login_\(scope)_"
+            result[prefix + "action_present"] = !action.isEmpty
+            result[prefix + "provision_requested"] = action == "SP"
+            result[prefix + "sync_requested"] = action == "SM"
+            result[prefix + "reset_requested"] = action == "RP"
+            result[prefix + "data_present"] = !encoded.isEmpty
+            result[prefix + "data_valid"] = !encoded.isEmpty && encoded.utf8.count <= 1048576
+                && !(Data(base64Encoded: encoded)?.isEmpty ?? true)
+        }
+        return result
+    }
+
+    static func approvedEndpoint(_ url: URL) throws -> URL {'''),
+]
+for before, after in challenge_changes:
+    if source.count(before) != 1:
+        raise SystemExit("pinned login challenge source changed")
+    source = source.replace(before, after)
+auth.write_text(source)
+
+source = account.read_text()
+before = "    public var labStoreFront: String?"
+if source.count(before) != 1:
+    raise SystemExit("pinned login challenge account changed")
+account.write_text(source.replace(before, before + "\n    public var labProvisioningSummary: [String: Bool] = [:]"))
+source = login.read_text()
+before = '                        "token": account.passwordToken,'
+if source.count(before) != 1:
+    raise SystemExit("pinned login challenge handoff changed")
+login.write_text(source.replace(before, before + '\n                        "login_provisioning": account.labProvisioningSummary,'))
+
+source_tests = tests.read_text()
+source_tests = source_tests.replace("import NIOCore\n", "import NIOCore\nimport NIOHTTP1\n")
+before = "    func testBooleanMachineSessionPreservesNativePlistTypeAndSignature() async throws {"
+after = '''    func testProvisioningSummaryClassifiesBothScopesWithoutLeakingHeaders() throws {
+        let empty = Authenticator.provisioningChallengeSummary(HTTPHeaders())
+        XCTAssertEqual(empty.count, 12)
+        XCTAssertTrue(empty.values.allSatisfy { !$0 })
+        let headers = HTTPHeaders([
+            ("x-APPLE-MD-Action", "SP"), ("X-Apple-MD-Data", "U1lOVEhFVElD"),
+            ("X-Apple-AMD-Action", "SM"), ("x-apple-amd-data", "U1lOVEhFVElD"),
+            ("Set-Cookie", "PRIVATE_SYNTHETIC"),
+        ])
+        let summary = Authenticator.provisioningChallengeSummary(headers)
+        XCTAssertEqual(summary["login_md_provision_requested"], true)
+        XCTAssertEqual(summary["login_amd_sync_requested"], true)
+        XCTAssertEqual(summary["login_md_data_valid"], true)
+        XCTAssertEqual(summary["login_amd_data_valid"], true)
+        XCTAssertEqual(summary["login_amd_reset_requested"], false)
+        let bad = Authenticator.provisioningChallengeSummary(HTTPHeaders([
+            ("X-Apple-MD-Action", "PRIVATE_SYNTHETIC"), ("X-Apple-MD-Data", "not base64!"),
+            ("X-Apple-AMD-Action", "RP"),
+        ]))
+        XCTAssertEqual(bad["login_md_action_present"], true)
+        XCTAssertEqual(bad["login_md_provision_requested"], false)
+        XCTAssertEqual(bad["login_md_data_present"], true)
+        XCTAssertEqual(bad["login_md_data_valid"], false)
+        XCTAssertEqual(bad["login_amd_reset_requested"], true)
+        let publicJSON = String(decoding: try JSONEncoder().encode([empty, summary, bad]), as: UTF8.self)
+        XCTAssertFalse(publicJSON.contains("PRIVATE_SYNTHETIC"))
+        XCTAssertFalse(publicJSON.contains("U1lOVEhFVElD"))
+    }
+
+''' + before
+if source_tests.count(before) != 1:
+    raise SystemExit("pinned login challenge test changed")
+tests.write_text(source_tests.replace(before, after))

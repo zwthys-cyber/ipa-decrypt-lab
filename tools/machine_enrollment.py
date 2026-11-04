@@ -20,6 +20,12 @@ BOOLS = {"md_data_present", "md_data_valid", "amd_data_present", "amd_data_valid
     "redirect_query_supported", "redirect_method_post", "redirect_https", "storefront_header_present",
     "message_mentions_sign_in", "message_mentions_password", "message_mentions_verification_code", "message_mentions_computer_limit"}
 
+LOGIN_FLAGS = {f"login_{scope}_{suffix}" for scope in ("md", "amd") for suffix in
+    ("action_present", "provision_requested", "sync_requested", "reset_requested", "data_present", "data_valid")}
+
+def clean_login_summary(value):
+    return {key: value[key] for key in LOGIN_FLAGS if type(value.get(key)) is bool} if type(value) is dict else {}
+
 def clean(value):
     r = {"schema": "ipa-lab-machine-enrollment-v1", "status": "probe_failed",
          "enrollment_created": False, "decryption_proven": False}
@@ -97,6 +103,7 @@ def trial(login_binary, native_binary, purpose="signIn", session_context="token"
         data = handoff.read_bytes()
         handoff.unlink()
         private = json.loads(data)
+        login_summary = clean_login_summary(private.get("login_provisioning"))
         allowed = {"dsid", "token", "guid"}
         if session_context in {"store", "cookies"}:
             allowed.add("cookies")
@@ -115,6 +122,7 @@ def trial(login_binary, native_binary, purpose="signIn", session_context="token"
         if not report.is_file() or report.stat().st_size > 65536:
             return clean({"status": "private_handoff_failed"})
         result = clean(json.loads(report.read_text()))
+        result.update(login_summary)
         result["store_session_authenticated"] = True
         result["authentication_purpose"] = purpose
         result["session_context"] = session_context
