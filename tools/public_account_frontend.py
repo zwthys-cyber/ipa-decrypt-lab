@@ -75,7 +75,17 @@ def inspect_text(raw):
             following = re.search(r"},[0-9]{2,6}:(?:\(|function)", tail[20:])
             modules[str(module_id)] = tail[:20+following.start()+1] if following else tail
     runtime_match = re.search(r"\.u\s*=\s*", text)
-    runtime = text[runtime_match.start():runtime_match.start()+30000] if runtime_match else None
+    runtime = []
+    if runtime_match:
+        loader = text[runtime_match.start():runtime_match.start()+100000]
+        for chunk in (24589, 53332, 47549, 21625, 21193, 49698):
+            values = re.findall(r"(?<![0-9])" + str(chunk) + r':"([^"]+)"', loader)
+            names = [value for value in values if re.fullmatch(r"account-[A-Za-z0-9-]+", value)]
+            hashes = [value for value in values if re.fullmatch(r"[a-f0-9]{8}", value)]
+            if names and hashes:
+                asset = "./" + names[0] + "." + hashes[0] + ".js"
+                runtime.append(asset)
+                refs.append(asset)
     return dict(known_api_urls=sorted(urls)[:40], static_code_contexts=contexts, request_modules=modules, runtime_loader=runtime), refs
 
 def main():
