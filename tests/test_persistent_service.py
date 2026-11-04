@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import Mock, patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"tools"))
 from persistent_journal import PersistentJournal
-from telegram_daemon import process_update, load_credentials, heartbeat, backup, KEYS
+from telegram_daemon import process_update, load_credentials, heartbeat, backup, KEYS, ServerController
 from telegram_queue import QueueError, GitHub
 from telegram_api import APIError
 
@@ -184,6 +184,38 @@ class PersistentTests(unittest.TestCase):
         path.chmod(0o644)
         with self.assertRaises(QueueError):
             load_credentials(path)
+
+    def test_systemd_readonly_credential_in_private_mount(self):
+        path=self.root/"bot.json"
+        path.write_text(json.dumps({k:"synthetic" for k in KEYS}))
+        path.chmod(0o444)
+        with patch.dict(os.environ,{"CREDENTIALS_DIRECTORY":str(self.root)}):
+            with patch("telegram_daemon.os.statvfs",return_value=Mock(f_flag=os.ST_RDONLY)):
+                self.assertEqual(set(load_credentials(path,systemd=True)),KEYS)
+            with patch("telegram_daemon.os.statvfs",return_value=Mock(f_flag=0)):
+                with self.assertRaises(QueueError):
+                    load_credentials(path,systemd=True)
+
+    def test_systemd_public_directory_rejected(self):
+        path=self.root/"bot.json"
+        path.write_text(json.dumps({k:"synthetic" for k in KEYS}))
+        path.chmod(0o444)
+        self.root.chmod(0o755)
+        with patch.dict(os.environ,{"CREDENTIALS_DIRECTORY":str(self.root)}):
+            with patch("telegram_daemon.os.statvfs",return_value=Mock(f_flag=os.ST_RDONLY)):
+                with self.assertRaises(QueueError):
+                    load_credentials(path,systemd=True)
+        self.root.chmod(0o700)
+
+    def test_daemon_does_not_keep_bounded_session_update_ceiling(self):
+        bot,github=Mock(),Mock()
+        controller=ServerController(bot,github,OWNER,"crypt","synthetic",journal=self.journal)
+        controller.handled=set(range(2001))
+        update={"update_id":3000,"message":{"date":int(time.time()),"text":"/id",
+            "from":{"id":OWNER,"is_bot":False},"chat":{"id":OWNER,"type":"private"}}}
+        process_update(controller,self.journal,update)
+        bot.message.assert_called_once()
+        self.assertEqual(self.journal.offset(),3001)
 
     def test_credentials_extra_keys_and_newlines_rejected(self):
         path=self.root/"credentials.json"

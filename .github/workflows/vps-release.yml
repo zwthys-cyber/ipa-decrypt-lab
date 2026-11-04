@@ -27,6 +27,18 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_*.py' -v
           sh -n deploy/install.sh
           systemd-analyze verify deploy/ipazake.service
+      - name: Verify real systemd credential mount without secrets
+        run: |
+          probe_config=$(mktemp)
+          trap 'rm -f "$probe_config"' EXIT
+          export PROBE_CONFIG="$probe_config"
+          PYTHONPATH=tools python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          from telegram_daemon import KEYS
+          Path(os.environ["PROBE_CONFIG"]).write_text(json.dumps({k:"synthetic" for k in KEYS}))
+          PY
+          sudo systemd-run --quiet --wait --pipe --unit=ipazake-credentials-probe -p User=runner -p "LoadCredential=bot.json:$probe_config" /usr/bin/env "PYTHONPATH=$GITHUB_WORKSPACE/tools" PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -c 'import os; from pathlib import Path; from telegram_daemon import load_credentials; load_credentials(Path(os.environ["CREDENTIALS_DIRECTORY"])/"bot.json",systemd=True); print("systemd_credentials_verified")'
       - name: Restore CI-verified official Bot API
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:

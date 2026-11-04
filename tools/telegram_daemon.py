@@ -20,9 +20,21 @@ HELP=("发送美区免费 App Store 链接或数字 App ID创建任务。\n"
       "/status 查看进度\n/get 任务编号 取回文件\n/cancel 取消当前任务\n/id 查看身份\n"
       "当前仅向管理员开放；尚未开放付费服务。")
 
-def load_credentials(path):
+def load_credentials(path, systemd=False):
     path=Path(path)
-    if path.is_symlink() or path.stat().st_mode & 0o077 or path.stat().st_size>32768:
+    info=path.stat()
+    private_file=info.st_mode & 0o077==0
+    if systemd:
+        parent=path.parent
+        # systemd may expose a read-only 0444 credential inside its private mount.
+        # Its directory/mount boundary, not the file's group read bits, protects it.
+        private_file=(str(parent)==os.environ.get("CREDENTIALS_DIRECTORY")
+                      and not parent.is_symlink()
+                      and parent.stat().st_uid in (0,os.geteuid())
+                      and parent.stat().st_mode & 0o007==0
+                      and bool(os.statvfs(parent).f_flag & os.ST_RDONLY)
+                      and info.st_mode & 0o222==0)
+    if path.is_symlink() or not path.is_file() or not private_file or info.st_size>32768:
         raise QueueError("insecure_credentials_file")
     values=json.loads(path.read_text())
     if (not isinstance(values,dict) or set(values)!=KEYS
@@ -39,6 +51,9 @@ def heartbeat(path, state, current=None):
 
 class ServerController(Controller):
     def handle(self,update):
+        # SQLite claims handle deduplication; the bounded session's
+        # in-memory update ceiling must not accumulate forever in a daemon.
+        self.handled.clear()
         self.submitted=self.journal.daily_submissions()
         item=update.get("message",{}) if isinstance(update,dict) else {}
         text=item.get("text","")
@@ -91,7 +106,7 @@ def main():
     try:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         credentials=Path(os.environ["CREDENTIALS_DIRECTORY"])/"bot.json"
-        os.environ.update(load_credentials(credentials))
+        os.environ.update(load_credentials(credentials,systemd=True))
         owner=owner_id(os.environ["TELEGRAM_OWNER_ID"])
         cap=int(os.environ.get("IPAZAKE_DAILY_TASK_LIMIT","20"))
         if not 1<=cap<=1000:
