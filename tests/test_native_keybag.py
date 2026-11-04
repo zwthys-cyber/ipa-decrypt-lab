@@ -86,6 +86,19 @@ class NativeKeybagContracts(unittest.TestCase):
         self.assertNotIn("abi_verified", r)
         self.assertEqual(r["interfaces"], {})
 
+    def test_constructed_request_is_not_authorization(self):
+        value = {"status": "synthetic_request_ready", "error_present": False}
+        for key in ("abi_verified", "ephemeral_account", "request_present", "request_is_post",
+                    "request_body_is_plist", "token_is_synthetic", "owner_is_synthetic", "endpoint_supported"):
+            value[key] = True
+        r = mod.clean(value)
+        self.assertEqual(r["status"], "synthetic_request_ready")
+        self.assertFalse(r["enrollment_created"])
+        for key in value:
+            broken = dict(value)
+            del broken[key]
+            self.assertEqual(mod.clean(broken)["status"], "probe_failed")
+
     def test_bad_types_fail_closed(self):
         for value in (None, [], "SECRET"):
             self.assertEqual(mod.clean(value)["status"], "probe_failed")

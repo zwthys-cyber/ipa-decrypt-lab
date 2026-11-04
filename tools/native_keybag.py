@@ -8,11 +8,12 @@ import subprocess
 import sys
 import tempfile
 
-MODES = {"interfaces", "context", "kbsync", "parameters", "public_bag"}
+MODES = {"interfaces", "context", "kbsync", "parameters", "public_bag", "request"}
 STATUSES = {"interface_unavailable", "interfaces_checked", "context_ready", "context_failed",
             "synthetic_sync_ready", "synthetic_sync_failed", "native_exception", "probe_failed",
             "native_process_failed", "probe_timeout", "synthetic_parameters_ready",
-            "synthetic_parameters_failed", "public_bag_ready", "public_bag_failed"}
+            "synthetic_parameters_failed", "public_bag_ready", "public_bag_failed",
+            "synthetic_request_ready", "synthetic_request_failed"}
 SPECS = {
     "AMSKeybag": {"+sharedInstance", "-init", "-fairplayContextWithError:",
         "-keybagSyncDataWithAccountID:transactionType:error:", "-keybagSyncData:transactionType:outError:",
@@ -44,7 +45,9 @@ def clean(value):
                 "sync_data_present", "synthetic_account_id", "ephemeral_account", "guid_is_six_bytes",
                 "owner_is_synthetic", "machine_name_present", "parameter_names_valid",
                 "bag_url_present", "endpoint_supported", "endpoint_query_present",
-                "owner_field_present", "account_dsid_is_synthetic"):
+                "owner_field_present", "account_dsid_is_synthetic", "token_is_synthetic", "need_div_zero",
+                "need_div_one", "request_present", "request_is_post", "request_body_is_plist",
+                "sap_header_present", "anisette_header_present"):
         if type(value.get(key)) is bool:
             r[key] = value[key]
     if type(value.get("error_domain")) is str and value["error_domain"] in DOMAINS:
@@ -93,8 +96,13 @@ def clean(value):
     host, path = value.get("endpoint_host"), value.get("endpoint_path")
     if type(host) is str and re.fullmatch(r"(buy|p[0-9]{1,3}-buy|finance-app)\.itunes\.apple\.com", host):
         r["endpoint_host"] = host
-    if path in ("/WebObjects/MZFinance.woa/wa/authorizeMachine", "/WebObjects/MZFinance.woa/wa/authorizeMachine/"):
+    if path in ("/WebObjects/MZFinance.woa/wa/authorizeMachine", "/WebObjects/MZFinance.woa/wa/authorizeMachine/", "/commerce/machine/authorize"):
         r["endpoint_path"] = path
+    if r["status"] == "synthetic_request_ready" and not (
+        all(r.get(k) is True for k in ("abi_verified", "ephemeral_account", "request_present",
+            "request_is_post", "request_body_is_plist", "token_is_synthetic", "owner_is_synthetic", "endpoint_supported"))
+        and r.get("error_present") is False):
+        r["status"] = "probe_failed"
     if r["status"] == "synthetic_parameters_ready" and not (
         all(r.get(k) is True for k in ("abi_verified", "ephemeral_account", "sync_data_present",
             "guid_is_six_bytes", "owner_is_synthetic", "machine_name_present", "parameter_names_valid"))
@@ -140,7 +148,7 @@ def main():
     arch = platform.machine()
     r = {"schema": "ipa-lab-native-keybag-matrix-v1",
          "architecture": arch if arch in {"arm64", "x86_64"} else "other",
-         "cases": [probe(mode) for mode in ("interfaces", "context", "kbsync", "parameters", "public_bag")],
+         "cases": [probe(mode) for mode in ("interfaces", "context", "kbsync", "parameters", "public_bag", "request")],
          "account_login_attempted": False, "enrollment_created": False, "decryption_proven": False}
     print(json.dumps(r, sort_keys=True))
     if any(c["status"] in {"probe_failed", "native_process_failed", "probe_timeout", "native_exception"}
