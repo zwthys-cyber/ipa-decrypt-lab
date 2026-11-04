@@ -59,29 +59,6 @@ static NSDictionary *Interfaces(void) {
 }
 
 
-static char TokenAssociation;
-static BOOL TokenProviderUsed=NO;
-static id LocalSecureToken(id object,SEL selector) {
- TokenProviderUsed=YES;
- return objc_getAssociatedObject(object,&TokenAssociation);
-}
-static BOOL BindToken(id account,NSString *token) {
- SEL sel=NSSelectorFromString(@"ams_secureToken");
- if(!ABI(account,sel,@"@",@[]))return NO;
- Class parent=object_getClass(account);
- Class sub=objc_allocateClassPair(parent,"LabEphemeralTokenAccount",0);
- if(!sub)return NO;
- Method method=class_getInstanceMethod(parent,sel);
- if(!class_addMethod(sub,sel,(IMP)LocalSecureToken,method_getTypeEncoding(method))) {
-   objc_disposeClassPair(sub);return NO;
- }
- objc_registerClassPair(sub);
- // Adapt only this ephemeral object; no persistent account or system process is modified.
- objc_setAssociatedObject(account,&TokenAssociation,token,OBJC_ASSOCIATION_COPY_NONATOMIC);
- object_setClass(account,sub);
- return YES;
-}
-
 static void TokenShape(NSMutableDictionary *r,id token) {
  r[@"x_token_is_string"]=B([token isKindOfClass:NSString.class]);
  r[@"x_token_is_number"]=B([token isKindOfClass:NSNumber.class]);
@@ -104,7 +81,6 @@ static void Parameters(NSMutableDictionary *r) {
  SEL pw=NSSelectorFromString(@"ams_setPassword:");
  if(!ABI(account,pw,@"v",@[@"@"]))return;
  ((void(*)(id,SEL,id))objc_msgSend)(account,pw,@"ipa-lab-synthetic-token");
- if(!BindToken(account,@"ipa-lab-synthetic-token"))return;
  id task=[NSClassFromString(@"AMSAuthorizeMachineTask") alloc];
  SEL init=NSSelectorFromString(@"initWithAccount:authorizeReason:bag:");
  if(!ABI(task,init,@"@",@[@"@",@"Q",@"@"]))return;
@@ -177,6 +153,31 @@ static void PublicBag(NSMutableDictionary *r) {
 }
 
 
+
+static BOOL ApplySessionHeaders(NSMutableURLRequest *request,NSNumber *dsid,NSString *token,NSString *guid) {
+ if(![request isKindOfClass:NSMutableURLRequest.class] || ![dsid isKindOfClass:NSNumber.class] ||
+    dsid.longLongValue<=0 || ![token isKindOfClass:NSString.class] || !token.length || token.length>8192 ||
+    [token rangeOfCharacterFromSet:[NSCharacterSet controlCharacterSet]].location!=NSNotFound ||
+    ![guid isKindOfClass:NSString.class] || [guid rangeOfString:@"^[A-Fa-f0-9]{12}$" options:NSRegularExpressionSearch].location==NSNotFound)return NO;
+ NSURLComponents *url=[NSURLComponents componentsWithURL:request.URL resolvingAgainstBaseURL:NO];
+ if(![url.scheme isEqual:@"https"] || ![url.host isEqual:@"buy.itunes.apple.com"] ||
+    ![url.path isEqual:@"/commerce/machine/authorize"] || url.user || url.password ||
+    url.fragment || (url.port && url.port.integerValue!=443) ||
+    ![request.HTTPMethod isEqual:@"POST"] || request.HTTPBody.length>1048576)return NO;
+ for(NSURLQueryItem *item in url.queryItems)
+   if(![item.name isEqual:@"guid"] || ![item.value.uppercaseString isEqual:guid.uppercaseString])return NO;
+ NSDictionary *body=request.HTTPBody?[NSPropertyListSerialization propertyListWithData:request.HTTPBody options:NSPropertyListImmutable format:NULL error:NULL]:nil;
+ if(![body isKindOfClass:NSDictionary.class] || ![body[@"ownerDsid"] isEqual:dsid] ||
+    ![body[@"guid"] isKindOfClass:NSString.class] || ![body[@"guid"] isEqual:guid.uppercaseString] ||
+    ![body[@"xToken"] isEqual:@"0"] || ![body[@"kbsync"] isKindOfClass:NSString.class])return NO;
+ NSData *sync=[[NSData alloc] initWithBase64EncodedString:body[@"kbsync"] options:0];
+ if(!sync.length || sync.length>1048576)return NO;
+ [request setValue:dsid.stringValue forHTTPHeaderField:@"X-Dsid"];
+ [request setValue:dsid.stringValue forHTTPHeaderField:@"iCloud-DSID"];
+ [request setValue:token forHTTPHeaderField:@"X-Token"];
+ return YES;
+}
+
 static void Request(NSMutableDictionary *r) {
  Class ac=NSClassFromString(@"ACAccount"); SEL create=NSSelectorFromString(@"ams_createEphemeralAccount");
  if(!ABI(ac,create,@"@",@[]))return;
@@ -190,7 +191,6 @@ static void Request(NSMutableDictionary *r) {
    id v=[name isEqualToString:@"ams_setDSID:"]?@1234567:@"ipa-lab-synthetic-token";
    ((void(*)(id,SEL,id))objc_msgSend)(account,s,v);
  }
- if(!BindToken(account,@"ipa-lab-synthetic-token"))return;
  Class cls=NSClassFromString(@"AMSAuthorizeMachineTask");
  SEL bagSel=NSSelectorFromString(@"createBagForSubProfile");
  if(!ABI(cls,bagSel,@"@",@[]))return;
@@ -208,7 +208,23 @@ static void Request(NSMutableDictionary *r) {
  ErrorFields(r,error);
  BOOL ready=[value isKindOfClass:NSURLRequest.class];r[@"request_present"]=B(ready);
  if(ready) {
-   NSURLRequest *request=value;
+   NSMutableURLRequest *request=[value mutableCopy];
+   NSDictionary *initialBody=request.HTTPBody?[NSPropertyListSerialization propertyListWithData:request.HTTPBody options:NSPropertyListImmutable format:NULL error:NULL]:nil;
+   NSString *guid=[initialBody isKindOfClass:NSDictionary.class]?initialBody[@"guid"]:nil;
+   BOOL negative=YES;
+   for(NSString *badURL in @[@"http://buy.itunes.apple.com/commerce/machine/authorize",
+      @"https://buy.itunes.apple.com.evil.invalid/commerce/machine/authorize",
+      @"https://buy.itunes.apple.com:444/commerce/machine/authorize",
+      @"https://user:password@buy.itunes.apple.com/commerce/machine/authorize",
+      @"https://buy.itunes.apple.com/commerce/machine/authorize/other",
+      @"https://buy.itunes.apple.com/commerce/machine/authorize?other=value"]) {
+     NSMutableURLRequest *bad=[request mutableCopy];bad.URL=[NSURL URLWithString:badURL];
+     if(ApplySessionHeaders(bad,@1234567,@"ipa-lab-synthetic-token",guid))negative=NO;
+   }
+   if(ApplySessionHeaders([request mutableCopy],@7654321,@"ipa-lab-synthetic-token",guid))negative=NO;
+   if(ApplySessionHeaders([request mutableCopy],@1234567,@"",guid))negative=NO;
+   r[@"session_policy_verified"]=B(negative);
+   r[@"session_headers_applied"]=B(ApplySessionHeaders(request,@1234567,@"ipa-lab-synthetic-token",guid));
    NSURLComponents *url=[NSURLComponents componentsWithURL:request.URL resolvingAgainstBaseURL:NO];
    BOOL supported=[url.scheme isEqual:@"https"] && [url.host isEqual:@"buy.itunes.apple.com"]
      && [url.path isEqual:@"/commerce/machine/authorize"] && !url.user && !url.password
@@ -278,7 +294,6 @@ int main(int argc,const char **argv) { @autoreleasepool {
      }
      if(ABI(bag,NSSelectorFromString(@"resetContext"),@"v",@[]))((void(*)(id,SEL))objc_msgSend)(bag,NSSelectorFromString(@"resetContext"));
    }
-   r[@"secure_token_provider_used"]=B(TokenProviderUsed);
    r[@"state_after"]=State();
  } @catch(NSException *e) {r[@"status"]=@"native_exception";}
  NSData *out=[NSJSONSerialization dataWithJSONObject:r options:0 error:NULL];

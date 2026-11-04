@@ -62,7 +62,7 @@ class NativeKeybagContracts(unittest.TestCase):
         value = {"status": "synthetic_parameters_ready", "sync_data_length": 200,
                  "error_present": False}
         for key in ("abi_verified", "ephemeral_account", "sync_data_present", "guid_is_six_bytes",
-                    "owner_is_synthetic", "machine_name_present", "parameter_names_valid", "token_is_synthetic"):
+                    "owner_is_synthetic", "machine_name_present", "parameter_names_valid", "x_token_is_zero"):
             value[key] = True
         self.assertEqual(mod.clean(value)["status"], "synthetic_parameters_ready")
         for key in value:
@@ -89,7 +89,8 @@ class NativeKeybagContracts(unittest.TestCase):
     def test_constructed_request_is_not_authorization(self):
         value = {"status": "synthetic_request_ready", "error_present": False}
         for key in ("abi_verified", "ephemeral_account", "request_present", "request_is_post",
-                    "request_body_is_plist", "token_is_synthetic", "owner_is_synthetic", "endpoint_supported"):
+                    "request_body_is_plist", "x_token_is_zero", "owner_is_synthetic", "endpoint_supported",
+                    "session_policy_verified", "session_headers_applied", "token_header_is_synthetic"):
             value[key] = True
         r = mod.clean(value)
         self.assertEqual(r["status"], "synthetic_request_ready")

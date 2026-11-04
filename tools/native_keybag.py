@@ -49,7 +49,7 @@ def clean(value):
                 "need_div_one", "request_present", "request_is_post", "request_body_is_plist",
                 "sap_header_present", "anisette_header_present", "secure_token_provider_used",
                 "x_token_is_string", "x_token_is_number", "x_token_is_one", "x_token_is_zero",
-                "x_token_is_empty", "token_header_is_synthetic"):
+                "x_token_is_empty", "token_header_is_synthetic", "session_policy_verified", "session_headers_applied"):
         if type(value.get(key)) is bool:
             r[key] = value[key]
     if type(value.get("error_domain")) is str and value["error_domain"] in DOMAINS:
@@ -105,12 +105,13 @@ def clean(value):
         r["endpoint_path"] = path
     if r["status"] == "synthetic_request_ready" and not (
         all(r.get(k) is True for k in ("abi_verified", "ephemeral_account", "request_present",
-            "request_is_post", "request_body_is_plist", "token_is_synthetic", "owner_is_synthetic", "endpoint_supported"))
+            "request_is_post", "request_body_is_plist", "x_token_is_zero", "owner_is_synthetic", "endpoint_supported",
+            "session_policy_verified", "session_headers_applied", "token_header_is_synthetic"))
         and r.get("error_present") is False):
         r["status"] = "probe_failed"
     if r["status"] == "synthetic_parameters_ready" and not (
         all(r.get(k) is True for k in ("abi_verified", "ephemeral_account", "sync_data_present",
-            "guid_is_six_bytes", "owner_is_synthetic", "machine_name_present", "parameter_names_valid", "token_is_synthetic"))
+            "guid_is_six_bytes", "owner_is_synthetic", "machine_name_present", "parameter_names_valid", "x_token_is_zero"))
         and r.get("sync_data_length", 0) > 0 and r.get("error_present") is False):
         r["status"] = "probe_failed"
     if r["status"] == "public_bag_ready" and not (
