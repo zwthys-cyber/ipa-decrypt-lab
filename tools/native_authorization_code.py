@@ -17,10 +17,12 @@ METHODS = (
     "+[AMSAnisette _headersForRequest:account:type:]",
     "+[AMSURLRequestDecoration addAnisetteHeadersToRequest:account:type:bag:]",
     "-[AMSAuthorizeMachineTask initWithUsername:authorizeReason:bag:presentationDelegate:]",
+    "-[AMSKeybag importKeybagWithData:error:]",
+    "__40__AMSKeybag_importKeybagWithData_error___block_invoke",
 )
 LINE = re.compile(r"^\s*(?:->\s*)?0x[0-9a-fA-F]+\s+<\+([0-9]+)>:\s+(.+)$")
 HEADER = re.compile(r"^([^\s\x60]+)\x60(.+):$")
-FOCUS = re.compile(r"xToken|needDiv|ownerDsid|kbsync|setAnisetteType|ams_.*(?:[Tt]oken|[Pp]assword)|[Aa]uthentication|[Aa]nisette|MDM|AMD|[Ee]phemeral|setCredentialSource|setAuthenticationType")
+FOCUS = re.compile(r"xToken|needDiv|ownerDsid|kbsync|setAnisetteType|ams_.*(?:[Tt]oken|[Pp]assword)|[Aa]uthentication|[Aa]nisette|MDM|AMD|[Ee]phemeral|setCredentialSource|setAuthenticationType|[Ii]mport|[Ss]tatus|AMSError|ha0d|[Ff]air[Pp]lay")
 
 def extract(output):
     methods = {}
