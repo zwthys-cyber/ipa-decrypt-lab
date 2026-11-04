@@ -9,6 +9,7 @@ on:
         options:
           - ams
           - commerce
+          - commerce-response
 permissions:
   contents: read
 concurrency:

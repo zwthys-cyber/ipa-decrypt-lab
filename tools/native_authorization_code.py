@@ -1,4 +1,4 @@
-"""Read two native method implementations in an account-free disposable process."""
+"""Inspect allowlisted native implementations in an account-free disposable process."""
 import argparse
 import json
 import os
@@ -40,7 +40,12 @@ COMMERCE_METHODS = (
     "-[CKStoreAccount _legacyStoreAccount]",
     "+[CKStoreAccount _storeAccountFromACAccount:client:]",
 )
-METHODS += COMMERCE_METHODS
+COMMERCE_RESPONSE_METHODS = (
+    "__106-[CKMachineAuthorizationContext _runRequestWithAccount:bagURLKey:authenticationContext:completionHandler:]_block_invoke",
+    "__66-[CKMachineAuthorizationContext _requestBodyForAccount:bagURLKey:]_block_invoke",
+)
+COMMERCE_SYMBOLS = COMMERCE_METHODS + COMMERCE_RESPONSE_METHODS
+METHODS += COMMERCE_SYMBOLS
 LINE = re.compile(r"^\s*(?:->\s*)?0x[0-9a-fA-F]+\s+<\+([0-9]+)>:\s+(.+)$")
 HEADER = re.compile(r"^([^\s\x60]+)\x60(.+):$")
 FOCUS = re.compile(r"xToken|needDiv|ownerDsid|kbsync|setAnisetteType|ams_.*(?:[Tt]oken|[Pp]assword)|[Aa]uthentication|[Aa]nisette|MDM|AMD|[Ee]phemeral|setCredentialSource|setAuthenticationType|[Ii]mport|[Ss]tatus|AMSError|ha0d|[Ff]air[Pp]lay|[Cc]ontext|SC Info|fpsd|Shared|XtCq|directory|Directory|42023|42032|42018|5bd9|5bd0|5bde|a427|a430|a422|open|mkdir|stat|access|fcntl|File|[Dd]iversity|divbag|keybag|kbSync|dsID|_legacy|[Rr]eply|[Ee]ntitle|MachService")
@@ -54,7 +59,7 @@ def extract(output):
         header = HEADER.fullmatch(line.strip())
         if header:
             name = re.sub(r"\([^)]*\)", "", header[2])
-            current = name if name in METHODS and header[1] == ("CommerceKit" if name in COMMERCE_METHODS else "AppleMediaServices") else None
+            current = name if name in METHODS and header[1] == ("CommerceKit" if name in COMMERCE_SYMBOLS else "AppleMediaServices") else None
             continue
         match = LINE.fullmatch(line)
         if current and match and len(match[2]) <= 1024:
@@ -80,9 +85,10 @@ def extract(output):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--scope", choices=("ams", "commerce"), default="ams")
+    parser.add_argument("--scope", choices=("ams", "commerce", "commerce-response"), default="ams")
     args = parser.parse_args()
-    methods = COMMERCE_METHODS if args.scope == "commerce" else tuple(name for name in METHODS if name not in COMMERCE_METHODS)
+    methods = {"commerce": COMMERCE_METHODS, "commerce-response": COMMERCE_RESPONSE_METHODS,
+               "ams": tuple(name for name in METHODS if name not in COMMERCE_SYMBOLS)}[args.scope]
     if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "darwin":
         raise SystemExit("GitHub-hosted macOS required")
     report = {"schema": "ipa-lab-native-authorization-code-v1",
