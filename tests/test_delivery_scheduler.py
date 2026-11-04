@@ -52,6 +52,13 @@ class SchedulerTests(unittest.TestCase):
         run["display_title"]+=";command"
         self.assertFalse(matches(run,RID))
 
+    def test_build_progress_is_available_before_worker_feed(self):
+        api=GitHub("synthetic")
+        api.call=Mock(return_value={"check_runs":[]})
+        api.jobs=Mock(return_value=[{"steps":[{"name":"Test independent signing request construction",
+                                               "status":"in_progress"}]}])
+        self.assertEqual(api.progress({"id":10,"head_sha":"f"*40},RID),"building")
+
     def test_verified_result_wins_over_failed_retry(self):
         api=GitHub("synthetic")
         successful=dict(old(),id=8,conclusion="success")
