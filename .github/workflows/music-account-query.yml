@@ -1,0 +1,66 @@
+name: Private official Music account count
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Preflight uses synthetic email without submitting; query signs in once and reads only
+        type: choice
+        default: preflight
+        options: [preflight, query]
+permissions:
+  contents: read
+concurrency:
+  group: official-music-account-query
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Check private input, output filtering and count evidence
+        run: python3 -m unittest discover -s tests -p 'test_music_account_query.py' -v
+      - name: Build navigation and private account-query clients
+        run: |
+          clang -Wall -Wextra -Werror -fobjc-arc -framework Foundation -framework AppKit -framework ApplicationServices tools/NativeMusicAccountNavigation.m -o music-account-navigation
+          clang -Wall -Wextra -Werror -fobjc-arc -framework Foundation -framework AppKit -framework ApplicationServices tools/NativeMusicAccountQuery.m -o music-account-query
+          ./music-account-navigation --contract
+          ./music-account-query --contract
+      - name: Verify actual login controls using an unsubmitted synthetic email
+        timeout-minutes: 3
+        run: |
+          ulimit -c 0
+          python3 tools/music_account_query.py --binary ./music-account-query --preflight
+  query:
+    if: github.ref == 'refs/heads/main' && inputs.mode == 'query'
+    needs: verify
+    runs-on: macos-15
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Build and check the same private client
+        run: |
+          clang -Wall -Wextra -Werror -fobjc-arc -framework Foundation -framework AppKit -framework ApplicationServices tools/NativeMusicAccountQuery.m -o music-account-query
+          ./music-account-query --contract
+      - name: Check controls before exposing account secrets
+        timeout-minutes: 3
+        run: |
+          ulimit -c 0
+          python3 tools/music_account_query.py --binary ./music-account-query --preflight
+      - name: Sign in once and read the authorized-computer count
+        timeout-minutes: 3
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        run: |
+          ulimit -c 0
+          python3 tools/music_account_query.py --binary ./music-account-query

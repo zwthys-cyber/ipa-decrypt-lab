@@ -23,6 +23,8 @@ static NSString *Label(id raw) {
     while ([s hasSuffix:@"…"] || [s hasSuffix:@"."] || [s hasSuffix:@":"])
         s = [s substringToIndex:s.length-1];
     NSDictionary *labels = @{
+        @"sign out":@"sign_out", @"computer authorizations":@"computer_authorizations", @"authorized devices":@"authorized_devices",
+        @"your apple account or password was incorrect":@"credentials_rejected", @"your apple id or password was incorrect":@"credentials_rejected",
         @"account":@"account", @"account settings":@"account_settings", @"view my account":@"account_settings",
         @"sign in":@"sign_in", @"sign in to the itunes store":@"sign_in_heading",
         @"sign in to music":@"sign_in_heading", @"sign in to your apple account":@"sign_in_heading",
@@ -62,6 +64,8 @@ static BOOL CanPress(NSString *action, NSString *role, NSString *label, BOOL ena
     if (!enabled) return NO;
     if ([action isEqual:@"open_account_menu"])
         return [role isEqual:@"AXMenuBarItem"] && [label isEqual:@"account"];
+    if ([action isEqual:@"open_account_settings"])
+        return [role isEqual:@"AXMenuItem"] && [label isEqual:@"account_settings"];
     if ([action isEqual:@"dismiss_welcome"])
         return [role isEqual:@"AXButton"] && [label isEqual:@"welcome_start"];
     if ([action isEqual:@"open_signin_dialog"])
@@ -282,25 +286,7 @@ static BOOL Contract(void) {
     NSData *data = [NSJSONSerialization dataWithJSONObject:PublicSnapshot(@[fixture]) options:0 error:nil];
     return data && [[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] rangeOfString:@"PRIVATE-SENTINEL"].location == NSNotFound;
 }
-int main(int argc, const char **argv) { @autoreleasepool {
-    const char *ci = getenv("GITHUB_ACTIONS");
-    if (!ci || strcmp(ci,"true") || getenv("APPLE_ID") || getenv("APPLE_PASSWORD")) return 2;
-    if (argc==2 && !strcmp(argv[1],"--contract")) {
-        if (!Contract()) return 3;
-        puts("Official account navigation contract passed.");
-        return 0;
-    }
-    if (argc != 1) return 2;
-    alarm(55);
-    NSMutableDictionary *report = [@{
-        @"schema":@"ipa-lab-music-account-navigation-v1",
-        @"credentials_used":@NO,@"credential_submit_attempted":@NO,
-        @"authorization_request_attempted":@NO,@"deauthorization_attempted":@NO,
-        @"security_upgrade_accepted":@NO,@"authorization_count_retrieved":@NO,
-        @"account_management_working":@NO,@"permission_prompt_requested":@NO,
-        @"music_launch_succeeded":@NO,@"accessibility_trusted":AXIsProcessTrusted()?@YES:@NO,
-        @"status":@"unavailable"
-    } mutableCopy];
+static NSRunningApplication *NavigateToSignIn(NSMutableDictionary *report) {
     NSURL *url = [NSWorkspace.sharedWorkspace URLForApplicationWithBundleIdentifier:@"com.apple.Music"];
     if (url && [report[@"accessibility_trusted"] boolValue]) {
         __block BOOL done=NO;
@@ -343,12 +329,38 @@ int main(int argc, const char **argv) { @autoreleasepool {
             }
             report[@"after_navigation"]=WindowSnapshot(target);
             CFRelease(target);
-            [app terminate];
+            return app;
         }
     }
+    return nil;
+}
+#ifndef LAB_MUSIC_UI_LIBRARY
+int main(int argc, const char **argv) { @autoreleasepool {
+    const char *ci = getenv("GITHUB_ACTIONS");
+    if (!ci || strcmp(ci,"true") || getenv("APPLE_ID") || getenv("APPLE_PASSWORD")) return 2;
+    if (argc==2 && !strcmp(argv[1],"--contract")) {
+        if (!Contract()) return 3;
+        puts("Official account navigation contract passed.");
+        return 0;
+    }
+    if (argc != 1) return 2;
+    alarm(55);
+    NSMutableDictionary *report = [@{
+        @"schema":@"ipa-lab-music-account-navigation-v1",
+        @"credentials_used":@NO,@"credential_submit_attempted":@NO,
+        @"authorization_request_attempted":@NO,@"deauthorization_attempted":@NO,
+        @"security_upgrade_accepted":@NO,@"authorization_count_retrieved":@NO,
+        @"account_management_working":@NO,@"permission_prompt_requested":@NO,
+        @"music_launch_succeeded":@NO,@"accessibility_trusted":AXIsProcessTrusted()?@YES:@NO,
+        @"status":@"unavailable"
+    } mutableCopy];
+    NSRunningApplication *app=NavigateToSignIn(report);
+    if(app)[app terminate];
     NSData *data=[NSJSONSerialization dataWithJSONObject:report options:NSJSONWritingSortedKeys error:nil];
     if(!data)return 3;
     [NSFileHandle.fileHandleWithStandardOutput writeData:data];
     [NSFileHandle.fileHandleWithStandardOutput writeData:[@"\n" dataUsingEncoding:NSUTF8StringEncoding]];
     return 0;
 }}
+
+#endif
