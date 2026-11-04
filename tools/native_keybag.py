@@ -7,6 +7,9 @@ import re
 import subprocess
 import sys
 import tempfile
+import urllib.error
+import urllib.parse
+import urllib.request
 
 MODES = {"interfaces", "context", "kbsync", "parameters", "public_bag", "request"}
 STATUSES = {"interface_unavailable", "interfaces_checked", "context_ready", "context_failed",
@@ -148,6 +151,56 @@ def probe(mode):
         except (OSError, ValueError):
             return clean({"mode": mode})
 
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+def classify_route(location):
+    result = {"redirect_host": "other", "redirect_path": "other",
+              "redirect_https": False, "redirect_query_present": False}
+    if type(location) is not str or len(location) > 2048:
+        return result
+    try:
+        target = urllib.parse.urlsplit(urllib.parse.urljoin(
+            "https://buy.itunes.apple.com/commerce/machine/authorize", location))
+        result["redirect_https"] = target.scheme == "https" and target.port in {None, 443} and not target.username and not target.password
+        result["redirect_query_present"] = bool(target.query)
+        if target.hostname == "buy.itunes.apple.com":
+            result["redirect_host"] = "buy"
+        elif type(target.hostname) is str and re.fullmatch(r"p[0-9]{1,3}-buy\.itunes\.apple\.com", target.hostname):
+            result["redirect_host"] = "pod_buy"
+        elif target.hostname == "finance-app.itunes.apple.com":
+            result["redirect_host"] = "finance_app"
+        paths = {"/commerce/machine/authorize": "authorize_exact",
+                 "/commerce/machine/authorize/": "authorize_slash",
+                 "/WebObjects/MZFinance.woa/wa/authorizeMachine": "legacy",
+                 "/WebObjects/MZFinance.woa/wa/authorizeMachine/": "legacy_slash"}
+        result["redirect_path"] = paths.get(target.path, "other")
+    except (ValueError, TypeError):
+        pass
+    return result
+
+def public_route():
+    result = {"schema": "ipa-lab-public-authorization-route-v1", "method": "HEAD",
+              "status": "request_failed", "account_login_attempted": False}
+    try:
+        opener = urllib.request.build_opener(NoRedirect)
+        request = urllib.request.Request("https://buy.itunes.apple.com/commerce/machine/authorize",
+                                         method="HEAD")
+        try:
+            response = opener.open(request, timeout=10)
+        except urllib.error.HTTPError as error:
+            response = error
+        with response:
+            result["http_status"] = response.code
+            result["status"] = "response_received"
+            result.update(classify_route(response.headers.get("Location")))
+    except (OSError, ValueError):
+        pass
+    return result
+
+
 def main():
     if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "darwin":
         raise SystemExit("GitHub-hosted macOS is required")
@@ -156,6 +209,7 @@ def main():
          "architecture": arch if arch in {"arm64", "x86_64"} else "other",
          "cases": [probe(mode) for mode in ("interfaces", "context", "kbsync", "parameters", "public_bag", "request")],
          "account_login_attempted": False, "enrollment_created": False, "decryption_proven": False}
+    r["public_route"] = public_route()
     print(json.dumps(r, sort_keys=True))
     if any(c["status"] in {"probe_failed", "native_process_failed", "probe_timeout", "native_exception"}
            for c in r["cases"]):

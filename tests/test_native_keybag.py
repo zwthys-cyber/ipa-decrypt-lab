@@ -100,6 +100,15 @@ class NativeKeybagContracts(unittest.TestCase):
             del broken[key]
             self.assertEqual(mod.clean(broken)["status"], "probe_failed")
 
+    def test_public_route_reports_only_fixed_classifications(self):
+        result = mod.classify_route("https://buy.itunes.apple.com/commerce/machine/authorize/?token=SECRET")
+        self.assertEqual(result["redirect_path"], "authorize_slash")
+        self.assertTrue(result["redirect_query_present"])
+        self.assertNotIn("SECRET", json.dumps(result))
+        for value in ("https://buy.itunes.apple.com.evil.invalid/SECRET",
+                      "https://user:SECRET@buy.itunes.apple.com:444/SECRET", None):
+            self.assertNotIn("SECRET", json.dumps(mod.classify_route(value)))
+
     def test_bad_types_fail_closed(self):
         for value in (None, [], "SECRET"):
             self.assertEqual(mod.clean(value)["status"], "probe_failed")
