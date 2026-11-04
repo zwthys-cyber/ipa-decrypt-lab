@@ -24,7 +24,7 @@
 
 最新进展：[双架构原生代码检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41761399542)找到了一个实际缺陷：机器授权正文 xToken 留成了缺失值 "0"，应绑定登录响应 passwordToken。修复已通过[双架构检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41761683677)。修复后分别测试普通登录、机器授权用途、Cookie 与布尔值会话创建，均登录成功，但授权仍返回 2002，没有 keybag。最新[布尔值试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41762837405)通过 20 项 Python、10 项 Swift 测试与原生编译。
 
-[设备认证代码检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41762566901)另确认：临时账号跳过原生 Anisette 头；机器授权的账号范围与现有 AuthKit Anisette 提供器不同，不能直接把“独立初始化成功”解释成机器授权可用。新增的[响应头试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41763040212)通过 21 项 Python、10 项 Swift 测试及原生合成检查；授权响应仍为 2002，且没有 MD/AMD 初始化指令或数据。 [本轮证据](OFFLINE-BACKEND.md#native-authorization-body-token-correction-2026-11-04)。
+[设备认证代码检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41762566901)另确认：临时账号跳过原生 Anisette 头；机器授权的账号范围与现有 AuthKit Anisette 提供器不同，不能直接把“独立初始化成功”解释成机器授权可用。新增的[响应头试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41763040212)通过 21 项 Python、10 项 Swift 测试及原生合成检查；授权响应仍为 2002，且没有 MD/AMD 初始化指令或数据。进一步的[登录阶段对照](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41763584459)通过 22 项 Python、11 项 Swift 测试，登录过程所有响应也未观察到这些指令；授权仍未成功。 [本轮证据](OFFLINE-BACKEND.md#native-authorization-body-token-correction-2026-11-04)。
 
 ## 当前阻塞：解密授权材料
 
