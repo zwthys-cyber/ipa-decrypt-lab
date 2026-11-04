@@ -69,10 +69,10 @@ def inspect_text(raw):
         refs.extend(re.findall(pattern, text))
     modules = {}
     for module_id in (9783, 86014, 33905):
-        marker = re.search(r"(?<![0-9])" + str(module_id) + r":(?:\\(|function)", text)
+        marker = re.search(r"(?<![0-9])" + str(module_id) + r":(?:\(|function)", text)
         if marker:
             tail = text[marker.start():marker.start()+18000]
-            following = re.search(r"},[0-9]{2,6}:(?:\\(|function)", tail[20:])
+            following = re.search(r"},[0-9]{2,6}:(?:\(|function)", tail[20:])
             modules[str(module_id)] = tail[:20+following.start()+1] if following else tail
     return dict(known_api_urls=sorted(urls)[:40], static_code_contexts=contexts, request_modules=modules), refs
 
