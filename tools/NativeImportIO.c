@@ -1,6 +1,16 @@
 // Linked only into our diagnostic executable. Never injected into system processes.
 #include "NativeImportIO.h"
-#include <mach-o/dyld-interposing.h>
+// SDKs do not ship dyld-interposing.h. Emit the documented dyld tuple ABI.
+// Reference: apple-oss-distributions/dyld/include/mach-o/dyld-interposing.h.
+// These workflows build arm64 and x86_64, not the arm64e pointer-auth variant.
+#if defined(__arm64e__)
+#error Unsupported pointer-authenticated interpose ABI
+#endif
+#define LAB_INTERPOSE(hook,target) \
+ __attribute__((used,section("__DATA,__interpose"))) \
+ static const struct { const void *replacement; const void *original; } \
+ lab_tuple_##target = { (const void *)&hook, (const void *)&target };
+
 #include <stdatomic.h>
 #include <pthread.h>
 #include <errno.h>
@@ -80,25 +90,25 @@ static int traced_open(const char *path,int flags,...) {
  unsigned int g=atomic_load(&epoch);int result=open(path,flags,mode),saved=errno;
  if(g)record(g,area_path(path),OP_OPEN,result<0,saved);errno=saved;return result;
 }
-DYLD_INTERPOSE(traced_open,open)
+LAB_INTERPOSE(traced_open,open)
 static int traced_openat(int fd,const char *path,int flags,...) {
  mode_t mode=0;if(flags&O_CREAT){va_list ap;va_start(ap,flags);mode=va_arg(ap,int);va_end(ap);}
  unsigned int g=atomic_load(&epoch);int a=g?area_at(fd,path):-1;
  int result=openat(fd,path,flags,mode),saved=errno;
  record(g,a,OP_OPENAT,result<0,saved);errno=saved;return result;
 }
-DYLD_INTERPOSE(traced_openat,openat)
+LAB_INTERPOSE(traced_openat,openat)
 static FILE *traced_fopen(const char *path,const char *mode) {
  unsigned int g=atomic_load(&epoch);FILE *result=fopen(path,mode);int saved=errno;
  if(g)record(g,area_path(path),OP_FOPEN,!result,saved);errno=saved;return result;
 }
-DYLD_INTERPOSE(traced_fopen,fopen)
+LAB_INTERPOSE(traced_fopen,fopen)
 #define PATH_HOOK(name,op,args,call) \
  static int traced_##name args { \
   unsigned int g=atomic_load(&epoch);int result=name call,saved=errno; \
   if(g)record(g,area_path(path),op,result<0,saved);errno=saved;return result; \
  } \
- DYLD_INTERPOSE(traced_##name,name)
+ LAB_INTERPOSE(traced_##name,name)
 PATH_HOOK(stat,OP_STAT,(const char *path,struct stat *st),(path,st))
 PATH_HOOK(lstat,OP_LSTAT,(const char *path,struct stat *st),(path,st))
 PATH_HOOK(access,OP_ACCESS,(const char *path,int mode),(path,mode))
@@ -109,13 +119,13 @@ static int traced_rename(const char *from,const char *to) {
  if(g){int a=area_path(to);record(g,a>=0?a:area_path(from),OP_RENAME,result<0,saved);}
  errno=saved;return result;
 }
-DYLD_INTERPOSE(traced_rename,rename)
+LAB_INTERPOSE(traced_rename,rename)
 #define FD_HOOK(type,name,op,args,call) \
  static type traced_##name args { \
   unsigned int g=atomic_load(&epoch);int a=g?area_fd(fd):-1; \
   type result=name call;int saved=errno;record(g,a,op,result<0,saved);errno=saved;return result; \
  } \
- DYLD_INTERPOSE(traced_##name,name)
+ LAB_INTERPOSE(traced_##name,name)
 FD_HOOK(ssize_t,read,OP_READ,(int fd,void *buffer,size_t size),(fd,buffer,size))
 FD_HOOK(ssize_t,write,OP_WRITE,(int fd,const void *buffer,size_t size),(fd,buffer,size))
 FD_HOOK(ssize_t,pread,OP_PREAD,(int fd,void *buffer,size_t size,off_t offset),(fd,buffer,size,offset))
@@ -127,16 +137,16 @@ static int traced_fclose(FILE *stream) {
  unsigned int g=atomic_load(&epoch);int a=g?area_fd(fileno(stream)):-1;
  int result=fclose(stream),saved=errno;record(g,a,OP_FCLOSE,result!=0,saved);errno=saved;return result;
 }
-DYLD_INTERPOSE(traced_fclose,fclose)
+LAB_INTERPOSE(traced_fclose,fclose)
 static size_t traced_fread(void *buffer,size_t size,size_t count,FILE *stream) {
  unsigned int g=atomic_load(&epoch);int a=g?area_fd(fileno(stream)):-1;
  size_t result=fread(buffer,size,count,stream);int saved=errno;
  record(g,a,OP_FREAD,result<count && ferror(stream),saved);errno=saved;return result;
 }
-DYLD_INTERPOSE(traced_fread,fread)
+LAB_INTERPOSE(traced_fread,fread)
 static size_t traced_fwrite(const void *buffer,size_t size,size_t count,FILE *stream) {
  unsigned int g=atomic_load(&epoch);int a=g?area_fd(fileno(stream)):-1;
  size_t result=fwrite(buffer,size,count,stream);int saved=errno;
  record(g,a,OP_FWRITE,result<count && ferror(stream),saved);errno=saved;return result;
 }
-DYLD_INTERPOSE(traced_fwrite,fwrite)
+LAB_INTERPOSE(traced_fwrite,fwrite)
