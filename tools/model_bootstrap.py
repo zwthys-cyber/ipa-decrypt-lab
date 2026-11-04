@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import re
 import subprocess
 import sys
 import tempfile
@@ -97,6 +98,73 @@ def recovery_failure(raw):
                                            "permission","current layout","unsupported","hash","hardware")}
 
 
+
+def input_profile(engine, ipa):
+    """Only fixed structural counts/booleans may leave the private doctor report."""
+    env={key:os.environ[key] for key in ("PATH","HOME","LANG") if key in os.environ}
+    env["GITHUB_ACTIONS"]="true"
+    code,out,_=run_private([engine,"doctor","--ipa",str(ipa)],env,timeout=90)
+    result={"ready":False,"status":"input_profile_rejected"}
+    if code or len(out)>1024**2:
+        return result
+    value=json.loads(out)
+    if type(value) is not dict or value.get("schema")!="unfairplay-doctor-v1":
+        return result
+    checks=value.get("checks")
+    sinfs=value.get("sinf")
+    if type(checks) is not dict or type(sinfs) is not list or not 0<len(sinfs)<=4096:
+        return result
+    if any(type(item) is not dict or type(item.get("current_layout")) is not bool
+           or type(item.get("legacy_markers")) is not bool for item in sinfs):
+        return result
+    result.update(sinf_count=len(sinfs),
+                  current_layout_count=sum(item["current_layout"] for item in sinfs),
+                  legacy_marker_count=sum(item["legacy_markers"] for item in sinfs))
+    result["checks"]={key:checks.get(key) is True
+                      for key in ("ipa_inventory","ipa_sinf","current_sinf_layout")}
+    result["ready"]=all(result["checks"].values()) and result["current_layout_count"]==len(sinfs)
+    result["status"]="input_profile_compatible" if result["ready"] else "input_profile_rejected"
+    return result
+
+
+RECOVERY_ERRORS={
+    "installed SINF does not use the current layout":"installed_sinf_layout",
+    "canonical input has no valid SUPF or SUPP key file":"missing_key_file",
+    "canonical input has no SIDB state":"missing_sidb",
+    "SIDB container authentication failed":"sidb_authentication",
+    "authenticated SINF accepted no class precursor":"sinf_class_rejected",
+    "tagged SIDB selection requires one decoded tree":"sidb_tree_count",
+    "derive SIDB tag codebook":"sidb_tag_codebook",
+    "unsupported SIDB root tag":"sidb_root_tag",
+    "missing SIDB route tag":"sidb_route_missing",
+    "duplicate SIDB route tag":"sidb_route_duplicate",
+    "unsupported SIDB route tag":"sidb_route_unsupported",
+    "unsupported SIDB account version":"sidb_account_version",
+    "SIDB value is not a registry record":"sidb_value_record",
+    "capture hardware IOMACAddress":"hardware_capture",
+    "Permission denied":"permission_denied",
+}
+RECOVERY_PHASES=("load-inputs","decode-sidb","select-class","search-sinf","validate-ipa")
+
+
+def recovery_diagnostics(raw):
+    text=raw[:1024**2].decode("utf-8","replace")
+    errors=[line[7:] for line in text.splitlines() if line.startswith("error: ")]
+    error="\n".join(errors)
+    phases=[]
+    for line in text.splitlines():
+        if not line.startswith("recovery build="):
+            continue
+        match=re.search(r"(?:^| )phase=([a-z-]+)(?: |$)",line)
+        if match and match[1] in RECOVERY_PHASES and match[1] not in phases:
+            phases.append(match[1])
+    return {"error_record_present":bool(errors),
+            "error_codes":[code for needle,code in RECOVERY_ERRORS.items() if needle in error],
+            "last_phase":phases[-1] if phases else "not_observed",
+            "phases":phases,
+            "error_mentions":recovery_failure(error.encode())}
+
+
 def sealed_summary(raw):
     if len(raw)>64*1024:
         raise ValueError("invalid_sealed_model")
@@ -112,13 +180,9 @@ def sealed_summary(raw):
     return {key:value[key] for key in ("schema","repository","secret_name","key_id","encrypted_value")}
 
 
-def bootstrap(login_binary,native_binary,download_binary,engine,sealer,report=None):
+def bootstrap(login_binary,native_binary,download_binary,engine,sealer,report=None,inspect_input_only=False):
     report=base() if report is None else report
-    result=enroll(login_binary,native_binary,backend="commerce",session_context="cookies",
-                  client_context="login_agent",observe_state=True)
-    report["enrollment"]=result
-    if not state_ready(result):
-        return dict(report,status="enrollment_state_unavailable")
+    report["authorization_request_attempted"]=False
     with tempfile.TemporaryDirectory(prefix="ipa-lab-model-bootstrap-") as directory:
         root=Path(directory)
         root.chmod(0o700)
@@ -130,6 +194,18 @@ def bootstrap(login_binary,native_binary,download_binary,engine,sealer,report=No
         app=candidate_app(ipa,root/"candidate")
         # This is an extracted candidate, never represented as an installed/running app.
         report["app_input_kind"]="extracted_ipa_candidate"
+        report["input_profile"]=input_profile(engine,ipa)
+        if report["input_profile"].get("ready") is not True:
+            return dict(report,status="input_profile_rejected")
+        if inspect_input_only:
+            return dict(report,status="input_profile_compatible")
+        # All downloadable prerequisites are checked before consuming a machine slot.
+        result=enroll(login_binary,native_binary,backend="commerce",session_context="cookies",
+                      client_context="login_agent",observe_state=True)
+        report["enrollment"]=result
+        report["authorization_request_attempted"]=result.get("authorization_request_attempted") is True
+        if not state_ready(result):
+            return dict(report,status="enrollment_state_unavailable")
         model_dir=root/"models"
         model_dir.mkdir(mode=0o700)
         env={"PATH":"/usr/bin:/bin","GITHUB_ACTIONS":"true"}
@@ -142,7 +218,7 @@ def bootstrap(login_binary,native_binary,download_binary,engine,sealer,report=No
         except subprocess.TimeoutExpired:
             return dict(report,status="model_recovery_timeout")
         if code:
-            return dict(report,status="model_recovery_rejected",recovery_mentions=recovery_failure(out+err))
+            return dict(report,status="model_recovery_rejected",recovery_diagnostics=recovery_diagnostics(out+err))
         model,summary=setup_summary(out,model_dir)
         report.update(summary)
         report["model_recovered"]=True
@@ -169,6 +245,7 @@ def main():
     parser=argparse.ArgumentParser()
     for option in ("login-binary","native-binary","download-binary","engine","sealer"):
         parser.add_argument("--"+option,required=True)
+    parser.add_argument("--inspect-input-only",action="store_true")
     args=parser.parse_args()
     if os.environ.get("GITHUB_ACTIONS")!="true" or sys.platform!="darwin":
         raise SystemExit("GitHub-hosted macOS required")
@@ -178,7 +255,7 @@ def main():
         report=base()
         try:
             report=bootstrap(*(str(Path(getattr(args,key)).resolve()) for key in
-                               ("login_binary","native_binary","download_binary","engine","sealer")),report=report)
+                               ("login_binary","native_binary","download_binary","engine","sealer")),report=report,inspect_input_only=args.inspect_input_only)
         except subprocess.TimeoutExpired:
             report["status"]="bootstrap_timeout_do_not_retry"
         except Exception:
@@ -188,7 +265,7 @@ def main():
         print(json.dumps(sealed,sort_keys=True))
         report["sealed_model_emitted"]=True
     print(json.dumps(report,sort_keys=True))
-    return 0 if report["status"]=="model_recovered_and_verified" else 2
+    return 0 if report["status"] in {"model_recovered_and_verified","input_profile_compatible"} else 2
 
 
 if __name__=="__main__":

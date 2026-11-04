@@ -45,11 +45,13 @@ class BootstrapTests(unittest.TestCase):
             value[field]=new
             self.assertFalse(model.state_ready(value))
 
-    def test_no_state_stops_before_downloader(self):
-        with patch.object(model,"enroll",return_value={}),patch.object(model,"download_original") as download:
+    def test_failed_download_does_not_consume_authorization(self):
+        with patch.object(model,"enroll") as enroll, \
+                patch.object(model,"download_original",return_value="download_login_failed"):
             result=model.bootstrap("login","native","download","engine","sealer")
-        download.assert_not_called()
-        self.assertEqual(result["status"],"enrollment_state_unavailable")
+        enroll.assert_not_called()
+        self.assertFalse(result["authorization_request_attempted"])
+        self.assertEqual(result["status"],"original_download_failed")
 
     def test_archive_is_an_extracted_candidate_not_claimed_installed(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -126,6 +128,7 @@ class BootstrapTests(unittest.TestCase):
         with patch.object(model,"enroll",return_value=ready()), \
                 patch.object(model,"download_original",side_effect=download), \
                 patch.object(model,"candidate_app",return_value=Path("/synthetic/app")), \
+                patch.object(model,"input_profile",return_value={"ready":True}), \
                 patch.object(model,"run_private",side_effect=run), \
                 patch.object(model,"verify",return_value={"decryption_proven":verified,"plaintext_verified":verified}):
             result=model.bootstrap("login","native","download","engine","sealer")
@@ -146,6 +149,67 @@ class BootstrapTests(unittest.TestCase):
         self.assertFalse(result["model_plaintext_published"])
         self.assertEqual(result["app_input_kind"],"extracted_ipa_candidate")
         self.assertEqual(len(calls),2)
+
+
+    def test_progress_keywords_are_not_error_evidence(self):
+        raw=(b"recovery build=dev profile=minimal-current-sinf phase=load-inputs\n"
+             b"recovery build=dev profile=minimal-current-sinf phase=decode-sidb\n"
+             b"error: derive enrollment: missing SIDB route tag PRIVATE_SYNTHETIC\n")
+        value=model.recovery_diagnostics(raw)
+        self.assertEqual(value["last_phase"],"decode-sidb")
+        self.assertEqual(value["error_codes"],["sidb_route_missing"])
+        self.assertTrue(value["error_mentions"]["sidb"])
+        self.assertFalse(value["error_mentions"]["sinf"])
+        self.assertNotIn("PRIVATE_SYNTHETIC",json.dumps(value))
+
+    def test_unknown_error_and_phase_never_escape(self):
+        value=model.recovery_diagnostics(
+            b"recovery build=dev phase=private-secret\nerror: PRIVATE_SYNTHETIC unknown\n")
+        self.assertEqual(value["last_phase"],"not_observed")
+        self.assertEqual(value["error_codes"],[])
+        self.assertTrue(value["error_record_present"])
+        self.assertNotIn("PRIVATE_SYNTHETIC",json.dumps(value))
+
+    def test_doctor_report_is_filtered_and_requires_all_licenses_compatible(self):
+        raw={"schema":"unfairplay-doctor-v1","selector":"PRIVATE_SYNTHETIC_SELECTOR",
+             "checks":{"ipa_inventory":True,"ipa_sinf":True,"current_sinf_layout":True},
+             "sinf":[{"current_layout":True,"legacy_markers":True,"path":"PRIVATE_SYNTHETIC"}]}
+        def inspect():
+            with patch.object(model,"run_private",return_value=(0,json.dumps(raw).encode(),b"")):
+                return model.input_profile("engine",Path("/private/app.ipa"))
+        result=inspect()
+        self.assertTrue(result["ready"])
+        self.assertEqual(result["sinf_count"],1)
+        self.assertNotIn("PRIVATE_SYNTHETIC",json.dumps(result))
+        raw["sinf"][0]["current_layout"]=False
+        self.assertFalse(inspect()["ready"])
+        raw["sinf"][0]["current_layout"]=1
+        self.assertFalse(inspect()["ready"])
+
+    def test_nonzero_doctor_result_is_rejected(self):
+        with patch.object(model,"run_private",return_value=(1,b"PRIVATE_SYNTHETIC",b"")):
+            self.assertFalse(model.input_profile("engine",Path("/unused"))["ready"])
+
+    def test_input_inspection_never_enrolls_or_seals(self):
+        with patch.object(model,"download_original",return_value="original_downloaded"), \
+                patch.object(model,"candidate_app",return_value=Path("/synthetic/app")), \
+                patch.object(model,"input_profile",return_value={"ready":True}), \
+                patch.object(model,"enroll") as enroll,patch.object(model,"run_private") as run:
+            result=model.bootstrap("login","native","download","engine","sealer",inspect_input_only=True)
+        enroll.assert_not_called()
+        run.assert_not_called()
+        self.assertEqual(result["status"],"input_profile_compatible")
+        self.assertFalse(result["authorization_request_attempted"])
+        self.assertFalse(result["decryption_proven"])
+
+    def test_incompatible_license_stops_before_enrollment(self):
+        with patch.object(model,"download_original",return_value="original_downloaded"), \
+                patch.object(model,"candidate_app",return_value=Path("/synthetic/app")), \
+                patch.object(model,"input_profile",return_value={"ready":False}), \
+                patch.object(model,"enroll") as enroll:
+            result=model.bootstrap("login","native","download","engine","sealer")
+        enroll.assert_not_called()
+        self.assertEqual(result["status"],"input_profile_rejected")
 
 
 if __name__=="__main__":

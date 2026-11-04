@@ -9,6 +9,7 @@ on:
         options:
           - preflight
           - trial
+          - input-inspection
 permissions:
   contents: read
 concurrency:
@@ -154,8 +155,8 @@ jobs:
       - name: Confirm administrator state observer before account credentials
         timeout-minutes: 2
         run: python3 tools/fairplay_state_observer.py
-      - name: Enroll once, recover candidate model, and verify full original IPA
-        if: inputs.mode == 'trial'
+      - name: Inspect original IPA or enroll once and verify model
+        if: inputs.mode == 'trial' || inputs.mode == 'input-inspection'
         timeout-minutes: 20
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -163,4 +164,4 @@ jobs:
           LAB_KBSYNC_HELPER: ${{ github.workspace }}/lab-kbsync
         run: |
           ulimit -c 0
-          python3 tools/model_bootstrap.py --login-binary native-source/ApplePackage/.build/debug/ApplePackageTool --native-binary native-machine-enrollment --download-binary native-source/StoreDownload/.build/debug/ApplePackageTool --engine offline-engine --sealer lab-model-seal
+          python3 tools/model_bootstrap.py --login-binary native-source/ApplePackage/.build/debug/ApplePackageTool --native-binary native-machine-enrollment --download-binary native-source/StoreDownload/.build/debug/ApplePackageTool --engine offline-engine --sealer lab-model-seal ${{ inputs.mode == 'input-inspection' && '--inspect-input-only' || '' }}
