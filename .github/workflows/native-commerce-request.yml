@@ -1,0 +1,30 @@
+name: Account-free CommerceKit request construction
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-commerce-request
+  cancel-in-progress: false
+jobs:
+  construct:
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Check bounded request and privacy contracts
+        run: python3 -m unittest discover -s tests -p 'test_native_commerce*.py' -v
+      - name: Build the synthetic request constructor
+        run: clang -g -fobjc-arc -framework Foundation tools/NativeCommerceRequest.m -o native-commerce-request
+      - name: Construct without submitting a server authorization request
+        timeout-minutes: 1
+        run: |
+          ulimit -c 0
+          python3 tools/native_commerce_request.py
