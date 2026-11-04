@@ -383,7 +383,6 @@ class GitHub:
             icon = app_thumbnail(output, receipt["app_id"])
             progress("uploading")
             reply = bot.document( {"chat_id":owner, "document":output.as_uri(),
-                "caption":"IPA 已完成明文校验；已移除账号元数据。\n需要重签名后安装，尚未验证实际运行。\n任务：" + rid,
                 "disable_content_type_detection":True}, icon, timeout=TELEGRAM_TIMEOUT)
             require(isinstance(reply, dict) and type(reply.get("message_id")) is int
                     and reply.get("chat",{}).get("id") == owner
