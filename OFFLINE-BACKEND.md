@@ -588,3 +588,38 @@ Removing the observed access denial did not resolve these import errors in this 
 The latest response also set the historical message_mentions_computer_limit flag, whose implementation only checks for the literal phrases "five computers" or "5 computers". **That flag is a mention classifier, not a confirmed quota-exceeded response or an authorization count.** No raw message was retained, and HTTP/business success plus a keybag was still observed. Further account-bearing authorization repeats are suspended pending a substantive new diagnostic and clarified quota evidence; no other machine's authorization is revoked. There have now been five private trials returning keybag data, none with verified import success.
 
 The final account-free validation https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41770552591 passed both architectures with 19 Python checks each plus native I/O and response contracts. It additionally tested terminating an actual root-owned synthetic sleep worker on timeout, verified pipe closure, and checked that cleanup addresses only that child process group with a cleared environment. The native diagnostic also has a 70-second process deadline. These checks validate bounded execution and reporting; they are not new enrollment attempts.
+
+## CommerceKit service prerequisite (2026-11-04)
+
+This is a new account-free service path, separate from the earlier ASDFairPlayService rejection and the direct AMS keybag import failures. No Apple Secrets were supplied in the runs below. No server authorization request, import, account deauthorization, enrollment capture, model recovery, or real IPA decryption was performed.
+
+### Source and runtime evidence
+
+Scoped native inspection https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41773722865 passed on ARM and Intel with five Python checks per architecture and all ten requested CommerceKit implementations found. Limiting each inspection to AMS or CommerceKit keeps the bounded disassembly report useful; an earlier empty ARM report did not establish that CommerceKit could not load.
+
+The inspected CKMachineAuthorizationContext code sends transaction type 2 for machine authorization through the commerce service. Its reply block has four parameters: success, NSData sync data, a diversitybag-needed flag, and NSError. A two-argument callback would be incorrect. The account-free probe constructs a CKStoreAccount directly from a fixed plist and verifies its dsID getter; it does not read a real system account or secure token.
+
+The inspected CKStoreClient initializer checks case-sensitive identifier prefixes. The earlier mixed-case com.apple.AppStore identifier was not accepted and returned nil. The probe now uses the supported com.apple.configurator.ui identifier. This selects the framework's existing Configurator client behavior; it does not establish an entitlement grant or an authorization state.
+
+Earlier crashes were localized using bounded stack metadata from our own synthetic process. The stacks ended in objc_release inside SyntheticAccount. Initializers had been called through untyped objc_msgSend casts, which did not express ARC initializer ownership. Typed initializer declarations and a replacement-object initializer contract fixed that implementation defect. The debugger helper emits only bounded allowlisted symbol/module names and offsets, never arguments, registers, heap contents, or raw debugger output.
+
+### Latest observed result
+
+Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41774463734 at commit 5f856eb5e940a12bae2577154792c9fc66be7fe0 passed on both architectures. Each job passed seven Python checks and the native error/initializer contract, then compared separate runner-user and root processes with fixed zero and nonzero synthetic account values.
+
+| Architecture / user | Client and synthetic account | Request and reply | Observed result |
+| --- | --- | --- | --- |
+| ARM / runner | Created; runtime ABI and dsID check passed | Type 2 request sent; successful reply, nonempty bounded NSData, no error | synthetic_sync_ready; need_diversitybag=true |
+| Intel / runner | Created; runtime ABI and dsID check passed | Same evidence for both fixed values | synthetic_sync_ready; need_diversitybag=true |
+| ARM / root | Created; account checks passed | Service method ABI check failed; no generation request submitted | interface_unavailable |
+| Intel / root | Created; account checks passed | Same result for both fixed values | interface_unavailable |
+
+The root result does not establish a particular entitlement, connection, or daemon failure. It only establishes that this invocation did not expose the expected interface. The working ordinary-user route is the next candidate for study.
+
+All four expected nonempty SIDB/SIDS flags remained false before and after each probe. These four flags are deliberately limited observations, not a complete filesystem audit. Generated sync bytes were retained only inside the short-lived native process and were not printed, saved in artifacts, or returned to the public report.
+
+A green workflow means the bounded diagnostic completed and its contracts passed. The per-case report, not workflow color, determines whether the service prerequisite succeeded. Neither the successful synthetic reply nor the presence of diversitybag requirements demonstrates real-account enrollment, a usable model, or decrypted code.
+
+### Next evidence required
+
+Inspect the framework's import and completion behavior before invoking the import service: CommerceService's importKeyBag:diversityBag: method has no reply parameter, so return from that call cannot prove an import succeeded. Establish an observable result and bounded cleanup with synthetic fixtures first. Real authorization repeats remain subject to the previously recorded uncertainty about the five-computer wording; no other machine's authorization is revoked. A substantive new route must still prove actual import, matching model recovery, and complete encrypted-slice verification before any decryption claim.

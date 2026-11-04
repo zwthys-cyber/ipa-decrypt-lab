@@ -11,6 +11,7 @@
 | 独立 Anisette 与原生接入 | Linux / ARM Mac 初始化及复用成功；原生代理回调契约通过 | 实际 AuthKit 调用返回 XPC 4099，数据提供器未被调用，未生成模型 |
 | 原生 keybag / 机器授权 | 统一登录与授权身份后，服务器返回 keybag 和 diversitybag；已补齐两步导入及文件访问诊断 | keybag 为 -42023、diversitybag 为 -42032；root 下仍失败，未取得模型 |
 | App Store 守护进程 FairPlay 接口 | 双架构接口存在，固定零值和非零值对照完成 | 均返回 ASDErrorDomain 505，错误提到 entitlement，未生成请求数据 |
+| CommerceKit 系统服务路径 | ARM、Intel 普通用户下，固定零值与非零值均成功取得测试用同步数据 | root 对照未通过接口检查；未验证真实授权、导入或模型恢复 |
 | 原始 IPA 下载 | 目标 App ID 6599842047 已成功下载并检查到 62 个加密 Mach-O 切片 | 原始包仍然加密，不是砸壳产物 |
 | macOS 原生实验 | 62 次实际调用均返回 EPERM；已区分路径、文件布局和调用前检查 | 没有生成已验证明文；不能仅凭 EPERM 确定原因 |
 | 离线解密引擎 | 固定版本 UnfairPlay 在 GitHub Linux x86_64 编译成功，相关 Go 测试及 52 项 Python 测试通过 | 缺少匹配的私有 FairPlay enrollment 模型，未验证真实 IPA 解密 |
@@ -32,6 +33,8 @@
 该次响应还出现“五台电脑”相关措辞。现有关键词摘要不能确定已超限，也没有保存原始消息；暂不重复真实授权请求，不撤销其他设备授权。[最终无账号检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41770552591)在两个架构各通过 19 项 Python 测试及原生检查，包括 root 子进程超时清理。[完整证据与局限](OFFLINE-BACKEND.md#bounded-native-import-file-io-observations-2026-11-04)。
 
 另有[App Store 服务对照](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41767422349)：接口存在，但固定测试值均返回 ASDErrorDomain 505，错误提到 entitlement，没有生成请求数据。这与 AMS 导入错误分开记录。**尚未取得模型，也没有已验证的砸壳产物。**
+
+最新无账号进展：[CommerceKit 系统服务验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41774463734)在 ARM、Intel 各通过 7 项 Python 检查及原生检查。修复初始化调用的 ARC 所有权问题后，又根据系统实现改用受支持的 Configurator 客户端标识；两个架构的普通用户进程均成功创建合成账号、发出请求并收到非空测试用同步数据，回复要求 diversitybag。root 对照未通过接口检查，未发送生成请求。该次没有使用 Apple Secrets，没有提交服务器授权请求或导入 keybag，四个预期非空 SIDB/SIDS 标志仍为 false。**这是服务调用前提验证，尚不是账号注册、模型获取或真实解密成功。** [详细证据](OFFLINE-BACKEND.md#commercekit-service-prerequisite-2026-11-04)。
 
 ## 当前阻塞：keybag 导入与模型恢复
 
@@ -62,6 +65,7 @@ Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直�
 | Account-free native authorization code inspection | 双架构检查指定原生函数的机器指令及令牌/认证类型来源 | 不传入账号，不读取私有运行时状态 |
 | Account-free native request signing policy | 检查公开配置及原生 Mescal 签名策略；不发送授权请求 | 不传入账号 |
 | Account-free App Store FairPlay service probe | 双架构检查本地 App Store FairPlay 服务能否为固定测试值生成请求 | 不传入 Apple 账号，不提交授权或导入 |
+| Account-free CommerceKit keybag prerequisite | 双架构固定测试值、普通用户/root 对照；检查客户端初始化与系统服务回复 | 不传入 Apple 账号，不提交服务器授权或导入；不输出同步数据 |
 | Account-free keybag import rejection probe | 双架构无效 keybag/diversitybag、文件访问、普通用户/root 与超时清理检查 | 不传入账号、不发送授权请求 |
 | Private native machine enrollment trial | 最多一次授权请求，分别检查 keybag/diversitybag；可选有界文件诊断与 root 对照 | 最后一步使用 Apple Secrets；不导出会话或 keybag |
 
