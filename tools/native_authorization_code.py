@@ -52,11 +52,22 @@ COMMERCE_REQUEST_METHODS = (
     "+[CKStoreRequest userAgentForStoreClient:]",
     "-[CKMachineAuthorizationContext initWithStoreClient:]",
 )
-COMMERCE_SYMBOLS = COMMERCE_METHODS + COMMERCE_RESPONSE_METHODS + COMMERCE_REQUEST_METHODS
-METHODS += COMMERCE_SYMBOLS
+AMS_CORE_METHODS = METHODS
+COMMERCE_ACCOUNT_METHODS = (
+    "-[CKAccountStore viewAccount]",
+    "-[CKMachineAuthorizationContext deauthorizeMachineWithCompletionHandler:]",
+)
+ACCOUNT_INFO_METHODS = (
+    "-[AMSAccountDeviceInfoTask _deviceInfoRequest]",
+    "-[AMSAccountDeviceInfoTask _requestWithURL:]",
+    "-[AMSAccountDeviceInfoTask _updateAccountWithInfo:]",
+    "-[AMSAccountDeviceInfoResult initWithAccount:responseDictionary:]",
+)
+COMMERCE_SYMBOLS = COMMERCE_METHODS + COMMERCE_RESPONSE_METHODS + COMMERCE_REQUEST_METHODS + COMMERCE_ACCOUNT_METHODS
+METHODS += COMMERCE_SYMBOLS + ACCOUNT_INFO_METHODS
 LINE = re.compile(r"^\s*(?:->\s*)?0x[0-9a-fA-F]+\s+<\+([0-9]+)>:\s+(.+)$")
 HEADER = re.compile(r"^([^\s\x60]+)\x60(.+):$")
-FOCUS = re.compile(r"xToken|needDiv|ownerDsid|kbsync|setAnisetteType|ams_.*(?:[Tt]oken|[Pp]assword)|[Aa]uthentication|[Aa]nisette|MDM|AMD|[Ee]phemeral|setCredentialSource|setAuthenticationType|[Ii]mport|[Ss]tatus|AMSError|ha0d|[Ff]air[Pp]lay|[Cc]ontext|SC Info|fpsd|Shared|XtCq|directory|Directory|42023|42032|42018|5bd9|5bd0|5bde|a427|a430|a422|open|mkdir|stat|access|fcntl|File|[Dd]iversity|divbag|keybag|kbSync|dsID|_legacy|[Rr]eply|[Ee]ntitle|MachService")
+FOCUS = re.compile(r"xToken|needDiv|ownerDsid|kbsync|setAnisetteType|ams_.*(?:[Tt]oken|[Pp]assword)|[Aa]uthentication|[Aa]nisette|MDM|AMD|[Ee]phemeral|setCredentialSource|setAuthenticationType|[Ii]mport|[Ss]tatus|AMSError|ha0d|[Ff]air[Pp]lay|[Cc]ontext|SC Info|fpsd|Shared|XtCq|directory|Directory|42023|42032|42018|5bd9|5bd0|5bde|a427|a430|a422|open|mkdir|stat|access|fcntl|File|[Dd]iversity|divbag|keybag|kbSync|dsID|_legacy|[Rr]eply|[Ee]ntitle|MachService|viewAccount|accountInfo|deviceInfo|[Aa]uthoriz|[Aa]ssociate|[Cc]omputer|[Mm]achine|_deviceInfo|_updateAccount")
 
 def extract(output):
     methods = {}
@@ -93,10 +104,10 @@ def extract(output):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--scope", choices=("ams", "commerce", "commerce-response", "commerce-request"), default="ams")
+    parser.add_argument("--scope", choices=("ams", "commerce", "commerce-response", "commerce-request", "account-management"), default="ams")
     args = parser.parse_args()
     methods = {"commerce": COMMERCE_METHODS, "commerce-response": COMMERCE_RESPONSE_METHODS, "commerce-request": COMMERCE_REQUEST_METHODS,
-               "ams": tuple(name for name in METHODS if name not in COMMERCE_SYMBOLS)}[args.scope]
+               "ams": AMS_CORE_METHODS, "account-management": COMMERCE_ACCOUNT_METHODS + ACCOUNT_INFO_METHODS}[args.scope]
     if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "darwin":
         raise SystemExit("GitHub-hosted macOS required")
     report = {"schema": "ipa-lab-native-authorization-code-v1",

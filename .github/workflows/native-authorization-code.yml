@@ -11,6 +11,7 @@ on:
           - commerce
           - commerce-response
           - commerce-request
+          - account-management
 permissions:
   contents: read
 concurrency:
