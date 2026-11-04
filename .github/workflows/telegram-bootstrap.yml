@@ -1,0 +1,32 @@
+name: Telegram connection and private ID
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Check token only, or reply to private /id for 10 minutes
+        type: choice
+        default: check
+        options: [check, identify]
+permissions:
+  contents: read
+concurrency:
+  group: telegram-session
+  cancel-in-progress: false
+jobs:
+  telegram:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Test Telegram boundaries without credentials
+        run: python3 -m unittest discover -s tests -p 'test_telegram_api.py' -v
+      - name: Check bot or respond to identity requests
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          SESSION_MODE: ${{ inputs.mode }}
+        run: |
+          ulimit -c 0
+          python3 tools/telegram_bootstrap.py --mode "$SESSION_MODE"
