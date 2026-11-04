@@ -41,6 +41,49 @@ def clean(value):
 def environment():
     return {"PATH": "/usr/bin:/bin", "GITHUB_ACTIONS": "true"}
 
+def classify_connection_text(text):
+    if type(text) is not str or len(text) > 1048576:
+        return {"text_classification_available": False}
+    text = text.lower()
+    denial = "entitlement" in text and any(phrase in text for phrase in (
+        "missing", "not entitled", "not have", "lacks", "not present", "not allowed", "denied"))
+    return {"text_classification_available": True,
+            "entitlement_denial_phrase": denial,
+            "internal_authkit_entitlement_named": "com.apple.authkit.client.internal" in text,
+            "own_client_named": "authkittransport" in text or "authkit-transport" in text,
+            "code_requirement_phrase": "code signing requirement" in text or "codesigning requirement" in text}
+
+def daemon_diagnostic():
+    result = {"status": "query_failed", "events": 0, "entitlement_denial_events": 0,
+              "internal_authkit_entitlement_events": 0, "own_client_denial_events": 0,
+              "own_client_internal_entitlement_denial_events": 0}
+    try:
+        predicate = 'process == "akd" AND (eventMessage CONTAINS[c] "entitle" OR eventMessage CONTAINS[c] "AuthKitTransport" OR eventMessage CONTAINS[c] "authkit-transport")'
+        run = subprocess.run(["/usr/bin/log", "show", "--last", "1m", "--style", "json",
+            "--info", "--debug", "--predicate", predicate],
+            capture_output=True, text=True, timeout=10, env=environment())
+        if run.returncode or len(run.stdout) > 1048576:
+            return result
+        events = json.loads(run.stdout)
+        if type(events) is not list or len(events) > 1000:
+            return result
+        result["status"] = "queried"
+        for event in events:
+            if type(event) is not dict or Path(event.get("processImagePath", "")).name != "akd":
+                continue
+            flags = classify_connection_text(event.get("eventMessage"))
+            result["events"] += 1
+            denied = flags.get("entitlement_denial_phrase", False)
+            internal = flags.get("internal_authkit_entitlement_named", False)
+            own = flags.get("own_client_named", False)
+            result["entitlement_denial_events"] += int(denied)
+            result["internal_authkit_entitlement_events"] += int(internal)
+            result["own_client_denial_events"] += int(own and denied)
+            result["own_client_internal_entitlement_denial_events"] += int(own and internal and denied)
+    except Exception:
+        pass
+    return result
+
 def probe(binary, mode):
     if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "darwin":
         return clean({"status": "requires_github_macos"})
@@ -51,7 +94,9 @@ def probe(binary, mode):
                              capture_output=True, text=True, timeout=20, env=environment())
         if run.returncode or len(run.stdout) > 8192:
             return clean({})
-        return clean(json.loads(run.stdout))
+        result = clean(json.loads(run.stdout))
+        result["stderr_classification"] = classify_connection_text(run.stderr)
+        return result
     except Exception:
         return clean({})
 
@@ -94,7 +139,8 @@ def main():
             row["container"] = label
             rows.append(row)
     report = {"schema": "ipa-lab-authkit-transport-comparison-v1", "probes": rows,
-              "metadata": service_metadata(), "account_login_attempted": False,
+              "metadata": service_metadata(), "daemon_diagnostic": daemon_diagnostic(),
+              "account_login_attempted": False,
               "enrollment_created": False, "decryption_proven": False}
     output = json.dumps(report, sort_keys=True)
     print(output)

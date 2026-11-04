@@ -42,12 +42,37 @@ class TransportTests(unittest.TestCase):
             self.assertTrue(kwargs["capture_output"])
             self.assertNotIn("APPLE_ID", kwargs["env"])
             self.assertNotIn("APPLE_PASSWORD", kwargs["env"])
-            return SimpleNamespace(returncode=0, stdout=json.dumps({"status": "transport_rejected"}))
+            return SimpleNamespace(returncode=0, stdout=json.dumps({"status": "transport_rejected"}), stderr="")
         with patch.dict(os.environ, {"GITHUB_ACTIONS": "true", "APPLE_ID": "private",
                                      "APPLE_PASSWORD": "private"}), patch.object(
             transport.sys, "platform", "darwin"
         ), patch.object(transport.subprocess, "run", side_effect=child):
             self.assertEqual(transport.probe("/synthetic", "named")["status"], "transport_rejected")
+
+    def test_connection_text_exposes_only_fixed_flags(self):
+        result = transport.classify_connection_text(
+            "Client org.ipa-lab.AuthKitTransport is missing entitlement com.apple.authkit.client.internal; private-identifier")
+        self.assertTrue(result["entitlement_denial_phrase"])
+        self.assertTrue(result["internal_authkit_entitlement_named"])
+        self.assertTrue(result["own_client_named"])
+        self.assertNotIn("private", json.dumps(result))
+        result = transport.classify_connection_text("Entitlement com.apple.authkit.client.internal is present")
+        self.assertFalse(result["entitlement_denial_phrase"])
+        self.assertFalse(transport.classify_connection_text("x" * 1048577)["text_classification_available"])
+
+    def test_daemon_log_counts_only_correlated_fixed_phrases(self):
+        events = [
+            {"processImagePath": "/system/akd", "eventMessage": "authkit-transport missing entitlement com.apple.authkit.client.internal private"},
+            {"processImagePath": "/system/akd", "eventMessage": "another-client missing entitlement private"},
+            {"processImagePath": "/system/another", "eventMessage": "AuthKitTransport missing entitlement private"},
+        ]
+        with patch.object(transport.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout=json.dumps(events))):
+            result = transport.daemon_diagnostic()
+        self.assertEqual(result["status"], "queried")
+        self.assertEqual(result["events"], 2)
+        self.assertEqual(result["entitlement_denial_events"], 2)
+        self.assertEqual(result["own_client_internal_entitlement_denial_events"], 1)
+        self.assertNotIn("private", json.dumps(result))
 
     def test_timeout_and_invalid_native_output_are_not_reported(self):
         for output in ("private-invalid", "x" * 8193):
