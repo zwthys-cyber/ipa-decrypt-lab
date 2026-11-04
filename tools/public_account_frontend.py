@@ -88,11 +88,14 @@ def main():
         page_summary, refs = inspect_text(page)
         report.update(entry_host="apps.mzstatic.com", entry_mime=mime, page_bytes=len(page),
                       page=page_summary, discovered_scripts=len(parser.urls))
-        queued = deque(urllib.parse.urljoin(entry, url) for url in parser.urls + refs)
+        candidates = [urllib.parse.urljoin(entry, url) for url in parser.urls + refs]
+        candidates.sort(key=lambda url: ("vendor." in url, "apple-media-services" not in url))
+        report["entry_scripts"] = [urllib.parse.urlsplit(url).path for url in candidates if safe_asset(url, entry)][:40]
+        queued = deque(candidates)
         seen, total = set(), len(page)
         while queued and len(seen) < MAX_ASSETS and total < MAX_TOTAL:
             url = queued.popleft()
-            if url in seen or not safe_asset(url, entry):
+            if url in seen or not safe_asset(url, entry) or ("vendor." in url and "apple-media-services" not in url):
                 continue
             seen.add(url)
             data, mime = fetch(url)
