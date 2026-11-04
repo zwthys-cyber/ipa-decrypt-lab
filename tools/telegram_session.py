@@ -368,9 +368,11 @@ def main():
                 journal.load()
                 return 0 if controller.deliver(request_id(args.request_id)) else 2
             controller.say("IPA 机器人限时测试已启动，约 "+str(args.minutes)+" 分钟。\n\n"+HELP)
-            controller.recover()
-            if args.request_id and not controller.current:
+            if args.request_id:
+                journal.load()
                 controller.resume(request_id(args.request_id),args.resume_app_id)
+            else:
+                controller.recover()
             deadline=time.monotonic()+args.minutes*60
             offset=0
             while time.monotonic()<deadline:

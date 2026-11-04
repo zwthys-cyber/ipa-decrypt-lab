@@ -132,6 +132,39 @@ class JournalTests(unittest.TestCase):
         c.handle(update())
         gh.dispatch.assert_not_called()
 
+    def test_ack_then_journal_failure_does_not_resend_after_restart(self):
+        api=Checks()
+        journal=Journal(api,"synthetic",OWNER)
+        bot,gh=Mock(),Mock()
+        def delivered(*args,**kwargs):
+            api.fail=True
+            return {"status":"telegram_file_delivered","request_id":RID,"bytes":100}
+        gh.deliver.side_effect=delivered
+        c=Controller(bot,gh,OWNER,"crypt","synthetic",journal=journal)
+        c.deliver(RID)
+        self.assertEqual(api.items[-1]["external_id"],RID)
+        api.fail=False
+        fresh_gh=Mock()
+        fresh=Controller(bot,fresh_gh,OWNER,"crypt","synthetic",journal=Journal(api,"synthetic",OWNER))
+        fresh.recover()
+        fresh_gh.deliver.assert_not_called()
+        self.assertEqual(fresh.journal.records[RID]["state"],"sending")
+
+    def test_cancel_api_failure_prevents_auto_delivery_after_restart(self):
+        api=Checks()
+        journal=Journal(api,"synthetic",OWNER)
+        journal.write(RID,"pending","6599842047")
+        bot,gh=Mock(),Mock()
+        gh.cancel.side_effect=QueueError("github_transport_unknown")
+        c=Controller(bot,gh,OWNER,"crypt","synthetic",journal=journal)
+        c.current={"rid":RID,"app":"6599842047"}
+        with self.assertRaises(QueueError):
+            c.handle(update(text="/cancel"))
+        self.assertIsNone(c.current)
+        fresh=Controller(bot,gh,OWNER,"crypt","synthetic",journal=Journal(api,"synthetic",OWNER))
+        fresh.recover()
+        gh.deliver.assert_not_called()
+
     def test_expired_or_future_pending_is_not_auto_recovered(self):
         j=Journal(Checks(),"synthetic",OWNER)
         for at in (int(time.time())-86401,int(time.time())+3600):
