@@ -71,6 +71,8 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p 'test_native_keybag.py' -v
           python3 -m unittest discover -s tests -p 'test_machine_enrollment.py' -v
+          python3 -m unittest discover -s tests -p 'test_native_commerce*.py' -v
+          python3 -m unittest discover -s tests -p 'test_commerce_import_logs.py' -v
       - name: Build native prerequisite and one-request client
         timeout-minutes: 2
         run: |
@@ -79,11 +81,19 @@ jobs:
           clang -fobjc-arc -DLAB_IMPORT_IO -framework Foundation tools/NativeMachineEnrollment.m -L. -lNativeImportIO -Wl,-rpath,@executable_path -o native-machine-enrollment
           ./native-machine-enrollment --io-contract
           ./native-machine-enrollment --response-contract
+          swiftc native-source/ApplePackage/Sources/ApplePackage/Configuration/DeviceIdentifier.swift tools/NativeDeviceIdentity.swift -o native-device-identity
       - name: Verify synthetic prerequisites before exposing account secrets
+        if: inputs.backend != 'commerce'
         timeout-minutes: 3
         run: |
           ulimit -c 0
           python3 tools/native_keybag.py
+      - name: Verify the actual commerce constructor before exposing account secrets
+        if: inputs.backend == 'commerce'
+        timeout-minutes: 2
+        run: |
+          ulimit -c 0
+          python3 tools/commerce_enrollment_preflight.py
       - name: Patch bounded private login handoff without saving account
         run: python3 tools/patch_machine_enrollment.py native-source/ApplePackage
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830

@@ -318,5 +318,37 @@ class MachineEnrollmentContracts(unittest.TestCase):
                 self.assertEqual(result["status"], "invalid_private_input")
             run.assert_not_called()
 
+    def test_commerce_private_handoff_and_log_window_do_not_publish_credentials(self):
+        import commerce_import_logs
+        captured = []
+        def fake_run(argv, env, **kwargs):
+            if argv[0] == "login":
+                handoff = Path(env["LAB_ENROLLMENT_INPUT_PATH"])
+                handoff.write_text(json.dumps({"dsid": "1234567", "token": "PRIVATE_TOKEN",
+                    "guid": "001122334455", "user_agent": "Configurator/fixed", "cookies": []}))
+                handoff.chmod(0o600)
+            else:
+                self.assertEqual(argv[0], "native")
+                self.assertNotIn("APPLE_PASSWORD", env)
+                self.assertNotIn("PRIVATE_TOKEN", " ".join(argv))
+                captured.append(json.loads(kwargs["data"]))
+                Path(argv[-1]).write_text(json.dumps({"status": "keybag_not_issued", "backend": "commerce",
+                    "running_as_root": False, "authorization_request_attempted": False}))
+            return (0, b"PRIVATE_OUTPUT", b"PRIVATE_ERROR")
+        with patch.dict("os.environ", {"APPLE_ID": "private@example.invalid", "APPLE_PASSWORD": "PRIVATE_PASSWORD"}, clear=True):
+            with patch.object(mod, "run_private", side_effect=fake_run):
+                with patch.object(commerce_import_logs, "collect", return_value={"status": "no_matching_events",
+                        "import_verified": False}) as logs:
+                    result = mod.trial("login", "native", backend="commerce", client_context="login_agent",
+                        session_context="cookies")
+        self.assertEqual(len(captured), 1)
+        self.assertEqual(captured[0]["backend"], "commerce")
+        self.assertEqual(captured[0]["apple_id"], "private@example.invalid")
+        self.assertEqual(captured[0]["token"], "PRIVATE_TOKEN")
+        self.assertEqual(result["service_log_window"]["status"], "no_matching_events")
+        logs.assert_called_once()
+        for private in ("PRIVATE", "private@example.invalid", "001122334455"):
+            self.assertNotIn(private, json.dumps(result))
+
 if __name__ == "__main__":
     unittest.main()

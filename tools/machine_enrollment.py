@@ -1,5 +1,6 @@
 """Bounded private Store login and one native machine-authorization request."""
 import argparse
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -224,17 +225,22 @@ def trial(login_binary, native_binary, purpose="signIn", session_context="token"
         data = json.dumps(payload).encode()
         del payload
         del private
+        native_started = datetime.now(timezone.utc)
         try:
             code, _, _ = run_private(native_command(native_binary, report, env, native_user), env, data=data, timeout=75)
         except subprocess.TimeoutExpired:
             return clean({"status": "native_timeout"})
         finally:
             del data
+        native_ended = datetime.now(timezone.utc)
         if code:
             return clean({"status": "native_process_failed"})
         if not report.is_file() or report.stat().st_size > 65536:
             return clean({"status": "private_handoff_failed"})
         result = clean(json.loads(report.read_text()))
+        if backend == "commerce":
+            from commerce_import_logs import collect
+            result["service_log_window"] = collect(native_started, native_ended)
         result["native_user"] = native_user
         if native_user == "root" and result.get("running_as_root") is not True:
             result["status"] = "probe_failed"
