@@ -8,6 +8,11 @@ on:
         type: choice
         default: preflight
         options: [preflight, export]
+      runner:
+        description: GitHub-hosted macOS pool
+        type: choice
+        default: macos-15-intel
+        options: [macos-15-intel, macos-15]
       app_id:
         description: Free US App Store numeric ID
         type: string
@@ -25,7 +30,7 @@ concurrency:
 jobs:
   native:
     if: github.ref == 'refs/heads/main'
-    runs-on: macos-15
+    runs-on: ${{ inputs.runner || 'macos-15-intel' }}
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
     timeout-minutes: 40
@@ -81,9 +86,9 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: native-source/ApplePackage/.build
-          key: swift-macos15-arm64-xcode26.2-391bfe6-${{ hashFiles('tools/patch_swift_diagnostics.py', 'tools/patch_ent_download.py', 'tools/LabEntDownload.swift', 'tests/LabEntDownloadTests.swift') }}
+          key: swift-macos15-${{ runner.arch }}-xcode26.2-391bfe6-${{ hashFiles('tools/patch_swift_diagnostics.py', 'tools/patch_ent_download.py', 'tools/LabEntDownload.swift', 'tests/LabEntDownloadTests.swift') }}
           restore-keys: |
-            swift-macos15-arm64-xcode26.2-391bfe6-
+            swift-macos15-${{ runner.arch }}-xcode26.2-391bfe6-
       - name: Test independent signing request construction
         working-directory: native-source/ApplePackage
         run: swift test -j 2 --filter 'SAPAuthenticationRequestTests|LabEntDownloadTests'
