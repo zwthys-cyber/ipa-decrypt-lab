@@ -722,3 +722,52 @@ The report contains only fixed schema fields, fixed app identifiers, booleans an
 This establishes a usable GUI foundation for an alternative GitHub-only investigation through Apple's official application. It is not a working account-management implementation. Account login, access to the account settings page, the actual authorized-computer count, and any reset operation remain unverified. The next evidence needed is bounded navigation to the official account page and a private, read-only count query. No further real enrollment attempt is justified solely by this capability result. Account-wide removal still requires explicit scope approval after a concrete supported method is prepared.
 
 The official instructions continue to place computer-authorization management in Music/Apple TV on Mac or Windows: https://support.apple.com/zh-cn/118292. The public web research did not establish an equivalent mobile-browser control; that is an evidence gap, not proof that every web route is impossible.
+
+## Official Music UI navigation and private account query (2026-11-04)
+
+The GitHub-only route now goes beyond opening the application. Account-free run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41827608688 at 594371f45f4021ea7bb85102ab0340fc6ecaaed3 reached the official Music sign-in window on ARM and Intel.
+
+The initial Music welcome sheet blocked the Sign In menu. The navigation helper recognizes that sheet and its Start Listening control, then declines the following optional sheet through its Not Now text. That text did not expose AXPress. The fallback uses its current accessibility geometry, verifies the hit-tested element still has the same process and exact Not Now label, and posts one mouse click. No coordinate is guessed and no Continue/subscription/account-security-upgrade action is used. Both architectures then successfully invoked Account > Sign In and observed the Apple Account placeholder. The first login step has an email field only.
+
+A narrowly scoped account-free diagnostic at https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41826789540 reported only the first welcome sheet's fixed button caption, Start Listening. That temporary caption extractor was removed after identifying the control. Current diagnostics classify labels into fixed enums and do not emit arbitrary UI text.
+
+### Private input and read-only count workflow
+
+The new music-account-query.yml defaults to preflight. Query mode requires both architecture checks, then runs one ARM job with another control preflight before exposing Secrets. It shares the actual navigation implementation with the account-free tool.
+
+Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41828237601 at 78ee6fcc9347ad3cc4b029bebbe39ff13242618e passed on both architectures:
+- Eight Python tests cover credential transport, output filtering, timeout cleanup, numeric count validation and required count evidence.
+- Native contracts cover allowed navigation actions, private-value reporting and exclusion of policy limits/associated-device totals from the count parser.
+- The actual client located the email field, filled a synthetic invalid-domain email without submitting it, observed the Sign In button become enabled, and cleared the field.
+
+The private wrapper passes account credentials only through stdin, not command arguments or the child environment; discards native stderr; and emits only an allowlisted report. UI static text may be classified privately, but arbitrary text, field values, screenshots, account identifiers and passwords are not exported. No account data or build cache is uploaded after login. Account state remains only in the disposable GitHub runner.
+
+The query client allows one email submission and one password submission, waits for an enabled Sign Out menu as sign-in evidence, then opens Account Settings and looks for an explicit current computer-authorization count. It does not call Authorize This Computer, Deauthorize This Computer or Deauthorize All, and does not accept an optional security upgrade. This is an application sign-in: flags describe actions explicitly invoked by this client, not proof that Apple's application performs no background account activity.
+
+The parser requires an authorization-section label and an explicit current-usage sentence, with a count from zero through five. It rejects policy text such as "up to five", associated-device totals, conflicting counts and missing evidence. A page that does not expose that exact evidence must remain count_not_observed; a green build or available GUI is not a count result.
+
+
+### Actual query attempts and current blocker
+
+- Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41828426165 stopped at an Intel navigation preflight failure. The query job was skipped; that run did not submit real credentials. Fixed-duration assumptions were replaced with bounded waits for observable first-run UI transitions, and a fixed navigation-status summary was added.
+- Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41828828697 passed both architecture preflights and the same-runner preflight. The actual official Music flow submitted the account email and then password, but did not observe an enabled Sign Out menu within the initial wait. It reported signin_unconfirmed, not successful login or a password error.
+- Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41829387679 at e82027284af9736bf93ab6f4fb3e1f30949ed923 extended the login wait to at most 60 seconds and inspected the authentication window separately from the main Music window. After password submission, the fixed-label classifier observed an unknown-error message. It did not observe a successful login or enter Account Settings.
+- Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41830015849 at ebcb9239c806bb0b84cecc452d8102d6128aaf54 reproduced the official unknown-error UI and collected a bounded authentication-log summary from the same invocation. Both architecture verification jobs passed 20 Python tests (8 private-query and 12 native-log diagnostics), native navigation/query contracts, log availability checks and synthetic control preflights. The query job also passed its preflight. Its final failure is the actual unresolved sign-in, not a compilation or privacy-test failure.
+
+The last real report has credentials_used, email_form_ready, email_submit_attempted, password_form_ready and password_submit_attempted true. signed_in_menu_observed, account_settings_invoked, authorization_section_observed, explicit_current_count_observed and authorization_count_retrieved remain false. Explicit machine authorization, deauthorization and security-upgrade acceptance remain false. No account-settings count, recovered enrollment model or verified decrypted IPA was obtained.
+
+### Authentication diagnostic evidence
+
+The existing native_auth_diagnostics.py collector was extended to include Music, with a new privacy test. It reads a bounded system-log interval in memory and returns only allowlisted process names, error domains, error/status codes, fixed reason flags and bounded counts. Raw log messages, account identifiers, credentials, timestamps and paths are not exported. This does not capture or expose Apple's SRP proof bytes.
+
+The last invocation examined 30 matching events without hitting output, event, record or cooccurrence limits. Relevant observations:
+- akd reported the fixed server_authentication_failed and srp_server_proof_missing flags. The latter corresponds to the literal M2 missing diagnostic.
+- AKAuthenticationError -7012 occurred in an authentication-context event.
+- com.apple.AppleIDAuthSupport code 2 occurred twice in authentication-context events. One such event also contained the server_authentication_failed flag.
+- Music also reported AMSErrorDomain 204, while other akd records included XPC/connection and additional AuthKit codes. Those records are not independently assigned as the cause.
+
+M2 missing and -7012 were not reported as a same-event causal chain. The summary narrows the visible failure to the native authentication exchange, but does not prove that the password is wrong, that two-factor authentication is enabled, that a particular certificate or machine identity is responsible, or that every Apple authentication path fails. The separately verified Swift downloader login path remains distinct.
+
+At this point the GUI navigation is implemented and verified; official native sign-in and authorization-count retrieval are not. Further identical credential submissions would not address the observed failure. A changed authentication path or evidence-based correction is needed before another real trial. An alternative worth investigating is whether the already working downloader session can support a legitimate read-only account-information request; no such account-count endpoint or session handoff has yet been established.
+
+The earlier CommerceKit machine-authorization response still contains business failure 3002 and five-computer wording, with no keybag. The account's actual count remains unknown. No Deauthorize All operation was prepared or executed, and its account-wide scope and annual-use consequences still require explicit owner approval once a concrete working method exists.

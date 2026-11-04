@@ -46,7 +46,7 @@
 
 [未发送请求的构造检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41776353497)在双架构各通过 17 项测试：系统服务构造了目标地址正确的 HTTPS POST，保留固定同步数据、测试令牌和 needDiv，并加入六字节格式 GUID。但目标账号的 ownerDsid、X-Dsid 和 Configurator User-Agent 检查尚未通过；ARM 存在两项预期 Anisette 头，Intel 不同时具备。这些字段的存在不证明认证有效。这项较早的构造检查尚未绑定真实会话；后续绑定和真实服务器结果以上方最新记录为准。
 
-用户目前没有可用电脑。[无账号账户管理代码检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41779680901)确认 CKAccountStore.viewAccount 只是打开账户界面；AMS 设备信息任务尚未被证实能读取电脑授权数量。进一步的[官方界面能力检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41780878891)已在 GitHub ARM、Intel Mac 上成功启动“音乐”，读取到“账户”“登录”和“授权”菜单，且现有辅助功能权限可用；因此可以继续研究由 GitHub 操作官方账户页面，不要求用户自备电脑。此检查没有使用账号、执行登录或点击任何账户操作，未观察到“账户设置”菜单项，也没有读取授权数量或完成撤销。现有代码仍不能自动“全部解除授权”。手机端另可通过 [Apple 支持](https://support.apple.com/zh-cn/contact)请求人工核对与协助；不保证支持人员能够重置限制。
+用户目前没有可用电脑。官方“音乐”界面自动化已在 GitHub ARM、Intel Mac 上跑通：能够处理首次启动提示，进入“账户 → 登录”，并填入、清空未提交的合成邮箱。[双架构预检](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41828237601)通过。进一步的[真实登录诊断](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41830015849)完成邮箱和密码提交，但官方窗口显示“未知错误”，未确认登录成功。受限日志观察到服务端认证失败、SRP 服务端证明缺失（M2 missing）、AKAuthenticationError -7012 和 AppleIDAuthSupport 2；不能仅凭这些记录认定密码错误或双重认证已启用。**尚未进入账户设置、未读到实际授权数量、未执行解除授权。** 已实现的只读数量查询仍被原生登录失败阻塞。最新两个架构各通过 20 项 Python 测试、原生检查及无账号预检。手机端仍可通过 [Apple 支持](https://support.apple.com/zh-cn/contact)请求核对授权数量，但不保证能够重置限制。[研究详情](OFFLINE-BACKEND.md#official-music-ui-navigation-and-private-account-query-2026-11-04)。
 
 ## 当前阻塞：新授权被拒绝，需核对电脑授权名额
 
@@ -77,6 +77,8 @@ Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直�
 | Account-free native authorization code inspection | 双架构检查指定原生函数的机器指令及令牌/认证类型来源 | 不传入账号，不读取私有运行时状态 |
 | Account-free native request signing policy | 检查公开配置及原生 Mescal 签名策略；不发送授权请求 | 不传入账号 |
 | Account-free App Store FairPlay service probe | 双架构检查本地 App Store FairPlay 服务能否为固定测试值生成请求 | 不传入 Apple 账号，不提交授权或导入 |
+| Account-free official Music sign-in navigation | 识别欢迎页和可选提示，进入官方登录窗口，报告固定界面标签 | 不使用账号或提交凭据；不点击订阅、授权或安全升级 |
+| Private official Music account count | 默认无账号预检；查询模式单次完成邮箱、密码提交并尝试读取明确的当前授权数量 | 真实登录目前返回未知错误；未读到数量，不执行任何解除授权，不输出原始界面或认证日志 |
 | Account-free official account-management UI capability | 启动官方音乐应用，检查 URL 处理程序、现有界面访问权限及固定菜单标签 | 无 Secrets、不登录、不点击菜单操作、不申请权限；界面可访问不等于已完成账户管理 |
 | Account-free CommerceKit keybag prerequisite | 双架构固定测试值、普通用户/root 对照；检查客户端初始化与系统服务回复 | 不传入 Apple 账号，不提交服务器授权或导入；不输出同步数据 |
 | Account-free CommerceKit invalid import observation | 固定无效数据、调用前后服务响应、状态标志与有界日志摘要 | 无账号；仅无效合成导入，不把调用返回当作成功 |
