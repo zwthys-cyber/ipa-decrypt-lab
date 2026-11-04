@@ -141,7 +141,10 @@ jobs:
           sshpass -e ssh -o UserKnownHostsFile="$DEPLOY_TEMP/known_hosts" -o StrictHostKeyChecking=yes -o ConnectTimeout=15 "root@$VPS_HOST" "sh -s -- /root/ipazake-$GITHUB_SHA.tar.gz /root/ipazake-$GITHUB_SHA.json $GITHUB_SHA $sha" < deploy/install.sh
           for attempt in $(seq 1 30); do
             if sshpass -e ssh -o UserKnownHostsFile="$DEPLOY_TEMP/known_hosts" -o StrictHostKeyChecking=yes "root@$VPS_HOST" "systemctl is-active --quiet ipazake.service && grep -q '\"state\": \"ready\"' /var/lib/ipazake/health.json"; then
-              gh workflow disable telegram-session.yml --repo "$GITHUB_REPOSITORY"
+              old_state=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/telegram-session.yml" --jq '.state')
+              if [ "$old_state" = active ]; then
+                gh workflow disable telegram-session.yml --repo "$GITHUB_REPOSITORY"
+              fi
               echo persistent_service_ready_verified
               exit 0
             fi
