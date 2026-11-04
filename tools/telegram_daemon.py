@@ -8,7 +8,7 @@ import signal
 import sqlite3
 import time
 from telegram_api import APIError
-from telegram_queue import GitHub, QueueError
+from telegram_queue import GitHub, QueueError, failure_kind
 from telegram_runtime import local_bot
 from telegram_controller import Controller, owner_id, event
 from telegram_menu import configure
@@ -183,8 +183,8 @@ def main():
         event(str(exc))
         heartbeat(root/"health.json","failed")
         return 2
-    except Exception:
-        event("persistent_service_failed")
+    except Exception as exc:
+        event("persistent_service_failed",exception_kind=failure_kind(exc))
         heartbeat(root/"health.json","failed")
         return 2
     finally:

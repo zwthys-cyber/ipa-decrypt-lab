@@ -22,6 +22,13 @@ WORKFLOW = "private-delivery.yml"
 from capacity import (MAX_IPA_BYTES, MAX_CIPHER_BYTES, MAX_ARTIFACT_BYTES,
                       MIN_FREE_BYTES, CRYPTO_TIMEOUT, TELEGRAM_TIMEOUT)
 MAX_FILE = MAX_IPA_BYTES
+def failure_kind(exc):
+    names={"URLError","HTTPError","TimeoutError","PermissionError","FileNotFoundError",
+           "BadZipFile","JSONDecodeError","OSError","TypeError","ValueError","AttributeError",
+           "RuntimeError","QueueError","APIError","OperationalError"}
+    name=type(exc).__name__
+    return name if name in names else "unexpected"
+
 class QueueError(RuntimeError):
     pass
 
@@ -221,7 +228,9 @@ class GitHub:
         for attempt in range(2):
             try:
                 return self._archive_once(artifact_id,destination)
-            except (OSError,http.client.HTTPException):
+            except (OSError,http.client.HTTPException) as exc:
+                print(json.dumps({"schema":"artifact-retrieval-v1","status":"transport_exception",
+                                  "exception_kind":failure_kind(exc),"attempt":attempt+1}),flush=True)
                 destination.unlink(missing_ok=True)
                 if attempt:
                     raise QueueError("artifact_transport_failed") from None

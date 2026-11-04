@@ -6,7 +6,7 @@ import urllib.error
 from pathlib import Path
 from unittest.mock import Mock, MagicMock
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"tools"))
-from telegram_queue import GitHub,QueueError
+from telegram_queue import GitHub,QueueError,failure_kind
 from telegram_controller import Controller
 from persistent_journal import PersistentJournal
 from telegram_api import APIError
@@ -25,6 +25,12 @@ class DeliveryResilienceTests(unittest.TestCase):
         response.__enter__.return_value=response
         response.read.side_effect=[b"synthetic-ciphertext",b""]
         return response
+
+    def test_exception_type_diagnostic_never_uses_message(self):
+        self.assertEqual(failure_kind(urllib.error.URLError("PRIVATE_TOKEN")),"URLError")
+        self.assertEqual(failure_kind(ValueError("PRIVATE_PATH")),"ValueError")
+        private_class=type("PRIVATE_CUSTOM_NAME",(Exception,),{})
+        self.assertEqual(failure_kind(private_class("PRIVATE_TOKEN")),"unexpected")
 
     def test_initial_get_timeout_retried_without_leaking_exception(self):
         api=GitHub("synthetic")

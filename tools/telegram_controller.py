@@ -6,7 +6,7 @@ import re
 import time
 import urllib.parse
 from telegram_api import APIError, private_message
-from telegram_queue import QueueError
+from telegram_queue import QueueError, failure_kind
 from app_preflight import PreflightError, MESSAGES
 from task_progress import ProgressCard, LABELS
 from delivery_scheduler import app_from_run, queued_too_long, retryable, MAX_RUNS
@@ -204,7 +204,8 @@ class Controller:
             category=("telegram" if isinstance(exc,APIError) else
                       "delivery_check" if isinstance(exc,QueueError) else "unexpected")
             event("delivery_outcome_unknown" if upload_started else "delivery_preparation_failed",
-                  request_id=rid,stage=stage if stage in LABELS else "unknown",category=category)
+                  request_id=rid,stage=stage if stage in LABELS else "unknown",category=category,
+                  exception_kind=failure_kind(exc))
             if upload_started:
                 card.update("unknown",force=True)
                 self.say("文件发送结果未确认。请先检查聊天；如未收到，可稍后用 /get "+rid+" 手动重试。")
