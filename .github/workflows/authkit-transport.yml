@@ -17,7 +17,7 @@ jobs:
           persist-credentials: false
       - name: Test error classification and account isolation
         run: python3 -m unittest discover -s tests -p 'test_authkit_transport.py' -v
-      - name: Build own clients with and without a declared AuthKit permission
+      - name: Build ordinary own clients with in-process connection diagnostics
         timeout-minutes: 2
         run: |
           clang -fobjc-arc -framework Foundation -framework Security tools/AuthKitTransport.m -o authkit-transport
@@ -25,9 +25,6 @@ jobs:
           cp authkit-transport AuthKitTransport.app/Contents/MacOS/AuthKitTransport
           python3 -c "import plistlib; plistlib.dump({'CFBundleIdentifier': 'org.ipa-lab.AuthKitTransport', 'CFBundleExecutable': 'AuthKitTransport', 'CFBundleName': 'AuthKitTransport', 'CFBundlePackageType': 'APPL', 'CFBundleVersion': '1'}, open('AuthKitTransport.app/Contents/Info.plist', 'wb'))"
           codesign --force --sign - AuthKitTransport.app
-          cp -R AuthKitTransport.app AuthKitDeclared.app
-          python3 -c "import plistlib; plistlib.dump({'com.apple.authkit.client.internal': True}, open('declared-authkit.plist', 'wb'))"
-          codesign --force --sign - --entitlements declared-authkit.plist AuthKitDeclared.app
       - name: Fetch public URL bag without an Apple account and classify daemon errors
         timeout-minutes: 3
         run: |

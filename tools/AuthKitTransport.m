@@ -80,7 +80,8 @@ static NSDictionary *transportDetail(NSXPCConnection *connection, xpc_connection
             @"entitlement", @"requirement", @"identity", @"connection", @"invalid", @"terminated", @"rejected",
             @"lookup", @"endpoint", @"process", @"exited", @"code", @"signing", @"sandbox", @"bootstrap",
             @"interrupted", @"transport", @"authorization", @"authentication", @"permission", @"denied",
-            @"error", @"unavailable", @"unsupported", @"resume", @"current", @"remote", @"closed", @"unknown"])
+            @"error", @"unavailable", @"unsupported", @"resume", @"current", @"remote", @"closed", @"unknown", @"active", @"still", @"not", @"yet", @"pending", @"no", @"invalidation",
+            @"reason", @"suspended", @"never", @"attempted", @"connected", @"disconnected", @"activated", @"activation"])
             if ([words containsObject:term]) [terms addObject:term];
         r[@"invalidation_reason_terms"] = terms;
         r[@"reason_internal_authkit_entitlement_named"] = @([lower containsString:@"com.apple.authkit.client.internal"]);
@@ -90,6 +91,52 @@ static NSDictionary *transportDetail(NSXPCConnection *connection, xpc_connection
     return r;
 }
 
+
+
+static NSMutableArray *proxyFailures;
+static NSUInteger proxyRequests;
+static IMP asyncProxyOriginal;
+static IMP syncProxyOriginal;
+static id tracedProxy(id object, SEL selector, void (^handler)(NSError *)) {
+    NSXPCConnection *connection = [object isKindOfClass:NSXPCConnection.class] ? object : nil;
+    BOOL tracked = [connection.serviceName isEqual:@"com.apple.ak.auth.xpc"];
+    xpc_connection_t raw = nil;
+    if (tracked && method(connection.class, @"_xpcConnection", 2)) {
+        id value = ((id (*)(id, SEL))objc_msgSend)(connection, NSSelectorFromString(@"_xpcConnection"));
+        if (value && xpc_get_type(value) == XPC_TYPE_CONNECTION) raw = value;
+    }
+    if (tracked) @synchronized(proxyFailures) { proxyRequests++; }
+    void (^wrapped)(NSError *) = ^(NSError *error) {
+        if (tracked) {
+            NSMutableDictionary *item = [errorReport(error) mutableCopy];
+            [item addEntriesFromDictionary:transportDetail(connection, raw)];
+            @synchronized(proxyFailures) {
+                if (proxyFailures.count < 4) [proxyFailures addObject:item];
+            }
+        }
+        if (handler) handler(error);
+    };
+    IMP original = selector == @selector(remoteObjectProxyWithErrorHandler:) ? asyncProxyOriginal : syncProxyOriginal;
+    return ((id (*)(id, SEL, id))original)(object, selector, wrapped);
+}
+static BOOL installProxyTrace(void) {
+    proxyFailures = [NSMutableArray array];
+    proxyRequests = 0;
+    Method asyncMethod = class_getInstanceMethod(NSXPCConnection.class, @selector(remoteObjectProxyWithErrorHandler:));
+    Method syncMethod = class_getInstanceMethod(NSXPCConnection.class, @selector(synchronousRemoteObjectProxyWithErrorHandler:));
+    if (!asyncMethod || !syncMethod) return NO;
+    asyncProxyOriginal = method_getImplementation(asyncMethod);
+    syncProxyOriginal = method_getImplementation(syncMethod);
+    method_setImplementation(asyncMethod, (IMP)tracedProxy);
+    method_setImplementation(syncMethod, (IMP)tracedProxy);
+    return YES;
+}
+static void removeProxyTrace(void) {
+    if (asyncProxyOriginal) method_setImplementation(class_getInstanceMethod(NSXPCConnection.class,
+        @selector(remoteObjectProxyWithErrorHandler:)), asyncProxyOriginal);
+    if (syncProxyOriginal) method_setImplementation(class_getInstanceMethod(NSXPCConnection.class,
+        @selector(synchronousRemoteObjectProxyWithErrorHandler:)), syncProxyOriginal);
+}
 
 static NSDictionary *signatureDetail(void) {
     NSMutableDictionary *r = [@{@"signature_metadata_available": @NO,
@@ -124,6 +171,7 @@ int main(int argc, const char **argv) {
             @"account_login_attempted": @NO, @"enrollment_created": @NO, @"decryption_proven": @NO} mutableCopy];
         @try {
             [r addEntriesFromDictionary:signatureDetail()];
+            r[@"proxy_trace_installed"] = @(installProxyTrace());
             dlopen("/System/Library/PrivateFrameworks/AuthKit.framework/AuthKit", RTLD_LAZY | RTLD_LOCAL);
             Class cls = NSClassFromString(@"AKAppleIDAuthenticationController");
             NSString *selector = method(cls, @"fetchURLBagWithCompletion:", 3) ? @"fetchURLBagWithCompletion:" :
@@ -178,6 +226,11 @@ int main(int argc, const char **argv) {
                 }
             }
         } @catch (NSException *exception) { r[@"status"] = @"native_exception"; }
+        @synchronized(proxyFailures) {
+            r[@"observed_auth_proxy_requests"] = @(proxyRequests);
+            r[@"observed_proxy_failures"] = [proxyFailures copy] ?: @[];
+        }
+        removeProxyTrace();
         NSData *json = [NSJSONSerialization dataWithJSONObject:r options:NSJSONWritingSortedKeys error:NULL];
         fwrite(json.bytes, 1, json.length, stdout);
         fputc('\n', stdout);

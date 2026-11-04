@@ -58,6 +58,18 @@ class TransportTests(unittest.TestCase):
             self.assertTrue(result["native_process_signalled"])
             self.assertNotIn("private", json.dumps(result))
 
+    def test_proxy_error_capture_is_bounded_sanitized_and_not_recursive(self):
+        item = {"error_domain": "NSCocoaErrorDomain", "error_code": 4099, "raw_error": "private-secret",
+                "service_name": "com.apple.ak.auth.xpc", "invalidation_reason_terms": ["connection", "private"],
+                "observed_proxy_failures": [{"raw_error": "private-nested"}]}
+        result = transport.clean({"observed_auth_proxy_requests": 2, "observed_proxy_failures": [item] * 8})
+        self.assertEqual(result["observed_auth_proxy_requests"], 2)
+        self.assertEqual(len(result["observed_proxy_failures"]), 4)
+        self.assertNotIn("private", json.dumps(result))
+        for row in result["observed_proxy_failures"]:
+            self.assertNotIn("observed_proxy_failures", row)
+            self.assertEqual(row["error_code"], 4099)
+
     def test_bag_success_requires_completed_nonempty_error_free_response(self):
         value = {"status": "bag_fetch_succeeded", "callback_completed": True,
                  "bag_result_present": True, "error_present": False}

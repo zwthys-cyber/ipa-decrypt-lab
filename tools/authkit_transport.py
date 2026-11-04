@@ -17,7 +17,8 @@ BOOLS = {"explicit_client_identifier", "bundle_identifier_present", "bag_selecto
          "reason_service_missing", "reason_connection_invalidated", "reason_sandbox_denied",
          "reason_connection_rejected", "reason_internal_authkit_entitlement_named",
          "reason_peer_code_requirement", "reason_peer_cancelled",
-         "signature_metadata_available", "declared_internal_authkit_entitlement", "native_process_signalled"}
+         "signature_metadata_available", "declared_internal_authkit_entitlement", "native_process_signalled",
+         "proxy_trace_installed"}
 STATUSES = {"interface_unavailable", "transport_timeout", "transport_rejected", "bag_fetch_succeeded",
             "empty_result", "native_exception", "probe_failed", "requires_github_macos", "native_process_failed"}
 DOMAINS = {"NSCocoaErrorDomain", "AKAuthenticationError", "AKAuthenticationServerError",
@@ -25,9 +26,9 @@ DOMAINS = {"NSCocoaErrorDomain", "AKAuthenticationError", "AKAuthenticationServe
 SERVICES = {"com.apple.ak.auth.xpc", "com.apple.ak.anisette.xpc",
             "com.apple.ak.authorizationservices.xpc", "com.apple.akd"}
 
-REASON_TERMS = set("peer cancelled canceled client server signature entitlement requirement identity connection invalid terminated rejected lookup endpoint process exited code signing sandbox bootstrap interrupted transport authorization authentication permission denied error unavailable unsupported resume current remote closed unknown".split())
+REASON_TERMS = set("peer cancelled canceled client server signature entitlement requirement identity connection invalid terminated rejected lookup endpoint process exited code signing sandbox bootstrap interrupted transport authorization authentication permission denied error unavailable unsupported resume current remote closed unknown active still not yet pending no invalidation reason suspended never attempted connected disconnected activated activation".split())
 
-def clean(value):
+def clean(value, nested=False):
     result = {"schema": "ipa-lab-authkit-transport-v1", "status": "probe_failed",
               "account_login_attempted": False, "enrollment_created": False, "decryption_proven": False}
     if not isinstance(value, dict):
@@ -41,6 +42,10 @@ def clean(value):
         code = value.get("error_code")
         if type(code) is int and -999999 <= code <= 999999:
             result.update(error_domain=value["error_domain"], error_code=code)
+    if not nested and type(value.get("observed_auth_proxy_requests")) is int and 0 <= value["observed_auth_proxy_requests"] <= 32:
+        result["observed_auth_proxy_requests"] = value["observed_auth_proxy_requests"]
+    if not nested and type(value.get("observed_proxy_failures")) is list:
+        result["observed_proxy_failures"] = [clean(item, nested=True) for item in value["observed_proxy_failures"][:4] if type(item) is dict]
     if type(value.get("invalidation_reason_terms")) is list:
         result["invalidation_reason_terms"] = sorted({term for term in value["invalidation_reason_terms"]
             if type(term) is str and term in REASON_TERMS})
@@ -143,7 +148,6 @@ def service_metadata():
     for label, path in {
         "app_store": "/System/Applications/App Store.app",
         "client": "./AuthKitTransport.app",
-        "declared_client": "./AuthKitDeclared.app",
     }.items():
         try:
             run = subprocess.run(["/usr/bin/codesign", "-d", "--entitlements", ":-", path],
@@ -163,8 +167,7 @@ def main():
         return 2
     rows = []
     for label, binary in (("command_line", "./authkit-transport"),
-                          ("own_app_bundle", "./AuthKitTransport.app/Contents/MacOS/AuthKitTransport"),
-                          ("declared_internal_permission", "./AuthKitDeclared.app/Contents/MacOS/AuthKitTransport")):
+                          ("own_app_bundle", "./AuthKitTransport.app/Contents/MacOS/AuthKitTransport")):
         for mode in ("default", "named"):
             row = probe(binary, mode)
             row["container"] = label
