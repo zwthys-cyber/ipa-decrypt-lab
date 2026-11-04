@@ -12,7 +12,7 @@ from public_store_routes import AGENT, BAG_URL, NoRedirect, decode
 MAX_FILE = 3 * 1024 * 1024
 MAX_TOTAL = 12 * 1024 * 1024
 MAX_ASSETS = 12
-INTEREST = re.compile(r"account.?summary|authoriz|authoris|deauthor|computer|machine.?count|account.?info|account.?settings", re.I)
+INTEREST = re.compile(r"authorizedComputers|primaryQuery|accountSettingsGraphqlUrl|AccountSettingsGraphqlUrl|fetchAccount|accountSummaryGraphQL|shouldMakeStoreXhrRequest|makeHttpRequest|ActionSignature", re.I)
 
 def fetch(url):
     request = urllib.request.Request(url, headers={"User-Agent": AGENT, "Accept-Encoding": "identity"})
@@ -53,9 +53,9 @@ def inspect_text(raw):
             urls.add(urllib.parse.urlunsplit((p.scheme, p.netloc, p.path, "", "")))
     contexts = []
     for match in INTEREST.finditer(text):
-        if len(contexts) >= 60:
+        if len(contexts) >= 80:
             break
-        fragment = text[max(0, match.start()-110):min(len(text), match.end()+180)]
+        fragment = text[max(0, match.start()-250):min(len(text), match.end()+700)]
         fragment = " ".join(fragment.split())
         if fragment not in contexts:
             contexts.append(fragment)
