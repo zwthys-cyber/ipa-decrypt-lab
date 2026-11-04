@@ -98,7 +98,7 @@ No verification-code or optional account-security-upgrade prompt was detected in
 
 A graphical session and UI automation are available on GitHub-hosted Macs; an external Mac is not established as a necessary prerequisite merely because the work needs native App Store UI. The current tested macos-15 route instead stops at native authentication. macos-26 was probed without credentials and has not passed the corresponding form or login test.
 
-The underlying authentication error domain/code and rejection cause remain unknown. Do not equate the generic error with a wrong password, enabled 2FA, a mandatory security upgrade, or definitive virtual-machine exclusion. The previously successful download-client session does not establish native App Store enrollment.
+The first trial did not expose an error domain/code. The bounded diagnostic follow-up below now records AuthKit errors on Intel, but the rejection cause remains unresolved. Do not equate the generic UI error or these codes with a wrong password, enabled 2FA, a mandatory security upgrade, or definitive virtual-machine exclusion. The previously successful download-client session does not establish native App Store enrollment.
 
 Further work needs evidence about that native rejection or a working enrollment protocol, rather than another unchanged login/remap retry. No real IPA decryption or portable enrollment model was produced in these experiments.
 
@@ -110,3 +110,49 @@ Further work needs evidence about that native rejection or a working enrollment 
 - tools/enrollment_environment.py discards raw native output. Published fields are fixed statuses, bounded counts, known error categories and path visibility. Credential values, account identifiers, screenshots and native error text are not published.
 - UI indications never set enrollment_created or decryption_proven to true. The login workflow returns nonzero for unresolved/rejected authentication even when the native probe itself exits normally.
 - No artifacts, real IPA files or models are uploaded. The hosted VM is discarded after the job.
+
+
+## Bounded error diagnostics and Intel comparison (2026-11-04)
+
+### Completed runs
+
+| Run / commit | Hosted runner | Checks | Authentication and model result |
+| --- | --- | --- | --- |
+| [41744985165](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41744985165) / 9e1e6f3f758da2d29705f9b554a938288f67273b | macos-15, arm64 | 10 UI-report tests + 8 diagnostic tests passed; log preflight and Swift compilation passed | Native login rejected with unknown_error. The unfiltered process log exceeded 8 MiB; its raw bytes were discarded, so this run establishes no underlying error code. |
+| [41745356356](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41745356356) / 32313fd76707ea70b147b7875096f16262fb8767 | macos-15-intel, x86_64 | Same 18 tests, source-filtered log preflight and native compilation passed | Native login rejected with unknown_error; bounded log capture succeeded. No enrollment model recovered. |
+
+Both trials submitted the configured email and password through the native form. Both left email and password fields visible with Sign Out disabled. Neither detected a verification-code or optional security-upgrade prompt, and neither accepted an upgrade. Privileged metadata checks returned not_found before and after for all three previously listed SIDB/SIDS paths.
+
+The Intel run examined 184 filtered events and produced 15 aggregate records without hitting output, event or record limits. Its allowlisted error-code observations include:
+
+| Process | Domain / code | Events | Authentication words in the same event |
+| --- | --- | --- | --- |
+| akd | AKAuthenticationError -7018 | 1 | yes |
+| akd | AKAuthenticationError -7012 | 1 | yes |
+| akd | AKAuthenticationError -7066 | 16 | no |
+| akd | AKAuthenticationError -7044 / -7023 / -7010 | 2 / 6 / 5 | no |
+| akd | NSOSStatusErrorDomain -25300 | 4 | no |
+| App Store | AMSErrorDomain 12 | 5 | no |
+
+HTTP 200 and 304 observations from the same window are not authentication-success evidence. Other background errors also occurred. The authentication_context field is a lexical classification of a log message, not proof of causality or a distinct successful authentication transaction.
+
+The collection window covers helper launch through termination and final metadata checks, including App Store introductions, unrelated background requests and cleanup. Consequently -7012 or other codes could describe secondary/cancellation events. No temporal ordering, underlying-error relationship, server payload or specific failure reason is established by the aggregate report. Unknown error domains and all raw descriptions are deliberately dropped. Future causal diagnosis should narrow to the credential-submission window and classify the underlying AuthKit failure before another account trial; it should not infer the cause from the mere presence of a code.
+
+### Platform evidence and limits
+
+[Apple's virtual-machine support article](https://support.apple.com/en-asia/120468) lists Apple Media Services, including apps, among unavailable VM features. [Parallels' July 2026 support article](https://kb.parallels.com/en/131160) explicitly says native Mac App Store sign-in remains unsupported in Apple Silicon VMs even with macOS 15+, and distinguishes Intel virtualization from that framework-specific restriction. [GitHub's runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) lists both macos-15 and macos-15-intel as hosted VM options.
+
+These sources motivated a single Intel comparison. They do not prove that every custom Store protocol is impossible, and the repository's earlier signed download-client success remains valid. Conversely, the Intel failure does not establish a universal Intel restriction, while changing architecture alone did not fix this account's tested native route. A successful Intel login would still not prove compatible iOS enrollment or replace the matching installed iOS-app/IPA control required by the pinned recovery engine.
+
+Primary reports give a reason to avoid overinterpreting -7018: [an Apple Developer Forums report](https://developer.apple.com/forums/thread/834106) includes this code in a separate Sign in with Apple failure on physical devices. That is a different API and is not a diagnosis of this App Store failure. No definitive public mapping for this trial's -7012 or complete underlying rejection chain was established.
+
+The tested GitHub-only native bootstrap remains unsuccessful on both architectures. No portable model, real plaintext verification or paid service was produced. Further work needs a new protocol/state-creation hypothesis or a more specific underlying failure, not an unchanged UI login retry.
+
+### Diagnostic implementation
+
+- tools/native_auth_diagnostics.py reads only a bounded time window from a fixed process set. After the arm64 output-limit failure, the predicate also requires a known error-domain, failureType or HTTP-status term before log serialization.
+- The child receives only PATH and LC_ALL, not Apple secrets. It has a 15-second timeout, 8 MiB output cap, 20,000-event cap and 64-record cap. Failed/oversized raw output is discarded.
+- Only allowlisted process/domain/symbol names, bounded numeric codes, boolean context and aggregate counts can enter the public report. Raw logs are kept only transiently in runner memory; no file or artifact is created.
+- The account workflow tests redaction, limits, timeout behavior, environment isolation and failure reporting before supplying credentials. A log-query preflight must also pass before the account step.
+- The login workflow now exposes only the two explicitly permitted GitHub-hosted runner choices, serializes account trials and retains bounded job/step timeouts.
+- Compilation and all tests/experiments in this update ran on GitHub. No project build, test, login or execution occurred on the Debian server or editing workspace.
