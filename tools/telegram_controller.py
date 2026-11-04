@@ -1,25 +1,19 @@
-"""Owner-only, bounded Telegram -> GitHub -> private IPA test session."""
-import argparse
+"""Owner-only task controller shared by the persistent daemon and contract tests."""
 import hashlib
 import hmac
 import json
-import os
-from pathlib import Path
 import re
 import time
 import urllib.parse
 from telegram_api import APIError, private_message
-from telegram_queue import GitHub, QueueError, request_id
-from telegram_runtime import local_bot
-from delivery_journal import Journal
-from telegram_menu import configure as configure_menu
+from telegram_queue import QueueError
 from task_progress import ProgressCard, LABELS
 from delivery_scheduler import app_from_run, queued_too_long, retryable, MAX_RUNS
 
 HELP = ("发送美区免费 App Store 链接或数字 App ID，创建下载与解密任务。\n"
         "/status 查看当前任务\n/cancel 取消当前任务\n"
         "/get 任务编号 重新获取已完成文件（保留约一天）\n/id 查看自己的数字 ID\n"
-        "当前为 GitHub 限时测试，一次处理一个任务；文件需要自行重签名安装。")
+        "当前仅管理员可用，一次处理一个任务；文件需要自行重签名安装。")
 
 def target_id(text):
     if not isinstance(text,str) or len(text)>1024:
@@ -326,87 +320,3 @@ class Controller:
             self.current["stage"]=stage
             self.card(rid,self.current["app"]).update(stage)
 
-def main():
-    p=argparse.ArgumentParser()
-    p.add_argument("--mode",choices=("check","menu","progress-demo","session","deliver"),default="check")
-    p.add_argument("--minutes",type=int,default=30)
-    p.add_argument("--request-id",default="")
-    p.add_argument("--resume-app-id",default="")
-    p.add_argument("--server",required=True)
-    p.add_argument("--crypt",required=True)
-    args=p.parse_args()
-    os.umask(0o077)
-    try:
-        if os.environ.get("GITHUB_ACTIONS")!="true":
-            raise APIError("requires_github_actions")
-        if not 1<=args.minutes<=45:
-            raise APIError("invalid_session_duration")
-        if args.resume_app_id and not re.fullmatch(r"[1-9][0-9]{4,19}",args.resume_app_id):
-            raise APIError("invalid_resume_app")
-        owner=owner_id(os.environ.get("TELEGRAM_OWNER_ID",""))
-        github=GitHub(os.environ.get("GH_TOKEN",""))
-        crypt=str(Path(args.crypt).resolve())
-        with local_bot(args.server) as bot:
-            journal=Journal(github,os.environ["TELEGRAM_BOT_TOKEN"],owner)
-            controller=Controller(bot,github,owner,crypt,os.environ["TELEGRAM_BOT_TOKEN"],journal=journal)
-            event("local_bot_authenticated")
-            event(**configure_menu(bot,owner))
-            if args.mode=="progress-demo":
-                card=ProgressCard(bot,owner,"0"*32,demo=True)
-                for stage in ("queued","downloading","decrypting","verifying","uploading","done"):
-                    if not card.update(stage,force=True):
-                        raise APIError("progress_demo_edit_unconfirmed")
-                    time.sleep(2)
-                event("progress_demo_verified",edits=5)
-                return 0
-            if args.mode=="menu":
-                return 0
-            if args.mode=="check":
-                controller.say("大文件上传通道已连接，管理员身份限制已生效。")
-                event("owner_message_confirmed")
-                return 0
-            if args.mode=="deliver":
-                journal.load()
-                return 0 if controller.deliver(request_id(args.request_id)) else 2
-            controller.say("IPA 机器人限时测试已启动，约 "+str(args.minutes)+" 分钟。\n\n"+HELP)
-            if args.request_id:
-                journal.load()
-                controller.resume(request_id(args.request_id),args.resume_app_id)
-            else:
-                controller.recover()
-            deadline=time.monotonic()+args.minutes*60
-            offset=0
-            while time.monotonic()<deadline:
-                try:
-                    updates=bot.call("getUpdates",{"offset":offset,"limit":20,"timeout":15,
-                                                   "allowed_updates":["message"]},timeout=35)
-                    if not isinstance(updates,list):
-                        raise APIError("telegram_invalid_response")
-                    for update in updates:
-                        if isinstance(update,dict) and type(update.get("update_id")) is int:
-                            offset=max(offset,update["update_id"]+1)
-                            controller.handle(update)
-                    controller.tick()
-                except QueueError as exc:
-                    event(str(exc))
-                    time.sleep(5)
-                except APIError as exc:
-                    event(exc.status)
-                    if exc.status in ("invalid_bot_token","telegram_polling_conflict"):
-                        raise
-                    time.sleep(5)
-            controller.say("本次限时测试会话已结束。已提交的任务会继续执行，加密文件保留约一天。")
-            event("bounded_session_finished")
-            return 0
-    except APIError as exc:
-        event(exc.status)
-        return 2
-    except QueueError as exc:
-        event(str(exc))
-        return 2
-    except Exception:
-        event("telegram_session_failed")
-        return 2
-
-if __name__=="__main__":
-    raise SystemExit(main())

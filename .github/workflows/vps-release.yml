@@ -66,7 +66,7 @@ jobs:
       - name: Assemble public runtime bundle
         run: |
           cp dist/telegram-bot-api package/bin/
-          for module in telegram_daemon persistent_journal telegram_session telegram_runtime telegram_api telegram_menu telegram_queue task_progress delivery_scheduler delivery_journal ipa_audit; do
+          for module in telegram_daemon persistent_journal telegram_controller telegram_runtime telegram_api telegram_menu telegram_queue task_progress delivery_scheduler ipa_audit; do
             cp "tools/$module.py" package/tools/
           done
           cp deploy/ipazake.service deploy/install.sh package/deploy/
@@ -132,19 +132,17 @@ jobs:
               raise SystemExit("missing_runtime_credentials")
           (Path(os.environ["DEPLOY_TEMP"])/"bot.json").write_text(json.dumps(values))
           PY
-          # Refuse overlapping cloud-runner pollers; do not cancel workers or owner tasks.
-          active=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/telegram-session.yml/runs?per_page=20" --jq '[.workflow_runs[] | select(.status!="completed")] | length')
-          test "$active" -eq 0 || { echo bounded_session_still_active; exit 2; }
+          # Deleted legacy workflows can still have historical runs: reject live pollers.
+          for legacy in telegram-session.yml telegram-bootstrap.yml; do
+            active=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?per_page=100" --jq "[.workflow_runs[] | select(.path==\".github/workflows/$legacy\" and .status!=\"completed\")] | length")
+            test "$(printf '%s\n' "$active" | awk '{n+=$1} END {print n+0}')" -eq 0 || { echo legacy_poller_still_active; exit 2; }
+          done
           sha=$(cut -d ' ' -f 1 vps-controller.sha256)
           sshpass -e scp -q -o UserKnownHostsFile="$DEPLOY_TEMP/known_hosts" -o StrictHostKeyChecking=yes -o ConnectTimeout=15 vps-controller.tar.gz "root@$VPS_HOST:/root/ipazake-$GITHUB_SHA.tar.gz"
           sshpass -e scp -q -o UserKnownHostsFile="$DEPLOY_TEMP/known_hosts" -o StrictHostKeyChecking=yes -o ConnectTimeout=15 "$DEPLOY_TEMP/bot.json" "root@$VPS_HOST:/root/ipazake-$GITHUB_SHA.json"
           sshpass -e ssh -o UserKnownHostsFile="$DEPLOY_TEMP/known_hosts" -o StrictHostKeyChecking=yes -o ConnectTimeout=15 "root@$VPS_HOST" "sh -s -- /root/ipazake-$GITHUB_SHA.tar.gz /root/ipazake-$GITHUB_SHA.json $GITHUB_SHA $sha" < deploy/install.sh
           for attempt in $(seq 1 30); do
             if sshpass -e ssh -o UserKnownHostsFile="$DEPLOY_TEMP/known_hosts" -o StrictHostKeyChecking=yes "root@$VPS_HOST" "systemctl is-active --quiet ipazake.service && grep -q '\"state\": \"ready\"' /var/lib/ipazake/health.json"; then
-              old_state=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/telegram-session.yml" --jq '.state')
-              if [ "$old_state" = active ]; then
-                gh workflow disable telegram-session.yml --repo "$GITHUB_REPOSITORY"
-              fi
               echo persistent_service_ready_verified
               exit 0
             fi

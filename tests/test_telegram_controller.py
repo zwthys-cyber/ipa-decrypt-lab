@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"tools"))
 from telegram_api import APIError
 from telegram_queue import QueueError, validate_receipt, request_id
-from telegram_session import Controller, opaque_id, owner_id, target_id
+from telegram_controller import Controller, opaque_id, owner_id, target_id
 
 OWNER=123456789
 RID="a"*32
@@ -17,7 +17,7 @@ def update(uid=OWNER,text="6599842047",number=1):
     return {"update_id":number,"message":{"date":int(time.time()),"text":text,
         "from":{"id":uid,"is_bot":False},"chat":{"id":uid,"type":"private"}}}
 
-class SessionTests(unittest.TestCase):
+class ControllerTests(unittest.TestCase):
     def controller(self):
         bot,gh=Mock(),Mock()
         gh.dispatch.return_value={"status":"queued"}
@@ -41,7 +41,7 @@ class SessionTests(unittest.TestCase):
 
     def test_first_submission_is_allowed_on_a_fresh_runner(self):
         c,bot,gh=self.controller()
-        with patch("telegram_session.time.monotonic",return_value=1):
+        with patch("telegram_controller.time.monotonic",return_value=1):
             c.handle(update())
         gh.dispatch.assert_called_once()
 

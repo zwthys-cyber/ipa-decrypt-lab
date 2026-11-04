@@ -31,7 +31,7 @@
 
 - Private export 41856194867 verified all 62 slices / 12,524 pages, removed Store account data, and retained only age ciphertext and a sanitized receipt for one day. Plaintext IPA size: 92,118,013 bytes.
 - Telegram delivery 41864719056 authenticated the pinned official local Bot API server, privately decrypted the ciphertext on GitHub Linux, independently checked digest and archive structure, and obtained a private-owner sendDocument acknowledgement for all 92,118,013 bytes. This is private delivery evidence, not proof of actual Linux FairPlay decryption or installation/runtime.
-- DELIVERY_AGE_IDENTITY and Telegram credentials are configured as Secrets. Do not regenerate/replace the delivery identity merely to retry an existing artifact. See docs/TELEGRAM.md for bounded session commands and limits.
+- DELIVERY_AGE_IDENTITY and Telegram credentials are configured as Secrets. Do not regenerate/replace the delivery identity merely to retry an existing artifact. See docs/TELEGRAM.md for current daemon commands and limits.
 - Queue/owner/deduplication behavior has synthetic coverage. Record actual Telegram-request-to-workflow runs separately before claiming that live path verified.
 
 ## Sanitized progress reporting
@@ -57,20 +57,18 @@
 
 - Latest regression/probe run 41882955218 passed 308 Python tests (1 environment skip) and real ciphertext readiness/archive-digest verification. Prefer verified worker/native-check stages over delayed queued metadata; before queue cancellation cross-check that the bound native Check is actually queued. New Telegram sessions replace old bounded sessions, not IPA worker workflows.
 
-## Bounded cross-session recovery
-- telegram-session.yml may use checks:write for sanitized, HMAC-authenticated recovery records anchored to commit 482c1fccde988a4ca198251e32935374e83578f1. Never publish raw owner IDs, message IDs, update IDs, tokens, account data or file contents.
-- A journal write and readback must precede dispatch or file transmission. Unknown file-send outcomes must not be automatically repeated after restart. Explicit owner /get remains a manual retrieval action.
-- Keep the existing single-session concurrency group and owner-only gate. This bounded Checks log is not a production database or distributed lock. Recovered work must not repeat ambiguous failover dispatches.
-- journal-contracts.yml may write/read synthetic journal records using its GitHub token, without Apple/Telegram secrets, to test cross-runner recovery and principal isolation.
+## Persistent recovery
+- Use private SQLite recovery records. Record intent before dispatch or transmission; unknown file-send outcomes must not be automatically repeated after restart.
+- The old Checks journal and bounded polling entry points have been removed. Preserve owner isolation and recovery failure tests against SQLite.
 
 ## Persistent VPS deployment
 - The user purchased a Debian 13 x86_64 VPS and explicitly asked to connect the project. Keep the server address and SSH credentials in deployment Secrets, not public source.
 - GitHub builds/tests the public release, including Debian 13 compatibility. The VPS installs only runtime packages and verified artifacts. SSH installation, service startup and operational health inspection are authorized; no tests or compilers on the VPS.
 - A dedicated VPS_GH_TOKEN limited to this repository supplies Actions write and Contents read. Never copy the maintainer's broad workstation OAuth credential onto the server.
 - The daemon uses a private SQLite recovery log, persistent Telegram state, a single-controller lock, systemd restart and a non-root service account. Apple credentials/model stay in GitHub. Only authenticated delivery-envelope decryption may run on the VPS.
-- Disable the bounded telegram-session workflow after successful cutover to prevent a second poller. Owner-only access and billing-off remain defaults.
+- Legacy bounded polling and identity bootstrap entry points are removed. Reject overlapping historical poller runs during deployment. Owner-only access and billing-off remain defaults.
 - Runtime service credentials travel only via pinned SSH to a root-private systemd credential file, never public artifacts/logs. Deploy only after CI passes; retain the previous release for rollback.
 
 Checks 不是 fine-grained PAT 的必填权限。遇到 Checks 权限拒绝时，服务器改用 Actions 任务/步骤状态；不再基于缺失的 Checks 证据提前交付或取消排队任务，等待正常完成后校验交付。
 
-- Persistent VPS deployment is verified by run 41899775076 at code commit 06bcf81fab70e597c823d1096877d3d6df4c01bd (347 Python tests, 1 skip, on both Ubuntu and Debian 13; Go and actual systemd credential mount tests). The owner-only daemon is enabled and healthy, and Telegram startup notification was acknowledged. Do not describe a fresh post-migration IPA task as verified without separate evidence. The legacy telegram-session workflow is disabled; stop the VPS service before enabling another poller.
+- Persistent VPS deployment is verified by run 41899775076 at code commit 06bcf81fab70e597c823d1096877d3d6df4c01bd (347 Python tests, 1 skip, on both Ubuntu and Debian 13; Go and actual systemd credential mount tests). The owner-only daemon is enabled and healthy, and Telegram startup notification was acknowledged. Do not describe a fresh post-migration IPA task as verified without separate evidence. Legacy polling source has been removed; never start another poller alongside the VPS.

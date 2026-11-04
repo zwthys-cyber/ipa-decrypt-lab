@@ -19,7 +19,7 @@
 
 systemd 服务 `ipazake.service` 使用独立无登录用户，开机启动、异常重启，内存上限 2 GiB。程序目录只读，私有数据位于 `/var/lib/ipazake`。服务凭据由 systemd LoadCredential 注入，源文件 `/etc/ipazake/bot.json` 仅 root 可读。
 
-SQLite WAL + FULL 同步保存任务与 Telegram 更新处理意图。重复更新和进程重启不会自动重发已发送或结果不明的文件。普通重启保留本地 Telegram 状态；不得在别的机器启动同一机器人轮询。成功切换后关闭旧的 telegram-session 工作流。
+SQLite WAL + FULL 同步保存任务与 Telegram 更新处理意图。重复更新和进程重启不会自动重发已发送或结果不明的文件。普通重启保留本地 Telegram 状态；不得在别的机器启动同一机器人轮询。旧限时轮询和身份查询源文件已删除，部署时仍检查历史运行，防止第二个轮询进程。
 
 管理员每日默认最多提交 20 个任务（UTC，包含失败请求），一个任务同时处理；服务配置可调整上限。未开放其他用户、自动收费或付款入口。
 
@@ -39,4 +39,4 @@ Checks 不是 fine-grained PAT 的必填权限。遇到 Checks 权限拒绝时�
 
 [运行 41899775076](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41899775076)在 GitHub Ubuntu 与 Debian 13 容器各通过 347 项 Python 测试（1 项环境跳过），Go 加密测试和真实 systemd 凭据挂载验证通过。最终部署的代码提交为 06bcf81fab70e597c823d1096877d3d6df4c01bd。
 
-服务器已启用常驻服务及开机自启，健康状态 ready，Telegram 菜单回读和私聊启动消息确认成功。发布脚本会清除先前失败造成的 systemd 启动限速；关闭旧 GitHub 会话入口的操作可重复执行。启动通知和健康探针不等于迁移后新 IPA 任务的完整交付实测。
+服务器已启用常驻服务及开机自启，健康状态 ready，Telegram 菜单回读和私聊启动消息确认成功。发布脚本会清除先前失败造成的 systemd 启动限速；当前发布不依赖已删除工作流的详情接口。启动通知和健康探针不等于迁移后新 IPA 任务的完整交付实测。

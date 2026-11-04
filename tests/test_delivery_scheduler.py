@@ -7,7 +7,7 @@ from unittest.mock import Mock
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"tools"))
 from delivery_scheduler import matches, app_from_run, queued_too_long, retryable, alternate
 from telegram_queue import GitHub, QueueError
-from telegram_session import Controller
+from telegram_controller import Controller
 
 RID="a"*32
 def job():

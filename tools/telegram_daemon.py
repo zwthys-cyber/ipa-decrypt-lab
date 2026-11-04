@@ -10,7 +10,7 @@ import time
 from telegram_api import APIError
 from telegram_queue import GitHub, QueueError
 from telegram_runtime import local_bot
-from telegram_session import Controller, owner_id, event
+from telegram_controller import Controller, owner_id, event
 from telegram_menu import configure
 from persistent_journal import PersistentJournal
 

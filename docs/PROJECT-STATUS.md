@@ -80,7 +80,7 @@
 
 服务器使用非 root systemd 服务、持久 SQLite 任务记录、Telegram 更新防重放、自动重启和开机自启；仅管理员可用，收费入口关闭。下载及 FairPlay 解密仍由 GitHub macOS 运行器执行。服务成功登录 Telegram、回读菜单并确认发送启动消息；尚未将这次迁移后的真实 IPA 新任务交付算作已验证。
 
-旧 telegram-session 工作流已禁用，防止第二个轮询进程。代码、安装器、权限与回滚说明见 [VPS 部署文档](VPS-DEPLOYMENT.md)。
+旧限时轮询及身份查询入口、Checks 恢复实现已删除，防止误启动第二个轮询进程。代码、安装器、权限与回滚说明见 [VPS 部署文档](VPS-DEPLOYMENT.md)。
 
 ## 尚未完成的部分
 
