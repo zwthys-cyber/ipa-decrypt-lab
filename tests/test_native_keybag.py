@@ -62,7 +62,7 @@ class NativeKeybagContracts(unittest.TestCase):
         value = {"status": "synthetic_parameters_ready", "sync_data_length": 200,
                  "error_present": False}
         for key in ("abi_verified", "ephemeral_account", "sync_data_present", "guid_is_six_bytes",
-                    "owner_is_synthetic", "machine_name_present", "parameter_names_valid"):
+                    "owner_is_synthetic", "machine_name_present", "parameter_names_valid", "token_is_synthetic"):
             value[key] = True
         self.assertEqual(mod.clean(value)["status"], "synthetic_parameters_ready")
         for key in value:

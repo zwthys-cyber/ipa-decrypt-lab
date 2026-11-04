@@ -47,7 +47,7 @@ def clean(value):
                 "bag_url_present", "endpoint_supported", "endpoint_query_present",
                 "owner_field_present", "account_dsid_is_synthetic", "token_is_synthetic", "need_div_zero",
                 "need_div_one", "request_present", "request_is_post", "request_body_is_plist",
-                "sap_header_present", "anisette_header_present"):
+                "sap_header_present", "anisette_header_present", "secure_token_provider_used"):
         if type(value.get(key)) is bool:
             r[key] = value[key]
     if type(value.get("error_domain")) is str and value["error_domain"] in DOMAINS:
@@ -105,7 +105,7 @@ def clean(value):
         r["status"] = "probe_failed"
     if r["status"] == "synthetic_parameters_ready" and not (
         all(r.get(k) is True for k in ("abi_verified", "ephemeral_account", "sync_data_present",
-            "guid_is_six_bytes", "owner_is_synthetic", "machine_name_present", "parameter_names_valid"))
+            "guid_is_six_bytes", "owner_is_synthetic", "machine_name_present", "parameter_names_valid", "token_is_synthetic"))
         and r.get("sync_data_length", 0) > 0 and r.get("error_present") is False):
         r["status"] = "probe_failed"
     if r["status"] == "public_bag_ready" and not (

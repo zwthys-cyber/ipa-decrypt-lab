@@ -58,6 +58,30 @@ static NSDictionary *Interfaces(void) {
  return r;
 }
 
+
+static char TokenAssociation;
+static BOOL TokenProviderUsed=NO;
+static id LocalSecureToken(id object,SEL selector) {
+ TokenProviderUsed=YES;
+ return objc_getAssociatedObject(object,&TokenAssociation);
+}
+static BOOL BindToken(id account,NSString *token) {
+ SEL sel=NSSelectorFromString(@"ams_secureToken");
+ if(!ABI(account,sel,@"@",@[]))return NO;
+ Class parent=object_getClass(account);
+ Class sub=objc_allocateClassPair(parent,"LabEphemeralTokenAccount",0);
+ if(!sub)return NO;
+ Method method=class_getInstanceMethod(parent,sel);
+ if(!class_addMethod(sub,sel,(IMP)LocalSecureToken,method_getTypeEncoding(method))) {
+   objc_disposeClassPair(sub);return NO;
+ }
+ objc_registerClassPair(sub);
+ // Adapt only this ephemeral object; no persistent account or system process is modified.
+ objc_setAssociatedObject(account,&TokenAssociation,token,OBJC_ASSOCIATION_COPY_NONATOMIC);
+ object_setClass(account,sub);
+ return YES;
+}
+
 static void Parameters(NSMutableDictionary *r) {
  Class cls=NSClassFromString(@"ACAccount");
  SEL create=NSSelectorFromString(@"ams_createEphemeralAccount");
@@ -73,6 +97,7 @@ static void Parameters(NSMutableDictionary *r) {
  SEL pw=NSSelectorFromString(@"ams_setPassword:");
  if(!ABI(account,pw,@"v",@[@"@"]))return;
  ((void(*)(id,SEL,id))objc_msgSend)(account,pw,@"ipa-lab-synthetic-token");
+ if(!BindToken(account,@"ipa-lab-synthetic-token"))return;
  id task=[NSClassFromString(@"AMSAuthorizeMachineTask") alloc];
  SEL init=NSSelectorFromString(@"initWithAccount:authorizeReason:bag:");
  if(!ABI(task,init,@"@",@[@"@",@"Q",@"@"]))return;
@@ -157,6 +182,7 @@ static void Request(NSMutableDictionary *r) {
    id v=[name isEqualToString:@"ams_setDSID:"]?@1234567:@"ipa-lab-synthetic-token";
    ((void(*)(id,SEL,id))objc_msgSend)(account,s,v);
  }
+ if(!BindToken(account,@"ipa-lab-synthetic-token"))return;
  Class cls=NSClassFromString(@"AMSAuthorizeMachineTask");
  SEL bagSel=NSSelectorFromString(@"createBagForSubProfile");
  if(!ABI(cls,bagSel,@"@",@[]))return;
@@ -238,6 +264,7 @@ int main(int argc,const char **argv) { @autoreleasepool {
      }
      if(ABI(bag,NSSelectorFromString(@"resetContext"),@"v",@[]))((void(*)(id,SEL))objc_msgSend)(bag,NSSelectorFromString(@"resetContext"));
    }
+   r[@"secure_token_provider_used"]=B(TokenProviderUsed);
    r[@"state_after"]=State();
  } @catch(NSException *e) {r[@"status"]=@"native_exception";}
  NSData *out=[NSJSONSerialization dataWithJSONObject:r options:0 error:NULL];
