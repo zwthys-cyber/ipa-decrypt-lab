@@ -101,6 +101,43 @@ static BOOL ResponseContract(void) {
 }
 @end
 
+
+static BOOL ApplyClientContext(NSMutableURLRequest *request,NSDictionary *input,NSMutableDictionary *report) {
+ id mode=input[@"client_context"];
+ if(!mode && !input[@"user_agent"])return YES;
+ if(![mode isEqual:@"login_agent"])return NO;
+ id agent=input[@"user_agent"];
+ if(![agent isKindOfClass:NSString.class] || [agent length]<1 || [agent length]>512
+   || [agent rangeOfCharacterFromSet:[[NSCharacterSet characterSetWithRange:NSMakeRange(32,95)] invertedSet]].location!=NSNotFound)return NO;
+ NSData *before=[request.HTTPBody copy];
+ NSString *previous=[request valueForHTTPHeaderField:@"User-Agent"];
+ [request setValue:agent forHTTPHeaderField:@"User-Agent"];
+ BOOL bound=[[request valueForHTTPHeaderField:@"User-Agent"] isEqual:agent] && [before isEqual:request.HTTPBody];
+ report[@"client_agent_bound"]=B(bound);
+ report[@"client_agent_changed"]=B(![previous isEqual:agent]);
+ return bound;
+}
+static BOOL ClientContextContract(void) {
+ NSMutableURLRequest *request=[NSMutableURLRequest requestWithURL:[NSURL URLWithString:@"https://buy.itunes.apple.com/commerce/machine/authorize"]];
+ request.HTTPMethod=@"POST";request.HTTPBody=[@"synthetic-body" dataUsingEncoding:NSUTF8StringEncoding];
+ [request setValue:@"native-fixture/1" forHTTPHeaderField:@"User-Agent"];
+ [request setValue:@"synthetic-cookie" forHTTPHeaderField:@"Cookie"];
+ NSData *body=[request.HTTPBody copy];NSDictionary *headers=[request.allHTTPHeaderFields copy];
+ NSMutableDictionary *report=[NSMutableDictionary dictionary];
+ BOOL ok=ApplyClientContext(request,@{},report) && [headers isEqual:request.allHTTPHeaderFields] && report.count==0;
+ for(id invalid in @[@"",@"line\r\nInjected: bad",@"control\tvalue",@"non-ascii-\u00e9",@123,[@"x" stringByPaddingToLength:513 withString:@"x" startingAtIndex:0]]) {
+   NSMutableURLRequest *copy=[request mutableCopy];
+   ok=ok && !ApplyClientContext(copy,@{@"client_context":@"login_agent",@"user_agent":invalid},[NSMutableDictionary dictionary])
+     && [copy.allHTTPHeaderFields isEqual:headers] && [copy.HTTPBody isEqual:body];
+ }
+ ok=ok && !ApplyClientContext([request mutableCopy],@{@"client_context":@"unknown",@"user_agent":@"fixture/1"},[NSMutableDictionary dictionary]);
+ ok=ok && !ApplyClientContext([request mutableCopy],@{@"client_context":@"login_agent"},[NSMutableDictionary dictionary]);
+ ok=ok && ApplyClientContext(request,@{@"client_context":@"login_agent",@"user_agent":@"login-fixture/1"},report);
+ NSMutableDictionary *expected=[headers mutableCopy];expected[@"User-Agent"]=@"login-fixture/1";
+ return ok && [report[@"client_agent_bound"] boolValue] && [report[@"client_agent_changed"] boolValue]
+   && [request.HTTPBody isEqual:body] && [request.allHTTPHeaderFields isEqual:expected];
+}
+
 static NSURLRequest *PreparedRequest(NSDictionary *input,NSMutableDictionary *report) {
  NSString *text=input[@"dsid"],*token=input[@"token"],*guid=input[@"guid"];
  if(![text isKindOfClass:NSString.class] || [text rangeOfString:@"^[1-9][0-9]{0,17}$" options:NSRegularExpressionSearch].location==NSNotFound)return nil;
@@ -138,6 +175,7 @@ static NSURLRequest *PreparedRequest(NSDictionary *input,NSMutableDictionary *re
  if(!valid)return nil;
  report[@"session_cookie_count"]=@(ApplyStoreContext(request,input));
  report[@"storefront_header_present"]=B([request valueForHTTPHeaderField:@"X-Apple-Store-Front"].length>0);
+ if(!ApplyClientContext(request,input,report))return nil;
  request.timeoutInterval=30;
  return request;
 }
@@ -204,7 +242,7 @@ static void Authorize(NSDictionary *input,NSMutableDictionary *r) {
 int main(int argc,const char **argv) { @autoreleasepool {
  if(argc!=2 || !getenv("GITHUB_ACTIONS") || strcmp(getenv("GITHUB_ACTIONS"),"true"))return 2;
  if(!strcmp(argv[1],"--response-contract")) {
-   BOOL ok=ResponseContract();puts(ok?"response challenge privacy contract passed":"response challenge privacy contract failed");return ok?0:4;
+   BOOL ok=ResponseContract() && ClientContextContract();puts(ok?"response and client context contracts passed":"response and client context contracts failed");return ok?0:4;
  }
  NSMutableDictionary *r=[@{@"schema":@"ipa-lab-machine-enrollment-v1",@"status":@"invalid_private_input",
    @"authorization_request_attempted":@NO,@"enrollment_created":@NO,@"decryption_proven":@NO} mutableCopy];

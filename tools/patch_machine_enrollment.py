@@ -271,3 +271,10 @@ after = '''    func testProvisioningSummaryClassifiesBothScopesWithoutLeakingHea
 if source_tests.count(before) != 1:
     raise SystemExit("pinned login challenge test changed")
 tests.write_text(source_tests.replace(before, after))
+
+# Hand off the actual login User-Agent for an explicit same-client control.
+source = login.read_text()
+before = '                        "guid": Configuration.deviceIdentifier,'
+if source.count(before) != 1:
+    raise SystemExit("pinned login client metadata handoff changed")
+login.write_text(source.replace(before, before + '\n                        "user_agent": Configuration.userAgent,'))

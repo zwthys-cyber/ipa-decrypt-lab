@@ -20,6 +20,13 @@ on:
           - token
           - cookies
           - storefront
+      client_context:
+        description: Keep native User-Agent or bind the exact login client agent
+        type: choice
+        default: native
+        options:
+          - native
+          - login_agent
 permissions:
   contents: read
 concurrency:
@@ -81,10 +88,11 @@ jobs:
       - name: Authenticate once and attempt one machine authorization request
         timeout-minutes: 4
         env:
+          LAB_CLIENT_CONTEXT: ${{ inputs.client_context }}
           LAB_SESSION_CONTEXT: ${{ inputs.session_context }}
           LAB_PURPOSE: ${{ inputs.purpose }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
         run: |
           ulimit -c 0
-          python3 tools/machine_enrollment.py --login-binary native-source/ApplePackage/.build/debug/ApplePackageTool --native-binary native-machine-enrollment --purpose "$LAB_PURPOSE" --session-context "$LAB_SESSION_CONTEXT"
+          python3 tools/machine_enrollment.py --login-binary native-source/ApplePackage/.build/debug/ApplePackageTool --native-binary native-machine-enrollment --purpose "$LAB_PURPOSE" --session-context "$LAB_SESSION_CONTEXT" --client-context "$LAB_CLIENT_CONTEXT"

@@ -14,7 +14,7 @@ STATUSES = {"invalid_private_input", "request_preparation_failed", "request_time
     "keybag_imported_model_unverified", "keybag_import_failed", "native_exception", "probe_failed",
     "missing_credentials", "login_failed", "login_ambiguous", "login_timeout", "native_timeout",
     "native_process_failed", "private_handoff_failed"}
-BOOLS = {"md_data_present", "md_data_valid", "amd_data_present", "amd_data_valid", "authorization_request_attempted", "ephemeral_account", "session_identity_verified", "body_token_bound",
+BOOLS = {"client_agent_bound", "client_agent_changed", "md_data_present", "md_data_valid", "amd_data_present", "amd_data_valid", "authorization_request_attempted", "ephemeral_account", "session_identity_verified", "body_token_bound",
     "redirect_blocked", "response_oversized", "error_present", "apple_failure_present",
     "dialog_present", "keybag_present", "keybag_import_succeeded", "redirect_seen",
     "redirect_query_supported", "redirect_method_post", "redirect_https", "storefront_header_present",
@@ -78,8 +78,8 @@ def run_private(argv, env, *, data=None, timeout=120):
         p.communicate()
         raise
 
-def trial(login_binary, native_binary, purpose="signIn", session_context="token"):
-    if purpose not in {"signIn", "machineAuthorize", "machineSession", "booleanSession"} or session_context not in {"token", "cookies", "storefront", "store"}:
+def trial(login_binary, native_binary, purpose="signIn", session_context="token", client_context="native"):
+    if client_context not in {"native", "login_agent"} or purpose not in {"signIn", "machineAuthorize", "machineSession", "booleanSession"} or session_context not in {"token", "cookies", "storefront", "store"}:
         return clean({"status": "invalid_private_input"})
     email, password = os.environ.get("APPLE_ID"), os.environ.get("APPLE_PASSWORD")
     if not email or not password:
@@ -109,7 +109,12 @@ def trial(login_binary, native_binary, purpose="signIn", session_context="token"
             allowed.add("cookies")
         if session_context in {"store", "storefront"}:
             allowed.add("storefront")
-        data = json.dumps({key: private[key] for key in allowed if key in private}).encode()
+        payload = {key: private[key] for key in allowed if key in private}
+        if client_context == "login_agent":
+            payload["client_context"] = client_context
+            payload["user_agent"] = private.get("user_agent")
+        data = json.dumps(payload).encode()
+        del payload
         del private
         try:
             code, _, _ = run_private([native_binary, str(report)], env, data=data, timeout=75)
@@ -126,6 +131,9 @@ def trial(login_binary, native_binary, purpose="signIn", session_context="token"
         result["store_session_authenticated"] = True
         result["authentication_purpose"] = purpose
         result["session_context"] = session_context
+        result["client_context"] = client_context
+        if client_context == "login_agent" and result.get("authorization_request_attempted") is True and result.get("client_agent_bound") is not True:
+            result["status"] = "probe_failed"
         return result
 
 def main():
@@ -134,11 +142,12 @@ def main():
     parser.add_argument("--native-binary", required=True)
     parser.add_argument("--purpose", choices=("signIn", "machineAuthorize", "machineSession", "booleanSession"), default="signIn")
     parser.add_argument("--session-context", choices=("token", "cookies", "storefront", "store"), default="token")
+    parser.add_argument("--client-context", choices=("native", "login_agent"), default="native")
     args = parser.parse_args()
     if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "darwin":
         raise SystemExit("GitHub-hosted macOS required")
     try:
-        r = trial(str(Path(args.login_binary).resolve()), str(Path(args.native_binary).resolve()), args.purpose, args.session_context)
+        r = trial(str(Path(args.login_binary).resolve()), str(Path(args.native_binary).resolve()), args.purpose, args.session_context, args.client_context)
     except Exception:
         r = clean({"status": "probe_failed"})
     print(json.dumps(r, sort_keys=True))

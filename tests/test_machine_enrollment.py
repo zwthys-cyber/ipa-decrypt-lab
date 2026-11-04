@@ -51,6 +51,7 @@ class MachineEnrollmentContracts(unittest.TestCase):
         with patch.object(mod, "run_private") as run:
             self.assertEqual(mod.trial("login", "native", purpose="unrecognized")["status"], "invalid_private_input")
             self.assertEqual(mod.trial("login", "native", session_context="unrecognized")["status"], "invalid_private_input")
+            self.assertEqual(mod.trial("login", "native", client_context="unrecognized")["status"], "invalid_private_input")
             run.assert_not_called()
 
     def test_session_context_selects_only_the_requested_private_fields(self):
@@ -106,6 +107,35 @@ class MachineEnrollmentContracts(unittest.TestCase):
         self.assertEqual(r, {"login_md_action_present": True})
         for invalid in (None, [], "SECRET"):
             self.assertEqual(mod.clean_login_summary(invalid), {})
+
+    def test_login_client_agent_is_explicitly_selected_and_verified(self):
+        for mode in ("native", "login_agent"):
+            for bound in (True, False):
+                def fake_run(argv, env, **kwargs):
+                    if argv[0] == "login":
+                        handoff = Path(env["LAB_ENROLLMENT_INPUT_PATH"])
+                        handoff.write_text(json.dumps({"dsid": "123", "token": "SECRET", "guid": "001122334455",
+                            "user_agent": "private-client/1", "unexpected": "SECRET"}))
+                        handoff.chmod(0o600)
+                    else:
+                        payload = json.loads(kwargs["data"])
+                        if mode == "login_agent":
+                            self.assertEqual(payload["user_agent"], "private-client/1")
+                            self.assertEqual(payload["client_context"], mode)
+                        else:
+                            self.assertNotIn("user_agent", payload)
+                            self.assertNotIn("client_context", payload)
+                        self.assertNotIn("unexpected", payload)
+                        Path(argv[1]).write_text(json.dumps({"status": "keybag_not_issued",
+                            "authorization_request_attempted": True, "client_agent_bound": bound}))
+                    return (0, b"", b"")
+                with patch.dict("os.environ", {"APPLE_ID": "test@example.invalid", "APPLE_PASSWORD": "SECRET"}, clear=True):
+                    with patch.object(mod, "run_private", side_effect=fake_run):
+                        result = mod.trial("login", "native", client_context=mode)
+                expected = "probe_failed" if mode == "login_agent" and not bound else "keybag_not_issued"
+                self.assertEqual(result["status"], expected)
+                self.assertNotIn("private-client/1", json.dumps(result))
+                self.assertNotIn("SECRET", json.dumps(result))
 
     def test_boolean_numbers_and_unknown_types_rejected(self):
         r = mod.clean({"status": [], "error_domain": [], "error_code": True,
