@@ -8,6 +8,23 @@ import tempfile
 import time
 from telegram_api import APIError, Telegram
 
+def startup_failure(path):
+    try:
+        with open(path,"rb") as stream:
+            text=stream.read(65536).lower()
+        for needle,status in (
+            (b"temporary directory","local_bot_temporary_directory_failed"),
+            (b"working directory","local_bot_working_directory_failed"),
+            (b"address already in use","local_bot_port_in_use"),
+            (b"unknown option","local_bot_invalid_options"),
+            (b"api-id and api-hash","local_bot_app_credentials_rejected"),
+            (b"error while loading shared libraries","local_bot_runtime_library_missing")):
+            if needle in text:
+                return status
+    except OSError:
+        pass
+    return "local_bot_server_exited"
+
 @contextmanager
 def local_bot(binary):
     token = os.environ.get("TELEGRAM_BOT_TOKEN","")
@@ -27,6 +44,8 @@ def local_bot(binary):
     with tempfile.TemporaryDirectory(prefix="telegram-local-private-") as directory:
         root = Path(directory)
         root.chmod(0o700)
+        (root/"state").mkdir(mode=0o700)
+        (root/"temp").mkdir(mode=0o700)
         env = {k:os.environ[k] for k in ("PATH","LANG") if k in os.environ}
         env.update(HOME=str(root), TELEGRAM_API_ID=api_id, TELEGRAM_API_HASH=api_hash)
         with open(root/"server.log","wb") as log:
@@ -40,7 +59,7 @@ def local_bot(binary):
                 deadline = time.monotonic()+120
                 while time.monotonic() < deadline:
                     if process.poll() is not None:
-                        raise APIError("local_bot_server_exited")
+                        raise APIError(startup_failure(root/"server.log"))
                     try:
                         bot.check()
                         authenticated = True
