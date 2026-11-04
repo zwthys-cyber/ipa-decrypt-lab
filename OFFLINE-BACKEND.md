@@ -623,3 +623,40 @@ A green workflow means the bounded diagnostic completed and its contracts passed
 ### Next evidence required
 
 Inspect the framework's import and completion behavior before invoking the import service: CommerceService's importKeyBag:diversityBag: method has no reply parameter, so return from that call cannot prove an import succeeded. Establish an observable result and bounded cleanup with synthetic fixtures first. Real authorization repeats remain subject to the previously recorded uncertainty about the five-computer wording; no other machine's authorization is revoked. A substantive new route must still prove actual import, matching model recovery, and complete encrypted-slice verification before any decryption claim.
+
+## CommerceKit import observations and request construction (2026-11-04)
+
+### Completion semantics
+
+Native response-callback inspection https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41775035009 passed on ARM and Intel, with five Python checks each. The inspected callback reads keybag and diversitybag, invokes importKeyBag:diversityBag: when either exists, and subsequently reports the store response's error through its completion handler. There is no import-result callback in that invocation. The deauthorization branch was inspected statically only and was not executed.
+
+This is why the new probe treats an import call returning and a later successful kbSync reply as availability observations, not an import acknowledgment or ordering guarantee.
+
+### Fixed invalid bags and bounded log windows
+
+The first invalid-input run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41775565133 passed on both architectures, with 12 Python checks per job and the native error/initializer contract. It compared a no-import baseline with two fixed zero-filled arrays (32-byte keybag, 16-byte diversitybag). It supplied no Apple credentials and made no server authorization request. Both cases generated baseline and follow-up sync data; the invalid case's no-reply call returned. All four observed nonempty SIDB/SIDS flags stayed false.
+
+The follow-up https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41775774340 passed 17 Python checks per architecture plus the native contract. It additionally reduced a precise, short system-log time window to counts and a fixed error-code allowlist:
+
+| Architecture / case | Import-related log observation | State and interpretation |
+| --- | --- | --- |
+| ARM / no import | No matching events | Four expected nonempty file flags false |
+| ARM / invalid bags | Two import-failure mentions; known-code set contains -42018 | Call returned; follow-up sync succeeded; import remains unverified |
+| Intel / no import | No matching events | Four flags false |
+| Intel / invalid bags | No matching events | Call returned; follow-up sync succeeded; import remains unverified |
+
+The log filter accepts only commerce/fpsd events within the measured interval. Raw messages, paths, identifiers and unrecognized numeric values are discarded. A known-code set does not assign a separate result to each bag. Missing Intel events do not establish that the handler did not run or that import succeeded; logging coverage and timing are limited. Logs and file-presence observations never set import_verified, enrollment_created or decryption_proven to true.
+
+Log reads are limited to 15 seconds and a one-MiB accepted report. The native control has a 25-second process deadline and the wrapper a 30-second timeout. Only read-only log collection uses sudo; imports execute as the ordinary runner user. The generic child-group cleanup already handles elevated read-only log processes. No artifact contains raw logs or sync data.
+
+Shared request-generation callbacks now collect replies under their own lock before merging the sanitized metadata into the main report. Regression run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41775607926 passed 12 Python checks per architecture and retained the earlier runner-success/root-interface-unavailable results.
+
+### Constructing, but not sending, a native request
+
+Inspection https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41776041134 found all six selected request-construction methods on both architectures with five Python checks each. CKStoreRequest's _URLRequestWithError: delegates to the system service's URLRequestForStoreRequest:reply: and returns a NSURLRequest/NSError pair. Our probe does not call runAsyncWithCompletionHandler:, runSync:, or a network task to execute that returned authorization request.
+
+Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41776353497 at dcc32601eeaa456f3b7e3a86a33c4a9d59090eaa passed on ARM and Intel, with 17 Python checks each. A fixed synthetic account and fixed non-secret token generated a four-field native body: machineName, kbsync, needDiv and xToken. The returned request was an HTTPS POST to the expected buy.itunes.apple.com machine-authorization path, preserved the sync/token/diversity fields, and had a six-byte-format GUID in its plist body. Values and the request itself were not published.
+
+This test deliberately distinguishes basic construction from real-session readiness. The body ownerDsid and X-Dsid header did not match the fixed synthetic account, and the User-Agent did not pass the Configurator-prefix check. These false flags alone do not distinguish absent fields from another value. ARM had both inspected Anisette headers, while Intel did not have both; header presence is not proof that their contents are valid.
+
+No authorization request, login, or import occurred in this construction run. The four state flags remained false, no model was captured, and no encrypted IPA was decrypted. The next work is identity/header binding and proving that the request uses a GUID consistent with the authenticated download session, without overwriting a mismatched native identity. These prerequisites must be checked before a real service-based enrollment trial is meaningful.
