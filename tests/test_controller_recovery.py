@@ -93,6 +93,7 @@ class RecoveryTests(unittest.TestCase):
         journal=self.journal()
         bot,gh=Mock(),Mock()
         def delivered(*args,**kwargs):
+            kwargs["progress"]("uploading")
             self.fail=True
             return {"status":"telegram_file_delivered","request_id":RID,"bytes":100}
         gh.deliver.side_effect=delivered

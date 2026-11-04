@@ -215,6 +215,24 @@ class GitHub:
             self.call("/actions/runs/" + str(int(run["id"])) + "/cancel", {}, "POST")
 
     def archive(self, artifact_id, destination):
+        destination=Path(destination)
+        require(not destination.exists() and not destination.is_symlink(),"artifact_destination_exists")
+        # GET-only transport retry. Never retry Telegram sends or job submissions.
+        for attempt in range(2):
+            try:
+                return self._archive_once(artifact_id,destination)
+            except (OSError,http.client.HTTPException):
+                destination.unlink(missing_ok=True)
+                if attempt:
+                    raise QueueError("artifact_transport_failed") from None
+            except QueueError as exc:
+                if str(exc)!="artifact_transport_failed":
+                    raise
+                destination.unlink(missing_ok=True)
+                if attempt:
+                    raise
+
+    def _archive_once(self, artifact_id, destination):
         require(type(artifact_id) is int and artifact_id > 0, "invalid_artifact_id")
         request = urllib.request.Request("https://api.github.com/repos/" + REPOSITORY
             + "/actions/artifacts/" + str(artifact_id) + "/zip",

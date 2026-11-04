@@ -180,24 +180,42 @@ class Controller:
 
     def deliver(self,rid):
         card=self.card(rid)
-        card.update("retrieving")
+        stage="retrieving"
+        upload_started=False
+        def progress(value):
+            nonlocal stage,upload_started
+            stage=value
+            if value=="uploading":
+                # Durable send intent immediately before the non-repeatable API call.
+                self.record(rid,"sending")
+                upload_started=True
+            card.update(value)
         try:
-            self.record(rid,"sending")
-            result=self.github.deliver(rid,self.bot,self.owner,self.crypt,progress=card.update)
+            self.record(rid,"pending")
+            progress("retrieving")
+            result=self.github.deliver(rid,self.bot,self.owner,self.crypt,progress=progress)
             event(**result)
             self.delivered.add(rid)
             self.record(rid,"delivered")
             card.update("done",force=True)
             return True
-        except APIError:
-            # sendDocument can time out after Telegram accepted it. No automatic resend.
-            card.update("unknown",force=True)
-            event("delivery_outcome_unknown",request_id=rid)
-            self.say("文件发送结果未确认。请先检查聊天；如未收到，可稍后用 /get "+rid+" 手动重试。")
-        except QueueError as exc:
-            card.update("failed",force=True)
-            event(str(exc),request_id=rid)
-            self.say("暂时无法交付文件："+str(exc)+"\n任务编号："+rid)
+        except Exception as exc:
+            # No exception body, URL, credentials or archive paths enter logs/chat.
+            category=("telegram" if isinstance(exc,APIError) else
+                      "delivery_check" if isinstance(exc,QueueError) else "unexpected")
+            event("delivery_outcome_unknown" if upload_started else "delivery_preparation_failed",
+                  request_id=rid,stage=stage if stage in LABELS else "unknown",category=category)
+            if upload_started:
+                card.update("unknown",force=True)
+                self.say("文件发送结果未确认。请先检查聊天；如未收到，可稍后用 /get "+rid+" 手动重试。")
+            else:
+                try:
+                    self.record(rid,"closed")
+                except Exception:
+                    event("delivery_failure_record_unavailable")
+                card.update("failed",force=True)
+                self.say("取回或校验文件失败，尚未开始向 Telegram 上传。"
+                         "\n无需重新下载解密，可用 /get "+rid+" 重试取回现有产物。")
         return False
 
     def resume(self,rid,app=""):
