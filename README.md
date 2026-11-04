@@ -46,7 +46,7 @@
 
 [未发送请求的构造检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41776353497)在双架构各通过 17 项测试：系统服务构造了目标地址正确的 HTTPS POST，保留固定同步数据、测试令牌和 needDiv，并加入六字节格式 GUID。但目标账号的 ownerDsid、X-Dsid 和 Configurator User-Agent 检查尚未通过；ARM 存在两项预期 Anisette 头，Intel 不同时具备。这些字段的存在不证明认证有效。这项较早的构造检查尚未绑定真实会话；后续绑定和真实服务器结果以上方最新记录为准。
 
-用户目前没有可用电脑。[无账号账户管理代码检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41779680901)在 ARM、Intel 均完成：CKAccountStore.viewAccount 只是通过 URL scheme 打开账户界面；AMS 的设备信息任务使用序列号请求并更新本地 isBundleOwner，未提供已确认的电脑授权数量读取能力。现有代码尚不能自动读取数量或“全部解除授权”，本轮没有登录账号或调用撤销方法。手机端可通过 [Apple 支持](https://support.apple.com/zh-cn/contact)请求人工核对与协助；不保证支持人员能够重置限制。
+用户目前没有可用电脑。[无账号账户管理代码检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41779680901)确认 CKAccountStore.viewAccount 只是打开账户界面；AMS 设备信息任务尚未被证实能读取电脑授权数量。进一步的[官方界面能力检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41780878891)已在 GitHub ARM、Intel Mac 上成功启动“音乐”，读取到“账户”“登录”和“授权”菜单，且现有辅助功能权限可用；因此可以继续研究由 GitHub 操作官方账户页面，不要求用户自备电脑。此检查没有使用账号、执行登录或点击任何账户操作，未观察到“账户设置”菜单项，也没有读取授权数量或完成撤销。现有代码仍不能自动“全部解除授权”。手机端另可通过 [Apple 支持](https://support.apple.com/zh-cn/contact)请求人工核对与协助；不保证支持人员能够重置限制。
 
 ## 当前阻塞：新授权被拒绝，需核对电脑授权名额
 
@@ -77,6 +77,7 @@ Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直�
 | Account-free native authorization code inspection | 双架构检查指定原生函数的机器指令及令牌/认证类型来源 | 不传入账号，不读取私有运行时状态 |
 | Account-free native request signing policy | 检查公开配置及原生 Mescal 签名策略；不发送授权请求 | 不传入账号 |
 | Account-free App Store FairPlay service probe | 双架构检查本地 App Store FairPlay 服务能否为固定测试值生成请求 | 不传入 Apple 账号，不提交授权或导入 |
+| Account-free official account-management UI capability | 启动官方音乐应用，检查 URL 处理程序、现有界面访问权限及固定菜单标签 | 无 Secrets、不登录、不点击菜单操作、不申请权限；界面可访问不等于已完成账户管理 |
 | Account-free CommerceKit keybag prerequisite | 双架构固定测试值、普通用户/root 对照；检查客户端初始化与系统服务回复 | 不传入 Apple 账号，不提交服务器授权或导入；不输出同步数据 |
 | Account-free CommerceKit invalid import observation | 固定无效数据、调用前后服务响应、状态标志与有界日志摘要 | 无账号；仅无效合成导入，不把调用返回当作成功 |
 | Account-free CommerceKit request construction | 构造固定测试身份的请求，检查地址、方法与字段保留 | 无账号；不发送返回的授权请求 |

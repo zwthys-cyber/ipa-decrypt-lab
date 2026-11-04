@@ -685,7 +685,7 @@ This combination strongly points to the computer-authorization limit, rather tha
 
 Apple's current official guidance says an account can authorize up to five computers simultaneously, provides Mac/Windows account-settings steps for checking the count, and limits "Deauthorize All" to once a year: https://support.apple.com/zh-cn/118292. That page supports the general rule; it does not independently establish this account's current count.
 
-Earlier research returned keybag data in five separate trials. Those disposable-runner authorizations may have contributed to the limit; existing sanitized records do not establish which computers are counted. No deauthorization was attempted and no other device's authorization was changed. Further real authorization submissions are suspended until the owner verifies available slots or provides new evidence that changes this diagnosis. This does not block account-free implementation review or synthetic verification.
+Earlier research returned keybag data in five separate trials. Those disposable-runner authorizations may have contributed to the limit; existing sanitized records do not establish which computers are counted. No deauthorization was attempted and no other device's authorization was changed. Further real authorization submissions are suspended until available slots are verified or new evidence changes this diagnosis. This does not block account-free implementation review or synthetic verification.
 
 ### Final reporting regression
 
@@ -707,3 +707,18 @@ Read-only static inspection https://github.com/zwthys-cyber/ipa-decrypt-lab/acti
 Apple's published self-service steps currently use Music/Apple TV on Mac or Windows: https://support.apple.com/zh-cn/118292. The documentation does not establish an equivalent iPhone self-service control. Mobile users can contact Apple Support through https://support.apple.com/zh-cn/contact to ask an adviser to verify the authorization count and available options; assistance or a reset is not guaranteed.
 
 The GitHub automation for account-wide removal remains unimplemented and unverified. No authorization count was retrieved, no device was removed, no all-device reset was performed, and no new enrollment request was sent. Any future account-wide removal must have explicit scope approval because it affects existing computers and the published all-device operation has an annual limit.
+
+
+### Official Music UI capability on GitHub-hosted Macs
+
+Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41780878891 at 6f6894d0576f36ff815183bc7682594954566c15 completed successfully on macos-15 (ARM) and macos-15-intel. Both compiled the new NativeAccountManagementCapabilities.m probe with -Wall -Wextra -Werror and ran it without account secrets.
+
+Both runners reported an on-console session, installed Music application, successful Music launch, existing accessibility trust, and successful menu reads. The fixed-label detector saw Account, Sign In, and Authorizations. It did not observe the Account Settings, Authorize This Computer or Deauthorize This Computer labels; this bounded traversal does not establish that those controls are absent or usable after login.
+
+The itms/itmss schemes resolve to com.apple.Music and macappstores resolves to com.apple.AppStore. The probe resolved those handlers but did not open an account URL. It launched Music, read menu attributes, and requested termination of its newly opened application; it did not perform accessibility actions, prompt for new permissions, change TCC settings, enter credentials, sign in, submit authorization, or remove any authorization.
+
+The report contains only fixed schema fields, fixed app identifiers, booleans and fixed error categories. It does not export screenshots, window contents, arbitrary menu text, account identifiers or credentials. The workflow has no Secrets bindings, read-only repository permissions, pinned checkout, a three-minute job limit, a one-minute execution step and a 40-second process deadline.
+
+This establishes a usable GUI foundation for an alternative GitHub-only investigation through Apple's official application. It is not a working account-management implementation. Account login, access to the account settings page, the actual authorized-computer count, and any reset operation remain unverified. The next evidence needed is bounded navigation to the official account page and a private, read-only count query. No further real enrollment attempt is justified solely by this capability result. Account-wide removal still requires explicit scope approval after a concrete supported method is prepared.
+
+The official instructions continue to place computer-authorization management in Music/Apple TV on Mac or Windows: https://support.apple.com/zh-cn/118292. The public web research did not establish an equivalent mobile-browser control; that is an evidence gap, not proof that every web route is impossible.
