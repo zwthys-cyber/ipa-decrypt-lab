@@ -1,6 +1,6 @@
 # IPA Decrypt Lab
 
-**已在 GitHub-hosted macOS 上恢复 FairPlay 模型，并验证指定应用的原始 IPA 解密。** 真实私有加密导出已通过，Telegram 管理员私聊与 92 MB 完整 IPA 交付已通过实测。应用安装运行及收费服务尚未完成。
+**已在 GitHub-hosted macOS 上恢复 FairPlay 模型，并验证指定应用的原始 IPA 解密。** 真实私有加密导出已通过，Telegram 管理员私聊与 92 MB 完整 IPA 交付已通过实测。管理员常驻服务已部署；应用安装运行及收费服务尚未完成。
 
 ## 当前阶段与使用入口
 
@@ -10,7 +10,7 @@
 - **从授权检查点重新恢复**：打开 [Private same-runner model bootstrap](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/workflows/model-bootstrap.yml)，选择 `main` 和 **`checkpoint-replay`**。
 - 这两个入口均复用已有私有数据，不调用新的机器授权。当前默认测试目标为 App ID 6599842047；成功后仍只保留验证结果，不提供 IPA 下载产物。
 
-- **Telegram 私有测试**：见 [配置、指令与启动说明](docs/TELEGRAM.md)。
+- **Telegram 管理员常驻内测**：已迁移到用户的 Debian 13 VPS，见 [部署与运维说明](docs/VPS-DEPLOYMENT.md)。旧 GitHub 限时会话入口已关闭，避免轮询冲突。
 - **跨会话恢复**：已接入任务记录、自动恢复追踪和交付防重发，323 项 Python 测试（1 项环境跳过）及跨运行器合成验证通过。见 [恢复机制与限制](docs/SESSION-RECOVERY.md)。
 
 下载交付已升级为 **macOS 26 Intel 默认、macOS 15 Intel 备用**。26 上的真实样本验证已通过，构建缓存复用、排队切换和不等待迟到总状态的安全交付已接入。[升级与实测记录](docs/TELEGRAM.md)。

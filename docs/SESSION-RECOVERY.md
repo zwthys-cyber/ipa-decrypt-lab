@@ -1,6 +1,6 @@
 # 跨会话任务恢复
 
-机器人仍为 GitHub Actions 限时、管理员私聊测试服务。
+本文记录历史 GitHub Actions 限时会话的 Checks 恢复日志。机器人现已迁移到 VPS，采用私有 SQLite 持久记录；现行部署与验证见 [VPS 部署说明](VPS-DEPLOYMENT.md)。
 
 ## 行为
 

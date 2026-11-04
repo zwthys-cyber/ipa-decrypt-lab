@@ -1,6 +1,6 @@
-# Telegram 私有交付测试
+# Telegram 私有交付
 
-当前机器人为 @ipazake_bot。所有编译、测试、下载、解密及机器人会话仅在 GitHub-hosted Actions 中运行。这里是限时集成测试入口，不是常驻收费服务。
+当前机器人为 @ipazake_bot，已接入用户的 Debian 13 VPS 常驻运行，仅管理员私聊可用。编译、测试、App Store 下载和 FairPlay 解密仍在 GitHub-hosted Actions 上执行；VPS 负责持久任务记录、认证解包和 Telegram 私有交付。尚未开放收费服务。
 
 ## 已实现的流程
 
@@ -25,7 +25,11 @@
 
 交付密钥由 GitHub 上的 delivery-contracts.yml / keygen 生成。工作流只输出仓库公钥封装后的密钥密文及 age 公钥；需由维护者经 GitHub API 保存密文为 Secret，并将对应公钥写入 config/delivery.json。正常使用无需重复生成，也不要覆盖现有密钥，否则之前的交付产物将无法解密。
 
-## 首次准备与启动
+## 历史 GitHub 限时会话入口
+
+此入口已禁用，避免与 VPS 同时轮询。现在使用 [VPS 发布工作流与运维说明](VPS-DEPLOYMENT.md)。下列步骤保留作历史记录；若需回切，必须先停止 VPS 服务，再启用旧入口。
+
+### 原首次准备与启动
 
 1. 运行 telegram-server-build.yml，编译固定版本的官方本地 Bot API，并缓存公开二进制。该步骤不接触 Telegram 或 Apple Secret。
 2. 运行 delivery-contracts.yml / test，完成 Python 边界、任务状态及 age 篡改拒绝测试。
@@ -144,3 +148,7 @@ GitHub 工作流总状态可能在文件已准备好之后仍显示运行中。�
 ## 跨会话状态
 
 已加入签名恢复日志、提交和发送前读回、成功交付记录。重启后接回已有任务；发送结果不明确时提示人工检查聊天，不自动重复上传。[恢复说明及 323 项测试、跨运行器验证结果](SESSION-RECOVERY.md)。仍为管理员私聊、限时会话；不支持多用户收费运营。
+
+## 常驻状态
+
+管理员现在无需每 30 分钟重启会话；可以直接私聊机器人发送 /status、/id 或 App Store 链接。当前每日默认提交上限为 20 次（UTC），单任务处理，计入失败提交；此处不是收费额度。任务和更新处理意图保存在 VPS 私有 SQLite。真实 IPA 迁移后交付需另行记录，不能由启动通知代替。

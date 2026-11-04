@@ -34,3 +34,9 @@ SQLite WAL + FULL 同步保存任务与 Telegram 更新处理意图。重复更�
 数据库不提供跨服务器同时运行的分布式锁。当前阶段仅管理员常驻内测，安装运行兼容性、真实迁移后交付及完整商业运营需分别记录。
 
 Checks 不是 fine-grained PAT 的必填权限。遇到 Checks 权限拒绝时，服务器改用 Actions 任务/步骤状态；不再基于缺失的 Checks 证据提前交付或取消排队任务，等待正常完成后校验交付。
+
+## 已验证的部署
+
+[运行 41899775076](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41899775076)在 GitHub Ubuntu 与 Debian 13 容器各通过 347 项 Python 测试（1 项环境跳过），Go 加密测试和真实 systemd 凭据挂载验证通过。最终部署的代码提交为 06bcf81fab70e597c823d1096877d3d6df4c01bd。
+
+服务器已启用常驻服务及开机自启，健康状态 ready，Telegram 菜单回读和私聊启动消息确认成功。发布脚本会清除先前失败造成的 systemd 启动限速；关闭旧 GitHub 会话入口的操作可重复执行。启动通知和健康探针不等于迁移后新 IPA 任务的完整交付实测。
