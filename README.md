@@ -6,6 +6,8 @@
 
 最新只读结果：[下载器会话查询](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41834443913)已成功读取账号实际授权电脑数量：**5 台**。Swift 登录成功，账户摘要接口返回 HTTP 200 和 `authorizations.authorizedComputers = 5`；Linux/macOS 各通过 20 项 Python 测试，另通过 11 项 Swift 测试。无需用户另备电脑，也不依赖失败的“音乐”原生登录。**只查询了数量，没有申请新机器授权或解除任何授权，仍未取得模型或验证砸壳。** [详细证据](OFFLINE-BACKEND.md#downloader-session-account-summary-2026-11-04)。
 
+已准备独立的“全部解除电脑授权”流程：[Linux/macOS 预览](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41836096346)各通过 38 项测试，真实解除任务已跳过。操作会先确认仍有 5 台，最多发送一次解除请求，再复查是否变为 0；默认预览不登录、不联网。**尚未获得对全部电脑解除授权的明确同意，因此没有执行。** 该操作影响账号下全部电脑的购买授权，并受 Apple 一年一次的限制；清空名额本身不代表模型或砸壳成功。[已准备的实现](tools/store_deauthorization.py)。
+
 此前的 [CommerceKit 真实试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41778198600)完成 59 项 Python、11 项 Swift 测试及原生检查。真实登录成功，原生 GUID 与下载器一致，账号、令牌、User-Agent 和 Cookie 已绑定；服务器返回 HTTP 200，但正文包含业务失败码 **3002**，并提到“五台电脑”。**没有 keybag，没有执行导入，也没有模型或已验证的砸壳产物。**
 
 这比早先仅出现“五台电脑”措辞的成功发包响应更明确，强烈指向电脑授权数量限制；后续只读账户摘要已确认实际数量为 5；仍未取得各电脑的明细或归属，不能据此确定每个名额来自哪次试验。此前五次返回 keybag 的临时运行器试验可能计入授权，现有摘要无法确认。暂不重复真实授权请求，不自动撤销现有设备授权。Apple 官方说明最多同时授权五台电脑，可在 Mac/Windows 的“音乐”或 Apple TV 账户设置中核对数量；“全部解除授权”影响所有电脑，且一年只能使用一次。[官方说明](https://support.apple.com/zh-cn/118292)。
@@ -81,6 +83,7 @@ Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直�
 | Account-free App Store FairPlay service probe | 双架构检查本地 App Store FairPlay 服务能否为固定测试值生成请求 | 不传入 Apple 账号，不提交授权或导入 |
 | Account-free official Music sign-in navigation | 识别欢迎页和可选提示，进入官方登录窗口，报告固定界面标签 | 不使用账号或提交凭据；不点击订阅、授权或安全升级 |
 | Public Apple account frontend inspection | 从 Apple 公共配置跟踪账户摘要前端及只读查询格式 | 无账号，不执行前端脚本，不调用账户变更接口 |
+| Confirmed all-computer deauthorization | 默认无网络预览；另设需明确确认的单次全部解除操作及前后数量检查 | 仅预览与合成测试通过，真实任务未执行；影响所有电脑且有一年一次限制 |
 | Private Store computer authorization count | 默认无账号预检；查询模式使用下载器签名登录会话，只读当前电脑授权数量 | 已实际读到 5 台；不会解除授权，账号会话和响应正文不公开 |
 | Private official Music account count | 默认无账号预检；查询模式单次完成邮箱、密码提交并尝试读取明确的当前授权数量 | 真实登录目前返回未知错误；未读到数量，不执行任何解除授权，不输出原始界面或认证日志 |
 | Account-free official account-management UI capability | 启动官方音乐应用，检查 URL 处理程序、现有界面访问权限及固定菜单标签 | 无 Secrets、不登录、不点击菜单操作、不申请权限；界面可访问不等于已完成账户管理 |

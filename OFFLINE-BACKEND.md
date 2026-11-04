@@ -821,3 +821,25 @@ This is stronger evidence than the earlier 3002/five-computers diagnostic: the a
 The prior native Music/AuthKit login failure remains unresolved, but it no longer prevents this read-only account-count check.
 
 All builds, tests and requests ran on GitHub-hosted runners. The public repository contains source, synthetic fixtures and bounded diagnostic results only.
+
+
+### Prepared all-computer deauthorization; not executed
+
+The [public settings-component inspection](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41835510353) found the actual confirmation action in both legacy and current Apple desktop account components. After its confirmation dialog, the frontend resolves `deauthAllMachines` and sends a JSON-content-type POST with no request body. Its default route is `/account/deauthAllMachines`. The button is shown for at least two authorized computers; this UI condition does **not** establish that the account is eligible under the yearly limit.
+
+Apple documents that deauthorizing inaccessible computers uses **Deauthorize All**, affects computer purchase access, requires reauthorizing computers still in use, and is available only once per year: [Apple Support](https://support.apple.com/en-us/118292). This is a different operation from removing a linked iPhone, MusicKit permission, or TVKit permission. The lab has not performed it.
+
+`tools/store_deauthorization.py` and `.github/workflows/store-deauthorization.yml` prepare a separately gated operation:
+
+1. Default `preview` exposes no Secrets, performs no network requests and shows the precise operation and consequences.
+2. Execution requires both `mode=deauthorize` and the exact acknowledgement `DEAUTHORIZE ALL 5 COMPUTERS`, supplied **only after explicit account-owner approval**.
+3. A fresh signed Store login and read-only query must still confirm exactly five computers. An unavailable or changed count stops before mutation.
+4. The fixed Apple endpoint receives at most **one** empty-body POST. No mutation redirect or retry is followed, including after timeout.
+5. A separate read-only query checks the outcome. HTTP 200 alone does not count as success; the count must become zero. Unknown/error outcomes retain the attempt state and must not be blindly retried.
+6. The operation does not request new machine authorization, accept a security upgrade, or run enrollment/decryption. Releasing quota would not itself prove that keybag import or model recovery works.
+
+[Preview verification](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41836096346) passed **38 tests on Linux and 38 on macOS** (20 read-only session/transport tests plus 18 operation tests). Both previews reported no credentials, no network request and zero mutation attempts. The real `deauthorize` job was **skipped**.
+
+The [final public-origin check](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41836095534) resolved module 37689's `hW` constant to `https://buy.itunes.apple.com`; module 57801 binds `DeauthAllMachines` to `/account/deauthAllMachines`. This confirms the prepared request's exact host/path from current public source. Synthetic tests do not establish that the server will accept an eventual real operation or that the account's yearly eligibility remains available.
+
+No account-wide approval has been given, and no deauthorization execution has been dispatched.
