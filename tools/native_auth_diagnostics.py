@@ -12,7 +12,7 @@ import time
 MAX_BYTES = 8 * 1024 * 1024
 MAX_EVENTS = 20000
 PROCESSES = frozenset({
-    "App Store", "appstoreagent", "amsaccountsd", "amsengagementd", "akd",
+    "Music", "App Store", "appstoreagent", "amsaccountsd", "amsengagementd", "akd",
     "AppleIDAuthAgent", "AuthKitUIService", "StoreKitUIService",
 })
 DOMAINS = (

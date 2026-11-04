@@ -26,13 +26,16 @@ jobs:
         with:
           persist-credentials: false
       - name: Check private input, output filtering and count evidence
-        run: python3 -m unittest discover -s tests -p 'test_music_account_query.py' -v
+        run: |
+          python3 -m unittest discover -s tests -p 'test_music_account_query.py' -v
+          python3 -m unittest discover -s tests -p 'test_native_auth_diagnostics.py' -v
       - name: Build navigation and private account-query clients
         run: |
           clang -Wall -Wextra -Werror -fobjc-arc -framework Foundation -framework AppKit -framework ApplicationServices tools/NativeMusicAccountNavigation.m -o music-account-navigation
           clang -Wall -Wextra -Werror -fobjc-arc -framework Foundation -framework AppKit -framework ApplicationServices tools/NativeMusicAccountQuery.m -o music-account-query
           ./music-account-navigation --contract
           ./music-account-query --contract
+          python3 tools/native_auth_diagnostics.py --check
       - name: Verify actual login controls using an unsubmitted synthetic email
         timeout-minutes: 3
         run: |

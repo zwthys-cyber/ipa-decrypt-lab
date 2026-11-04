@@ -6,6 +6,7 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
+import time
 
 SCHEMA = "ipa-lab-music-account-query-v1"
 STATUSES = {
@@ -93,7 +94,8 @@ def clean(raw):
 def failure(status):
     return clean(dict(status=status, **{k: False for k in FORBIDDEN}))
 
-def run(binary, preflight=False):
+def run(binary, preflight=False, collect_diagnostics=False):
+    started = int(time.time())
     data = None
     if not preflight:
         email, password = os.environ.get("APPLE_ID"), os.environ.get("APPLE_PASSWORD")
@@ -123,7 +125,11 @@ def run(binary, preflight=False):
     if not output or len(output) > 65536:
         return failure("invalid_report")
     try:
-        return clean(json.loads(output))
+        result = clean(json.loads(output))
+        if collect_diagnostics and not preflight:
+            from native_auth_diagnostics import collect
+            result["authentication_diagnostics"] = collect(started, ended=int(time.time()) + 1)
+        return result
     except (ValueError, UnicodeError):
         return failure("invalid_report")
 
@@ -135,7 +141,7 @@ def main():
     if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "darwin":
         raise SystemExit("GitHub-hosted macOS required")
     try:
-        result = run(str(Path(args.binary).resolve()), args.preflight)
+        result = run(str(Path(args.binary).resolve()), args.preflight, collect_diagnostics=not args.preflight)
     except Exception:
         result = failure("native_failed")
     print(json.dumps(result, sort_keys=True))

@@ -29,6 +29,14 @@ class NativeAuthDiagnosticsTests(unittest.TestCase):
         for secret in ("private", "example.invalid", "password", "token", "never-export"):
             self.assertNotIn(secret, output)
 
+    def test_music_authentication_exports_only_error_metadata(self):
+        result = diagnostics.summarize(json.dumps([self.event(
+            "Sign in failed user=private@example.invalid Error Domain=AKAuthenticationError Code=-7018",
+            "Music")]))
+        self.assertEqual(result["records"], [{"process": "Music", "authentication_context": True,
+            "kind": "error", "domain_or_symbol": "AKAuthenticationError", "code": -7018, "events": 1}])
+        self.assertNotIn("private", json.dumps(result))
+
     def test_unknown_processes_domains_and_long_identifiers_are_dropped(self):
         values = [self.event("Error Domain=NSURLErrorDomain Code=-1009", "private-process"),
                   self.event("Error Domain=PrivateDomain Code=123"),
