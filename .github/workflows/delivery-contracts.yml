@@ -1,0 +1,48 @@
+name: Private delivery contracts and key
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Synthetic tests, or generate sealed delivery identity
+        type: choice
+        default: test
+        options: [test, keygen]
+permissions:
+  contents: read
+concurrency:
+  group: delivery-contracts
+  cancel-in-progress: false
+jobs:
+  contracts:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: FiloSottile/age
+          ref: b74dce4cdbe35b5e5f66c06d9612b72f89028758
+          path: native-source/age
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: '1.27.0'
+          cache-dependency-path: native-source/age/go.sum
+      - name: Test Python contracts
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Test authenticated encryption and build
+        run: |
+          mkdir -p native-source/age/cmd/lab-delivery-crypt
+          cp tools/delivery_crypto.go native-source/age/cmd/lab-delivery-crypt/main.go
+          cp tests/delivery_crypto_test.go native-source/age/cmd/lab-delivery-crypt/main_test.go
+          cd native-source/age
+          go test -p 2 -timeout 120s ./cmd/lab-delivery-crypt
+          go build -p 2 -trimpath -o ../../delivery-crypt ./cmd/lab-delivery-crypt
+      - name: Emit repository-sealed identity and public recipient
+        if: inputs.mode == 'keygen'
+        run: |
+          ulimit -c 0
+          ./delivery-crypt keygen
