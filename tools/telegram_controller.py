@@ -5,6 +5,7 @@ import json
 import re
 import time
 import urllib.parse
+from version_request import selector, VersionError
 from telegram_api import APIError, private_message
 from telegram_queue import QueueError, failure_kind
 from app_preflight import PreflightError, MESSAGES
@@ -12,6 +13,7 @@ from task_progress import ProgressCard, LABELS
 from delivery_scheduler import app_from_run, queued_too_long, retryable, MAX_RUNS
 
 HELP = ("发送美区免费 App Store 链接或数字 App ID，创建下载与解密任务。\n"
+        "/version AppID 版本号 下载指定旧版（也可填历史版本 ID）\n"
         "/status 查看当前任务\n/cancel 取消当前任务\n"
         "/get 任务编号 重新获取已完成文件（保留约一天）\n/id 查看自己的数字 ID\n"
         "当前仅管理员可用，一次处理一个任务；文件需要自行重签名安装。")
@@ -139,8 +141,17 @@ class Controller:
                 return
             self.deliver(parts[1])
             return
+        version = ""
         try:
-            app = target_id(text)
+            if command == "/version":
+                parts = text.split()
+                if len(parts) != 3:
+                    self.say("用法：/version AppID或商店链接 版本号\n例如：/version 444934666 9.3.55")
+                    return
+                app = target_id(parts[1])
+                version = selector(parts[2])
+            else:
+                app = target_id(text)
         except (ValueError,TypeError):
             self.say("请发送完整 App Store 链接或数字 App ID。用 /help 查看指令。")
             return
@@ -153,24 +164,30 @@ class Controller:
         if self.submitted and time.monotonic()-self.last_submission<30:
             self.say("请稍候 30 秒再提交。")
             return
-        rid = opaque_id(self.token,self.owner,update_number,app)
+        rid = opaque_id(self.token,self.owner,update_number,app + (":" + version if version else ""))
         if self.journal is not None and rid in self.journal.records:
             self.say("这个请求已记录，请用 /status 或 /get 查询。")
             return
         self.say("正在检查美区上架情况、价格和容量…")
         try:
-            self.github.preflight_app(app)
+            if version:
+                self.github.preflight_app(app, historical=True)
+            else:
+                self.github.preflight_app(app)
         except PreflightError as exc:
             self.say(MESSAGES[exc.status]+"\n未创建任务，不占用提交额度。")
             return
         self.record(rid,"pending",app)
         # Record before dispatch: an ambiguous network outcome must not cause a duplicate POST.
         self.current = {"rid":rid,"app":app,"state":"dispatch_pending","since":time.monotonic()}
+        self.current["version"] = version
+        if version:
+            self.say("请求历史版本："+version+"。查不到或版本不匹配会停止，不回退最新版。")
         self.card(rid,app).update("dispatch_pending")
         self.submitted+=1
         self.last_submission=time.monotonic()
         try:
-            result = self.github.dispatch(app,rid)
+            result = self.github.dispatch(app,rid,version=version) if version else self.github.dispatch(app,rid)
             self.current["state"] = result.get("status","queued")
             self.card(rid,app).update("queued")
             event("job_submitted",request_id=rid,app_id=app)
@@ -273,7 +290,8 @@ class Controller:
             current["retry_started"]=time.monotonic()
             self.card(rid).update("switching",force=True)
             try:
-                self.github.retry(app,rid,run_id,current.get("cancel_for_switch")==run_id)
+                self.github.retry(app,rid,run_id,current.get("cancel_for_switch")==run_id,
+                                  **({"version":current["version"]} if current.get("version") else {}))
                 event("runner_failover_dispatched",request_id=rid)
             except QueueError as exc:
                 event("runner_failover_unconfirmed",request_id=rid)

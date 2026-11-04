@@ -12,10 +12,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
+from version_request import selector, resolved_marker, verify_version
 from telegram_api import NoRedirect, APIError
 from app_preflight import check_app, MESSAGES, STEP_NAMES
 from ipa_audit import audit
-from delivery_scheduler import matches, retryable, alternate, MAX_RUNS, PRIMARY_RUNNER
+from delivery_scheduler import matches, retryable, alternate, MAX_RUNS, PRIMARY_RUNNER, version_from_run
 
 REPOSITORY = "zwthys-cyber/ipa-decrypt-lab"
 WORKFLOW = "private-delivery.yml"
@@ -116,17 +117,18 @@ class GitHub:
                 return run
         return runs[0] if runs else None
 
-    def preflight_app(self, app):
-        return check_app(app)
+    def preflight_app(self, app, historical=False):
+        return check_app(app, historical=historical)
 
-    def dispatch(self, app, rid):
+    def dispatch(self, app, rid, version=""):
+        version=selector(version)
         request_id(rid)
         require(re.fullmatch(r"[1-9][0-9]{4,19}", app or ""), "invalid_app_id")
         existing = self.find(rid)
         if existing:
             return existing
         response = self.call("/actions/workflows/" + WORKFLOW + "/dispatches",
-            {"ref":"main", "inputs":{"mode":"export", "app_id":app, "request_id":rid,"runner":PRIMARY_RUNNER}}, "POST")
+            {"ref":"main", "inputs":{"mode":"export", "app_id":app, "request_id":rid,"runner":PRIMARY_RUNNER, **({"version":version} if version else {})}}, "POST")
         if isinstance(response, dict) and type(response.get("workflow_run_id")) is int:
             return {"id":response["workflow_run_id"], "status":"queued"}
         return {"status":"dispatch_pending"}
@@ -152,7 +154,8 @@ class GitHub:
                 return False
         return True
 
-    def retry(self,app,rid,old_id,cancel_requested=False):
+    def retry(self,app,rid,old_id,cancel_requested=False,version=""):
+        version=selector(version)
         request_id(rid)
         require(re.fullmatch(r"[1-9][0-9]{4,19}",app or ""),"missing_retry_app")
         runs=self.runs(rid)
@@ -165,11 +168,12 @@ class GitHub:
         require(matches(old,rid) and old.get("head_branch")=="main"
                 and old.get("event")=="workflow_dispatch"
                 and old.get("path")==".github/workflows/"+WORKFLOW,"invalid_retry_source")
+        require(version_from_run(old)==version,"retry_version_mismatch")
         jobs=self.jobs(old)
         require(retryable(old,jobs,cancel_requested),"retry_not_safe")
         target=alternate(jobs)
         result=self.call("/actions/workflows/"+WORKFLOW+"/dispatches",
-            {"ref":"main","inputs":{"mode":"export","app_id":app,"request_id":rid,"runner":target}},"POST")
+            {"ref":"main","inputs":{"mode":"export","app_id":app,"request_id":rid,"runner":target, **({"version":version} if version else {})}},"POST")
         return {"status":"dispatch_pending","runner":target,
                 **({"id":result["workflow_run_id"]} if isinstance(result,dict)
                    and type(result.get("workflow_run_id")) is int else {})}
@@ -206,6 +210,7 @@ class GitHub:
     def failure_reason(self,run):
         messages = {
             "IPA exceeds 2000 MB capacity": "IPA 超过当前容量上限：2000 MB（2,000,000,000 字节），或解压后的程序规模超出检查预算。",
+            "Historical version unavailable": "指定旧版本查询或下载未完成，可能已不可下载或超过查询预算；未回退最新版。可核对版本号，或提供 Apple 历史版本 ID 重试。",
             "Insufficient private workspace": "处理所需磁盘空间不足，任务已停止，请稍后重试。",
         }
         messages.update({name:MESSAGES[code] for code,name in STEP_NAMES.items() if name not in messages})
@@ -306,6 +311,7 @@ class GitHub:
         progress("retrieving")
         run = self.find(rid)
         require(run is not None and self.artifact_ready(run,rid), "artifact_not_ready")
+        requested_version = version_from_run(run)
         run_id = int(run["id"])
         artifacts = self.call("/actions/runs/" + str(run_id) + "/artifacts?per_page=100")
         require(isinstance(artifacts, dict), "invalid_artifact_list")
@@ -333,6 +339,9 @@ class GitHub:
                         "invalid_artifact_sizes")
                 receipt = json.loads(z.read("receipt.json"))
                 validate_receipt(receipt, rid, run_id, run["head_sha"])
+                require(receipt.get("requested_version","")==requested_version,"receipt_version_mismatch")
+                if requested_version:
+                    resolved_marker("IPA_LAB_VERSION:" + str(receipt.get("external_version_id","")) + ":" + str(receipt.get("resolved_version","")), requested_version)
                 encrypted = root/"package.ipa.age"
                 with z.open("package.ipa.age") as src, encrypted.open("xb") as dst:
                     total = 0
@@ -346,7 +355,7 @@ class GitHub:
             require(encrypted.stat().st_size == receipt["ciphertext_bytes"]
                     and sha256(encrypted) == receipt["ciphertext_sha256"], "ciphertext_digest_mismatch")
             progress("delivery_verifying")
-            output = root/(receipt["app_id"] + "_decrypted.ipa")
+            output = root/(receipt["app_id"] + ("_" + receipt["resolved_version"] if requested_version else "") + "_decrypted.ipa")
             env = {k:os.environ[k] for k in ("PATH","HOME","LANG","DELIVERY_AGE_IDENTITY","LAB_RUNTIME") if k in os.environ}
             if os.environ.get("GITHUB_ACTIONS")=="true":
                 env["GITHUB_ACTIONS"] = "true"
@@ -358,6 +367,7 @@ class GitHub:
             encrypted.unlink()
             # Independent Linux archive/Mach-O structural check after authenticated decryption.
             info = audit(output)
+            verify_version(info, requested_version, receipt.get("resolved_version",""))
             require(info["encrypted_slice_count"] == 0, "delivery_contains_encrypted_images")
             with zipfile.ZipFile(output) as z:
                 require(not any(personalized(e.filename) for e in z.infolist()), "account_member_retained")

@@ -16,6 +16,7 @@ from task_progress import WorkerProgress
 from native_store import classify, classify_download, run
 from offline_verify import readiness
 from store_download import app_id, metadata
+from version_request import selector, resolved_marker, verify_version, VersionError
 
 from capacity import (MAX_IPA_BYTES, MAX_EXPANDED_BYTES, MIN_FREE_BYTES,
                       DOWNLOAD_TIMEOUT, DECRYPT_TIMEOUT, CRYPTO_TIMEOUT)
@@ -149,6 +150,7 @@ def export(binary, engine, crypt, target, request_id, recipient, output_dir, pro
     progress = progress or (lambda stage: None)
     require(os.environ.get("GITHUB_ACTIONS") == "true", "requires_github_actions")
     require(re.fullmatch(r"[a-f0-9]{32}", request_id) is not None, "invalid_request_id")
+    requested = selector(os.environ.get("DELIVERY_VERSION", ""))
     identifier = app_id(target)
     require(identifier == target, "canonical_app_id_required")
     require(re.fullmatch(r"age1[0-9a-z]{58}", recipient or "") is not None, "missing_delivery_recipient")
@@ -167,11 +169,13 @@ def export(binary, engine, crypt, target, request_id, recipient, output_dir, pro
         raise ExportError(status) from None
     except (TimeoutError, urllib.error.URLError):
         raise ExportError("metadata_network_failed") from None
-    check_capacity(info, output_dir.parent)
+    check_capacity({} if requested else info, output_dir.parent)
     email = os.environ["APPLE_ID"].strip()
     # Only native downloader receives the Store password, never the delivery key.
     env = {k: os.environ[k] for k in ("HOME", "PATH", "LANG", "LAB_KBSYNC_HELPER") if k in os.environ}
     env["APPLEPACKAGE_PASSWORD"] = os.environ["APPLE_PASSWORD"]
+    if requested:
+        env["LAB_REQUESTED_VERSION"] = requested
     login = ["login", email]
     if os.environ.get("APPLE_2FA_CODE"):
         login += ["--code", os.environ["APPLE_2FA_CODE"]]
@@ -183,13 +187,19 @@ def export(binary, engine, crypt, target, request_id, recipient, output_dir, pro
             root = Path(directory)
             root.chmod(0o700)
             original, candidate, cleaned = root/"source.ipa", root/"candidate.ipa", root/"delivery.ipa"
-            progress("downloading")
+            progress("resolving_version" if requested else "downloading")
             result = run(binary, ["download", email, info["bundleId"], "--output", str(original)], env, timeout=DOWNLOAD_TIMEOUT)
+            if requested and result.returncode != 0:
+                markers = re.findall(r"^IPA_LAB_VERSION_ERROR:([a-z_]+)$", result.stdout or "", re.M)
+                known = {"invalid_version","version_not_found","version_search_limit","version_lookup_unavailable"}
+                raise ExportError(markers[-1] if markers and markers[-1] in known else "version_download_rejected")
             require(result.returncode == 0 and original.is_file(), classify_download(result))
+            version_id, resolved_version = resolved_marker(result.stdout or "", requested) if requested else ("", "")
             require(0 < original.stat().st_size <= MAX_BYTES, "source_too_large")
             progress("auditing")
             before = audit(original)
             require(before["bundle_id"] == info["bundleId"], "downloaded_app_mismatch")
+            verify_version(before, requested, resolved_version)
             model = root/"model.bin"
             with os.fdopen(os.open(model, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), "wb") as stream:
                 stream.write(base64.b64decode(os.environ["FAIRPLAY_MODEL_B64"], validate=True))
@@ -208,7 +218,8 @@ def export(binary, engine, crypt, target, request_id, recipient, output_dir, pro
             report = json.loads(report_path.read_bytes())
             images, pages = validate_report(report, before, candidate)
             scrub_archive(candidate, cleaned)
-            verify_output(cleaned, before)
+            verified = verify_output(cleaned, before)
+            verify_version(verified, requested, resolved_version)
             original.unlink()
             candidate.unlink()
             progress("encrypting")
@@ -220,6 +231,8 @@ def export(binary, engine, crypt, target, request_id, recipient, output_dir, pro
             receipt = {
                 "schema": "ipa-private-delivery-v1", "status": "encrypted_artifact_ready",
                 "request_id": request_id, "app_id": identifier,
+                "requested_version": requested, "resolved_version": resolved_version,
+                "external_version_id": version_id,
                 "run_id": str(os.environ.get("GITHUB_RUN_ID", "")),
                 "source_commit": os.environ.get("GITHUB_SHA", ""),
                 "plaintext_verified": True, "runtime_verified": False,
@@ -265,7 +278,7 @@ def main():
         progress.advance("artifact_ready")
         print(json.dumps(result), flush=True)
         return 0
-    except ExportError as exc:
+    except (ExportError, VersionError) as exc:
         status = str(exc)
     except AuditError as exc:
         status = audit_failure(exc)
@@ -280,6 +293,12 @@ def main():
     if category and os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"],"a") as stream:
             stream.write("capacity_failure="+category+"\n")
+    version_codes = {"invalid_version","version_not_found","version_search_limit",
+                     "version_lookup_unavailable","version_download_rejected",
+                     "version_resolution_unconfirmed","downloaded_version_mismatch"}
+    if status in version_codes and os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("GITHUB_OUTPUT"):
+        with open(os.environ["GITHUB_OUTPUT"], "a") as stream:
+            stream.write("version_failure=" + status + "\n")
     progress.advance("failed")
     # An incomplete output directory is never uploaded by the workflow.
     import shutil

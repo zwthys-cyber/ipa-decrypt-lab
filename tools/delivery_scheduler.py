@@ -1,6 +1,7 @@
 """Bounded runner failover decisions. Never retry work that reached a runner."""
 from datetime import datetime, timezone
 import re
+from version_request import selector
 
 RUNNERS=("macos-26-intel","macos-26","macos-15-intel","macos-15")
 PRIMARY_RUNNER="macos-26-intel"
@@ -10,10 +11,10 @@ MAX_RUNS=2
 def matches(run,rid):
     title=run.get("display_title","")
     return (title=="delivery-"+rid or
-            re.fullmatch(r"delivery-"+re.escape(rid)+r"-app[1-9][0-9]{4,19}-(?:macos-(?:15|26)(?:-intel)?)",title) is not None)
+            re.fullmatch(r"delivery-"+re.escape(rid)+r"-app[1-9][0-9]{4,19}-(?:macos-(?:15|26)(?:-intel)?)(?:-version([0-9.]{1,32}))?",title) is not None)
 
 def app_from_run(run,rid):
-    m=re.fullmatch(r"delivery-"+re.escape(rid)+r"-app([1-9][0-9]{4,19})-(?:macos-(?:15|26)(?:-intel)?)",
+    m=re.fullmatch(r"delivery-"+re.escape(rid)+r"-app([1-9][0-9]{4,19})-(?:macos-(?:15|26)(?:-intel)?)(?:-version([0-9.]{1,32}))?",
                    run.get("display_title",""))
     return m.group(1) if m else ""
 
@@ -42,3 +43,7 @@ def retryable(run,jobs,cancel_requested=False):
 def alternate(jobs):
     labels={label for j in jobs for label in j.get("labels",[]) if isinstance(label,str)}
     return "macos-15-intel" if ("macos-26-intel" in labels or "macos-26" in labels) else PRIMARY_RUNNER
+
+def version_from_run(run):
+    match = re.search(r"-version([0-9.]{1,32})$", run.get("display_title",""))
+    return selector(match.group(1)) if match else ""

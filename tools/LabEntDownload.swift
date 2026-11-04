@@ -84,3 +84,66 @@ enum LabEntDownload {
         return try StoreDownloadEndpoint.validateRecoveryResponse(dict, app: app, version: version)
     }
 }
+
+ 
+// Historical selection uses authenticated Apple metadata, never a third-party index.
+public enum LabVersionResolver {
+    static let limit = 120
+    static func valid(_ value: String, pattern: String) -> Bool {
+        value.range(of: pattern, options: .regularExpression) != nil
+    }
+    static func isID(_ value: String) -> Bool {
+        valid(value, pattern: "^[1-9][0-9]{5,19}$")
+    }
+    static func isDisplay(_ value: String) -> Bool {
+        value.count <= 32 && valid(value, pattern: "^[0-9]{1,5}(\\.[0-9]{1,5}){0,4}$")
+    }
+    static func candidates(_ values: [String]) throws -> [String] {
+        guard values.count <= 10000, values.allSatisfy({ isID($0) }) else {
+            throw NSError(domain: "LabVersionInvalidList", code: 1)
+        }
+        return Array(Set(values)).sorted {
+            $0.count == $1.count ? $0 > $1 : $0.count > $1.count
+        }
+    }
+    public static func resolve(account: inout Account, app: Software, seed: String,
+                               requested: String) async throws -> String {
+        guard isID(requested) || isDisplay(requested) else {
+            print("IPA_LAB_VERSION_ERROR:invalid_version")
+            throw NSError(domain: "LabVersionInput", code: 1)
+        }
+        let deadline = Date().addingTimeInterval(180)
+        do {
+            let identifiers: [String]
+            if isID(requested) {
+                identifiers = [requested]
+            } else {
+                identifiers = try candidates(try await VersionFinder.list(
+                    account: &account, bundleIdentifier: app.bundleID,
+                    entityType: .iPhone, externalVersionID: seed))
+            }
+            for identifier in identifiers.prefix(limit) {
+                guard Date() < deadline else {
+                    print("IPA_LAB_VERSION_ERROR:version_search_limit")
+                    throw NSError(domain: "LabVersionReported", code: 1)
+                }
+                let metadata = try await VersionLookup.getVersionMetadata(
+                    account: &account, app: app, versionID: identifier)
+                guard isDisplay(metadata.displayVersion) else {
+                    throw NSError(domain: "LabVersionMetadata", code: 1)
+                }
+                if isID(requested) || metadata.displayVersion == requested {
+                    print("IPA_LAB_VERSION:" + identifier + ":" + metadata.displayVersion)
+                    return identifier
+                }
+            }
+            print("IPA_LAB_VERSION_ERROR:" + (identifiers.count > limit ? "version_search_limit" : "version_not_found"))
+            throw NSError(domain: "LabVersionReported", code: 1)
+        } catch {
+            if (error as NSError).domain != "LabVersionReported" {
+                print("IPA_LAB_VERSION_ERROR:version_lookup_unavailable")
+            }
+            throw error
+        }
+    }
+}

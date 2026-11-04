@@ -54,3 +54,16 @@ replace("Sources/ApplePackage/Commands/StoreDownloadEndpoint+Fetch.swift",
         let dict = try await StoreDownloadEndpoint.volumeStore.fetchProduct(""")
 shutil.copyfile("tools/LabEntDownload.swift", root/"Sources/ApplePackage/Commands/LabEntDownload.swift")
 shutil.copyfile("tests/LabEntDownloadTests.swift", root/"Tests/ApplePackageTests/LabEntDownloadTests.swift")
+
+# Resolve display versions after free-license acquisition and before pinned download.
+replace("Sources/ApplePackageTool/Commands/Download.swift",
+        "            let resolvedVersionID = try await resolveVersionID(",
+        "            var resolvedVersionID = try await resolveVersionID(")
+replace("Sources/ApplePackageTool/Commands/Download.swift",
+        '            print("IPA_LAB_STAGE:request_product")',
+        '''            if let requested = ProcessInfo.processInfo.environment["LAB_REQUESTED_VERSION"], !requested.isEmpty {
+                print("IPA_LAB_STAGE:resolving_version")
+                resolvedVersionID = try await LabVersionResolver.resolve(
+                    account: &account, app: app, seed: resolvedVersionID, requested: requested)
+            }
+            print("IPA_LAB_STAGE:request_product")''')

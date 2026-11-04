@@ -34,7 +34,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
 
-def check_app(identifier):
+def check_app(identifier, historical=False):
     if not isinstance(identifier,str) or not re.fullmatch(r"[1-9][0-9]{4,19}",identifier):
         raise PreflightError("invalid_app_id")
     url="https://itunes.apple.com/lookup?"+urllib.parse.urlencode(
@@ -70,7 +70,7 @@ def check_app(identifier):
                 size=int(size)
             if type(size) is not int or size<=0:
                 raise ValueError()
-            if size>MAX_IPA_BYTES:
+            if size>MAX_IPA_BYTES and not historical:
                 raise PreflightError("source_too_large")
         return info
     except PreflightError:
@@ -81,7 +81,7 @@ def check_app(identifier):
 def main():
     status="eligible"
     try:
-        check_app(os.environ.get("DELIVERY_APP_ID",""))
+        check_app(os.environ.get("DELIVERY_APP_ID",""), historical=bool(os.environ.get("DELIVERY_VERSION","")))
     except PreflightError as exc:
         status=exc.status
     output=os.environ.get("GITHUB_OUTPUT")

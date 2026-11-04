@@ -1,5 +1,5 @@
 name: Private verified IPA delivery
-run-name: delivery-${{ inputs.request_id }}-app${{ inputs.app_id }}-${{ inputs.runner || 'macos-26-intel' }}
+run-name: delivery-${{ inputs.request_id }}-app${{ inputs.app_id }}-${{ inputs.runner || 'macos-26-intel' }}${{ inputs.version && format('-version{0}', inputs.version) || '' }}
 on:
   workflow_dispatch:
     inputs:
@@ -17,6 +17,10 @@ on:
         description: Free US App Store numeric ID
         type: string
         default: '6599842047'
+      version:
+        description: Optional exact display version or Apple external version ID
+        type: string
+        default: ''
       request_id:
         description: Opaque 32-character lowercase hex request ID
         type: string
@@ -45,6 +49,7 @@ jobs:
         timeout-minutes: 1
         env:
           DELIVERY_APP_ID: ${{ inputs.app_id }}
+          DELIVERY_VERSION: ${{ inputs.version }}
         run: python3 tools/app_preflight.py
       - name: App unavailable in US storefront
         if: failure() && steps.eligibility.outputs.eligibility == 'app_not_found_in_us'
@@ -166,6 +171,7 @@ jobs:
           APPLE_2FA_CODE: ${{ secrets.APPLE_2FA_CODE }}
           GH_TOKEN: ${{ github.token }}
           DELIVERY_APP_ID: ${{ inputs.app_id }}
+          DELIVERY_VERSION: ${{ inputs.version }}
           DELIVERY_REQUEST_ID: ${{ inputs.request_id }}
         run: |
           ulimit -c 0
@@ -175,6 +181,9 @@ jobs:
         run: exit 1
       - name: Insufficient private workspace
         if: failure() && steps.export.outputs.capacity_failure == 'disk_limit'
+        run: exit 1
+      - name: Historical version unavailable
+        if: failure() && steps.export.outputs.version_failure != ''
         run: exit 1
       - name: Retain encrypted delivery for at most one day
         if: success() && inputs.mode == 'export'

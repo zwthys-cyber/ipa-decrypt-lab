@@ -3,6 +3,15 @@ import Foundation
 import XCTest
 
 final class LabEntDownloadTests: XCTestCase {
+    func testHistoricalSelectionBoundsAndOrdering() throws {
+        XCTAssertEqual(try LabVersionResolver.candidates(["842461647","842461648","842461647"]),
+                       ["842461648","842461647"])
+        XCTAssertThrowsError(try LabVersionResolver.candidates(["../bad"]))
+        XCTAssertFalse(LabVersionResolver.isDisplay("9.3.55 --output x"))
+        XCTAssertTrue(LabVersionResolver.isDisplay("9.3.55"))
+        XCTAssertTrue(LabVersionResolver.isID("842461647"))
+        XCTAssertFalse(LabVersionResolver.isID("9.3.55"))
+    }
     func testEndpointRejectsTokenExfiltrationAndRedirectTargets() {
         for value in [
             "http://downloaddispatch.itunes.apple.com" + LabEntDownload.endpointPath,

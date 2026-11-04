@@ -66,7 +66,7 @@ jobs:
       - name: Assemble public runtime bundle
         run: |
           cp dist/telegram-bot-api package/bin/
-          for module in app_preflight capacity telegram_daemon persistent_journal telegram_controller telegram_runtime telegram_api telegram_menu telegram_queue task_progress delivery_scheduler ipa_audit; do
+          for module in version_request app_preflight capacity telegram_daemon persistent_journal telegram_controller telegram_runtime telegram_api telegram_menu telegram_queue task_progress delivery_scheduler ipa_audit; do
             cp "tools/$module.py" package/tools/
           done
           cp deploy/ipazake.service deploy/install.sh deploy/prune_releases.py package/deploy/
