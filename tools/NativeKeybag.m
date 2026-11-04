@@ -57,9 +57,77 @@ static NSDictionary *Interfaces(void) {
  }
  return r;
 }
+
+static void Parameters(NSMutableDictionary *r) {
+ Class cls=NSClassFromString(@"ACAccount");
+ SEL create=NSSelectorFromString(@"ams_createEphemeralAccount");
+ if(!ABI(cls,create,@"@",@[]))return;
+ id account=((id(*)(id,SEL))objc_msgSend)(cls,create);
+ SEL ep=NSSelectorFromString(@"ams_isEphemeralAccount");
+ BOOL epABI=ABI(account,ep,@"B",@[]) || ABI(account,ep,@"c",@[]);
+ BOOL ephemeral=epABI && ((BOOL(*)(id,SEL))objc_msgSend)(account,ep);
+ r[@"ephemeral_account"]=B(ephemeral);
+ SEL dsid=NSSelectorFromString(@"ams_setDSID:");
+ if(!ephemeral || !ABI(account,dsid,@"v",@[@"@"]))return;
+ ((void(*)(id,SEL,id))objc_msgSend)(account,dsid,@0);
+ id task=[NSClassFromString(@"AMSAuthorizeMachineTask") alloc];
+ SEL init=NSSelectorFromString(@"initWithAccount:authorizeReason:bag:");
+ if(!ABI(task,init,@"@",@[@"@",@"Q",@"@"]))return;
+ task=((id(*)(id,SEL,id,unsigned long long,id))objc_msgSend)(task,init,account,0,nil);
+ SEL build=NSSelectorFromString(@"_buildRequestParametersWithError:");
+ BOOL ok=ABI(task,build,@"@",@[@"^@"]);r[@"abi_verified"]=B(ok);
+ if(!ok)return;
+ NSError *error=nil;
+ id params=((id(*)(id,SEL,NSError *__autoreleasing *))objc_msgSend)(task,build,&error);
+ ErrorFields(r,error);
+ BOOL valid=[params isKindOfClass:NSDictionary.class];
+ id sync=valid?params[@"kbsync"]:nil;
+ NSData *data=[sync isKindOfClass:NSString.class]?[[NSData alloc] initWithBase64EncodedString:sync options:0]:nil;
+ BOOL present=data.length>0 && data.length<=1048576;
+ r[@"sync_data_present"]=B(present);
+ if(present)r[@"sync_data_length"]=@(data.length);
+ id guid=valid?params[@"guid"]:nil;
+ r[@"guid_is_six_bytes"]=B([guid isKindOfClass:NSString.class] && [guid rangeOfString:@"^[A-Fa-f0-9]{12}$" options:NSRegularExpressionSearch].location!=NSNotFound);
+ id owner=valid?params[@"ownerDsid"]:nil;
+ r[@"owner_is_synthetic"]=B([owner isKindOfClass:NSNumber.class] && [owner isEqualToNumber:@0]);
+ r[@"machine_name_present"]=B([params[@"machineName"] isKindOfClass:NSString.class] && [params[@"machineName"] length]>0);
+ r[@"parameter_names_valid"]=B(valid && [[NSSet setWithArray:[params allKeys]] isEqualToSet:[NSSet setWithArray:@[@"kbsync",@"guid",@"machineName",@"ownerDsid"]]]);
+ r[@"status"]=valid && present && !error?@"synthetic_parameters_ready":@"synthetic_parameters_failed";
+}
+static void PublicBag(NSMutableDictionary *r) {
+ Class cls=NSClassFromString(@"AMSAuthorizeMachineTask");
+ SEL create=NSSelectorFromString(@"createBagForSubProfile");
+ if(!ABI(cls,create,@"@",@[]))return;
+ id bag=((id(*)(id,SEL))objc_msgSend)(cls,create);
+ SEL get=NSSelectorFromString(@"URLForKey:");
+ if(!ABI(bag,get,@"@",@[@"@"]))return;
+ id value=((id(*)(id,SEL,id))objc_msgSend)(bag,get,@"authorizeMachine");
+ SEL promiseSel=NSSelectorFromString(@"valuePromise");
+ if(!ABI(value,promiseSel,@"@",@[]))return;
+ id promise=((id(*)(id,SEL))objc_msgSend)(value,promiseSel);
+ SEL resultSel=NSSelectorFromString(@"resultWithTimeout:error:");
+ BOOL ok=ABI(promise,resultSel,@"@",@[@"d",@"^@"]);r[@"abi_verified"]=B(ok);
+ if(!ok)return;
+ NSError *error=nil;
+ id result=((id(*)(id,SEL,double,NSError *__autoreleasing *))objc_msgSend)(promise,resultSel,12.0,&error);
+ ErrorFields(r,error);
+ BOOL url=[result isKindOfClass:NSURL.class];
+ r[@"bag_url_present"]=B(url);
+ if(url) {
+   NSURLComponents *c=[NSURLComponents componentsWithURL:result resolvingAgainstBaseURL:NO];
+   BOOL host=[c.host rangeOfString:@"^(buy|p[0-9]{1,3}-buy|finance-app)\\.itunes\\.apple\\.com$" options:NSRegularExpressionSearch].location!=NSNotFound;
+   BOOL path=[c.path rangeOfString:@"^/WebObjects/MZFinance\\.woa/wa/authorizeMachine/?$" options:NSRegularExpressionSearch].location!=NSNotFound;
+   r[@"endpoint_supported"]=B([c.scheme isEqualToString:@"https"] && host && path && !c.user && !c.password && (!c.port || c.port.integerValue==443));
+   if(host)r[@"endpoint_host"]=c.host;
+   if(path)r[@"endpoint_path"]=c.path;
+   r[@"endpoint_query_present"]=B(c.query.length>0);
+ }
+ r[@"status"]=url && !error?@"public_bag_ready":@"public_bag_failed";
+}
+
 int main(int argc,const char **argv) { @autoreleasepool {
  if(argc!=3 || !getenv("GITHUB_ACTIONS") || strcmp(getenv("GITHUB_ACTIONS"),"true"))return 2;
- NSString *mode=@(argv[1]); if(![@[@"interfaces",@"context",@"kbsync"] containsObject:mode])return 2;
+ NSString *mode=@(argv[1]); if(![@[@"interfaces",@"context",@"kbsync",@"parameters",@"public_bag"] containsObject:mode])return 2;
  NSMutableDictionary *r=[@{@"mode":mode,@"status":@"interface_unavailable",@"account_login_attempted":@NO,@"enrollment_created":@NO,@"decryption_proven":@NO} mutableCopy];
  @try {
    r[@"state_before"]=State();
@@ -75,6 +143,10 @@ int main(int argc,const char **argv) { @autoreleasepool {
        if([v isKindOfClass:NSString.class] && [v rangeOfString:@"^[a-zA-Z0-9-]{1,80}$" options:NSRegularExpressionSearch].location!=NSNotFound)keys[symbol]=v;
      }
      r[@"bag_keys"]=keys; r[@"status"]=@"interfaces_checked";
+   } else if([mode isEqualToString:@"parameters"]) {
+     Parameters(r);
+   } else if([mode isEqualToString:@"public_bag"]) {
+     PublicBag(r);
    } else if([mode isEqualToString:@"context"]) {
      id context=[[NSClassFromString(@"AMSFairPlayContext") alloc] init]; SEL s=NSSelectorFromString(@"fairplayContextIDWithError:");
      BOOL ok=ABI(context,s,@"I",@[@"^@"]); r[@"abi_verified"]=B(ok);

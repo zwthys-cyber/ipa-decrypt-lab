@@ -58,6 +58,34 @@ class NativeKeybagContracts(unittest.TestCase):
         self.assertEqual(r["status"], "native_process_failed")
         self.assertEqual(r["native_exit_code"], -9)
 
+    def test_parameters_require_ephemeral_synthetic_identity(self):
+        value = {"status": "synthetic_parameters_ready", "sync_data_length": 200,
+                 "error_present": False}
+        for key in ("abi_verified", "ephemeral_account", "sync_data_present", "guid_is_six_bytes",
+                    "owner_is_synthetic", "machine_name_present", "parameter_names_valid"):
+            value[key] = True
+        self.assertEqual(mod.clean(value)["status"], "synthetic_parameters_ready")
+        for key in value:
+            broken = dict(value)
+            del broken[key]
+            self.assertEqual(mod.clean(broken)["status"], "probe_failed")
+
+    def test_url_report_excludes_query_credentials_and_unknown_hosts(self):
+        r = mod.clean({"endpoint_host": "secret.example", "endpoint_path": "/secret",
+            "endpoint_url": "https://user:secret@buy.itunes.apple.com/?secret",
+            "endpoint_query": "secret"})
+        self.assertNotIn("secret", json.dumps(r))
+        good = mod.clean({"endpoint_host": "buy.itunes.apple.com",
+            "endpoint_path": "/WebObjects/MZFinance.woa/wa/authorizeMachine"})
+        self.assertEqual(good["endpoint_host"], "buy.itunes.apple.com")
+
+    def test_native_numeric_booleans_remain_rejected(self):
+        r = mod.clean({"status": "context_ready", "abi_verified": 1, "context_ready": 1,
+            "error_present": 0, "interfaces": {"AMSKeybag": {"present": 1}}})
+        self.assertEqual(r["status"], "probe_failed")
+        self.assertNotIn("abi_verified", r)
+        self.assertEqual(r["interfaces"], {})
+
     def test_bad_types_fail_closed(self):
         for value in (None, [], "SECRET"):
             self.assertEqual(mod.clean(value)["status"], "probe_failed")
