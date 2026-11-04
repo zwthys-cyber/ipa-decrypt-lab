@@ -1,5 +1,5 @@
 name: Private verified IPA delivery
-run-name: delivery-${{ inputs.request_id }}-app${{ inputs.app_id }}-${{ inputs.runner || 'macos-15-intel' }}
+run-name: delivery-${{ inputs.request_id }}-app${{ inputs.app_id }}-${{ inputs.runner || 'macos-26-intel' }}
 on:
   workflow_dispatch:
     inputs:
@@ -11,7 +11,7 @@ on:
       runner:
         description: GitHub-hosted macOS pool
         type: choice
-        default: macos-15-intel
+        default: macos-26-intel
         options: [macos-26-intel, macos-26, macos-15-intel, macos-15]
       app_id:
         description: Free US App Store numeric ID
@@ -30,7 +30,7 @@ concurrency:
 jobs:
   native:
     if: github.ref == 'refs/heads/main'
-    runs-on: ${{ contains(fromJSON('["macos-26-intel","macos-26","macos-15-intel","macos-15"]'), inputs.runner) && inputs.runner || 'macos-15-intel' }}
+    runs-on: ${{ contains(fromJSON('["macos-26-intel","macos-26","macos-15-intel","macos-15"]'), inputs.runner) && inputs.runner || 'macos-26-intel' }}
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
       LAB_BUILD_JOBS: ${{ endsWith(inputs.runner, '-intel') && '4' || '2' }}

@@ -41,9 +41,11 @@ class SchedulerTests(unittest.TestCase):
         self.assertFalse(queued_too_long(run,[job()],now))
 
     def test_runner_and_legacy_metadata(self):
-        self.assertEqual(alternate([job()]),"macos-15-intel")
+        self.assertEqual(alternate([job()]),"macos-26-intel")
         j=job();j["labels"]=["macos-15-intel"]
-        self.assertEqual(alternate([j]),"macos-15")
+        self.assertEqual(alternate([j]),"macos-26-intel")
+        j["labels"]=["macos-26-intel"]
+        self.assertEqual(alternate([j]),"macos-15-intel")
         run=old()
         self.assertTrue(matches(run,RID))
         run["display_title"]="delivery-"+RID+"-app1530340312-macos-15-intel"
@@ -73,7 +75,7 @@ class SchedulerTests(unittest.TestCase):
         api.retry("1530340312",RID,10)
         post=api.call.call_args
         self.assertEqual(post.args[2],"POST")
-        self.assertEqual(post.args[1]["inputs"]["runner"],"macos-15-intel")
+        self.assertEqual(post.args[1]["inputs"]["runner"],"macos-26-intel")
         api.runs.return_value=[dict(old(),id=11,status="queued"),old()]
         api.retry("1530340312",RID,10)
         self.assertEqual(api.call.call_count,2)

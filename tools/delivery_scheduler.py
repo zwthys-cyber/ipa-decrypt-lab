@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import re
 
 RUNNERS=("macos-26-intel","macos-26","macos-15-intel","macos-15")
+PRIMARY_RUNNER="macos-26-intel"
 QUEUE_SECONDS=180
 MAX_RUNS=2
 
@@ -40,4 +41,4 @@ def retryable(run,jobs,cancel_requested=False):
 
 def alternate(jobs):
     labels={label for j in jobs for label in j.get("labels",[]) if isinstance(label,str)}
-    return "macos-15" if "macos-15-intel" in labels else "macos-15-intel"
+    return "macos-15-intel" if ("macos-26-intel" in labels or "macos-26" in labels) else PRIMARY_RUNNER

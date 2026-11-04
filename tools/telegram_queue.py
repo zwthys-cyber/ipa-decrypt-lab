@@ -13,7 +13,7 @@ import urllib.request
 import zipfile
 from telegram_api import NoRedirect, APIError
 from ipa_audit import audit
-from delivery_scheduler import matches, retryable, alternate, MAX_RUNS
+from delivery_scheduler import matches, retryable, alternate, MAX_RUNS, PRIMARY_RUNNER
 
 REPOSITORY = "zwthys-cyber/ipa-decrypt-lab"
 WORKFLOW = "private-delivery.yml"
@@ -99,7 +99,7 @@ class GitHub:
         if existing:
             return existing
         response = self.call("/actions/workflows/" + WORKFLOW + "/dispatches",
-            {"ref":"main", "inputs":{"mode":"export", "app_id":app, "request_id":rid,"runner":"macos-15-intel"}}, "POST")
+            {"ref":"main", "inputs":{"mode":"export", "app_id":app, "request_id":rid,"runner":PRIMARY_RUNNER}}, "POST")
         if isinstance(response, dict) and type(response.get("workflow_run_id")) is int:
             return {"id":response["workflow_run_id"], "status":"queued"}
         return {"status":"dispatch_pending"}
