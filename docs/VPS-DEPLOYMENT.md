@@ -51,6 +51,16 @@ Checks 不是 fine-grained PAT 的必填权限。遇到 Checks 权限拒绝时�
 - 保留并迁移 9 项控制器恢复测试到真实临时 SQLite；移除 6 项旧 Checks 专属或已有 SQLite 覆盖的测试，因此总数从 347 调整为 341。
 - 现行模型、下载、解密、交付、构建缓存工作流及研究证据继续保留。已删除代码可通过 Git 历史查阅，不另存过时代码副本。
 
-## 当前部署更新
+## 历史部署更新
 
 当前代码 `8c0d4f5a2746cc9f58af04209da2837d4d12ab45` 已由 [41906318760](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41906318760)构建、部署并通过服务健康检查，Ubuntu 和 Debian 13 各 347 项测试（1 项跳过）。QQ 大型程序文件仍未通过审计，不代表已完成此任务交付。
+
+## QQ 流式审计与真实导出已通过（2026-11-04）
+
+[真实运行 41907705194](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41907705194)成功处理 App ID 444934666：19 个加密切片、131440 页明文校验通过，清理后的 IPA 为 341766793 字节，状态 encrypted_artifact_ready，plaintext_verified=true。安装和实际运行仍未验证（runtime_verified=false）。
+
+任务编号 `4f99d3d815873a46c93a0ec3d500f552` 保持不变。仅发布 age 密文与收据，产物 13361017588 在 2026-11-05 20:41:15 UTC 到期。原失败任务不因人工复核自动重发；管理员可在机器人私聊执行 `/get 4f99d3d815873a46c93a0ec3d500f552`。尚未把本次 Telegram 文件发送计为已确认。
+
+审计器以 1 MiB 分块写入私有临时文件，再使用只读映射检查结构，FAT 切片使用视图而非整片复制。单 Mach-O 上限 1 GiB、总读取预算 2 GiB、归档条目 32768；IPA 总大小上限保持 1 GiB。完整成员 CRC、长度、路径、结构和明文校验保留，临时文件在正常与异常路径关闭删除。
+
+[部署验证 41907700244](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41907700244)在 Ubuntu 与 Debian 13 各通过 352 项测试（1 项跳过），包括真实构造的 513 MiB 合成成员及 Python 跟踪内存峰值小于 16 MiB 的断言。该断言不是整个服务 RSS 的测量。Go、systemd 凭据与部署健康检查通过，VPS 已运行提交 `25c4c657d452622db5ad9c6b08790a5a30f2b2df`。全部编译与测试在 GitHub 完成。

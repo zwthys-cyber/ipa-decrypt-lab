@@ -40,7 +40,7 @@
 
 Checks 读取无权限时使用 Actions 任务与步骤信息；缺少可信 Checks 证据时，不提前交付或主动取消排队任务，等待工作流正常完成后验证。存在可信且绑定请求/运行/提交的 artifact_ready check 时，仍须验证已完成加密产物和所有摘要才能提前交付。
 
-当前 IPA 限为 1 GiB，归档最多 32768 条，单 Mach-O 最多 512 MiB，审计总读取预算 2 GiB；交付前要求至少 6 GiB 可用磁盘。QQ（444934666）实测仍超过单 Mach-O 上限，尚不能交付，见项目状态。普通重启保留本地 Bot API 状态，不重复执行云端迁移或 logOut。
+当前 IPA 限为 1 GiB，归档最多 32768 条，单 Mach-O 最多 1 GiB（流式读取与私有只读映射），审计总读取预算 2 GiB；交付前要求至少 6 GiB 可用磁盘。QQ（444934666）已通过流式审计及真实解密导出：19 切片、131440 页，341766793 字节；本轮 Telegram 文件发送仍需单独确认，见项目状态。普通重启保留本地 Bot API 状态，不重复执行云端迁移或 logOut。
 
 ## 配置与证据
 
@@ -51,3 +51,5 @@ Apple 账号、已有模型、Telegram 凭据与交付私钥均配置为 GitHub 
 - [初次 VPS 部署 41899775076](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41899775076)：Ubuntu、Debian 13、Go 与 systemd 凭据验证通过，服务启动和 Telegram 通知成功。
 
 这些历史样本不等于迁移后新 IPA 任务已经实测。当前状态见 [项目状态](PROJECT-STATUS.md)。
+
+最新流式审计部署：[41907700244](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41907700244)，352 项测试（1 项跳过）；[QQ 真实导出 41907705194](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41907705194)通过。
