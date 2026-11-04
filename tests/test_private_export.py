@@ -1,4 +1,9 @@
 import copy
+import contextlib
+import io
+import os
+import urllib.error
+from unittest.mock import patch
 import hashlib
 import json
 from pathlib import Path
@@ -7,9 +12,36 @@ import tempfile
 import unittest
 import zipfile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
-from private_export import ExportError, account_member, scrub_archive, validate_report
+from private_export import main, export, ExportError, account_member, scrub_archive, validate_report
 
 class PrivateExportTests(unittest.TestCase):
+    def test_metadata_failures_are_classified_without_login(self):
+        cases = [
+            (ValueError("app not found in US storefront"), "app_not_found_in_us"),
+            (ValueError("first version supports free apps only"), "paid_app_not_supported"),
+            (ValueError("private unexpected response"), "metadata_invalid_response"),
+            (TimeoutError("private URL"), "metadata_network_failed"),
+            (urllib.error.URLError("private URL"), "metadata_network_failed"),
+        ]
+        with tempfile.TemporaryDirectory() as d:
+            for error, expected in cases:
+                with patch.dict(os.environ,{"GITHUB_ACTIONS":"true","APPLE_ID":"synthetic","APPLE_PASSWORD":"synthetic"}), patch("private_export.readiness",return_value=[]), patch("private_export.metadata",side_effect=error), patch("private_export.run") as native:
+                    with self.assertRaisesRegex(ExportError,"^"+expected+"$"):
+                        export("binary","engine","crypt","444934666","a"*32,"age1"+"a"*58,Path(d)/"out")
+                    native.assert_not_called()
+
+    def test_unknown_exception_reports_stage_without_private_details(self):
+        def failure(*args):
+            args[-1]("auditing")
+            raise ValueError("SECRET_ACCOUNT_AND_PATH")
+        output=io.StringIO()
+        with patch("sys.argv",["export","--binary","x","--engine","y","--crypt","z"]), patch("private_export.WorkerProgress"), patch("private_export.Path.read_text",return_value='{"recipient":"synthetic"}'), patch("private_export.export",side_effect=failure), patch("shutil.rmtree"), patch("private_export.os.umask"), contextlib.redirect_stdout(output):
+            self.assertEqual(main(),2)
+        result=json.loads(output.getvalue().splitlines()[-1])
+        self.assertEqual(result["failed_stage"],"auditing")
+        self.assertEqual(result["status"],"private_export_failed")
+        self.assertNotIn("SECRET_ACCOUNT_AND_PATH",output.getvalue())
+
     def fixture(self, root):
         output = root/"out.ipa"
         output.write_bytes(b"synthetic-verified-output")

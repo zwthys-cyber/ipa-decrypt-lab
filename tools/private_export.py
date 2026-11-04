@@ -9,6 +9,7 @@ import re
 import subprocess
 import tempfile
 import zipfile
+import urllib.error
 from ipa_audit import audit
 from task_progress import WorkerProgress
 from native_store import classify, classify_download, run
@@ -129,7 +130,17 @@ def export(binary, engine, crypt, target, request_id, recipient, output_dir, pro
     require(os.environ.get("APPLE_ID") and os.environ.get("APPLE_PASSWORD"), "missing_apple_credentials")
     require(not output_dir.exists(), "output_directory_exists")
     progress("metadata")
-    info = metadata(identifier)
+    try:
+        info = metadata(identifier)
+    except ValueError as exc:
+        status = {
+            "app not found in US storefront": "app_not_found_in_us",
+            "first version supports free apps only": "paid_app_not_supported",
+            "metadata response exceeded budget": "metadata_response_too_large",
+        }.get(str(exc), "metadata_invalid_response")
+        raise ExportError(status) from None
+    except (TimeoutError, urllib.error.URLError):
+        raise ExportError("metadata_network_failed") from None
     email = os.environ["APPLE_ID"].strip()
     # Only native downloader receives the Store password, never the delivery key.
     env = {k: os.environ[k] for k in ("HOME", "PATH", "LANG", "LAB_KBSYNC_HELPER") if k in os.environ}
@@ -210,11 +221,18 @@ def main():
     os.umask(0o077)
     output = Path("delivery-out")
     progress = WorkerProgress(os.environ.get("DELIVERY_REQUEST_ID",""))
+    stage = "preparing"
+    def advance(value):
+        nonlocal stage
+        stage = value
+        progress.advance(value)
+        # Fixed stage names only; no native output, URLs, paths or account fields.
+        print(json.dumps({"schema":"ipa-export-stage-v1","stage":value}),flush=True)
     try:
         recipient = json.loads(Path("config/delivery.json").read_text())["recipient"]
         result = export(str(Path(args.binary).resolve()), str(Path(args.engine).resolve()),
                         str(Path(args.crypt).resolve()), os.environ.get("DELIVERY_APP_ID", ""),
-                        os.environ.get("DELIVERY_REQUEST_ID", ""), recipient, output, progress.advance)
+                        os.environ.get("DELIVERY_REQUEST_ID", ""), recipient, output, advance)
         progress.advance("artifact_ready")
         print(json.dumps(result), flush=True)
         return 0
@@ -229,7 +247,7 @@ def main():
     import shutil
     shutil.rmtree(output, ignore_errors=True)
     print(json.dumps({"schema": "ipa-private-delivery-v1", "status": status,
-                      "plaintext_published": False}), flush=True)
+                      "failed_stage": stage, "plaintext_published": False}), flush=True)
     return 2
 
 if __name__ == "__main__":
