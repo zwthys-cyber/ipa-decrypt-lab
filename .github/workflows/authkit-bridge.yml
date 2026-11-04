@@ -1,0 +1,24 @@
+name: Native Anisette callback contract
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-anisette-contract
+  cancel-in-progress: false
+jobs:
+  contract:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Compile native callback contract
+        run: clang -fobjc-arc -framework Foundation tools/AuthKitBridge.m -o authkit-bridge
+      - name: Verify synthetic forwarding and missing-data rejection without an account
+        timeout-minutes: 1
+        run: |
+          ulimit -c 0
+          python3 tools/authkit_bridge.py
