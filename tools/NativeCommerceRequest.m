@@ -1,10 +1,11 @@
 // Construct a request from fixed values; never execute the returned URL request.
 #define LAB_COMMERCE_LIBRARY 1
 #include "NativeCommerceKeybag.m"
+#include "CommerceSessionBinding.h"
 @protocol LabStoreRequestInitializing <NSObject>
 - (instancetype)initWithStoreClient:(id)client URL:(id)URL;
 @end
-static void BuildCommerceRequest(NSMutableDictionary *r) {
+static void BuildCommerceRequest(NSDictionary *input,NSMutableDictionary *r) {
  BOOL loaded=dlopen("/System/Library/PrivateFrameworks/CommerceKit.framework/CommerceKit",RTLD_NOW|RTLD_GLOBAL)!=NULL;
  r[@"framework_loaded"]=B(loaded);if(!loaded){r[@"status"]=@"framework_unavailable";return;}
  id account=SyntheticAccount(YES,r);
@@ -72,6 +73,7 @@ static void BuildCommerceRequest(NSMutableDictionary *r) {
  r[@"body_sync_preserved"]=B([wireBody[@"kbsync"] isEqual:sync]);
  r[@"body_token_preserved"]=B([wireBody[@"xToken"] isEqual:token]);
  r[@"body_needdiv_preserved"]=B([wireBody[@"needDiv"] isEqual:needDiv]);
+ r[@"body_owner_present"]=B(wireBody[@"ownerDsid"]!=nil);
  r[@"body_owner_matches_synthetic"]=B([wireBody[@"ownerDsid"] isEqual:@1234567] || [wireBody[@"ownerDsid"] isEqual:@"1234567"]);
  id guid=wireBody[@"guid"];
  r[@"body_guid_is_six_bytes"]=B([guid isKindOfClass:NSString.class]
@@ -79,16 +81,47 @@ static void BuildCommerceRequest(NSMutableDictionary *r) {
  BOOL good=YES;for(NSString *key in @[@"request_https",@"request_host_allowed",@"request_path_allowed",
      @"request_is_post",@"request_body_is_plist",@"body_sync_preserved",@"body_token_preserved",@"body_needdiv_preserved"])
    good=good && [r[key] boolValue];
- r[@"status"]=good?@"request_constructed":@"request_shape_unverified";
+ if(!good){r[@"status"]=@"request_shape_unverified";return;}
+ r[@"native_guid_matches_login"]=B([guid isKindOfClass:NSString.class] && [guid isEqual:input[@"guid"]]);
+ NSMutableURLRequest *bound=LabBindCommerceSession(urlRequest,@1234567,token,input[@"guid"],input[@"user_agent"]);
+ r[@"session_bound"]=B(bound!=nil);
+ if(!bound){r[@"status"]=@"session_binding_failed";return;}
+ NSDictionary *boundBody=[NSPropertyListSerialization propertyListWithData:bound.HTTPBody options:NSPropertyListImmutable format:NULL error:NULL];
+ r[@"session_user_agent_bound"]=B([[bound valueForHTTPHeaderField:@"User-Agent"] isEqual:input[@"user_agent"]]);
+ r[@"session_owner_bound"]=B([boundBody[@"ownerDsid"] isEqual:@1234567]);
+ r[@"session_dsid_headers_bound"]=B([[bound valueForHTTPHeaderField:@"X-Dsid"] isEqual:@"1234567"]
+   && [[bound valueForHTTPHeaderField:@"iCloud-DSID"] isEqual:@"1234567"]);
+ r[@"session_token_header_bound"]=B([[bound valueForHTTPHeaderField:@"X-Token"] isEqual:token]);
+ r[@"native_guid_preserved"]=B([boundBody[@"guid"] isEqual:guid]);
+ r[@"sync_preserved_after_binding"]=B([boundBody[@"kbsync"] isEqual:sync]);
+ r[@"token_preserved_after_binding"]=B([boundBody[@"xToken"] isEqual:token]);
+ r[@"needdiv_preserved_after_binding"]=B([boundBody[@"needDiv"] isEqual:needDiv]);
+ r[@"content_length_matches"]=B([[bound valueForHTTPHeaderField:@"Content-Length"] longLongValue]==(long long)bound.HTTPBody.length);
+ r[@"bound_route_valid"]=B(LabCommerceRoute(bound,input[@"guid"]));
+ BOOL headersPreserved=YES;
+ for(NSString *key in @[@"X-Apple-I-MD",@"X-Apple-I-MD-M"]) {
+   NSString *before=[urlRequest valueForHTTPHeaderField:key],*after=[bound valueForHTTPHeaderField:key];
+   headersPreserved=headersPreserved && ((!before && !after) || [before isEqual:after]);
+ }
+ r[@"anisette_preserved_after_binding"]=B(headersPreserved);
+ r[@"status"]=@"synthetic_session_bound";
 }
 int main(int argc,const char **argv) { @autoreleasepool {
  if(!getenv("GITHUB_ACTIONS") || strcmp(getenv("GITHUB_ACTIONS"),"true") || argc!=2)return 2;
  signal(SIGALRM,Deadline);alarm(25);
+ if(!strcmp(argv[1],"--binding-contract")) {
+   BOOL ok=LabCommerceBindingContract();puts(ok?"commerce binding contract passed":"commerce binding contract failed");return ok?0:4;
+ }
  NSMutableDictionary *r=[@{@"schema":@"ipa-lab-commerce-request-v1",@"status":@"interface_unavailable",
    @"account_login_attempted":@NO,@"authorization_request_attempted":@NO,@"keybag_import_attempted":@NO,
    @"enrollment_created":@NO,@"decryption_proven":@NO,@"running_as_root":B(geteuid()==0)} mutableCopy];
  CheckpointPath=@(argv[1]);Checkpoint(r,@"started");r[@"state_before"]=State();
- @try {BuildCommerceRequest(r);}
+ unsigned char inputBytes[4097];size_t count=fread(inputBytes,1,sizeof(inputBytes),stdin);
+ id input=count>0 && count<sizeof(inputBytes)?[NSJSONSerialization JSONObjectWithData:[NSData dataWithBytes:inputBytes length:count] options:0 error:NULL]:nil;
+ BOOL valid=[input isKindOfClass:NSDictionary.class] && [input[@"guid"] isKindOfClass:NSString.class]
+   && [input[@"guid"] rangeOfString:@"^[A-F0-9]{12}$" options:NSRegularExpressionSearch].location!=NSNotFound
+   && [input[@"user_agent"] isKindOfClass:NSString.class];
+ @try {if(valid)BuildCommerceRequest(input,r);else r[@"status"]=@"private_identity_unavailable";}
  @catch(NSException *exception){r[@"status"]=@"native_exception";}
  r[@"state_after"]=State();
  NSData *out=[NSJSONSerialization dataWithJSONObject:r options:0 error:NULL];

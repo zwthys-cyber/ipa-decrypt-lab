@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).parents[1] / "tools"))
 import native_commerce_request as mod
 
@@ -51,6 +52,28 @@ class CommerceRequestContracts(unittest.TestCase):
         self.assertEqual(result["native_phase"], "building_request")
         self.assertEqual(result["native_exit_code"], -11)
         self.assertNotIn("PRIVATE", json.dumps(result))
+
+    def test_binding_requires_every_identity_and_preservation_check(self):
+        value = dict(sample(), status="synthetic_session_bound")
+        value.update({key: True for key in mod.BINDING})
+        self.assertEqual(mod.clean(value)["status"], "synthetic_session_bound")
+        for key in mod.BINDING:
+            changed = dict(value)
+            changed.pop(key)
+            self.assertEqual(mod.clean(changed)["status"], "probe_failed", key)
+        self.assertFalse(mod.clean(value)["authorization_request_attempted"])
+
+    def test_private_guid_handoff_is_strict_and_never_part_of_report(self):
+        for code, output in ((0, b"PRIVATE"), (0, b"001122334455\n"), (1, b"001122334455")):
+            with patch.object(mod, "run_private", return_value=(code, output, b"PRIVATE")):
+                self.assertIsNone(mod.private_identity({}))
+        with patch.object(mod, "run_private", return_value=(0, b"001122334455", b"PRIVATE")):
+            handoff = json.loads(mod.private_identity({}))
+            self.assertEqual(handoff["guid"], "001122334455")
+            self.assertEqual(handoff["user_agent"], mod.LOGIN_AGENT)
+            public = mod.clean(dict(sample(), **handoff))
+            self.assertNotIn("001122334455", json.dumps(public))
+            self.assertNotIn(mod.LOGIN_AGENT, json.dumps(public))
 
 if __name__ == "__main__":
     unittest.main()

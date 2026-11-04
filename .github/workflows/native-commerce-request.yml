@@ -19,10 +19,19 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: Lakr233/ApplePackage
+          ref: 391bfe6ee6598d73e4f94b88b38b50bd6f6ec67b
+          path: identity-source/ApplePackage
+          persist-credentials: false
       - name: Check bounded request and privacy contracts
         run: python3 -m unittest discover -s tests -p 'test_native_commerce*.py' -v
       - name: Build the synthetic request constructor
-        run: clang -g -fobjc-arc -framework Foundation tools/NativeCommerceRequest.m -o native-commerce-request
+        run: |
+          swiftc identity-source/ApplePackage/Sources/ApplePackage/Configuration/DeviceIdentifier.swift tools/NativeDeviceIdentity.swift -o native-device-identity
+          clang -g -fobjc-arc -framework Foundation tools/NativeCommerceRequest.m -o native-commerce-request
+          ./native-commerce-request --binding-contract
       - name: Construct without submitting a server authorization request
         timeout-minutes: 1
         run: |
