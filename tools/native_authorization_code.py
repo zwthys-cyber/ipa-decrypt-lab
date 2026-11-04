@@ -44,7 +44,15 @@ COMMERCE_RESPONSE_METHODS = (
     "__106-[CKMachineAuthorizationContext _runRequestWithAccount:bagURLKey:authenticationContext:completionHandler:]_block_invoke",
     "__66-[CKMachineAuthorizationContext _requestBodyForAccount:bagURLKey:]_block_invoke",
 )
-COMMERCE_SYMBOLS = COMMERCE_METHODS + COMMERCE_RESPONSE_METHODS
+COMMERCE_REQUEST_METHODS = (
+    "-[CKStoreRequest _URLRequestWithError:]",
+    "-[CKStoreRequest initWithStoreClient:URL:]",
+    "-[CKStoreRequest initWithStoreClient:bagURLKey:]",
+    "-[CKStoreRequest _cookieHeader]",
+    "+[CKStoreRequest userAgentForStoreClient:]",
+    "-[CKMachineAuthorizationContext initWithStoreClient:]",
+)
+COMMERCE_SYMBOLS = COMMERCE_METHODS + COMMERCE_RESPONSE_METHODS + COMMERCE_REQUEST_METHODS
 METHODS += COMMERCE_SYMBOLS
 LINE = re.compile(r"^\s*(?:->\s*)?0x[0-9a-fA-F]+\s+<\+([0-9]+)>:\s+(.+)$")
 HEADER = re.compile(r"^([^\s\x60]+)\x60(.+):$")
@@ -85,9 +93,9 @@ def extract(output):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--scope", choices=("ams", "commerce", "commerce-response"), default="ams")
+    parser.add_argument("--scope", choices=("ams", "commerce", "commerce-response", "commerce-request"), default="ams")
     args = parser.parse_args()
-    methods = {"commerce": COMMERCE_METHODS, "commerce-response": COMMERCE_RESPONSE_METHODS,
+    methods = {"commerce": COMMERCE_METHODS, "commerce-response": COMMERCE_RESPONSE_METHODS, "commerce-request": COMMERCE_REQUEST_METHODS,
                "ams": tuple(name for name in METHODS if name not in COMMERCE_SYMBOLS)}[args.scope]
     if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "darwin":
         raise SystemExit("GitHub-hosted macOS required")
