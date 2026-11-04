@@ -1,5 +1,5 @@
 name: Private verified IPA delivery
-run-name: delivery-${{ inputs.request_id }}
+run-name: delivery-${{ inputs.request_id }}-app${{ inputs.app_id }}-${{ inputs.runner || 'macos-15-intel' }}
 on:
   workflow_dispatch:
     inputs:
@@ -30,7 +30,7 @@ concurrency:
 jobs:
   native:
     if: github.ref == 'refs/heads/main'
-    runs-on: ${{ inputs.runner || 'macos-15-intel' }}
+    runs-on: ${{ inputs.runner == 'macos-15' && 'macos-15' || 'macos-15-intel' }}
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
     timeout-minutes: 40

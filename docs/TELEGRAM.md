@@ -43,6 +43,16 @@
 
 实时进度验证：[295 项 Python 测试及 Telegram 单消息更新 41868108407](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41868108407) 已通过；[阶段通道写入与读回 41868334364](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41868334364) 已通过。两项演示不下载或解密真实应用。
 
+## 排队与备用运行器
+
+原始 ARM 任务 cb7bc7f3d855680a4e5cf55548507d3a 在 [41866779185](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41866779185) 因 hosted runner 多次分配失败而终止，GitHub 注释明确提示 macOS ARM 容量不足。该任务没有执行步骤。使用同一逻辑任务编号的 Intel 恢复运行是 [41869909475](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41869909475)。
+
+新任务默认使用 macos-15-intel，备用为 macos-15；两者都是 GitHub-hosted macOS。Swift 缓存按 runner.arch 隔离。运行标题包含任务编号、App ID 和运行器，支持机器人重启后恢复追踪。
+
+未分配运行器且排队超过 3 分钟时，机器人尝试取消旧运行；只有确认旧运行已结束且未执行任何步骤，才提交备用线路。因容量不足直接失败且没有分配运行器的任务也可切换。每个逻辑任务最多两次运行；已分配运行器、已进入下载/解密的失败不自动重跑，用户主动取消不自动重试。
+
+取消或提交结果不明确时，不盲目重发；备用提交 3 分钟仍未确认则停止自动尝试并提示保留任务编号。平台整体故障、两个池都无容量时，备用池也不能保证立即启动。进度卡会显示切换状态，平台错误不能被当成解密成功。
+
 ## 实时进度
 
 任务使用一张管理员私聊进度卡，显示真实阶段、任务编号和已用时间。同阶段约 15 秒刷新一次，阶段变化及时更新，避免连续发送多条通知。/status 会立即刷新当前进度卡。

@@ -13,6 +13,7 @@ from telegram_queue import GitHub, QueueError, request_id
 from telegram_runtime import local_bot
 from telegram_menu import configure as configure_menu
 from task_progress import ProgressCard
+from delivery_scheduler import app_from_run, queued_too_long, retryable, MAX_RUNS
 
 HELP = ("发送美区免费 App Store 链接或数字 App ID，创建下载与解密任务。\n"
         "/status 查看当前任务\n/cancel 取消当前任务\n"
@@ -157,15 +158,70 @@ class Controller:
             self.say("暂时无法交付文件："+str(exc)+"\n任务编号："+rid)
         return False
 
-    def resume(self,rid):
+    def resume(self,rid,app=""):
         run=self.github.find(rid)
         if run and run.get("status")!="completed":
-            self.current={"rid":rid,"app":"","state":run.get("status","queued"),
+            self.current={"rid":rid,"app":app or app_from_run(run,rid),"state":run.get("status","queued"),
                           "stage":"processing","since":time.monotonic()}
             self.card(rid).update("processing")
             event("job_tracking_resumed",request_id=rid)
         else:
             self.deliver(rid)
+
+    def failover(self,run):
+        current=self.current
+        rid=current["rid"]
+        if type(run.get("id")) is not int:
+            return False
+        run_id=run["id"]
+        if current.get("retry_posted_for")==run_id:
+            # A POST may have succeeded even if its response was lost. Lookup only.
+            if time.monotonic()-current.get("retry_started",time.monotonic())>180:
+                self.card(rid).update("unknown",force=True)
+                self.say("备用线路提交结果仍未确认，已停止自动重试。请保留任务编号，稍后可用 /get 取回结果。")
+                self.current=None
+            else:
+                self.card(rid).update("switching")
+            return True
+        if current.get("retry_posted_for") and current["retry_posted_for"]!=run_id:
+            current.pop("retry_posted_for",None)
+            current.pop("cancel_for_switch",None)
+        app=current.get("app") or app_from_run(run,rid)
+        if not app:
+            return False
+        if run.get("status") not in ("queued","waiting","pending","requested","completed"):
+            return False
+        if run.get("status")=="completed" and run.get("conclusion") not in ("failure","cancelled"):
+            return False
+        runs=self.github.runs(rid)
+        if not isinstance(runs,list) or len(runs)>=MAX_RUNS:
+            return False
+        jobs=self.github.jobs(run)
+        if retryable(run,jobs,current.get("cancel_for_switch")==run_id):
+            # Set before POST; an ambiguous dispatch is never automatically repeated.
+            current["retry_posted_for"]=run_id
+            current["retry_started"]=time.monotonic()
+            self.card(rid).update("switching",force=True)
+            try:
+                self.github.retry(app,rid,run_id,current.get("cancel_for_switch")==run_id)
+                event("runner_failover_dispatched",request_id=rid)
+            except QueueError as exc:
+                event("runner_failover_unconfirmed",request_id=rid)
+                self.say("备用线路提交结果尚未确认，正在核对；不会重复提交。")
+            return True
+        if queued_too_long(run,jobs):
+            self.card(rid).update("switching")
+            if current.get("cancel_attempted_for")!=run_id:
+                current["cancel_attempted_for"]=run_id
+                try:
+                    self.github.cancel(rid)
+                    current["cancel_for_switch"]=run_id
+                    self.say("排队超过 3 分钟，已请求停止旧线路；确认停止后自动切换备用运行器。")
+                except QueueError:
+                    self.card(rid).update("capacity_wait",force=True)
+                    self.say("运行器容量不足，平台暂未确认旧线路停止；为防重复执行，保留原任务并继续核对。")
+            return True
+        return False
 
     def tick(self):
         if not self.current:
@@ -176,6 +232,8 @@ class Controller:
             if time.monotonic()-self.current["since"]>300:
                 self.say("未能确认 GitHub 任务状态，请稍后用 /get "+rid+" 查询已完成产物。")
                 self.current=None
+            return
+        if self.failover(run):
             return
         state=run.get("status","unknown")
         if state=="completed":
@@ -205,6 +263,7 @@ def main():
     p.add_argument("--mode",choices=("check","menu","progress-demo","session","deliver"),default="check")
     p.add_argument("--minutes",type=int,default=30)
     p.add_argument("--request-id",default="")
+    p.add_argument("--resume-app-id",default="")
     p.add_argument("--server",required=True)
     p.add_argument("--crypt",required=True)
     args=p.parse_args()
@@ -214,6 +273,8 @@ def main():
             raise APIError("requires_github_actions")
         if not 1<=args.minutes<=45:
             raise APIError("invalid_session_duration")
+        if args.resume_app_id and not re.fullmatch(r"[1-9][0-9]{4,19}",args.resume_app_id):
+            raise APIError("invalid_resume_app")
         owner=owner_id(os.environ.get("TELEGRAM_OWNER_ID",""))
         github=GitHub(os.environ.get("GH_TOKEN",""))
         crypt=str(Path(args.crypt).resolve())
@@ -239,7 +300,7 @@ def main():
                 return 0 if controller.deliver(request_id(args.request_id)) else 2
             controller.say("IPA 机器人限时测试已启动，约 "+str(args.minutes)+" 分钟。\n\n"+HELP)
             if args.request_id:
-                controller.resume(request_id(args.request_id))
+                controller.resume(request_id(args.request_id),args.resume_app_id)
             deadline=time.monotonic()+args.minutes*60
             offset=0
             while time.monotonic()<deadline:

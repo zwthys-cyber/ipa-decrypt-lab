@@ -13,6 +13,7 @@ import urllib.request
 import zipfile
 from telegram_api import NoRedirect, APIError
 from ipa_audit import audit
+from delivery_scheduler import matches, retryable, alternate, MAX_RUNS
 
 REPOSITORY = "zwthys-cyber/ipa-decrypt-lab"
 WORKFLOW = "private-delivery.yml"
@@ -64,21 +65,32 @@ class GitHub:
             # A POST timeout may still have created a run. Never blindly retry it.
             raise QueueError("github_transport_unknown") from None
 
-    def find(self, rid):
+    def runs(self, rid):
         request_id(rid)
+        found=[]
         # Bounded alpha sessions create few runs; do not expose arbitrary workflow access.
         for page in (1,2,3):
             data = self.call("/actions/workflows/" + WORKFLOW + "/runs?event=workflow_dispatch&per_page=100&page=" + str(page))
             require(isinstance(data, dict) and isinstance(data.get("workflow_runs"), list), "invalid_run_list")
             for run in data["workflow_runs"]:
-                if (run.get("display_title") == "delivery-" + rid
+                if (matches(run,rid)
                         and run.get("event") == "workflow_dispatch"
                         and run.get("head_branch") == "main"
                         and run.get("path") == ".github/workflows/" + WORKFLOW):
-                    return run
+                    found.append(run)
             if len(data["workflow_runs"]) < 100:
-                return None
-        return None
+                break
+        return sorted(found,key=lambda r:r["id"],reverse=True)
+
+    def find(self,rid):
+        runs=self.runs(rid)
+        for run in runs:
+            if run.get("status")=="completed" and run.get("conclusion")=="success":
+                return run
+        for run in runs:
+            if run.get("status")!="completed":
+                return run
+        return runs[0] if runs else None
 
     def dispatch(self, app, rid):
         request_id(rid)
@@ -87,10 +99,37 @@ class GitHub:
         if existing:
             return existing
         response = self.call("/actions/workflows/" + WORKFLOW + "/dispatches",
-            {"ref":"main", "inputs":{"mode":"export", "app_id":app, "request_id":rid}}, "POST")
+            {"ref":"main", "inputs":{"mode":"export", "app_id":app, "request_id":rid,"runner":"macos-15-intel"}}, "POST")
         if isinstance(response, dict) and type(response.get("workflow_run_id")) is int:
             return {"id":response["workflow_run_id"], "status":"queued"}
         return {"status":"dispatch_pending"}
+
+    def jobs(self,run):
+        data=self.call("/actions/runs/"+str(int(run["id"]))+"/jobs?per_page=100")
+        require(isinstance(data,dict) and isinstance(data.get("jobs"),list),"invalid_job_list")
+        return data["jobs"]
+
+    def retry(self,app,rid,old_id,cancel_requested=False):
+        request_id(rid)
+        require(re.fullmatch(r"[1-9][0-9]{4,19}",app or ""),"missing_retry_app")
+        runs=self.runs(rid)
+        require(bool(runs),"retry_source_missing")
+        # A visible new attempt or successful result wins over another POST.
+        if runs[0]["id"]!=old_id or any(r.get("conclusion")=="success" for r in runs):
+            return self.find(rid)
+        require(len(runs)<MAX_RUNS,"runner_retry_budget_exhausted")
+        old=self.call("/actions/runs/"+str(int(old_id)))
+        require(matches(old,rid) and old.get("head_branch")=="main"
+                and old.get("event")=="workflow_dispatch"
+                and old.get("path")==".github/workflows/"+WORKFLOW,"invalid_retry_source")
+        jobs=self.jobs(old)
+        require(retryable(old,jobs,cancel_requested),"retry_not_safe")
+        target=alternate(jobs)
+        result=self.call("/actions/workflows/"+WORKFLOW+"/dispatches",
+            {"ref":"main","inputs":{"mode":"export","app_id":app,"request_id":rid,"runner":target}},"POST")
+        return {"status":"dispatch_pending","runner":target,
+                **({"id":result["workflow_run_id"]} if isinstance(result,dict)
+                   and type(result.get("workflow_run_id")) is int else {})}
 
     def progress(self, run, rid):
         from task_progress import parse_stage
