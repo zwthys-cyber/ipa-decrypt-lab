@@ -1,0 +1,45 @@
+name: Build official Telegram large-file server
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: telegram-server-build
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: tdlib/telegram-bot-api
+          ref: e3e9dd8e5b3d7ab8537cd5a10dc31d5ffa8f82d1
+          submodules: recursive
+          persist-credentials: false
+      - name: Install public build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gperf libssl-dev zlib1g-dev cmake ninja-build
+      - name: Restore compiled public binary
+        id: binary-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: dist/telegram-bot-api
+          key: telegram-bot-api-ubuntu24-x64-e3e9dd8e5b3d7ab-v1
+      - name: Compile official local Bot API
+        if: steps.binary-cache.outputs.cache-hit != 'true'
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DTD_ENABLE_JNI=OFF
+          cmake --build build --target telegram-bot-api --parallel 2
+          mkdir -p dist
+          cp build/telegram-bot-api dist/telegram-bot-api
+      - name: Verify public executable
+        run: dist/telegram-bot-api --version
+      - name: Cache public executable only
+        if: steps.binary-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: dist/telegram-bot-api
+          key: telegram-bot-api-ubuntu24-x64-e3e9dd8e5b3d7ab-v1
