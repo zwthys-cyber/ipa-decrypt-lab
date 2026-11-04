@@ -135,7 +135,7 @@ int main(void) { @autoreleasepool {
     }
     NSData *data = [NSJSONSerialization dataWithJSONObject:report options:NSJSONWritingSortedKeys error:nil];
     if (!data) return 3;
-    [NSFileHandle.standardOutputHandle writeData:data];
-    [NSFileHandle.standardOutputHandle writeData:[@"\n" dataUsingEncoding:NSUTF8StringEncoding]];
+    [NSFileHandle.fileHandleWithStandardOutput writeData:data];
+    [NSFileHandle.fileHandleWithStandardOutput writeData:[@"\n" dataUsingEncoding:NSUTF8StringEncoding]];
     return 0;
 }}
