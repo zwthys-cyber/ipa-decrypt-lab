@@ -1,0 +1,60 @@
+name: Private native machine enrollment trial
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: private-machine-enrollment
+  cancel-in-progress: false
+jobs:
+  trial:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: Lakr233/ApplePackage
+          ref: 391bfe6ee6598d73e4f94b88b38b50bd6f6ec67b
+          path: native-source/ApplePackage
+          persist-credentials: false
+      - name: Check session isolation, privacy, and request policy
+        run: |
+          python3 -m unittest discover -s tests -p 'test_native_keybag.py' -v
+          python3 -m unittest discover -s tests -p 'test_machine_enrollment.py' -v
+      - name: Build native prerequisite and one-request client
+        timeout-minutes: 2
+        run: |
+          clang -fobjc-arc -framework Foundation tools/NativeKeybag.m -o native-keybag
+          clang -fobjc-arc -framework Foundation tools/NativeMachineEnrollment.m -o native-machine-enrollment
+      - name: Verify synthetic prerequisites before exposing account secrets
+        timeout-minutes: 3
+        run: |
+          ulimit -c 0
+          python3 tools/native_keybag.py
+      - name: Patch bounded private login handoff without saving account
+        run: python3 tools/patch_machine_enrollment.py native-source/ApplePackage
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: native-source/ApplePackage/.build
+          key: swift-machine-enrollment-391bfe6-${{ hashFiles('tools/patch_machine_enrollment.py') }}
+          restore-keys: |
+            swift-macos15-arm64-xcode26.2-391bfe6-
+      - name: Build and check private login client
+        working-directory: native-source/ApplePackage
+        run: |
+          swift test -j 2 --filter SAPAuthenticationRequestTests
+          swift build -j 2 --product ApplePackageTool
+      - name: Authenticate once and attempt one machine authorization request
+        timeout-minutes: 4
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        run: |
+          ulimit -c 0
+          python3 tools/machine_enrollment.py --login-binary native-source/ApplePackage/.build/debug/ApplePackageTool --native-binary native-machine-enrollment
