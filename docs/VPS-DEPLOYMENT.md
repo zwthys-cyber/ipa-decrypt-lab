@@ -40,3 +40,13 @@ Checks 不是 fine-grained PAT 的必填权限。遇到 Checks 权限拒绝时�
 [运行 41899775076](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41899775076)在 GitHub Ubuntu 与 Debian 13 容器各通过 347 项 Python 测试（1 项环境跳过），Go 加密测试和真实 systemd 凭据挂载验证通过。最终部署的代码提交为 06bcf81fab70e597c823d1096877d3d6df4c01bd。
 
 服务器已启用常驻服务及开机自启，健康状态 ready，Telegram 菜单回读和私聊启动消息确认成功。发布脚本会清除先前失败造成的 systemd 启动限速；当前发布不依赖已删除工作流的详情接口。启动通知和健康探针不等于迁移后新 IPA 任务的完整交付实测。
+
+## 旧文件清理（2026-11-04）
+
+清理提交 `a5e78c27b25a6c10efea46f9a84d0211385db503` 已通过 [GitHub 发布验证 41900942436](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41900942436)：Ubuntu 与 Debian 13 各 341 项 Python 测试（1 项跳过），Go 与真实 systemd 凭据检查成功，发布包生成成功。本轮未重新部署，VPS 仍运行先前已验证版本 `06bcf81`。
+
+- 删除三个已退役工作流：限时 Telegram 会话、云端身份引导、Checks 恢复实验。
+- 删除旧身份引导脚本、限时会话 CLI、Checks 日志模块及专用测试文件。
+- 将仍使用的控制器移至 `telegram_controller.py`，更新守护进程、发布文件列表和测试引用。
+- 保留并迁移 9 项控制器恢复测试到真实临时 SQLite；移除 6 项旧 Checks 专属或已有 SQLite 覆盖的测试，因此总数从 347 调整为 341。
+- 现行模型、下载、解密、交付、构建缓存工作流及研究证据继续保留。已删除代码可通过 Git 历史查阅，不另存过时代码副本。

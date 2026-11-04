@@ -10,8 +10,8 @@
 - **从授权检查点重新恢复**：打开 [Private same-runner model bootstrap](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/workflows/model-bootstrap.yml)，选择 `main` 和 **`checkpoint-replay`**。
 - 这两个入口均复用已有私有数据，不调用新的机器授权。当前默认测试目标为 App ID 6599842047；成功后仍只保留验证结果，不提供 IPA 下载产物。
 
-- **Telegram 管理员常驻内测**：已迁移到用户的 Debian 13 VPS，见 [部署与运维说明](docs/VPS-DEPLOYMENT.md)。旧 GitHub 限时会话入口已关闭，避免轮询冲突。
-- **跨会话恢复**：已接入任务记录、自动恢复追踪和交付防重发，323 项 Python 测试（1 项环境跳过）及跨运行器合成验证通过。见 [恢复机制与限制](docs/SESSION-RECOVERY.md)。
+- **Telegram 管理员常驻内测**：已迁移到用户的 Debian 13 VPS，见 [部署与运维说明](docs/VPS-DEPLOYMENT.md)。旧 GitHub 限时会话和身份引导源文件已删除，避免轮询冲突。
+- **持久恢复**：现行实现为 VPS 私有 SQLite，支持任务追踪和未知发送结果防重发；旧 Checks 日志已移除。见 [恢复机制与限制](docs/SESSION-RECOVERY.md)。
 
 下载交付已升级为 **macOS 26 Intel 默认、macOS 15 Intel 备用**。26 上的真实样本验证已通过，构建缓存复用、排队切换和不等待迟到总状态的安全交付已接入。[升级与实测记录](docs/TELEGRAM.md)。
 
@@ -41,7 +41,7 @@
 | 模型恢复 | GitHub macOS 上真实恢复并保存加密模型 | 未声称已安装或运行候选应用 |
 | IPA 解密校验 | 指定原始 IPA 的 62 个加密切片、12,524 页通过 | 尚未独立验证 Apple CMS 信任或应用安装运行 |
 | 模型与状态复用 | 直接使用保存的模型、从检查点重新恢复模型均在全新运行器通过真实 IPA 校验 | 两条复用路径均不调用机器授权；不推断所有账号、应用、版本都兼容 |
-| Telegram / 私有交付 | 私聊身份确认、真实加密导出及 92 MB 大文件发送已通过；[限时测试入口](docs/TELEGRAM.md) | 指令合约已通过；没有已部署的收费服务 |
+| Telegram / 私有交付 | 私聊身份确认、真实加密导出及 92 MB 大文件发送已通过；[常驻服务说明](docs/TELEGRAM.md) | 指令合约已通过；没有已部署的收费服务 |
 
 此前经用户明确批准，[单次全部解除授权](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41837099155)已确认 **5 → 0 台**，之后四次授权试验合计占用四个名额。不会把全部解除授权作为重复清理方式。Apple 的五台上限和一年一次全部解除限制仍适用。[官方说明](https://support.apple.com/en-us/118292)。
 
@@ -53,7 +53,7 @@
 
 `FAIRPLAY_STATE_B64` 仅包含固定 SIDB/SIDS 文件和必要硬件标识，不包含 IPA、Apple 密码或登录会话。它用于复用授权状态研究兼容性，不能单独当作已验证模型。[真实检查点重放 41847775765](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41847775765)已在另一台全新运行器通过：从保存的状态重新恢复模型，随后完成相同的 62 个加密切片、12,524 页校验，且 `authorization_request_attempted=false`。归档状态只恢复到私有临时目录，不为新运行器注册电脑授权。
 
-原有验证流程仍删除候选明文。新增 [私有交付流程](docs/TELEGRAM.md) 已验证完整 IPA 导出，公开只保留一天 age 密文和收据；明文只在私有运行器目录处理，`runtime_verified=false`。Telegram 限时任务入口已接入，[真实大文件回传](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41864719056)已确认；计费与常驻部署尚未完成。
+原有验证流程仍删除候选明文。新增 [私有交付流程](docs/TELEGRAM.md) 已验证完整 IPA 导出，公开只保留一天 age 密文和收据；明文只在私有运行器目录处理，`runtime_verified=false`。Telegram 常驻控制器已接入，[真实大文件回传](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41864719056)已确认；管理员常驻服务已部署，计费尚未开放。
 
 较早的同运行器试验曾返回 `model_recovery_rejected`。成功版本调整了下载/授权顺序、改进了诊断并加入检查点，也更换了运行器；这些不是单变量对照，尚不能把第一次失败归因于某一个变化。[完整研究记录](OFFLINE-BACKEND.md)。
 
@@ -109,7 +109,7 @@
 - 用户拒绝可选的双重认证升级，不自动接受升级；通用登录错误不冒充确定的 2FA 提示。
 - `cryptid=0`、返回码为零、文件内容变化、编译成功均不足以证明解密成功。
 - 离线验证要求完整加密切片覆盖及可用的 CodeDirectory 加密前页面哈希匹配；这些检查不等于独立 Apple CMS 信任验证，也不证明应用可安装运行。
-- Actions 仅用于限时研发验证，不是 TG 商业服务的长期运行主机。尚未部署生产服务。
+- Actions 仅用于限时研发验证，不是 TG 商业服务的长期运行主机。已部署管理员常驻内测，尚未开放商业服务。
 
 ## 模块与详细记录
 
