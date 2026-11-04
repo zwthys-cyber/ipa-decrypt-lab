@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import plistlib
 import re
 import subprocess
 import sys
@@ -182,12 +183,13 @@ def classify_route(location):
     return result
 
 def public_route():
-    result = {"schema": "ipa-lab-public-authorization-route-v1", "method": "HEAD",
+    result = {"schema": "ipa-lab-public-authorization-route-v1", "method": "POST", "input": "empty_plist",
               "status": "request_failed", "account_login_attempted": False}
     try:
         opener = urllib.request.build_opener(NoRedirect)
         request = urllib.request.Request("https://buy.itunes.apple.com/commerce/machine/authorize",
-                                         method="HEAD")
+                                         method="POST", data=plistlib.dumps({}),
+                                         headers={"Content-Type": "application/x-apple-plist"})
         try:
             response = opener.open(request, timeout=10)
         except urllib.error.HTTPError as error:
