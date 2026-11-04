@@ -20,3 +20,15 @@ func TestSealingRejectsInvalidInputs(t *testing.T){
  for _,raw:=range [][]byte{nil,make([]byte,modelLimit+1)}{if _,err:=sealModel(raw,publicKey);err==nil{t.Fatal("invalid size accepted")}}
  if _,err:=sealModel([]byte("private"),"invalid");err==nil{t.Fatal("invalid key accepted")}
 }
+
+func TestFixedSecretPurpose(t *testing.T) {
+ for _, tc:=range []struct{ args []string; schema, secret string; valid bool }{
+  {[]string{"seal","private.bin"},"ipa-lab-github-sealed-model-v1","FAIRPLAY_MODEL_B64",true},
+  {[]string{"seal","private.bin","state"},"ipa-lab-github-sealed-state-v1","FAIRPLAY_STATE_B64",true},
+  {[]string{"seal","private.bin","OTHER"},"","",false},
+  {[]string{"seal"},"","",false},
+ } {
+  schema,secret,err:=target(tc.args)
+  if (err==nil)!=tc.valid || schema!=tc.schema || secret!=tc.secret { t.Fatal("invalid purpose binding") }
+ }
+}

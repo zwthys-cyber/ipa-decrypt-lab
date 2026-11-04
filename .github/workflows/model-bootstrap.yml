@@ -10,6 +10,7 @@ on:
           - preflight
           - trial
           - input-inspection
+          - checkpoint-replay
 permissions:
   contents: read
 concurrency:
@@ -40,6 +41,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_fairplay_state_observer.py' -v
           python3 -m unittest discover -s tests -p 'test_observed_enrollment.py' -v
           python3 -m unittest discover -s tests -p 'test_model_bootstrap.py' -v
+          python3 -m unittest discover -s tests -p 'test_private_fairplay_state.py' -v
           python3 -m unittest discover -s tests -p 'test_offline_verify.py' -v
           python3 -m unittest discover -s tests -p 'test_native_store.py' -v
           python3 -m unittest discover -s tests -p 'test_native_commerce*.py' -v
@@ -156,12 +158,13 @@ jobs:
         timeout-minutes: 2
         run: python3 tools/fairplay_state_observer.py
       - name: Inspect original IPA or enroll once and verify model
-        if: inputs.mode == 'trial' || inputs.mode == 'input-inspection'
+        if: inputs.mode != 'preflight'
         timeout-minutes: 20
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           LAB_KBSYNC_HELPER: ${{ github.workspace }}/lab-kbsync
+          FAIRPLAY_STATE_B64: ${{ inputs.mode == 'checkpoint-replay' && secrets.FAIRPLAY_STATE_B64 || '' }}
         run: |
           ulimit -c 0
-          python3 tools/model_bootstrap.py --login-binary native-source/ApplePackage/.build/debug/ApplePackageTool --native-binary native-machine-enrollment --download-binary native-source/StoreDownload/.build/debug/ApplePackageTool --engine offline-engine --sealer lab-model-seal ${{ inputs.mode == 'input-inspection' && '--inspect-input-only' || '' }}
+          python3 tools/model_bootstrap.py --login-binary native-source/ApplePackage/.build/debug/ApplePackageTool --native-binary native-machine-enrollment --download-binary native-source/StoreDownload/.build/debug/ApplePackageTool --engine offline-engine --sealer lab-model-seal ${{ inputs.mode == 'input-inspection' && '--inspect-input-only' || '' }} ${{ inputs.mode == 'checkpoint-replay' && '--use-checkpoint' || '' }}

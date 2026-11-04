@@ -25,8 +25,15 @@ func sealModel(raw []byte, key string) ([]byte, error) {
  return box.SealAnonymous(nil,private,&recipient,rand.Reader)
 }
 
+func target(args []string) (string,string,error) {
+ if len(args)==2 { return "ipa-lab-github-sealed-model-v1","FAIRPLAY_MODEL_B64",nil }
+ if len(args)==3 && args[2]=="state" { return "ipa-lab-github-sealed-state-v1","FAIRPLAY_STATE_B64",nil }
+ return "","",fmt.Errorf("invalid purpose")
+}
+
 func run() error {
- if len(os.Args)!=2 || os.Getenv("GITHUB_ACTIONS")!="true" { return fmt.Errorf("invalid invocation") }
+ schema,secret,targetErr:=target(os.Args)
+ if targetErr!=nil || os.Getenv("GITHUB_ACTIONS")!="true" { return fmt.Errorf("invalid invocation") }
  info,err:=os.Lstat(os.Args[1])
  if err!=nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077!=0 || info.Size()<=0 || info.Size()>modelLimit {
   return fmt.Errorf("invalid model file")
@@ -37,9 +44,9 @@ func run() error {
  sealed,err:=sealModel(raw,publicKey)
  if err!=nil { return err }
  return json.NewEncoder(os.Stdout).Encode(map[string]any{
-  "schema":"ipa-lab-github-sealed-model-v1",
+  "schema":schema,
   "repository":"zwthys-cyber/ipa-decrypt-lab",
-  "secret_name":"FAIRPLAY_MODEL_B64",
+  "secret_name":secret,
   "key_id":keyID,
   "encrypted_value":base64.StdEncoding.EncodeToString(sealed),
  })

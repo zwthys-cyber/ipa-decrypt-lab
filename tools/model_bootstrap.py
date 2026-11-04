@@ -15,6 +15,7 @@ from native_store import run as store_run, classify, classify_download
 from store_download import metadata
 from private_trial import extract_checked
 from offline_verify import verify, MODEL_LIMIT
+import private_fairplay_state as checkpoint
 
 TARGET = "6599842047"
 
@@ -72,16 +73,16 @@ def candidate_app(ipa, root):
     return apps[0]
 
 
-def setup_summary(raw, root):
+def setup_summary(raw, root, schema="unfairplay-setup-v1", model_key="model"):
     if len(raw)>1024**2:
         raise ValueError("invalid_setup_report")
     value=json.loads(raw)
-    if (type(value) is not dict or value.get("schema")!="unfairplay-setup-v1"
+    if (type(value) is not dict or value.get("schema")!=schema
             or value.get("success") is not True or type(value.get("plaintext_verified")) is not bool
             or type(value.get("encrypted_images")) is not int or not 0<value["encrypted_images"]<=4096
             or type(value.get("decrypted_pages")) is not int or not 0<value["decrypted_pages"]<=1024**2):
         raise ValueError("invalid_setup_report")
-    path=Path(value.get("model",""))
+    path=Path(value.get(model_key,""))
     resolved=path.resolve(strict=True)
     if (not path.is_absolute() or path.is_symlink() or not resolved.is_relative_to(root.resolve())
             or not resolved.is_file() or not 0<resolved.stat().st_size<=MODEL_LIMIT
@@ -165,13 +166,17 @@ def recovery_diagnostics(raw):
             "error_mentions":recovery_failure(error.encode())}
 
 
-def sealed_summary(raw):
+def sealed_summary(raw,purpose="model"):
     if len(raw)>64*1024:
         raise ValueError("invalid_sealed_model")
     value=json.loads(raw)
-    if (type(value) is not dict or value.get("schema")!="ipa-lab-github-sealed-model-v1"
+    if purpose not in {"model","state"}:
+        raise ValueError("invalid sealed purpose")
+    expected_schema="ipa-lab-github-sealed-"+purpose+"-v1"
+    expected_secret={"model":"FAIRPLAY_MODEL_B64","state":"FAIRPLAY_STATE_B64"}[purpose]
+    if (type(value) is not dict or value.get("schema")!=expected_schema
             or value.get("repository")!="zwthys-cyber/ipa-decrypt-lab"
-            or value.get("secret_name")!="FAIRPLAY_MODEL_B64"
+            or value.get("secret_name")!=expected_secret
             or value.get("key_id")!="3380204578043523366"):
         raise ValueError("invalid_sealed_model")
     cipher=base64.b64decode(value.get("encrypted_value",""),validate=True)
@@ -180,7 +185,44 @@ def sealed_summary(raw):
     return {key:value[key] for key in ("schema","repository","secret_name","key_id","encrypted_value")}
 
 
-def bootstrap(login_binary,native_binary,download_binary,engine,sealer,report=None,inspect_input_only=False):
+
+def seal_checkpoint(root,sealer):
+    """Capture a fixed set of private inputs; only repository-key ciphertext can escape."""
+    env={"PATH":"/usr/bin:/bin","GITHUB_ACTIONS":"true"}
+    state=root/"state.json"
+    argv=["/usr/bin/sudo","-n","--","/usr/bin/env","-i","PATH=/usr/bin:/bin",
+          "GITHUB_ACTIONS=true",str(Path(sys.executable).resolve()),
+          str(Path(__file__).with_name("private_fairplay_state.py").resolve()),
+          "--output",str(state),"--uid",str(os.getuid()),"--gid",str(os.getgid())]
+    try:
+        code,_,_=run_private(argv,env,timeout=25)
+        if (code or state.is_symlink() or not state.is_file() or state.stat().st_mode&0o077
+                or not 0<state.stat().st_size<=checkpoint.LIMIT):
+            return {"status":"checkpoint_capture_failed"}
+        checkpoint.validate(state.read_bytes())
+        code,out,_=run_private([sealer,str(state),"state"],env,timeout=15)
+        if code:
+            return {"status":"checkpoint_sealing_failed"}
+        return {"status":"checkpoint_sealed","sealed":sealed_summary(out,purpose="state")}
+    except Exception:
+        return {"status":"checkpoint_failed"}
+
+
+def recover_checkpoint(engine,app,ipa,root,model_dir):
+    state=checkpoint.materialize(os.environ.get("FAIRPLAY_STATE_B64",""),root/"restored-state")
+    env={"PATH":"/usr/bin:/bin","GITHUB_ACTIONS":"true","TMPDIR":str(root)}
+    capture=root/"capture"
+    argv=[engine,"collect","--app",str(app),"--ipa",str(ipa),"--output",str(capture),
+          "--system-state",str(state["fpsd"]),"--shared-state",str(state["shared"]),
+          "--adi-state",str(state["adi"]),"--iomac-file",str(state["hardware"])]
+    code,out,err=run_private(argv,env,timeout=90)
+    if code:
+        return code,out,err
+    return run_private([engine,"recover","--capture",str(capture),"--output",str(model_dir)],
+                       env,timeout=300)
+
+
+def bootstrap(login_binary,native_binary,download_binary,engine,sealer,report=None,inspect_input_only=False,use_checkpoint=False):
     report=base() if report is None else report
     report["authorization_request_attempted"]=False
     with tempfile.TemporaryDirectory(prefix="ipa-lab-model-bootstrap-") as directory:
@@ -200,26 +242,38 @@ def bootstrap(login_binary,native_binary,download_binary,engine,sealer,report=No
         if inspect_input_only:
             return dict(report,status="input_profile_compatible")
         # All downloadable prerequisites are checked before consuming a machine slot.
-        result=enroll(login_binary,native_binary,backend="commerce",session_context="cookies",
-                      client_context="login_agent",observe_state=True)
-        report["enrollment"]=result
-        report["authorization_request_attempted"]=result.get("authorization_request_attempted") is True
-        if not state_ready(result):
-            return dict(report,status="enrollment_state_unavailable")
+        if use_checkpoint:
+            report["state_source"]="github_secret_checkpoint"
+        else:
+            result=enroll(login_binary,native_binary,backend="commerce",session_context="cookies",
+                          client_context="login_agent",observe_state=True)
+            report["enrollment"]=result
+            report["authorization_request_attempted"]=result.get("authorization_request_attempted") is True
+            if not state_ready(result):
+                return dict(report,status="enrollment_state_unavailable")
+            saved=seal_checkpoint(root,sealer)
+            report["state_checkpoint_status"]=saved["status"]
+            if "sealed" in saved:
+                report["sealed_state"]=saved["sealed"]
+            report["state_source"]="current_runner"
         model_dir=root/"models"
-        model_dir.mkdir(mode=0o700)
+        if not use_checkpoint:
+            model_dir.mkdir(mode=0o700)
         env={"PATH":"/usr/bin:/bin","GITHUB_ACTIONS":"true"}
         argv=["/usr/bin/sudo","-n","--","/usr/bin/env","-i","PATH=/usr/bin:/bin",
               "GITHUB_ACTIONS=true","TMPDIR="+str(root),"SUDO_UID="+str(os.getuid()),
               "SUDO_GID="+str(os.getgid()),engine,"setup","--app",str(app),"--ipa",str(ipa),
               "--model-dir",str(model_dir)]
         try:
-            code,out,err=run_private(argv,env,timeout=300)
+            code,out,err=(recover_checkpoint(engine,app,ipa,root,model_dir) if use_checkpoint
+                          else run_private(argv,env,timeout=300))
         except subprocess.TimeoutExpired:
             return dict(report,status="model_recovery_timeout")
         if code:
             return dict(report,status="model_recovery_rejected",recovery_diagnostics=recovery_diagnostics(out+err))
-        model,summary=setup_summary(out,model_dir)
+        model,summary=(setup_summary(out,model_dir,schema="unfairplay-enrollment-recovery-v1",
+                                     model_key="enrollment_model") if use_checkpoint
+                       else setup_summary(out,model_dir))
         report.update(summary)
         report["model_recovered"]=True
         previous=os.environ.get("FAIRPLAY_MODEL_B64")
@@ -246,6 +300,7 @@ def main():
     for option in ("login-binary","native-binary","download-binary","engine","sealer"):
         parser.add_argument("--"+option,required=True)
     parser.add_argument("--inspect-input-only",action="store_true")
+    parser.add_argument("--use-checkpoint",action="store_true")
     args=parser.parse_args()
     if os.environ.get("GITHUB_ACTIONS")!="true" or sys.platform!="darwin":
         raise SystemExit("GitHub-hosted macOS required")
@@ -254,12 +309,18 @@ def main():
     else:
         report=base()
         try:
+            if args.use_checkpoint:
+                checkpoint.validate(checkpoint.decode_bytes(os.environ.get("FAIRPLAY_STATE_B64",""),checkpoint.LIMIT))
             report=bootstrap(*(str(Path(getattr(args,key)).resolve()) for key in
-                               ("login_binary","native_binary","download_binary","engine","sealer")),report=report,inspect_input_only=args.inspect_input_only)
+                               ("login_binary","native_binary","download_binary","engine","sealer")),report=report,inspect_input_only=args.inspect_input_only,use_checkpoint=args.use_checkpoint)
         except subprocess.TimeoutExpired:
             report["status"]="bootstrap_timeout_do_not_retry"
         except Exception:
             report["status"]="bootstrap_failed_do_not_retry"
+    state=report.pop("sealed_state",None)
+    if state is not None:
+        print(json.dumps(state,sort_keys=True))
+        report["sealed_state_emitted"]=True
     sealed=report.pop("sealed_model",None)
     if sealed is not None:
         print(json.dumps(sealed,sort_keys=True))

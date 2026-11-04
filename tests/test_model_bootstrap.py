@@ -129,6 +129,7 @@ class BootstrapTests(unittest.TestCase):
                 patch.object(model,"download_original",side_effect=download), \
                 patch.object(model,"candidate_app",return_value=Path("/synthetic/app")), \
                 patch.object(model,"input_profile",return_value={"ready":True}), \
+                patch.object(model,"seal_checkpoint",return_value={"status":"checkpoint_capture_failed"}), \
                 patch.object(model,"run_private",side_effect=run), \
                 patch.object(model,"verify",return_value={"decryption_proven":verified,"plaintext_verified":verified}):
             result=model.bootstrap("login","native","download","engine","sealer")
@@ -210,6 +211,44 @@ class BootstrapTests(unittest.TestCase):
             result=model.bootstrap("login","native","download","engine","sealer")
         enroll.assert_not_called()
         self.assertEqual(result["status"],"input_profile_rejected")
+
+
+    def test_sealed_state_cannot_be_confused_with_a_model(self):
+        raw=json.loads(sealed())
+        raw.update(schema="ipa-lab-github-sealed-state-v1",secret_name="FAIRPLAY_STATE_B64")
+        value=json.dumps(raw).encode()
+        self.assertEqual(model.sealed_summary(value,purpose="state")["secret_name"],"FAIRPLAY_STATE_B64")
+        with self.assertRaises(ValueError):
+            model.sealed_summary(value)
+        with self.assertRaises(ValueError):
+            model.sealed_summary(sealed(),purpose="state")
+
+    def test_checkpoint_replay_never_authorizes_a_new_machine(self):
+        def recover(engine,app,ipa,root,directory):
+            directory.mkdir(mode=0o700)
+            path=directory/"model.bin"
+            path.write_bytes(b"SYNTHETIC_MODEL")
+            path.chmod(0o600)
+            value=json.loads(setup(path))
+            value["schema"]="unfairplay-enrollment-recovery-v1"
+            value["enrollment_model"]=value.pop("model")
+            return 0,json.dumps(value).encode(),b""
+        with patch.object(model,"download_original",return_value="original_downloaded"), \
+                patch.object(model,"candidate_app",return_value=Path("/synthetic/app")), \
+                patch.object(model,"input_profile",return_value={"ready":True}), \
+                patch.object(model,"enroll") as enroll, \
+                patch.object(model,"seal_checkpoint") as capture, \
+                patch.object(model,"recover_checkpoint",side_effect=recover), \
+                patch.object(model,"verify",return_value={"decryption_proven":True,"plaintext_verified":True}), \
+                patch.object(model,"run_private",return_value=(0,sealed(),b"")) as run:
+            result=model.bootstrap("login","native","download","engine","sealer",use_checkpoint=True)
+        enroll.assert_not_called()
+        capture.assert_not_called()
+        self.assertEqual(result["status"],"model_recovered_and_verified")
+        self.assertFalse(result["authorization_request_attempted"])
+        self.assertEqual(result["state_source"],"github_secret_checkpoint")
+        self.assertEqual(run.call_count,1)
+        self.assertNotIn("SYNTHETIC",json.dumps(result))
 
 
 if __name__=="__main__":
