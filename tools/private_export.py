@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 import zipfile
 import urllib.error
-from ipa_audit import audit
+from ipa_audit import audit, AuditError
 from task_progress import WorkerProgress
 from native_store import classify, classify_download, run
 from offline_verify import readiness
@@ -19,6 +19,21 @@ from store_download import app_id, metadata
 MAX_BYTES = 1024 * 1024 * 1024
 class ExportError(RuntimeError):
     pass
+
+def audit_failure(exc):
+    # Only literal, reviewed audit reasons may leave the private runner.
+    reasons = {
+        "archive entry limit exceeded": "archive_entry_limit",
+        "Mach-O member size limit exceeded": "macho_member_limit",
+        "audit read budget exceeded": "audit_read_limit",
+        "symlink entries unsupported": "archive_symlink_unsupported",
+        "duplicate archive path": "archive_duplicate_path",
+        "unsafe archive path": "archive_unsafe_path",
+        "invalid load command size": "macho_load_command_invalid",
+        "Info.plist size limit exceeded": "info_plist_limit",
+        "root executable is not a supported Mach-O": "root_macho_unsupported",
+    }
+    return reasons.get(str(exc), "ipa_structure_rejected")
 
 def require(condition, status):
     if not condition:
@@ -238,6 +253,8 @@ def main():
         return 0
     except ExportError as exc:
         status = str(exc)
+    except AuditError as exc:
+        status = audit_failure(exc)
     except subprocess.TimeoutExpired:
         status = "private_export_timeout"
     except Exception:

@@ -12,7 +12,7 @@ import tempfile
 import unittest
 import zipfile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
-from private_export import main, export, ExportError, account_member, scrub_archive, validate_report
+from private_export import audit_failure, AuditError, main, export, ExportError, account_member, scrub_archive, validate_report
 
 class PrivateExportTests(unittest.TestCase):
     def test_metadata_failures_are_classified_without_login(self):
@@ -41,6 +41,11 @@ class PrivateExportTests(unittest.TestCase):
         self.assertEqual(result["failed_stage"],"auditing")
         self.assertEqual(result["status"],"private_export_failed")
         self.assertNotIn("SECRET_ACCOUNT_AND_PATH",output.getvalue())
+
+    def test_audit_errors_only_expose_fixed_codes(self):
+        self.assertEqual(audit_failure(AuditError("archive entry limit exceeded")),"archive_entry_limit")
+        self.assertEqual(audit_failure(AuditError("Mach-O member size limit exceeded")),"macho_member_limit")
+        self.assertEqual(audit_failure(AuditError("private filename or account")),"ipa_structure_rejected")
 
     def fixture(self, root):
         output = root/"out.ipa"
