@@ -38,6 +38,16 @@ class CapacityTests(unittest.TestCase):
         api.jobs.return_value=[{"steps":[{"name":"SECRET UNTRUSTED TEXT","conclusion":"failure"}]}]
         self.assertEqual(api.failure_reason({"id":1}),"")
 
+    def test_early_failed_check_keeps_tracking_until_reason_is_available(self):
+        bot,api=Mock(),Mock()
+        controller=Controller(bot,api,123456789,"crypt","synthetic")
+        controller.current={"rid":"a"*32,"app":"444934666"}
+        api.find.return_value={"id":1,"status":"in_progress"}
+        api.progress.return_value="failed"
+        controller.tick()
+        self.assertIsNotNone(controller.current)
+        api.deliver.assert_not_called()
+
     def test_controller_reports_capacity_after_workflow_completion(self):
         bot,api=Mock(),Mock()
         controller=Controller(bot,api,123456789,"crypt","synthetic")
@@ -46,7 +56,7 @@ class CapacityTests(unittest.TestCase):
         api.failure_reason.return_value="IPA 超过 2000 MB"
         with patch.object(controller,"failover",return_value=False):
             controller.tick()
-        self.assertIn("2000 MB",bot.message.call_args.args[1])
+        self.assertTrue(any("2000 MB" in call.args[1] for call in bot.message.call_args_list))
         self.assertIsNone(controller.current)
 
 if __name__=="__main__":
