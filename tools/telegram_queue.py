@@ -1,5 +1,6 @@
 """Fixed-repository GitHub queue and private encrypted artifact transport."""
 import hashlib
+from app_presentation import filename as app_filename, thumbnail as app_thumbnail
 import http.client
 import json
 import os
@@ -374,10 +375,16 @@ class GitHub:
             require(bot.base == "http://127.0.0.1:8081", "large_file_server_required")
             # Local server reads private local file; no multipart buffering and no public link.
             require(output.stat().st_size <= MAX_FILE, "telegram_file_exceeds_2000mb")
+            named_output = root/app_filename(info, receipt["app_id"])
+            if named_output != output:
+                require(not named_output.exists(), "delivery_name_collision")
+                output.rename(named_output)
+                output = named_output
+            icon = app_thumbnail(output, receipt["app_id"])
             progress("uploading")
-            reply = bot.call("sendDocument", {"chat_id":owner, "document":output.as_uri(),
+            reply = bot.document( {"chat_id":owner, "document":output.as_uri(),
                 "caption":"IPA 已完成明文校验；已移除账号元数据。\n需要重签名后安装，尚未验证实际运行。\n任务：" + rid,
-                "disable_content_type_detection":True}, timeout=TELEGRAM_TIMEOUT)
+                "disable_content_type_detection":True}, icon, timeout=TELEGRAM_TIMEOUT)
             require(isinstance(reply, dict) and type(reply.get("message_id")) is int
                     and reply.get("chat",{}).get("id") == owner
                     and reply.get("document",{}).get("file_size") == output.stat().st_size,

@@ -13,7 +13,7 @@ printf '%s  %s\n' "$expected" "$bundle" | sha256sum --check --status
 # Only system runtime libraries; no compiler, pip, git or build dependencies.
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y --no-install-recommends python3 ca-certificates libssl3t64 zlib1g libstdc++6
+apt-get install -y --no-install-recommends python3 python3-pil ca-certificates libssl3t64 zlib1g libstdc++6
 apt-get clean
 if ! id ipazake >/dev/null 2>&1; then
   useradd --system --home-dir /var/lib/ipazake --shell /usr/sbin/nologin ipazake

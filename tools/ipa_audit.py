@@ -158,6 +158,7 @@ def audit(path):
                         if s["encryption"] is not None and s["encryption"]["cryptid"] != 0)
         return {
             "bundle_id": info.get("CFBundleIdentifier"),
+            "display_name": info.get("CFBundleDisplayName") or info.get("CFBundleName"),
             "version": info.get("CFBundleShortVersionString"),
             "minimum_os": info.get("MinimumOSVersion"),
             "main_executable": main_path,

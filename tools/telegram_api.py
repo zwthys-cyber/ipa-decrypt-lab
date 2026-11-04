@@ -2,6 +2,7 @@
 import http.client
 import json
 import re
+import secrets
 import urllib.error
 import urllib.request
 
@@ -29,8 +30,11 @@ class Telegram:
                           "setChatMenuButton", "getChatMenuButton"}:
             raise APIError("unsupported_telegram_method")
         data = json.dumps(payload or {}, ensure_ascii=True).encode()
+        return self._request(method, data, "application/json", timeout)
+
+    def _request(self, method, data, content_type, timeout):
         request = urllib.request.Request(self.base + "/bot" + self.token + "/" + method,
-                                         data=data, headers={"Content-Type": "application/json"},
+                                         data=data, headers={"Content-Type": content_type},
                                          method="POST")
         try:
             with self.opener.open(request, timeout=timeout) as response:
@@ -43,6 +47,30 @@ class Telegram:
             raise APIError(status) from None
         except (OSError, ValueError, http.client.HTTPException):
             raise APIError("telegram_transport_unknown") from None
+
+    def document(self, payload, thumbnail, timeout=40):
+        if thumbnail is None:
+            return self.call("sendDocument", payload, timeout=timeout)
+        # Only the small thumbnail is multipart. The local server streams the IPA.
+        if (self.base != "http://127.0.0.1:8081" or not isinstance(thumbnail, bytes)
+                or not thumbnail.startswith(b"\xff\xd8") or not 0 < len(thumbnail) < 200000
+                or not isinstance(payload.get("document"), str)
+                or not payload["document"].startswith("file:///")):
+            raise APIError("invalid_document_thumbnail")
+        boundary = "ipa-" + secrets.token_hex(24)
+        fields = dict(payload, thumbnail="attach://app_icon")
+        chunks = []
+        for key, value in fields.items():
+            if not re.fullmatch(r"[a-z_]+", key):
+                raise APIError("invalid_document_field")
+            text = value if isinstance(value, str) else json.dumps(value)
+            chunks.append(("--"+boundary+'\r\nContent-Disposition: form-data; name="'+key+
+                           '"\r\n\r\n'+text+"\r\n").encode())
+        chunks.append(("--"+boundary+'\r\nContent-Disposition: form-data; name="app_icon"; '
+                       'filename="icon.jpg"\r\nContent-Type: image/jpeg\r\n\r\n').encode())
+        chunks.extend([thumbnail, ("\r\n--"+boundary+"--\r\n").encode()])
+        return self._request("sendDocument", b"".join(chunks),
+                             "multipart/form-data; boundary="+boundary, timeout)
 
     @staticmethod
     def parse(raw):

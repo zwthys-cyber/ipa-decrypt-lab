@@ -24,7 +24,9 @@ jobs:
           persist-credentials: false
       - name: Run Python persistence and delivery regression tests without credentials
         run: |
-          python3 -m unittest discover -s tests -p 'test_*.py' -v
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends python3-pil
+          /usr/bin/python3 -m unittest discover -s tests -p 'test_*.py' -v
           sh -n deploy/install.sh
           systemd-analyze verify deploy/ipazake.service
       - name: Verify real systemd credential mount without secrets
@@ -66,7 +68,7 @@ jobs:
       - name: Assemble public runtime bundle
         run: |
           cp dist/telegram-bot-api package/bin/
-          for module in version_request app_preflight capacity telegram_daemon persistent_journal telegram_controller telegram_runtime telegram_api telegram_menu telegram_queue task_progress delivery_scheduler ipa_audit; do
+          for module in app_presentation version_request app_preflight capacity telegram_daemon persistent_journal telegram_controller telegram_runtime telegram_api telegram_menu telegram_queue task_progress delivery_scheduler ipa_audit; do
             cp "tools/$module.py" package/tools/
           done
           cp deploy/ipazake.service deploy/install.sh deploy/prune_releases.py package/deploy/
@@ -75,7 +77,7 @@ jobs:
         run: |
           docker run --rm -v "$GITHUB_WORKSPACE:/src:ro" debian:13-slim sh -ec '
             apt-get update -qq
-            apt-get install -y --no-install-recommends python3 ca-certificates libssl3t64 zlib1g libstdc++6
+            apt-get install -y --no-install-recommends python3 python3-pil ca-certificates libssl3t64 zlib1g libstdc++6
             PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s /src/tests -p "test_*.py"
             /src/package/bin/telegram-bot-api --version
             PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/src/package/tools python3 -c "import telegram_daemon"
