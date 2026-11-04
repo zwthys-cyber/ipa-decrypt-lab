@@ -233,10 +233,19 @@ static id SharedKeybag(void) {
  Class cls=NSClassFromString(@"AMSKeybag");SEL shared=NSSelectorFromString(@"sharedInstance");
  return ABI(cls,shared,@"@",@[])?((id(*)(id,SEL))objc_msgSend)(cls,shared):nil;
 }
+static void SharedPathFields(NSMutableDictionary *r) {
+ NSString *path=@"/Users/Shared/SC Info";
+ NSFileManager *manager=NSFileManager.defaultManager;
+ NSDictionary *attributes=[manager attributesOfItemAtPath:path error:NULL];
+ BOOL directory=[attributes[NSFileType] isEqual:NSFileTypeDirectory];
+ r[@"shared_directory_present"]=B(directory);
+ r[@"shared_directory_writable"]=B(directory && [manager isWritableFileAtPath:path]);
+ r[@"shared_directory_symlink"]=B([attributes[NSFileType] isEqual:NSFileTypeSymbolicLink]);
+}
 static void InvalidImportProbe(NSMutableDictionary *r) {
  r[@"status"]=@"import_interface_unavailable";r[@"state_before"]=State();
  id bag=SharedKeybag();unsigned int context=ContextIdentifier(bag);
- r[@"context_ready_before_request"]=B(context!=0);
+ r[@"context_ready_before_request"]=B(context!=0);SharedPathFields(r);
  SEL import=NSSelectorFromString(@"importKeybagWithData:error:");
  if(!(ABI(bag,import,@"B",@[@"@",@"^@"])||ABI(bag,import,@"c",@[@"@",@"^@"])))return;
  NSData *invalid=[@"ipa-lab-invalid-keybag" dataUsingEncoding:NSUTF8StringEncoding];
@@ -251,7 +260,7 @@ static void InvalidImportProbe(NSMutableDictionary *r) {
 static void Authorize(NSDictionary *input,NSMutableDictionary *r) {
  r[@"state_before"]=State();
  id initialKeybag=SharedKeybag();unsigned int initialContext=ContextIdentifier(initialKeybag);
- r[@"context_ready_before_request"]=B(initialContext!=0);
+ r[@"context_ready_before_request"]=B(initialContext!=0);SharedPathFields(r);
  NSURLRequest *request=PreparedRequest(input,r);
  if(!request){r[@"status"]=@"request_preparation_failed";return;}
  LabEnrollmentResponse *delegate=[LabEnrollmentResponse new];

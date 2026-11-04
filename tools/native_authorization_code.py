@@ -21,6 +21,7 @@ METHODS = (
     "__40-[AMSKeybag importKeybagWithData:error:]_block_invoke",
     "-[AMSFairPlayContext fairplayContextIDWithError:]",
     "ha0dkchaters6",
+    "-[AMSFairPlayContext _validateFairPlayPath]",
 )
 LINE = re.compile(r"^\s*(?:->\s*)?0x[0-9a-fA-F]+\s+<\+([0-9]+)>:\s+(.+)$")
 HEADER = re.compile(r"^([^\s\x60]+)\x60(.+):$")
@@ -55,7 +56,7 @@ def extract(output):
         result[name] = {
             "instruction_count": len(rows),
             "calls": calls[:100],
-            "field_context": (rows if ("ams_secureToken" in name or "_accountIDForType" in name or "importKeybag" in name) else [rows[i] for i in sorted(selected)])[:180],
+            "field_context": (rows if (len(rows) <= 180 or "ams_secureToken" in name or "_accountIDForType" in name or "importKeybag" in name) else [rows[i] for i in sorted(selected)])[:180],
         }
     return result
 

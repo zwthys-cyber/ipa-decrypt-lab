@@ -14,11 +14,11 @@ on:
       session_context:
         description: Store session context forwarded to the authorization request
         type: choice
-        default: token
+        default: cookies
         options:
+          - cookies
           - store
           - token
-          - cookies
           - storefront
       client_context:
         description: Keep native User-Agent or bind the exact login client agent

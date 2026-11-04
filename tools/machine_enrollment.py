@@ -14,7 +14,7 @@ STATUSES = {"invalid_keybag_rejected", "invalid_keybag_unexpected_result", "inva
     "keybag_imported_model_unverified", "keybag_import_failed", "native_exception", "probe_failed",
     "missing_credentials", "login_failed", "login_ambiguous", "login_timeout", "native_timeout",
     "native_process_failed", "private_handoff_failed"}
-BOOLS = {"context_stable_after_rejection", "context_ready_before_request", "context_stable_before_import", "expected_invalid_keybag_rejected", "client_agent_bound", "client_agent_changed", "md_data_present", "md_data_valid", "amd_data_present", "amd_data_valid", "authorization_request_attempted", "ephemeral_account", "session_identity_verified", "body_token_bound",
+BOOLS = {"shared_directory_present", "shared_directory_writable", "shared_directory_symlink", "context_stable_after_rejection", "context_ready_before_request", "context_stable_before_import", "expected_invalid_keybag_rejected", "client_agent_bound", "client_agent_changed", "md_data_present", "md_data_valid", "amd_data_present", "amd_data_valid", "authorization_request_attempted", "ephemeral_account", "session_identity_verified", "body_token_bound",
     "redirect_blocked", "response_oversized", "error_present", "apple_failure_present",
     "dialog_present", "keybag_present", "keybag_import_succeeded", "redirect_seen",
     "redirect_query_supported", "redirect_method_post", "redirect_https", "storefront_header_present",
@@ -143,7 +143,7 @@ def main():
     parser.add_argument("--login-binary", required=True)
     parser.add_argument("--native-binary", required=True)
     parser.add_argument("--purpose", choices=("signIn", "machineAuthorize", "machineSession", "booleanSession"), default="signIn")
-    parser.add_argument("--session-context", choices=("token", "cookies", "storefront", "store"), default="token")
+    parser.add_argument("--session-context", choices=("token", "cookies", "storefront", "store"), default="cookies")
     parser.add_argument("--client-context", choices=("native", "login_agent"), default="login_agent")
     args = parser.parse_args()
     if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "darwin":
