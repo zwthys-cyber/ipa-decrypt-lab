@@ -842,4 +842,15 @@ Apple documents that deauthorizing inaccessible computers uses **Deauthorize All
 
 The [final public-origin check](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41836095534) resolved module 37689's `hW` constant to `https://buy.itunes.apple.com`; module 57801 binds `DeauthAllMachines` to `/account/deauthAllMachines`. This confirms the prepared request's exact host/path from current public source. Synthetic tests do not establish that the server will accept an eventual real operation or that the account's yearly eligibility remains available.
 
-No account-wide approval has been given, and no deauthorization execution has been dispatched.
+At the time of the preparation above, no account-wide approval or real execution had occurred. The subsequent approved operation is documented below.
+
+
+## Approved computer deauthorization (2026-11-04)
+
+The user explicitly approved one account-wide computer deauthorization in chat before dispatch of run 41837099155. The approved workflow was dispatched once at commit 294c5184c8656def5eddeb4ea21f1a079a1f7319. This is not permission to repeat the yearly account-wide operation.
+
+[Run 41837099155](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41837099155) completed successfully. Linux and macOS verification passed; the real job passed the 20 session tests and 11 Swift authentication tests before receiving account credentials. A fresh signed login and account-summary query confirmed five computers. The single empty-body POST to the reviewed Apple endpoint returned HTTP 200, without redirect or oversized response. The follow-up read-only query confirmed **zero** computers.
+
+The result is `deauthorization_confirmed`, with `count_before=5`, `count_after=0`, `mutation_request_count=1`, and `automatic_retry=false`. This run did not issue a new machine authorization, create an enrollment model, or verify decryption. Existing computer purchase authorizations were revoked as approved. The annual all-computer operation must not be repeated as routine cleanup.
+
+With the quota condition now changed, one follow-up CommerceKit enrollment trial has been dispatched using the previously validated login identity, GUID, token, User-Agent, and Cookie bindings. Its result is pending; the zero count above records the state immediately after deauthorization, not a guarantee that future authorization leaves it unchanged.

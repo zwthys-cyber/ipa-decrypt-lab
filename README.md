@@ -4,9 +4,11 @@
 
 ## 当前结果
 
-最新只读结果：[下载器会话查询](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41834443913)已成功读取账号实际授权电脑数量：**5 台**。Swift 登录成功，账户摘要接口返回 HTTP 200 和 `authorizations.authorizedComputers = 5`；Linux/macOS 各通过 20 项 Python 测试，另通过 11 项 Swift 测试。无需用户另备电脑，也不依赖失败的“音乐”原生登录。**只查询了数量，没有申请新机器授权或解除任何授权，仍未取得模型或验证砸壳。** [详细证据](OFFLINE-BACKEND.md#downloader-session-account-summary-2026-11-04)。
+用户明确同意后，[全部解除电脑授权](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41837099155)已执行成功：操作前确认 **5 台**，只发送一次请求，服务器 HTTP 200，随后只读复查为 **0 台**。未重复解除，也没有把释放名额视为模型或砸壳成功。后续正在恢复一次 CommerceKit 授权导入试验；若重新授权成功，数量可能随之增加。
 
-已准备独立的“全部解除电脑授权”流程：[Linux/macOS 预览](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41836096346)各通过 38 项测试，真实解除任务已跳过。操作会先确认仍有 5 台，最多发送一次解除请求，再复查是否变为 0；默认预览不登录、不联网。**尚未获得对全部电脑解除授权的明确同意，因此没有执行。** 该操作影响账号下全部电脑的购买授权，并受 Apple 一年一次的限制；清空名额本身不代表模型或砸壳成功。[已准备的实现](tools/store_deauthorization.py)。
+解除前的只读结果：[下载器会话查询](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41834443913)已成功读取账号实际授权电脑数量：**5 台**。Swift 登录成功，账户摘要接口返回 HTTP 200 和 `authorizations.authorizedComputers = 5`；Linux/macOS 各通过 20 项 Python 测试，另通过 11 项 Swift 测试。无需用户另备电脑，也不依赖失败的“音乐”原生登录。**只查询了数量，没有申请新机器授权或解除任何授权，仍未取得模型或验证砸壳。** [详细证据](OFFLINE-BACKEND.md#downloader-session-account-summary-2026-11-04)。
+
+已准备独立的“全部解除电脑授权”流程：[Linux/macOS 预览](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41836096346)各通过 38 项测试，真实解除任务已跳过。操作会先确认仍有 5 台，最多发送一次解除请求，再复查是否变为 0；默认预览不登录、不联网。**用户随后已明确同意，单次真实解除与数量复查已成功，见上方最新记录。** 该操作影响账号下全部电脑的购买授权，并受 Apple 一年一次的限制；清空名额本身不代表模型或砸壳成功。[已准备的实现](tools/store_deauthorization.py)。
 
 此前的 [CommerceKit 真实试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41778198600)完成 59 项 Python、11 项 Swift 测试及原生检查。真实登录成功，原生 GUID 与下载器一致，账号、令牌、User-Agent 和 Cookie 已绑定；服务器返回 HTTP 200，但正文包含业务失败码 **3002**，并提到“五台电脑”。**没有 keybag，没有执行导入，也没有模型或已验证的砸壳产物。**
 
@@ -52,7 +54,7 @@
 
 用户目前没有可用电脑。官方“音乐”界面自动化已在 GitHub ARM、Intel Mac 上跑通：能够处理首次启动提示，进入“账户 → 登录”，并填入、清空未提交的合成邮箱。[双架构预检](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41828237601)通过。进一步的[真实登录诊断](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41830015849)完成邮箱和密码提交，但官方窗口显示“未知错误”，未确认登录成功。受限日志观察到服务端认证失败、SRP 服务端证明缺失（M2 missing）、AKAuthenticationError -7012 和 AppleIDAuthSupport 2；不能仅凭这些记录认定密码错误或双重认证已启用。**该原生 UI 路径尚未进入账户设置，也未执行解除授权。** 后续通过下载器会话直接读取账户摘要，已确认实际数量为 5；原生 UI 登录本身仍未修复。最新两个架构各通过 20 项 Python 测试、原生检查及无账号预检。手机端仍可通过 [Apple 支持](https://support.apple.com/zh-cn/contact)请求核对授权数量，但不保证能够重置限制。[研究详情](OFFLINE-BACKEND.md#official-music-ui-navigation-and-private-account-query-2026-11-04)。
 
-## 当前阻塞：已确认 5 个电脑授权名额用满，模型仍未取得
+## 当前阻塞：电脑名额已释放，授权数据导入与模型获取仍待验证
 
 现有下载器创建临时账号会话并生成下载用 kbsync；这条代码路径不创建离线引擎需要的系统 FairPlay enrollment 状态。
 
@@ -83,7 +85,7 @@ Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直�
 | Account-free App Store FairPlay service probe | 双架构检查本地 App Store FairPlay 服务能否为固定测试值生成请求 | 不传入 Apple 账号，不提交授权或导入 |
 | Account-free official Music sign-in navigation | 识别欢迎页和可选提示，进入官方登录窗口，报告固定界面标签 | 不使用账号或提交凭据；不点击订阅、授权或安全升级 |
 | Public Apple account frontend inspection | 从 Apple 公共配置跟踪账户摘要前端及只读查询格式 | 无账号，不执行前端脚本，不调用账户变更接口 |
-| Confirmed all-computer deauthorization | 默认无网络预览；另设需明确确认的单次全部解除操作及前后数量检查 | 仅预览与合成测试通过，真实任务未执行；影响所有电脑且有一年一次限制 |
+| Confirmed all-computer deauthorization | 默认无网络预览；另设需明确确认的单次全部解除操作及前后数量检查 | 用户明确同意后真实执行一次，已确认数量从 5 变为 0；影响所有电脑且有一年一次限制 |
 | Private Store computer authorization count | 默认无账号预检；查询模式使用下载器签名登录会话，只读当前电脑授权数量 | 已实际读到 5 台；不会解除授权，账号会话和响应正文不公开 |
 | Private official Music account count | 默认无账号预检；查询模式单次完成邮箱、密码提交并尝试读取明确的当前授权数量 | 真实登录目前返回未知错误；未读到数量，不执行任何解除授权，不输出原始界面或认证日志 |
 | Account-free official account-management UI capability | 启动官方音乐应用，检查 URL 处理程序、现有界面访问权限及固定菜单标签 | 无 Secrets、不登录、不点击菜单操作、不申请权限；界面可访问不等于已完成账户管理 |
