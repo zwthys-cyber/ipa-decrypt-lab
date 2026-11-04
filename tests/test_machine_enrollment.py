@@ -21,6 +21,8 @@ class MachineEnrollmentContracts(unittest.TestCase):
         good = {"status": "keybag_imported_model_unverified", "http_status": 200,
             "authorization_request_attempted": True, "session_identity_verified": True, "body_token_bound": True,
             "keybag_present": True, "keybag_import_succeeded": True,
+            "context_ready_before_request": True, "context_stable_before_import": True, "keybag_import_attempted": True,
+            "diversitybag_present": False, "keybag_retry_attempted": False,
             "error_present": False, "apple_failure_present": False,
             "redirect_blocked": False, "response_oversized": False}
         self.assertEqual(mod.clean(good)["status"], "keybag_imported_model_unverified")
@@ -28,6 +30,28 @@ class MachineEnrollmentContracts(unittest.TestCase):
             changed = dict(good)
             del changed[key]
             self.assertEqual(mod.clean(changed)["status"], "probe_failed")
+
+    def test_diversity_and_retry_cannot_hide_an_incomplete_import(self):
+        good = dict(status="keybag_imported_model_unverified", http_status=200, authorization_request_attempted=True,
+            session_identity_verified=True, body_token_bound=True, keybag_present=True, keybag_import_succeeded=True,
+            context_ready_before_request=True, context_stable_before_import=True, keybag_import_attempted=True,
+            diversitybag_present=True, diversity_import_attempted=True, diversity_import_succeeded=True,
+            diversity_error_present=False, context_stable_after_diversity=True, keybag_retry_attempted=True,
+            initial_import_succeeded=False, initial_import_fairplay_status=-42023,
+            error_present=False, apple_failure_present=False, redirect_blocked=False, response_oversized=False)
+        self.assertEqual(mod.clean(good)["status"], "keybag_imported_model_unverified")
+        for key in ("diversity_import_attempted", "diversity_import_succeeded", "diversity_error_present",
+                    "context_stable_after_diversity", "initial_import_succeeded", "initial_import_fairplay_status"):
+            changed = dict(good)
+            del changed[key]
+            self.assertEqual(mod.clean(changed)["status"], "probe_failed")
+        changed = dict(good, diversitybag_present=False)
+        self.assertEqual(mod.clean(changed)["status"], "probe_failed")
+        private = mod.clean({"initial_error_domain": "PRIVATE", "diversity_error_domain": "PRIVATE",
+            "diversity_import_fairplay_status": True, "initial_import_fairplay_status": 2**31,
+            "diversitybag": "PRIVATE"})
+        self.assertNotIn("PRIVATE", json.dumps(private))
+        self.assertNotIn("diversity_import_fairplay_status", private)
 
     def test_redirect_or_failure_cannot_become_success(self):
         self.assertEqual(mod.clean({"status": "keybag_imported_model_unverified",

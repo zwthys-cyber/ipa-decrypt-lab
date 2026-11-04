@@ -39,4 +39,5 @@ if __name__ == "__main__":
     result["account_login_attempted"] = False
     print(json.dumps(result, sort_keys=True))
     raise SystemExit(0 if result["status"] == "invalid_keybag_rejected"
-                     and result.get("expected_invalid_keybag_rejected") is True else 2)
+                     and result.get("expected_invalid_keybag_rejected") is True
+                     and result.get("expected_invalid_diversity_rejected") is True else 2)

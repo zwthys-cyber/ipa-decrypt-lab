@@ -250,6 +250,98 @@ static BOOL ImportErrorContract(void) {
  }
  return YES;
 }
+static BOOL ValidBag(id data) {
+ return [data isKindOfClass:NSData.class] && [data length]>0 && [data length]<=2097152;
+}
+typedef NSDictionary *(^LabBagImporter)(NSData *,BOOL);
+static NSDictionary *ImportOneBag(id bag,NSData *data,BOOL diversity) {
+ NSMutableDictionary *result=[NSMutableDictionary dictionary];
+ SEL selector=NSSelectorFromString(diversity?@"importDiversityBagWithData:error:":@"importKeybagWithData:error:");
+ BOOL available=ABI(bag,selector,@"B",@[@"@",@"^@"]) || ABI(bag,selector,@"c",@[@"@",@"^@"]);
+ result[@"interface_available"]=B(available);
+ if(!available){result[@"import_succeeded"]=@NO;result[@"error_present"]=@YES;return result;}
+ NSError *error=nil;
+ BOOL imported=((BOOL(*)(id,SEL,id,NSError *__autoreleasing *))objc_msgSend)(bag,selector,data,&error);
+ ErrorFields(result,error);ImportErrorFields(result,error);
+ result[@"import_succeeded"]=B(imported && !error);
+ return result;
+}
+static void RecordBagResult(NSMutableDictionary *report,NSDictionary *result,NSString *prefix) {
+ for(NSString *field in @[@"error_present",@"error_domain",@"error_code",@"import_fairplay_status"]) {
+   NSString *key=[prefix stringByAppendingString:field];
+   [report removeObjectForKey:key];
+   if(result[field])report[key]=result[field];
+ }
+ NSString *success=prefix.length?[prefix stringByAppendingString:@"import_succeeded"]:@"keybag_import_succeeded";
+ report[success]=B([result[@"import_succeeded"] boolValue] && ![result[@"error_present"] boolValue]);
+}
+static void ProcessBags(NSDictionary *body,NSMutableDictionary *r,LabBagImporter importer,BOOL (^contextOK)(void)) {
+ id keybag=body[@"keybag"];
+ id diversity=body[@"diversitybag"];
+ BOOL hasDiversity=ValidBag(diversity);
+ r[@"diversitybag_present"]=B(hasDiversity);
+ r[@"diversity_import_attempted"]=@NO;r[@"keybag_retry_attempted"]=@NO;r[@"keybag_import_attempted"]=@NO;
+ if(!ValidBag(keybag)){r[@"status"]=@"keybag_not_issued";return;}
+ if(diversity && !hasDiversity){r[@"status"]=@"invalid_diversitybag";return;}
+ BOOL stable=contextOK();r[@"context_stable_before_import"]=B(stable);
+ if(!stable){r[@"status"]=@"keybag_context_changed";return;}
+ r[@"keybag_import_attempted"]=@YES;
+ NSDictionary *primary=importer(keybag,NO);
+ RecordBagResult(r,primary,@"initial_");RecordBagResult(r,primary,@"");
+ if(![primary[@"interface_available"] boolValue]){r[@"status"]=@"import_interface_unavailable";return;}
+ if(hasDiversity) {
+   if(!contextOK()){r[@"status"]=@"keybag_context_changed";return;}
+   r[@"diversity_import_attempted"]=@YES;
+   NSDictionary *diversityResult=importer(diversity,YES);
+   RecordBagResult(r,diversityResult,@"diversity_");
+   if(![diversityResult[@"interface_available"] boolValue]){r[@"status"]=@"import_interface_unavailable";return;}
+   if(![r[@"diversity_import_succeeded"] boolValue]){r[@"status"]=@"diversitybag_import_failed";return;}
+   BOOL after=contextOK();r[@"context_stable_after_diversity"]=B(after);
+   if(!after){r[@"status"]=@"keybag_context_changed";return;}
+   // A newly imported diversity bag is the only reason to retry locally, once.
+   if(![r[@"keybag_import_succeeded"] boolValue] && [primary[@"import_fairplay_status"] isEqual:@(-42023)]) {
+     r[@"keybag_retry_attempted"]=@YES;
+     primary=importer(keybag,NO);RecordBagResult(r,primary,@"");
+   }
+ }
+ r[@"status"]=[r[@"keybag_import_succeeded"] boolValue]?@"keybag_imported_model_unverified":@"keybag_import_failed";
+}
+static BOOL BagOrderContract(void) {
+ NSData *keybag=[@"PRIVATE_KEYBAG" dataUsingEncoding:NSUTF8StringEncoding];
+ NSData *diversity=[@"PRIVATE_DIVERSITY" dataUsingEncoding:NSUTF8StringEncoding];
+ NSDictionary *good=@{@"interface_available":@YES,@"import_succeeded":@YES,@"error_present":@NO};
+ NSDictionary *bad=@{@"interface_available":@YES,@"import_succeeded":@NO,@"error_present":@YES,
+   @"error_domain":@"AMSErrorDomain",@"error_code":@505,@"import_fairplay_status":@(-42023),@"private":@"PRIVATE_ERROR"};
+ for(NSUInteger mode=0;mode<7;mode++) {
+   NSMutableArray *order=[NSMutableArray array];__block NSUInteger primaryCalls=0,contextCalls=0;
+   NSMutableDictionary *r=[NSMutableDictionary dictionary];
+   NSDictionary *body=mode==0?@{@"keybag":keybag}:@{@"keybag":keybag,@"diversitybag":diversity};
+   ProcessBags(body,r,^NSDictionary *(NSData *data,BOOL div) {
+     [order addObject:div?@"diversity":@"keybag"];
+     if(div)return mode==2?bad:good;
+     primaryCalls++;
+     if(mode==0 || mode==5 || (primaryCalls==2 && mode!=6))return good;
+     if(mode==3)return @{@"interface_available":@YES,@"import_succeeded":@NO,@"error_present":@YES,@"import_fairplay_status":@(-42024)};
+     return bad;
+   },^BOOL {contextCalls++;return !(mode==4 && contextCalls==3);});
+   NSString *status=mode==2?@"diversitybag_import_failed":mode==3 || mode==6?@"keybag_import_failed":
+     mode==4?@"keybag_context_changed":@"keybag_imported_model_unverified";
+   NSArray *expected=mode==0?@[@"keybag"]:(mode==1 || mode==6)?@[@"keybag",@"diversity",@"keybag"]:@[@"keybag",@"diversity"];
+   if(![r[@"status"] isEqual:status] || ![order isEqual:expected])return NO;
+   if(mode==1 && ([r[@"error_present"] boolValue] || r[@"error_code"] || r[@"import_fairplay_status"]
+     || ![r[@"initial_import_fairplay_status"] isEqual:@(-42023)]))return NO;
+   NSString *json=[[NSString alloc] initWithData:[NSJSONSerialization dataWithJSONObject:r options:0 error:NULL] encoding:NSUTF8StringEncoding];
+   if([json containsString:@"PRIVATE"])return NO;
+ }
+ for(id malformed in @[@"PRIVATE",[NSData data],[NSMutableData dataWithLength:2097153]]) {
+   __block BOOL called=NO;NSMutableDictionary *r=[NSMutableDictionary dictionary];
+   ProcessBags(@{@"keybag":keybag,@"diversitybag":malformed},r,^NSDictionary *(NSData *d,BOOL div){called=YES;return good;},^BOOL{return YES;});
+   if(called || ![r[@"status"] isEqual:@"invalid_diversitybag"])return NO;
+ }
+ __block BOOL called=NO;NSMutableDictionary *r=[NSMutableDictionary dictionary];
+ ProcessBags(@{@"keybag":keybag},r,^NSDictionary *(NSData *d,BOOL div){called=YES;return good;},^BOOL{return NO;});
+ return !called && [r[@"status"] isEqual:@"keybag_context_changed"];
+}
 static unsigned int ContextIdentifier(id bag) {
  SEL context=NSSelectorFromString(@"fairplayContextWithError:");
  if(!ABI(bag,context,@"I",@[@"^@"]))return 0;
@@ -282,6 +374,10 @@ static void InvalidImportProbe(NSMutableDictionary *r) {
  ErrorFields(r,error);ImportErrorFields(r,error);
  r[@"expected_invalid_keybag_rejected"]=B(!ok && error!=nil);
  r[@"context_stable_after_rejection"]=B(context!=0 && context==ContextIdentifier(bag));
+ NSDictionary *diversity=ImportOneBag(bag,invalid,YES);
+ RecordBagResult(r,diversity,@"diversity_");
+ r[@"diversity_import_attempted"]=B([diversity[@"interface_available"] boolValue]);
+ r[@"expected_invalid_diversity_rejected"]=B(![diversity[@"import_succeeded"] boolValue] && [diversity[@"error_present"] boolValue]);
  r[@"status"]=!ok && error?@"invalid_keybag_rejected":@"invalid_keybag_unexpected_result";
 }
 
@@ -289,6 +385,7 @@ static void Authorize(NSDictionary *input,NSMutableDictionary *r) {
  r[@"state_before"]=State();
  id initialKeybag=SharedKeybag();unsigned int initialContext=ContextIdentifier(initialKeybag);
  r[@"context_ready_before_request"]=B(initialContext!=0);SharedPathFields(r);
+ if(!initialContext){r[@"status"]=@"keybag_context_unavailable";return;}
  NSURLRequest *request=PreparedRequest(input,r);
  if(!request){r[@"status"]=@"request_preparation_failed";return;}
  LabEnrollmentResponse *delegate=[LabEnrollmentResponse new];
@@ -337,22 +434,16 @@ static void Authorize(NSDictionary *input,NSMutableDictionary *r) {
  r[@"keybag_present"]=B(keybag);
  if(keybag)[r addEntriesFromDictionary:KeybagShape(blob)];
  if(delegate.response.statusCode!=200 || hasFailure || !keybag) {r[@"status"]=@"keybag_not_issued";return;}
- Class cls=NSClassFromString(@"AMSKeybag");SEL shared=NSSelectorFromString(@"sharedInstance");
- if(!ABI(cls,shared,@"@",@[])){r[@"status"]=@"import_interface_unavailable";return;}
- id bag=((id(*)(id,SEL))objc_msgSend)(cls,shared);SEL import=NSSelectorFromString(@"importKeybagWithData:error:");
- if(!(ABI(bag,import,@"B",@[@"@",@"^@"]) || ABI(bag,import,@"c",@[@"@",@"^@"]))) {
-   r[@"status"]=@"import_interface_unavailable";return;
- }
- r[@"context_stable_before_import"]=B(initialContext!=0 && initialKeybag==bag && initialContext==ContextIdentifier(bag));
- NSError *error=nil;
- BOOL imported=((BOOL(*)(id,SEL,id,NSError *__autoreleasing *))objc_msgSend)(bag,import,blob,&error);
- ErrorFields(r,error);ImportErrorFields(r,error);r[@"keybag_import_succeeded"]=B(imported && !error);
- r[@"status"]=imported && !error?@"keybag_imported_model_unverified":@"keybag_import_failed";
+ ProcessBags(body,r,^NSDictionary *(NSData *data,BOOL diversity) {
+   return ImportOneBag(initialKeybag,data,diversity);
+ },^BOOL {
+   return initialKeybag==SharedKeybag() && initialContext==ContextIdentifier(initialKeybag);
+ });
 }
 int main(int argc,const char **argv) { @autoreleasepool {
  if((argc!=2 && argc!=3) || !getenv("GITHUB_ACTIONS") || strcmp(getenv("GITHUB_ACTIONS"),"true"))return 2;
  if(!strcmp(argv[1],"--response-contract")) {
-   BOOL ok=ResponseContract() && ClientContextContract() && ImportErrorContract() && KeybagShapeContract();puts(ok?"response and client context contracts passed":"response and client context contracts failed");return ok?0:4;
+   BOOL ok=ResponseContract() && ClientContextContract() && ImportErrorContract() && KeybagShapeContract() && BagOrderContract();puts(ok?"response and client context contracts passed":"response and client context contracts failed");return ok?0:4;
  }
  NSMutableDictionary *r=[@{@"schema":@"ipa-lab-machine-enrollment-v1",@"status":@"invalid_private_input",
    @"authorization_request_attempted":@NO,@"enrollment_created":@NO,@"decryption_proven":@NO} mutableCopy];

@@ -9,12 +9,12 @@ import sys
 import tempfile
 from native_keybag import DOMAINS, STATE_KEYS
 
-STATUSES = {"invalid_keybag_rejected", "invalid_keybag_unexpected_result", "invalid_private_input", "request_preparation_failed", "request_timeout", "request_stopped",
+STATUSES = {"invalid_diversitybag", "diversitybag_import_failed", "keybag_context_changed", "keybag_context_unavailable", "invalid_keybag_rejected", "invalid_keybag_unexpected_result", "invalid_private_input", "request_preparation_failed", "request_timeout", "request_stopped",
     "response_not_plist", "keybag_not_issued", "import_interface_unavailable",
     "keybag_imported_model_unverified", "keybag_import_failed", "native_exception", "probe_failed",
     "missing_credentials", "login_failed", "login_ambiguous", "login_timeout", "native_timeout",
     "native_process_failed", "private_handoff_failed"}
-BOOLS = {"keybag_gzip", "keybag_binary_plist", "keybag_xml", "keybag_base64_text", "shared_directory_present", "shared_directory_writable", "shared_directory_symlink", "context_stable_after_rejection", "context_ready_before_request", "context_stable_before_import", "expected_invalid_keybag_rejected", "client_agent_bound", "client_agent_changed", "md_data_present", "md_data_valid", "amd_data_present", "amd_data_valid", "authorization_request_attempted", "ephemeral_account", "session_identity_verified", "body_token_bound",
+BOOLS = {"diversitybag_present", "diversity_import_attempted", "diversity_import_succeeded", "diversity_error_present", "initial_import_succeeded", "initial_error_present", "keybag_import_attempted", "keybag_retry_attempted", "context_stable_after_diversity", "expected_invalid_diversity_rejected", "keybag_gzip", "keybag_binary_plist", "keybag_xml", "keybag_base64_text", "shared_directory_present", "shared_directory_writable", "shared_directory_symlink", "context_stable_after_rejection", "context_ready_before_request", "context_stable_before_import", "expected_invalid_keybag_rejected", "client_agent_bound", "client_agent_changed", "md_data_present", "md_data_valid", "amd_data_present", "amd_data_valid", "authorization_request_attempted", "ephemeral_account", "session_identity_verified", "body_token_bound",
     "redirect_blocked", "response_oversized", "error_present", "apple_failure_present",
     "dialog_present", "keybag_present", "keybag_import_succeeded", "redirect_seen",
     "redirect_query_supported", "redirect_method_post", "redirect_https", "storefront_header_present",
@@ -49,21 +49,30 @@ def clean(value):
         r["session_cookie_count"] = value["session_cookie_count"]
     if type(value.get("approved_redirect_count")) is int and 0 <= value["approved_redirect_count"] <= 1:
         r["approved_redirect_count"] = value["approved_redirect_count"]
-    for key in ("error_code", "apple_failure_code", "fairplay_status"):
+    for key in ("error_code", "apple_failure_code", "fairplay_status", "initial_error_code", "diversity_error_code"):
         if type(value.get(key)) is int and -999999 <= value[key] <= 999999:
             r[key] = value[key]
-    if type(value.get("import_fairplay_status")) is int and -(2**31) <= value["import_fairplay_status"] < 2**31:
-        r["import_fairplay_status"] = value["import_fairplay_status"]
+    for key in ("import_fairplay_status", "initial_import_fairplay_status", "diversity_import_fairplay_status"):
+        if type(value.get(key)) is int and -(2**31) <= value[key] < 2**31:
+            r[key] = value[key]
     if type(value.get("http_status")) is int and 100 <= value["http_status"] <= 599:
         r["http_status"] = value["http_status"]
-    if type(value.get("error_domain")) is str and value["error_domain"] in DOMAINS:
-        r["error_domain"] = value["error_domain"]
+    for key in ("error_domain", "initial_error_domain", "diversity_error_domain"):
+        if type(value.get(key)) is str and value[key] in DOMAINS:
+            r[key] = value[key]
     for key in ("state_before", "state_after"):
         if type(value.get(key)) is dict:
             r[key] = {k: value[key][k] for k in STATE_KEYS if type(value[key].get(k)) is bool}
     if r["status"] == "keybag_imported_model_unverified" and not (
         all(r.get(k) is True for k in ("authorization_request_attempted", "session_identity_verified", "body_token_bound",
-                                      "keybag_present", "keybag_import_succeeded"))
+                                      "keybag_present", "keybag_import_succeeded", "context_ready_before_request", "context_stable_before_import", "keybag_import_attempted"))
+        and type(r.get("diversitybag_present")) is bool
+        and (r["diversitybag_present"] is False or (r.get("diversity_import_attempted") is True
+            and r.get("diversity_import_succeeded") is True and r.get("diversity_error_present") is False
+            and r.get("context_stable_after_diversity") is True))
+        and type(r.get("keybag_retry_attempted")) is bool
+        and (r["keybag_retry_attempted"] is False or (r.get("diversitybag_present") is True
+            and r.get("initial_import_succeeded") is False and r.get("initial_import_fairplay_status") == -42023))
         and r.get("http_status") == 200 and r.get("error_present") is False
         and r.get("apple_failure_present") is False and r.get("redirect_blocked") is False
         and r.get("response_oversized") is False):
