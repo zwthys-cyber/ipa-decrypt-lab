@@ -10,11 +10,20 @@ BOOLS = {"explicit_client_identifier", "bundle_identifier_present", "bag_selecto
          "identifier_initializer_present", "error_present", "xpc_connection_invalid",
          "xpc_connection_interrupted", "missing_entitlement", "code_signing_requirement",
          "lookup_failed", "service_missing", "connection_invalidated", "sandbox_denied",
-         "connection_rejected", "callback_completed", "bag_result_present"}
+         "connection_rejected", "callback_completed", "bag_result_present",
+         "connection_object_present", "raw_xpc_connection_present", "service_name_recognized",
+         "peer_pid_available", "invalidation_reason_api_present", "invalidation_reason_present",
+         "reason_missing_entitlement", "reason_code_signing_requirement", "reason_lookup_failed",
+         "reason_service_missing", "reason_connection_invalidated", "reason_sandbox_denied",
+         "reason_connection_rejected", "reason_internal_authkit_entitlement_named",
+         "reason_peer_code_requirement", "reason_peer_cancelled"}
 STATUSES = {"interface_unavailable", "transport_timeout", "transport_rejected", "bag_fetch_succeeded",
             "empty_result", "native_exception", "probe_failed", "requires_github_macos"}
 DOMAINS = {"NSCocoaErrorDomain", "AKAuthenticationError", "AKAuthenticationServerError",
            "NSPOSIXErrorDomain", "NSURLErrorDomain"}
+SERVICES = {"com.apple.ak.auth.xpc", "com.apple.ak.anisette.xpc",
+            "com.apple.ak.authorizationservices.xpc", "com.apple.akd"}
+
 def clean(value):
     result = {"schema": "ipa-lab-authkit-transport-v1", "status": "probe_failed",
               "account_login_attempted": False, "enrollment_created": False, "decryption_proven": False}
@@ -29,6 +38,8 @@ def clean(value):
         code = value.get("error_code")
         if type(code) is int and -999999 <= code <= 999999:
             result.update(error_domain=value["error_domain"], error_code=code)
+    if type(value.get("service_name")) is str and value["service_name"] in SERVICES:
+        result["service_name"] = value["service_name"]
     if value.get("sdk_xpc_invalid_code") == 4099:
         result["sdk_xpc_invalid_code"] = 4099
     if result["status"] == "bag_fetch_succeeded" and not (
@@ -111,6 +122,13 @@ def service_metadata():
             result[scope + "_akd_registered"] = False
     path = Path("/System/Library/LaunchAgents/com.apple.akd.plist")
     result["akd_launch_agent_plist_present"] = path.is_file()
+    if path.is_file():
+        try:
+            values = plistlib.loads(path.read_bytes())
+            services = values.get("MachServices", {})
+            result["known_advertised_services"] = sorted(name for name in SERVICES if name in services)
+        except Exception:
+            pass
     for label, path in {
         "app_store": "/System/Applications/App Store.app",
         "client": "./AuthKitTransport.app",

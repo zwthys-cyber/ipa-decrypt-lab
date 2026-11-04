@@ -25,6 +25,18 @@ class TransportTests(unittest.TestCase):
         result = transport.clean({"status": "private", "error_domain": "private", "error_code": True})
         self.assertNotIn("private", json.dumps(result))
 
+    def test_connection_metadata_drops_unknown_services_and_raw_reasons(self):
+        raw = {"status": "transport_rejected", "service_name": "com.apple.ak.auth.xpc",
+               "raw_reason": "private-machine-and-account", "peer_pid": 1234,
+               "invalidation_reason_present": True, "reason_peer_code_requirement": True}
+        result = transport.clean(raw)
+        self.assertEqual(result["service_name"], "com.apple.ak.auth.xpc")
+        self.assertTrue(result["reason_peer_code_requirement"])
+        self.assertNotIn("private", json.dumps(result))
+        self.assertNotIn("peer_pid", result)
+        raw["service_name"] = "com.apple.ak.private-identifier"
+        self.assertNotIn("service_name", transport.clean(raw))
+
     def test_bag_success_requires_completed_nonempty_error_free_response(self):
         value = {"status": "bag_fetch_succeeded", "callback_completed": True,
                  "bag_result_present": True, "error_present": False}
