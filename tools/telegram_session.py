@@ -233,6 +233,15 @@ class Controller:
                 self.say("未能确认 GitHub 任务状态，请稍后用 /get "+rid+" 查询已完成产物。")
                 self.current=None
             return
+        if run.get("status")!="completed" and type(run.get("id")) is int:
+            try:
+                if self.github.artifact_ready(run,rid) is True:
+                    self.current=None
+                    if rid not in self.delivered:
+                        self.deliver(rid)
+                    return
+            except QueueError:
+                pass
         if self.failover(run):
             return
         state=run.get("status","unknown")

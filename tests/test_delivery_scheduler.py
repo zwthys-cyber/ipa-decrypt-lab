@@ -88,6 +88,36 @@ class SchedulerTests(unittest.TestCase):
             api.retry("1530340312",RID,10)
         api.call.assert_not_called()
 
+    def test_early_delivery_requires_bound_ready_feed_and_finalized_artifact(self):
+        run=dict(old(),status="in_progress",conclusion=None)
+        api=GitHub("synthetic")
+        api.progress=Mock(return_value="artifact_ready")
+        artifact={"id":55,"name":"delivery-"+RID,"expired":False,"size_in_bytes":200,
+                  "digest":"sha256:"+"b"*64}
+        api.call=Mock(return_value={"artifacts":[artifact]})
+        self.assertTrue(api.artifact_ready(run,RID))
+        for key,value in (("expired",True),("digest",""),("size_in_bytes",0),("name","other")):
+            item=dict(artifact);item[key]=value
+            api.call.return_value={"artifacts":[item]}
+            self.assertFalse(api.artifact_ready(run,RID),key)
+        api.call.return_value={"artifacts":[artifact]}
+        api.progress.return_value="encrypting"
+        self.assertFalse(api.artifact_ready(run,RID))
+        api.progress.return_value="artifact_ready"
+        self.assertFalse(api.artifact_ready(dict(run,status="completed",conclusion="failure"),RID))
+        self.assertFalse(api.artifact_ready(dict(run,head_branch="other"),RID))
+
+    def test_ready_artifact_delivers_once_while_ci_status_is_delayed(self):
+        bot,api=Mock(),Mock()
+        api.find.return_value=dict(old(),status="in_progress",conclusion=None)
+        api.artifact_ready.return_value=True
+        api.deliver.return_value={"status":"telegram_file_delivered","request_id":RID,"bytes":200}
+        c=Controller(bot,api,123,"/crypt","synthetic")
+        c.current={"rid":RID,"app":"1530340312","state":"in_progress"}
+        c.tick();c.tick()
+        api.deliver.assert_called_once()
+        self.assertIsNone(c.current)
+
     def test_controller_does_not_repeat_ambiguous_retry_post(self):
         bot,api=Mock(),Mock()
         api.runs.return_value=[old()]

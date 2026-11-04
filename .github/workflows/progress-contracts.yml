@@ -4,6 +4,7 @@ on:
 permissions:
   contents: read
   checks: write
+  actions: read
 jobs:
   progress:
     if: github.ref == 'refs/heads/main'
@@ -14,7 +15,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Test progress boundaries without credentials
-        run: python3 -m unittest discover -s tests -p 'test_task_progress.py' -v
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
       - name: Verify synthetic stage write and readback
         env:
           GH_TOKEN: ${{ github.token }}
@@ -36,4 +37,33 @@ jobs:
                   raise SystemExit("progress_channel_readback_failed")
           print(json.dumps({"schema":"ipa-progress-probe-v1","status":"check_readback_verified",
                             "stage_count":3,"synthetic":True}))
+          PY
+      - name: Verify finalized encrypted sample readiness without sending a file
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: tools
+        run: |
+          python3 - <<'PY'
+          import json, os, tempfile
+          from pathlib import Path
+          from telegram_queue import GitHub, sha256
+          api=GitHub(os.environ["GH_TOKEN"])
+          rid="00000000000000000000000000000028"
+          run=api.find(rid)
+          if not run:
+              raise SystemExit("sample_run_missing")
+          delayed=dict(run,status="in_progress",conclusion=None)
+          if not api.artifact_ready(delayed,rid):
+              raise SystemExit("early_readiness_not_verified")
+          data=api.call("/actions/runs/"+str(run["id"])+"/artifacts?per_page=100")
+          item=next(a for a in data["artifacts"] if a["name"]=="delivery-"+rid and not a["expired"])
+          with tempfile.TemporaryDirectory(prefix="encrypted-readiness-probe-") as directory:
+              bundle=Path(directory)/"encrypted.zip"
+              api.archive(item["id"],bundle)
+              if "sha256:"+sha256(bundle)!=item["digest"]:
+                  raise SystemExit("artifact_digest_readback_failed")
+          print(json.dumps({"schema":"ipa-ready-probe-v1","status":"early_readiness_verified",
+                            "source_run_status":run["status"],"simulated_status_delay":True,
+                            "archive_digest_verified":True,"plaintext_accessed":False,
+                            "telegram_file_sent":False}))
           PY

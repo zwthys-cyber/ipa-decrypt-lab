@@ -39,3 +39,9 @@
 - The user requested live Telegram progress. private-delivery.yml may use checks:write solely to publish the fixed delivery-progress check for its own request/run and source commit. No account data, raw logs, file paths or secrets may enter progress payloads.
 - The Telegram controller may read those checks with checks:read and edit its own owner-private progress message. Report actual stages and elapsed time; never invent byte percentages. Completion 100% requires the file-send acknowledgement. Progress reporting failures must not repeat a job or file upload.
 - progress-contracts.yml may use checks:write only for its own synthetic progress-channel probe on the current source commit; it receives no Apple or Telegram credentials.
+
+## Delivery readiness during delayed workflow finalization
+
+- A trusted worker's request/run-bound artifact_ready check plus a finalized, non-expired encrypted artifact with a SHA-256 digest may release private delivery while the overall workflow status still lags. A completed failed/cancelled run does not qualify for this early path.
+- The controller must still verify artifact archive digest (when present), recipient-encrypted payload, receipt binding, plaintext digest and IPA structure before sending; the progress card reaches 100% only after Telegram acknowledges the file.
+- progress-contracts.yml may read Actions artifacts metadata and download only the fixed encrypted verification sample to test readiness/archive integrity. It receives no delivery identity or Apple/Telegram credentials and must not send files or expose plaintext.

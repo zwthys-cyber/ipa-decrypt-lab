@@ -192,13 +192,35 @@ class GitHub:
         except (OSError, http.client.HTTPException):
             raise QueueError("artifact_transport_failed") from None
 
+    def artifact_ready(self,run,rid):
+        request_id(rid)
+        if (not isinstance(run,dict) or type(run.get("id")) is not int
+                or not matches(run,rid) or run.get("event")!="workflow_dispatch"
+                or run.get("head_branch")!="main"
+                or run.get("path")!=".github/workflows/"+WORKFLOW):
+            return False
+        if run.get("status")=="completed":
+            return run.get("conclusion")=="success"
+        if run.get("status") not in ("in_progress","queued","waiting","pending"):
+            return False
+        if self.progress(run,rid)!="artifact_ready":
+            return False
+        data=self.call("/actions/runs/"+str(run["id"])+"/artifacts?per_page=100")
+        require(isinstance(data,dict) and isinstance(data.get("artifacts"),list),"invalid_artifact_list")
+        candidates=[a for a in data["artifacts"] if isinstance(a,dict) and a.get("name")=="delivery-"+rid
+                    and a.get("expired") is False]
+        return (len(candidates)==1 and type(candidates[0].get("id")) is int and candidates[0]["id"]>0
+                and type(candidates[0].get("size_in_bytes")) is int
+                and 0<candidates[0]["size_in_bytes"]<=MAX_FILE+4*1024*1024
+                and isinstance(candidates[0].get("digest"),str)
+                and re.fullmatch(r"sha256:[a-f0-9]{64}",candidates[0]["digest"]) is not None)
+
     def deliver(self, rid, bot, owner, crypt, progress=None):
         request_id(rid)
         progress = progress or (lambda stage: None)
         progress("retrieving")
         run = self.find(rid)
-        require(run is not None and run.get("status") == "completed"
-                and run.get("conclusion") == "success", "artifact_not_ready")
+        require(run is not None and self.artifact_ready(run,rid), "artifact_not_ready")
         run_id = int(run["id"])
         artifacts = self.call("/actions/runs/" + str(run_id) + "/artifacts?per_page=100")
         require(isinstance(artifacts, dict), "invalid_artifact_list")
@@ -210,6 +232,12 @@ class GitHub:
             root.chmod(0o700)
             bundle = root/"encrypted.zip"
             self.archive(found[0]["id"], bundle)
+            archive_digest=found[0].get("digest")
+            if archive_digest is not None:
+                require(isinstance(archive_digest,str) and
+                        re.fullmatch(r"sha256:[a-f0-9]{64}",archive_digest) and
+                        sha256(bundle)==archive_digest.removeprefix("sha256:"),
+                        "artifact_archive_digest_mismatch")
             with zipfile.ZipFile(bundle) as z:
                 entries = z.infolist()
                 require(len(entries) == 2 and {e.filename for e in entries} ==
