@@ -660,3 +660,35 @@ Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41776353497 at 
 This test deliberately distinguishes basic construction from real-session readiness. The body ownerDsid and X-Dsid header did not match the fixed synthetic account, and the User-Agent did not pass the Configurator-prefix check. These false flags alone do not distinguish absent fields from another value. ARM had both inspected Anisette headers, while Intel did not have both; header presence is not proof that their contents are valid.
 
 No authorization request, login, or import occurred in this construction run. The four state flags remained false, no model was captured, and no encrypted IPA was decrypted. The next work is identity/header binding and proving that the request uses a GUID consistent with the authenticated download session, without overwriting a mismatched native identity. These prerequisites must be checked before a real service-based enrollment trial is meaningful.
+
+## CommerceKit session binding and server refusal (2026-11-04)
+
+### Closing the identity and header gap
+
+The pinned download client's DeviceIdentifier.system implementation reads en0, falling back to en1, and produces an uppercase six-byte MAC-format GUID. The workflow now compiles that exact upstream source at ApplePackage 391bfe6ee6598d73e4f94b88b38b50bd6f6ec67b with a minimal helper. Its value travels only through private process pipes; no device identifier is printed or passed as a command-line argument. An initial standalone Swift helper declaration returned Void where the upstream guard requires Never; run 41777038680 stopped at compilation without invoking an account, and commit 49105eb corrected the declaration.
+
+Binding run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41777147010 passed on ARM and Intel with 19 Python checks each and a native binding contract. The system-generated GUID exactly matched the pinned client's value on both runners. The earlier ownerDsid flag was false because that field was absent. Binding supplies the matching account identifier and session headers, applies the same login User-Agent, updates Content-Length, and preserves GUID, sync data, token and needDiv. It rejects conflicting identities, unsupported destinations/methods/query fields, existing action signatures, malformed tokens and header-control characters. The input NSURLRequest remains unchanged on both success and rejection.
+
+The actual machine-enrollment binary now shares that constructor. Account-free preflight https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41777899832 passed 53 Python checks per architecture plus the native binding and response contracts. Both actual clients reported commerce_request_prepared, verified identity, one fixed Cookie, and the same NSXPC connection object through preparation. This is object-identity evidence, not a guarantee that a daemon's internal cryptographic state cannot change.
+
+Invalid-import regression https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41777902392 passed 24 Python checks per architecture and the native contract. It retained ARM's two failure-log mentions with known code -42018 and Intel's lack of matching messages. Only fixed invalid data was supplied.
+
+### One substantive real trial
+
+Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41778198600 at 6cb9707aa863aaf6eb42edf89005eb620791cc8c selected backend=commerce, native_user=runner, purpose=signIn, session_context=cookies and client_context=login_agent. Before exposing credentials it passed 59 Python tests, 11 Swift tests, native contracts and the actual constructor's no-submit preflight.
+
+The Store login succeeded. The native account DSID/token checks, GUID comparison, session binding, User-Agent and connection checks passed. Eight filtered session cookies were attached. The CommerceKit-generated request also had a storefront header; this differs from the older direct-AMS request path and remains a documented difference rather than an isolated cause.
+
+The single authorization request received HTTP 200 but a business failure with failureType 3002. The fixed message classifier found the phrase "five computers" or "5 computers". No keybag was present, no redirect occurred, and no keybag or diversitybag import was attempted. The four expected nonempty SIDB/SIDS flags stayed false; the bounded service-log window contained no matching import events. There is no new model, capture, or decrypted IPA.
+
+This combination strongly points to the computer-authorization limit, rather than merely treating any HTTP 200 as success. It is still not a direct account-settings count, a list of affected computers, or an official Apple mapping of error code 3002. The full response text and private account/device values were not retained.
+
+Apple's current official guidance says an account can authorize up to five computers simultaneously, provides Mac/Windows account-settings steps for checking the count, and limits "Deauthorize All" to once a year: https://support.apple.com/zh-cn/118292. That page supports the general rule; it does not independently establish this account's current count.
+
+Earlier research returned keybag data in five separate trials. Those disposable-runner authorizations may have contributed to the limit; existing sanitized records do not establish which computers are counted. No deauthorization was attempted and no other device's authorization was changed. Further real authorization submissions are suspended until the owner verifies available slots or provides new evidence that changes this diagnosis. This does not block account-free implementation review or synthetic verification.
+
+### Final reporting regression
+
+Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41778381405 at a521dd5c418abdf12ec7a8d40651f0a88b97bef8 passed on both architectures with 55 Python tests each, the native binding contract and the response/client-context contracts. Both public probes again reported only synthetic binding and no-submit preparation.
+
+The CommerceKit backend always reports import_verified=false and cannot reuse the direct AMS backend's keybag_imported_model_unverified success status. Even a returned import call, follow-up sync response, changed file flag or success wording in a log is insufficient to establish a recovered enrollment model or verified decryption.

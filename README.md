@@ -4,6 +4,12 @@
 
 ## 当前结果
 
+当前最新结果：[CommerceKit 真实试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41778198600)完成 59 项 Python、11 项 Swift 测试及原生检查。真实登录成功，原生 GUID 与下载器一致，账号、令牌、User-Agent 和 Cookie 已绑定；服务器返回 HTTP 200，但正文包含业务失败码 **3002**，并提到“五台电脑”。**没有 keybag，没有执行导入，也没有模型或已验证的砸壳产物。**
+
+这比早先仅出现“五台电脑”措辞的成功发包响应更明确，强烈指向电脑授权数量限制；目前仍未读取账号设置中的实际数量，也没有保留原始提示全文，不能据此列出或归属具体电脑。此前五次返回 keybag 的临时运行器试验可能计入授权，现有摘要无法确认。暂不重复真实授权请求，不自动撤销现有设备授权。Apple 官方说明最多同时授权五台电脑，可在 Mac/Windows 的“音乐”或 Apple TV 账户设置中核对数量；“全部解除授权”影响所有电脑，且一年只能使用一次。[官方说明](https://support.apple.com/zh-cn/118292)。
+
+此前发现的会话绑定缺口已在[双架构检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41777147010)和[实际客户端预检](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41777899832)中补齐。原生 GUID 未被重写，绑定后同步数据、令牌和 needDiv 均保持一致。[最终无账号回归](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41778381405)在两个架构各通过 55 项 Python 检查及原生检查；无完成回调的服务后端不能被标记为直接导入成功。[完整证据](OFFLINE-BACKEND.md#commercekit-session-binding-and-server-refusal-2026-11-04)。
+
 | 环节 | 已有证据 | 尚未完成 |
 | --- | --- | --- |
 | 下载客户端账号登录 | Swift 签名下载路径已成功登录，无需本次输入 OTP | 不代表系统 FairPlay 注册完成 |
@@ -11,7 +17,7 @@
 | 独立 Anisette 与原生接入 | Linux / ARM Mac 初始化及复用成功；原生代理回调契约通过 | 实际 AuthKit 调用返回 XPC 4099，数据提供器未被调用，未生成模型 |
 | 原生 keybag / 机器授权 | 统一登录与授权身份后，服务器返回 keybag 和 diversitybag；已补齐两步导入及文件访问诊断 | keybag 为 -42023、diversitybag 为 -42032；root 下仍失败，未取得模型 |
 | App Store 守护进程 FairPlay 接口 | 双架构接口存在，固定零值和非零值对照完成 | 均返回 ASDErrorDomain 505，错误提到 entitlement，未生成请求数据 |
-| CommerceKit 系统服务路径 | 双架构生成测试同步数据并构造未发送的请求；ARM 无效导入出现失败日志 | 真实会话身份尚未绑定；未验证真实授权、导入或模型恢复 |
+| CommerceKit 系统服务路径 | 双架构会话绑定和实际客户端预检通过；真实登录及 GUID/账号/令牌/User-Agent 校验通过 | 新授权返回业务错误 3002 并提到五台电脑；未发放 keybag，未进入导入 |
 | 原始 IPA 下载 | 目标 App ID 6599842047 已成功下载并检查到 62 个加密 Mach-O 切片 | 原始包仍然加密，不是砸壳产物 |
 | macOS 原生实验 | 62 次实际调用均返回 EPERM；已区分路径、文件布局和调用前检查 | 没有生成已验证明文；不能仅凭 EPERM 确定原因 |
 | 离线解密引擎 | 固定版本 UnfairPlay 在 GitHub Linux x86_64 编译成功，相关 Go 测试及 52 项 Python 测试通过 | 缺少匹配的私有 FairPlay enrollment 模型，未验证真实 IPA 解密 |
@@ -38,9 +44,9 @@
 
 后续[无效导入与日志对照](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41775774340)在两个架构各通过 17 项 Python 检查及原生检查。无效数据的导入调用也会返回，服务之后仍能生成同步数据；ARM 日志窗口记录到两条导入失败消息，固定错误码摘要包含 `-42018`，Intel 没有匹配日志。四个预期状态标志均未变化，故仍记为 `submission_unverified`。
 
-[未发送请求的构造检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41776353497)在双架构各通过 17 项测试：系统服务构造了目标地址正确的 HTTPS POST，保留固定同步数据、测试令牌和 needDiv，并加入六字节格式 GUID。但目标账号的 ownerDsid、X-Dsid 和 Configurator User-Agent 检查尚未通过；ARM 存在两项预期 Anisette 头，Intel 不同时具备。这些字段的存在不证明认证有效。**当前只完成请求构造，还不是可直接提交的真实会话。**
+[未发送请求的构造检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41776353497)在双架构各通过 17 项测试：系统服务构造了目标地址正确的 HTTPS POST，保留固定同步数据、测试令牌和 needDiv，并加入六字节格式 GUID。但目标账号的 ownerDsid、X-Dsid 和 Configurator User-Agent 检查尚未通过；ARM 存在两项预期 Anisette 头，Intel 不同时具备。这些字段的存在不证明认证有效。这项较早的构造检查尚未绑定真实会话；后续绑定和真实服务器结果以上方最新记录为准。
 
-## 当前阻塞：keybag 导入与模型恢复
+## 当前阻塞：新授权被拒绝，需核对电脑授权名额
 
 现有下载器创建临时账号会话并生成下载用 kbsync；这条代码路径不创建离线引擎需要的系统 FairPlay enrollment 状态。
 
@@ -73,7 +79,7 @@ Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直�
 | Account-free CommerceKit invalid import observation | 固定无效数据、调用前后服务响应、状态标志与有界日志摘要 | 无账号；仅无效合成导入，不把调用返回当作成功 |
 | Account-free CommerceKit request construction | 构造固定测试身份的请求，检查地址、方法与字段保留 | 无账号；不发送返回的授权请求 |
 | Account-free keybag import rejection probe | 双架构无效 keybag/diversitybag、文件访问、普通用户/root 与超时清理检查 | 不传入账号、不发送授权请求 |
-| Private native machine enrollment trial | 最多一次授权请求，分别检查 keybag/diversitybag；可选有界文件诊断与 root 对照 | 最后一步使用 Apple Secrets；不导出会话或 keybag |
+| Private native machine enrollment trial | 最多一次授权请求；可选 AMS 直接导入或 CommerceKit 系统服务；后者要求普通用户、登录 User-Agent 和 Cookie | 先运行无账号预检，最后一步使用 Apple Secrets；服务调用返回不代表导入成功 |
 
 在 Independent Swift Store trial 中选择：
 
