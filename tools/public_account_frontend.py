@@ -12,7 +12,7 @@ from public_store_routes import AGENT, BAG_URL, NoRedirect, decode
 MAX_FILE = 3 * 1024 * 1024
 MAX_TOTAL = 12 * 1024 * 1024
 MAX_ASSETS = 12
-INTEREST = re.compile(r"authorizedComputers|primaryQuery|accountSettingsGraphqlUrl|AccountSettingsGraphqlUrl|fetchAccount|accountSummaryGraphQL|shouldMakeStoreXhrRequest|makeHttpRequest|ActionSignature", re.I)
+INTEREST = re.compile(r"deauthoriz|deauthoris|deauth|revokeAll|authorizedComputers", re.I)
 
 def fetch(url):
     request = urllib.request.Request(url, headers={"User-Agent": AGENT, "Accept-Encoding": "identity"})
@@ -68,7 +68,7 @@ def inspect_text(raw):
     for pattern in patterns:
         refs.extend(re.findall(pattern, text))
     modules = {}
-    for module_id in (99064, 35510, 87795):
+    for module_id in (39513,):
         marker = re.search(r"(?<![0-9])" + str(module_id) + r":(?:\(|function)", text)
         if marker:
             tail = text[marker.start():marker.start()+18000]

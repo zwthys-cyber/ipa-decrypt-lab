@@ -771,3 +771,53 @@ M2 missing and -7012 were not reported as a same-event causal chain. The summary
 At this point the GUI navigation is implemented and verified; official native sign-in and authorization-count retrieval are not. Further identical credential submissions would not address the observed failure. A changed authentication path or evidence-based correction is needed before another real trial. An alternative worth investigating is whether the already working downloader session can support a legitimate read-only account-information request; no such account-count endpoint or session handoff has yet been established.
 
 The earlier CommerceKit machine-authorization response still contains business failure 3002 and five-computer wording, with no keybag. The account's actual count remains unknown. No Deauthorize All operation was prepared or executed, and its account-wide scope and annual-use consequences still require explicit owner approval once a concrete working method exists.
+
+
+## Downloader-session account summary (2026-11-04)
+
+### Purpose and scope
+
+The previous official Music route reached the email/password form but could not establish a signed-in native account. This experiment asks whether the already working signed downloader session can read the **actual authorized-computer count**, without requesting another machine authorization. It does not deauthorize any computer, reset a quota, create a FairPlay model, or prove decryption.
+
+### Current Apple public frontend
+
+The credential-free [Store bag probe](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41832531401) found that `accountSummary` points to an Apple static account-settings page on `apps.mzstatic.com`. This is a frontend URL, not an authenticated account response.
+
+The [bounded public frontend inspection](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41834004314) followed only the advertised content root and read static JavaScript without executing it or supplying credentials. It established:
+
+- Bag key `accountSummaryGraphQL` defaults to `https://buy.itunes.apple.com/account/v1/summary/graphql`.
+- The first-party `requestAccountSummary` query includes `authorizations.authorizedComputers`.
+- `linkedDevices` is a distinct field and must not be used as a computer-authorization count.
+- Modules 9783 and 86014 send a JSON POST and select a native Apple Media Services transport or a web transport. Native account-manager success is therefore not implied by identifying the endpoint.
+
+The lab requests only:
+
+```graphql
+query requestAccountSummary {
+  authorizations {
+    authorizedComputers
+  }
+}
+```
+
+It does not send the full frontend query, which also contains payment and personal account fields.
+
+### Implementation and verification
+
+`tools/store_account_summary.py` uses the pinned Swift login (`Lakr233/ApplePackage@391bfe6ee6598d73e4f94b88b38b50bd6f6ec67b`) with purpose `signIn`. The private handoff keeps DSID, token, GUID, original User-Agent, storefront, and scoped cookies on the ephemeral runner. It is validated for ownership, file mode, type and size, then deleted. Login stdout/stderr and authenticated response bodies are not published.
+
+The request destination and read-only query are fixed. At most one HTTP 307/308 to an explicitly allowed Apple buy pod with the identical path is followed. Cookies are rebuilt for the destination and checked for domain, path, expiry, header injection and total size. Responses are limited to 1 MiB; only an integer 0–5 at the exact GraphQL field is accepted, following confirmed Store login and HTTP 200 with no GraphQL errors. Partial data, linked-device counts, booleans and strings cannot produce success.
+
+[Workflow evidence](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41834443913): Linux passed 20 synthetic tests; the no-credential query returned HTTP 401. This establishes endpoint reachability and authentication enforcement, not a working authenticated account session.
+
+### Real result
+
+The macOS job also passed all 20 Python tests and the 11 pinned Swift SAP authentication tests. The signed downloader login succeeded. The fixed account-summary query returned HTTP 200, JSON, and **`data.authorizations.authorizedComputers = 5`**. The exact login User-Agent and a matching scoped Cookie header were present; no redirect was needed.
+
+The published result is `computer_count_observed`, not a model or decryption success. Both `machine_authorization_attempted` and `deauthorization_attempted` are false. The run did not call either machine-management endpoint, accept a security upgrade, or expose the account identity or response body.
+
+This is stronger evidence than the earlier 3002/five-computers diagnostic: the account's current count is now confirmed directly. It does **not** identify the computers, establish whether the earlier ephemeral runners occupy all slots, or make account-wide deauthorization authorized. Five computers is Apple's documented ceiling; a local code change cannot raise that service-side limit. The next review concerns the official deauthorization mechanism and its account-wide/yearly consequences, before any account-changing action.
+
+The prior native Music/AuthKit login failure remains unresolved, but it no longer prevents this read-only account-count check.
+
+All builds, tests and requests ran on GitHub-hosted runners. The public repository contains source, synthetic fixtures and bounded diagnostic results only.

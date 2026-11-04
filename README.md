@@ -4,9 +4,11 @@
 
 ## 当前结果
 
-当前最新结果：[CommerceKit 真实试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41778198600)完成 59 项 Python、11 项 Swift 测试及原生检查。真实登录成功，原生 GUID 与下载器一致，账号、令牌、User-Agent 和 Cookie 已绑定；服务器返回 HTTP 200，但正文包含业务失败码 **3002**，并提到“五台电脑”。**没有 keybag，没有执行导入，也没有模型或已验证的砸壳产物。**
+最新只读结果：[下载器会话查询](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41834443913)已成功读取账号实际授权电脑数量：**5 台**。Swift 登录成功，账户摘要接口返回 HTTP 200 和 `authorizations.authorizedComputers = 5`；Linux/macOS 各通过 20 项 Python 测试，另通过 11 项 Swift 测试。无需用户另备电脑，也不依赖失败的“音乐”原生登录。**只查询了数量，没有申请新机器授权或解除任何授权，仍未取得模型或验证砸壳。** [详细证据](OFFLINE-BACKEND.md#downloader-session-account-summary-2026-11-04)。
 
-这比早先仅出现“五台电脑”措辞的成功发包响应更明确，强烈指向电脑授权数量限制；目前仍未读取账号设置中的实际数量，也没有保留原始提示全文，不能据此列出或归属具体电脑。此前五次返回 keybag 的临时运行器试验可能计入授权，现有摘要无法确认。暂不重复真实授权请求，不自动撤销现有设备授权。Apple 官方说明最多同时授权五台电脑，可在 Mac/Windows 的“音乐”或 Apple TV 账户设置中核对数量；“全部解除授权”影响所有电脑，且一年只能使用一次。[官方说明](https://support.apple.com/zh-cn/118292)。
+此前的 [CommerceKit 真实试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41778198600)完成 59 项 Python、11 项 Swift 测试及原生检查。真实登录成功，原生 GUID 与下载器一致，账号、令牌、User-Agent 和 Cookie 已绑定；服务器返回 HTTP 200，但正文包含业务失败码 **3002**，并提到“五台电脑”。**没有 keybag，没有执行导入，也没有模型或已验证的砸壳产物。**
+
+这比早先仅出现“五台电脑”措辞的成功发包响应更明确，强烈指向电脑授权数量限制；后续只读账户摘要已确认实际数量为 5；仍未取得各电脑的明细或归属，不能据此确定每个名额来自哪次试验。此前五次返回 keybag 的临时运行器试验可能计入授权，现有摘要无法确认。暂不重复真实授权请求，不自动撤销现有设备授权。Apple 官方说明最多同时授权五台电脑，可在 Mac/Windows 的“音乐”或 Apple TV 账户设置中核对数量；“全部解除授权”影响所有电脑，且一年只能使用一次。[官方说明](https://support.apple.com/zh-cn/118292)。
 
 此前发现的会话绑定缺口已在[双架构检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41777147010)和[实际客户端预检](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41777899832)中补齐。原生 GUID 未被重写，绑定后同步数据、令牌和 needDiv 均保持一致。[最终无账号回归](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41778381405)在两个架构各通过 55 项 Python 检查及原生检查；无完成回调的服务后端不能被标记为直接导入成功。[完整证据](OFFLINE-BACKEND.md#commercekit-session-binding-and-server-refusal-2026-11-04)。
 
@@ -46,9 +48,9 @@
 
 [未发送请求的构造检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41776353497)在双架构各通过 17 项测试：系统服务构造了目标地址正确的 HTTPS POST，保留固定同步数据、测试令牌和 needDiv，并加入六字节格式 GUID。但目标账号的 ownerDsid、X-Dsid 和 Configurator User-Agent 检查尚未通过；ARM 存在两项预期 Anisette 头，Intel 不同时具备。这些字段的存在不证明认证有效。这项较早的构造检查尚未绑定真实会话；后续绑定和真实服务器结果以上方最新记录为准。
 
-用户目前没有可用电脑。官方“音乐”界面自动化已在 GitHub ARM、Intel Mac 上跑通：能够处理首次启动提示，进入“账户 → 登录”，并填入、清空未提交的合成邮箱。[双架构预检](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41828237601)通过。进一步的[真实登录诊断](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41830015849)完成邮箱和密码提交，但官方窗口显示“未知错误”，未确认登录成功。受限日志观察到服务端认证失败、SRP 服务端证明缺失（M2 missing）、AKAuthenticationError -7012 和 AppleIDAuthSupport 2；不能仅凭这些记录认定密码错误或双重认证已启用。**尚未进入账户设置、未读到实际授权数量、未执行解除授权。** 已实现的只读数量查询仍被原生登录失败阻塞。最新两个架构各通过 20 项 Python 测试、原生检查及无账号预检。手机端仍可通过 [Apple 支持](https://support.apple.com/zh-cn/contact)请求核对授权数量，但不保证能够重置限制。[研究详情](OFFLINE-BACKEND.md#official-music-ui-navigation-and-private-account-query-2026-11-04)。
+用户目前没有可用电脑。官方“音乐”界面自动化已在 GitHub ARM、Intel Mac 上跑通：能够处理首次启动提示，进入“账户 → 登录”，并填入、清空未提交的合成邮箱。[双架构预检](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41828237601)通过。进一步的[真实登录诊断](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41830015849)完成邮箱和密码提交，但官方窗口显示“未知错误”，未确认登录成功。受限日志观察到服务端认证失败、SRP 服务端证明缺失（M2 missing）、AKAuthenticationError -7012 和 AppleIDAuthSupport 2；不能仅凭这些记录认定密码错误或双重认证已启用。**该原生 UI 路径尚未进入账户设置，也未执行解除授权。** 后续通过下载器会话直接读取账户摘要，已确认实际数量为 5；原生 UI 登录本身仍未修复。最新两个架构各通过 20 项 Python 测试、原生检查及无账号预检。手机端仍可通过 [Apple 支持](https://support.apple.com/zh-cn/contact)请求核对授权数量，但不保证能够重置限制。[研究详情](OFFLINE-BACKEND.md#official-music-ui-navigation-and-private-account-query-2026-11-04)。
 
-## 当前阻塞：新授权被拒绝，需核对电脑授权名额
+## 当前阻塞：已确认 5 个电脑授权名额用满，模型仍未取得
 
 现有下载器创建临时账号会话并生成下载用 kbsync；这条代码路径不创建离线引擎需要的系统 FairPlay enrollment 状态。
 
@@ -78,6 +80,8 @@ Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直�
 | Account-free native request signing policy | 检查公开配置及原生 Mescal 签名策略；不发送授权请求 | 不传入账号 |
 | Account-free App Store FairPlay service probe | 双架构检查本地 App Store FairPlay 服务能否为固定测试值生成请求 | 不传入 Apple 账号，不提交授权或导入 |
 | Account-free official Music sign-in navigation | 识别欢迎页和可选提示，进入官方登录窗口，报告固定界面标签 | 不使用账号或提交凭据；不点击订阅、授权或安全升级 |
+| Public Apple account frontend inspection | 从 Apple 公共配置跟踪账户摘要前端及只读查询格式 | 无账号，不执行前端脚本，不调用账户变更接口 |
+| Private Store computer authorization count | 默认无账号预检；查询模式使用下载器签名登录会话，只读当前电脑授权数量 | 已实际读到 5 台；不会解除授权，账号会话和响应正文不公开 |
 | Private official Music account count | 默认无账号预检；查询模式单次完成邮箱、密码提交并尝试读取明确的当前授权数量 | 真实登录目前返回未知错误；未读到数量，不执行任何解除授权，不输出原始界面或认证日志 |
 | Account-free official account-management UI capability | 启动官方音乐应用，检查 URL 处理程序、现有界面访问权限及固定菜单标签 | 无 Secrets、不登录、不点击菜单操作、不申请权限；界面可访问不等于已完成账户管理 |
 | Account-free CommerceKit keybag prerequisite | 双架构固定测试值、普通用户/root 对照；检查客户端初始化与系统服务回复 | 不传入 Apple 账号，不提交服务器授权或导入；不输出同步数据 |
