@@ -84,6 +84,19 @@ class MachineEnrollmentContracts(unittest.TestCase):
                 self.assertEqual(result["session_context"], context)
                 self.assertNotIn("SECRET", json.dumps(result))
 
+    def test_response_challenges_publish_only_fixed_action_classes_and_flags(self):
+        for action in ("none", "SP", "SM", "RP", "other"):
+            r = mod.clean({"status": "keybag_not_issued", "md_action": action,
+                "amd_action": action, "md_data_present": True, "md_data_valid": False,
+                "amd_data_present": True, "amd_data_valid": True,
+                "response_headers": {"Set-Cookie": "SECRET"}, "md_data": "SECRET"})
+            self.assertEqual(r["md_action"], action)
+            self.assertEqual(r["amd_action"], action)
+            self.assertNotIn("SECRET", json.dumps(r))
+        r = mod.clean({"md_action": "SECRET", "amd_action": [], "md_data_valid": 1})
+        for key in ("md_action", "amd_action", "md_data_valid"):
+            self.assertNotIn(key, r)
+
     def test_boolean_numbers_and_unknown_types_rejected(self):
         r = mod.clean({"status": [], "error_domain": [], "error_code": True,
                        "keybag_import_succeeded": 1, "http_status": True})

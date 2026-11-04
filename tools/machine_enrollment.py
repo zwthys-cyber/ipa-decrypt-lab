@@ -14,7 +14,7 @@ STATUSES = {"invalid_private_input", "request_preparation_failed", "request_time
     "keybag_imported_model_unverified", "keybag_import_failed", "native_exception", "probe_failed",
     "missing_credentials", "login_failed", "login_ambiguous", "login_timeout", "native_timeout",
     "native_process_failed", "private_handoff_failed"}
-BOOLS = {"authorization_request_attempted", "ephemeral_account", "session_identity_verified", "body_token_bound",
+BOOLS = {"md_data_present", "md_data_valid", "amd_data_present", "amd_data_valid", "authorization_request_attempted", "ephemeral_account", "session_identity_verified", "body_token_bound",
     "redirect_blocked", "response_oversized", "error_present", "apple_failure_present",
     "dialog_present", "keybag_present", "keybag_import_succeeded", "redirect_seen",
     "redirect_query_supported", "redirect_method_post", "redirect_https", "storefront_header_present",
@@ -31,6 +31,8 @@ def clean(value):
         if type(value.get(key)) is bool:
             r[key] = value[key]
     for key, choices in {
+        "md_action": {"none", "SP", "SM", "RP", "other"},
+        "amd_action": {"none", "SP", "SM", "RP", "other"},
         "redirect_host_kind": {"buy", "pod_buy", "finance_app", "other"},
         "redirect_path_kind": {"authorize_exact", "authorize_slash", "legacy", "legacy_slash", "other"},
     }.items():

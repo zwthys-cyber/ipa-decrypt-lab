@@ -4,6 +4,42 @@
 #include "NativeKeybag.m"
 #undef main
 
+
+static NSDictionary *AnisetteResponseFields(NSHTTPURLResponse *response) {
+ NSMutableDictionary *headers=[NSMutableDictionary dictionary],*result=[NSMutableDictionary dictionary];
+ for(id key in response.allHeaderFields)if([key isKindOfClass:NSString.class])headers[[key lowercaseString]]=response.allHeaderFields[key];
+ for(NSString *scope in @[@"md",@"amd"]) {
+   NSString *prefix=[NSString stringWithFormat:@"x-apple-%@",scope];
+   id action=headers[[prefix stringByAppendingString:@"-action"]];
+   id encoded=headers[[prefix stringByAppendingString:@"-data"]];
+   NSString *kind=@"none";
+   if(action && ![action isEqual:@""])kind=[@[@"SP",@"SM",@"RP"] containsObject:action]?action:@"other";
+   BOOL present=[encoded isKindOfClass:NSString.class] && [encoded length]>0;
+   NSData *decoded=present && [encoded length]<=1048576?[[NSData alloc] initWithBase64EncodedString:encoded options:0]:nil;
+   result[[scope stringByAppendingString:@"_action"]]=kind;
+   result[[scope stringByAppendingString:@"_data_present"]]=B(present);
+   result[[scope stringByAppendingString:@"_data_valid"]]=B(decoded.length>0);
+ }
+ return result;
+}
+static BOOL ResponseContract(void) {
+ NSURL *url=[NSURL URLWithString:@"https://buy.itunes.apple.com/commerce/machine/authorize"];
+ NSHTTPURLResponse *(^response)(NSDictionary *)=^NSHTTPURLResponse *(NSDictionary *headers) {
+   return [[NSHTTPURLResponse alloc] initWithURL:url statusCode:200 HTTPVersion:@"HTTP/1.1" headerFields:headers];
+ };
+ NSDictionary *empty=AnisetteResponseFields(response(@{}));
+ NSDictionary *challenge=AnisetteResponseFields(response(@{@"x-APPLE-md-ACTION":@"SP",@"X-Apple-MD-Data":@"U1lOVEhFVElD",
+   @"X-Apple-AMD-Action":@"SM",@"x-apple-amd-data":@"U1lOVEhFVElD",@"Set-Cookie":@"PRIVATE_SYNTHETIC"}));
+ NSDictionary *bad=AnisetteResponseFields(response(@{@"X-Apple-MD-Action":@"PRIVATE_SYNTHETIC",@"X-Apple-MD-Data":@"not base64!"}));
+ NSString *serialized=[[NSString alloc] initWithData:[NSJSONSerialization dataWithJSONObject:@[empty,challenge,bad] options:0 error:NULL] encoding:NSUTF8StringEncoding];
+ return [empty[@"md_action"] isEqual:@"none"] && [empty[@"amd_action"] isEqual:@"none"]
+   && ![empty[@"md_data_present"] boolValue] && ![empty[@"amd_data_valid"] boolValue]
+   && [challenge[@"md_action"] isEqual:@"SP"] && [challenge[@"amd_action"] isEqual:@"SM"]
+   && [challenge[@"md_data_valid"] boolValue] && [challenge[@"amd_data_valid"] boolValue]
+   && [bad[@"md_action"] isEqual:@"other"] && [bad[@"md_data_present"] boolValue] && ![bad[@"md_data_valid"] boolValue]
+   && ![serialized containsString:@"PRIVATE_SYNTHETIC"] && ![serialized containsString:@"U1lOVEhFVElD"];
+}
+
 @interface LabEnrollmentResponse : NSObject <NSURLSessionDataDelegate>
 @property(nonatomic,strong) NSMutableData *data;
 @property(nonatomic,strong) NSHTTPURLResponse *response;
@@ -128,7 +164,7 @@ static void Authorize(NSDictionary *input,NSMutableDictionary *r) {
  if(delegate.redirectSummary)[r addEntriesFromDictionary:delegate.redirectSummary];
  r[@"redirect_seen"]=B(delegate.redirectSeen);r[@"approved_redirect_count"]=@(delegate.redirectCount);
  r[@"redirect_blocked"]=B(delegate.redirected);r[@"response_oversized"]=B(delegate.oversized);
- if(delegate.response)r[@"http_status"]=@(delegate.response.statusCode);
+ if(delegate.response){r[@"http_status"]=@(delegate.response.statusCode);[r addEntriesFromDictionary:AnisetteResponseFields(delegate.response)];}
  ErrorFields(r,delegate.error);
  if(delegate.redirected || delegate.oversized || delegate.error){r[@"status"]=@"request_stopped";return;}
  id obj=[NSPropertyListSerialization propertyListWithData:delegate.data options:NSPropertyListImmutable format:NULL error:NULL];
@@ -167,6 +203,9 @@ static void Authorize(NSDictionary *input,NSMutableDictionary *r) {
 }
 int main(int argc,const char **argv) { @autoreleasepool {
  if(argc!=2 || !getenv("GITHUB_ACTIONS") || strcmp(getenv("GITHUB_ACTIONS"),"true"))return 2;
+ if(!strcmp(argv[1],"--response-contract")) {
+   BOOL ok=ResponseContract();puts(ok?"response challenge privacy contract passed":"response challenge privacy contract failed");return ok?0:4;
+ }
  NSMutableDictionary *r=[@{@"schema":@"ipa-lab-machine-enrollment-v1",@"status":@"invalid_private_input",
    @"authorization_request_attempted":@NO,@"enrollment_created":@NO,@"decryption_proven":@NO} mutableCopy];
  @try {

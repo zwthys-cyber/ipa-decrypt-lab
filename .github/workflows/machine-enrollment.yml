@@ -51,6 +51,7 @@ jobs:
         run: |
           clang -fobjc-arc -framework Foundation tools/NativeKeybag.m -o native-keybag
           clang -fobjc-arc -framework Foundation tools/NativeMachineEnrollment.m -o native-machine-enrollment
+          ./native-machine-enrollment --response-contract
       - name: Verify synthetic prerequisites before exposing account secrets
         timeout-minutes: 3
         run: |
