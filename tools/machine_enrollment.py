@@ -71,7 +71,7 @@ def run_private(argv, env, *, data=None, timeout=120):
         raise
 
 def trial(login_binary, native_binary, purpose="signIn", session_context="store"):
-    if purpose not in {"signIn", "machineAuthorize"} or session_context not in {"token", "store"}:
+    if purpose not in {"signIn", "machineAuthorize"} or session_context not in {"token", "cookies", "storefront", "store"}:
         return clean({"status": "invalid_private_input"})
     email, password = os.environ.get("APPLE_ID"), os.environ.get("APPLE_PASSWORD")
     if not email or not password:
@@ -94,10 +94,14 @@ def trial(login_binary, native_binary, purpose="signIn", session_context="store"
             return clean({"status": "private_handoff_failed"})
         data = handoff.read_bytes()
         handoff.unlink()
-        if session_context == "token":
-            private = json.loads(data)
-            data = json.dumps({key: private[key] for key in ("dsid", "token", "guid")}).encode()
-            del private
+        private = json.loads(data)
+        allowed = {"dsid", "token", "guid"}
+        if session_context in {"store", "cookies"}:
+            allowed.add("cookies")
+        if session_context in {"store", "storefront"}:
+            allowed.add("storefront")
+        data = json.dumps({key: private[key] for key in allowed if key in private}).encode()
+        del private
         try:
             code, _, _ = run_private([native_binary, str(report)], env, data=data, timeout=75)
         except subprocess.TimeoutExpired:
@@ -119,7 +123,7 @@ def main():
     parser.add_argument("--login-binary", required=True)
     parser.add_argument("--native-binary", required=True)
     parser.add_argument("--purpose", choices=("signIn", "machineAuthorize"), default="signIn")
-    parser.add_argument("--session-context", choices=("token", "store"), default="store")
+    parser.add_argument("--session-context", choices=("token", "cookies", "storefront", "store"), default="store")
     args = parser.parse_args()
     if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "darwin":
         raise SystemExit("GitHub-hosted macOS required")

@@ -16,6 +16,8 @@ on:
         options:
           - store
           - token
+          - cookies
+          - storefront
 permissions:
   contents: read
 concurrency:

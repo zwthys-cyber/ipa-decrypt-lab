@@ -53,27 +53,36 @@ class MachineEnrollmentContracts(unittest.TestCase):
             self.assertEqual(mod.trial("login", "native", session_context="unrecognized")["status"], "invalid_private_input")
             run.assert_not_called()
 
-    def test_token_control_does_not_forward_cookies_or_storefront(self):
-        def fake_run(argv, env, **kwargs):
-            if argv[0] == "login":
-                self.assertEqual(env["LAB_AUTHORIZATION_PURPOSE"], "machineAuthorize")
-                handoff = Path(env["LAB_ENROLLMENT_INPUT_PATH"])
-                handoff.write_text(json.dumps({"dsid": "123", "token": "SECRET", "guid": "001122334455",
-                    "cookies": [{"name": "private", "value": "SECRET"}], "storefront": "SECRET"}))
-                handoff.chmod(0o600)
-            else:
-                payload = json.loads(kwargs["data"])
-                self.assertEqual(set(payload), {"dsid", "token", "guid"})
-                self.assertNotIn("APPLEPACKAGE_PASSWORD", env)
-                Path(argv[1]).write_text(json.dumps({"status": "keybag_not_issued", "http_status": 200}))
-            return (0, b"", b"")
-        with patch.dict("os.environ", {"APPLE_ID": "reader@example.invalid", "APPLE_PASSWORD": "SECRET"}, clear=True):
-            with patch.object(mod, "run_private", side_effect=fake_run) as run:
-                result = mod.trial("login", "native", purpose="machineAuthorize", session_context="token")
-        self.assertEqual(run.call_count, 2)
-        self.assertEqual(result["authentication_purpose"], "machineAuthorize")
-        self.assertEqual(result["session_context"], "token")
-        self.assertNotIn("SECRET", json.dumps(result))
+    def test_session_context_selects_only_the_requested_private_fields(self):
+        expected_fields = {
+            "token": {"dsid", "token", "guid"},
+            "cookies": {"dsid", "token", "guid", "cookies"},
+            "storefront": {"dsid", "token", "guid", "storefront"},
+            "store": {"dsid", "token", "guid", "cookies", "storefront"},
+        }
+        for context, fields in expected_fields.items():
+            with self.subTest(context=context):
+                def fake_run(argv, env, **kwargs):
+                    if argv[0] == "login":
+                        self.assertEqual(env["LAB_AUTHORIZATION_PURPOSE"], "machineAuthorize")
+                        handoff = Path(env["LAB_ENROLLMENT_INPUT_PATH"])
+                        handoff.write_text(json.dumps({"dsid": "123", "token": "SECRET", "guid": "001122334455",
+                            "cookies": [{"name": "private", "value": "SECRET"}], "storefront": "SECRET",
+                            "unexpected_private_field": "SECRET"}))
+                        handoff.chmod(0o600)
+                    else:
+                        payload = json.loads(kwargs["data"])
+                        self.assertEqual(set(payload), fields)
+                        self.assertNotIn("APPLEPACKAGE_PASSWORD", env)
+                        Path(argv[1]).write_text(json.dumps({"status": "keybag_not_issued", "http_status": 200}))
+                    return (0, b"", b"")
+                with patch.dict("os.environ", {"APPLE_ID": "reader@example.invalid", "APPLE_PASSWORD": "SECRET"}, clear=True):
+                    with patch.object(mod, "run_private", side_effect=fake_run) as run:
+                        result = mod.trial("login", "native", purpose="machineAuthorize", session_context=context)
+                self.assertEqual(run.call_count, 2)
+                self.assertEqual(result["authentication_purpose"], "machineAuthorize")
+                self.assertEqual(result["session_context"], context)
+                self.assertNotIn("SECRET", json.dumps(result))
 
     def test_boolean_numbers_and_unknown_types_rejected(self):
         r = mod.clean({"status": [], "error_domain": [], "error_code": True,
