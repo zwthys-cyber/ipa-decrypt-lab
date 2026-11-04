@@ -1,0 +1,77 @@
+name: Telegram private IPA test session
+run-name: Telegram-${{ inputs.mode }}-${{ inputs.minutes }}min
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Check local server, deliver a completed task, or start bounded polling
+        type: choice
+        default: check
+        options: [check, deliver, session]
+      minutes:
+        description: Session duration (1 to 45 minutes)
+        type: number
+        default: 30
+      request_id:
+        description: Optional completed request to deliver at session start
+        type: string
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: telegram-session
+  cancel-in-progress: false
+jobs:
+  telegram:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      actions: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Test all Python contracts without credentials
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Restore pinned public Bot API server
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: dist/telegram-bot-api
+          key: telegram-bot-api-ubuntu24-x64-e3e9dd8e5b3d7ab-v1
+          fail-on-cache-miss: true
+      - name: Verify official local server
+        run: dist/telegram-bot-api --version
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: FiloSottile/age
+          ref: b74dce4cdbe35b5e5f66c06d9612b72f89028758
+          path: native-source/age
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: '1.27.0'
+          cache-dependency-path: native-source/age/go.sum
+      - name: Build and test authenticated private transfer
+        run: |
+          mkdir -p native-source/age/cmd/lab-delivery-crypt
+          cp tools/delivery_crypto.go native-source/age/cmd/lab-delivery-crypt/main.go
+          cp tests/delivery_crypto_test.go native-source/age/cmd/lab-delivery-crypt/main_test.go
+          cd native-source/age
+          go test -p 2 -timeout 120s ./cmd/lab-delivery-crypt
+          go build -p 2 -trimpath -o ../../delivery-crypt ./cmd/lab-delivery-crypt
+      - name: Run bounded owner-only bot
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_OWNER_ID: ${{ secrets.TELEGRAM_OWNER_ID }}
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+          DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
+          GH_TOKEN: ${{ github.token }}
+          SESSION_MODE: ${{ inputs.mode }}
+          SESSION_MINUTES: ${{ inputs.minutes }}
+          DELIVERY_REQUEST_ID: ${{ inputs.request_id }}
+        run: |
+          ulimit -c 0
+          python3 tools/telegram_session.py --server dist/telegram-bot-api --crypt delivery-crypt --mode "$SESSION_MODE" --minutes "$SESSION_MINUTES" --request-id "$DELIVERY_REQUEST_ID"
