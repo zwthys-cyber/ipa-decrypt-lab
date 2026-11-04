@@ -165,8 +165,14 @@ static BOOL ApplySessionHeadersWithRouting(NSMutableURLRequest *request,NSNumber
     (![url.path isEqual:@"/commerce/machine/authorize"] && !(allowPod && [url.path isEqual:@"/commerce/machine/authorize/"])) || url.user || url.password ||
     url.fragment || (url.port && url.port.integerValue!=443) ||
     ![request.HTTPMethod isEqual:@"POST"] || request.HTTPBody.length>1048576)return NO;
- for(NSURLQueryItem *item in url.queryItems)
-   if(![item.name isEqual:@"guid"] || ![item.value.uppercaseString isEqual:guid.uppercaseString])return NO;
+ if(url.percentEncodedQuery.length>2048)return NO;
+ for(NSURLQueryItem *item in url.queryItems) {
+   if([item.name isEqual:@"guid"]) {
+     if(![item.value.uppercaseString isEqual:guid.uppercaseString])return NO;
+   } else if(allowPod && ( [item.name isEqual:@"dsid"] || [item.name isEqual:@"ownerDsid"] )) {
+     if(![item.value isEqual:dsid.stringValue])return NO;
+   } else if(!allowPod)return NO;
+ }
  NSDictionary *body=request.HTTPBody?[NSPropertyListSerialization propertyListWithData:request.HTTPBody options:NSPropertyListImmutable format:NULL error:NULL]:nil;
  if(![body isKindOfClass:NSDictionary.class] || ![body[@"ownerDsid"] isEqual:dsid] ||
     ![body[@"guid"] isKindOfClass:NSString.class] || ![body[@"guid"] isEqual:guid.uppercaseString] ||
@@ -238,6 +244,12 @@ static void Request(NSMutableDictionary *r) {
    pod.URL=[NSURL URLWithString:@"https://p17-buy.itunes.apple.com/commerce/machine/authorize/"];pod.HTTPMethod=@"POST";
    routed=routed && ApplySessionHeadersWithRouting(pod,@1234567,@"ipa-lab-synthetic-token",guid,YES);
    pod.URL=[NSURL URLWithString:@"https:/commerce/machine/authorize"];pod.HTTPMethod=@"POST";
+   routed=routed && !ApplySessionHeadersWithRouting(pod,@1234567,@"ipa-lab-synthetic-token",guid,YES);
+   pod.URL=[NSURL URLWithString:@"https://p17-buy.itunes.apple.com/commerce/machine/authorize?routing=synthetic-opaque"];pod.HTTPMethod=@"POST";
+   routed=routed && ApplySessionHeadersWithRouting(pod,@1234567,@"ipa-lab-synthetic-token",guid,YES);
+   pod.URL=[NSURL URLWithString:@"https://p17-buy.itunes.apple.com/commerce/machine/authorize?ownerDsid=7654321"];
+   routed=routed && !ApplySessionHeadersWithRouting(pod,@1234567,@"ipa-lab-synthetic-token",guid,YES);
+   pod.URL=[NSURL URLWithString:@"https://p17-buy.itunes.apple.com/commerce/machine/authorize?guid=not-a-guid"];
    routed=routed && !ApplySessionHeadersWithRouting(pod,@1234567,@"ipa-lab-synthetic-token",guid,YES);
    r[@"redirect_policy_verified"]=B(routed);
    r[@"session_policy_verified"]=B(negative);

@@ -43,9 +43,11 @@
  NSDictionary *paths=@{@"/commerce/machine/authorize":@"authorize_exact",@"/commerce/machine/authorize/":@"authorize_slash",
    @"/WebObjects/MZFinance.woa/wa/authorizeMachine":@"legacy",@"/WebObjects/MZFinance.woa/wa/authorizeMachine/":@"legacy_slash"};
  pathKind=paths[c.path]?:@"other";
- BOOL queryOK=YES;
- for(NSURLQueryItem *item in c.queryItems)
-   if(![item.name isEqual:@"guid"] || ![item.value.uppercaseString isEqual:self.guid.uppercaseString])queryOK=NO;
+ BOOL queryOK=c.percentEncodedQuery.length<=2048;
+ for(NSURLQueryItem *item in c.queryItems) {
+   if([item.name isEqual:@"guid"] && ![item.value.uppercaseString isEqual:self.guid.uppercaseString])queryOK=NO;
+   if(([item.name isEqual:@"dsid"] || [item.name isEqual:@"ownerDsid"]) && ![item.value isEqual:self.dsid.stringValue])queryOK=NO;
+ }
  self.redirectSummary=@{@"redirect_host_kind":hostKind,@"redirect_path_kind":pathKind,
    @"redirect_query_supported":B(queryOK),@"redirect_method_post":B([request.HTTPMethod isEqual:@"POST"]),
    @"redirect_https":B([c.scheme isEqual:@"https"] && (!c.port || c.port.integerValue==443) && !c.user && !c.password && !c.fragment)};
