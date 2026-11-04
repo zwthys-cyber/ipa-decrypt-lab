@@ -51,6 +51,17 @@ class StateTests(unittest.TestCase):
             self.assertTrue(observer.inventory(path, max_entries=2)["limit_reached"])
             self.assertTrue(observer.inventory(path, max_seconds=0)["limit_reached"])
 
+    def test_depth_limit_is_reported_instead_of_claiming_complete_inventory(self):
+        with tempfile.TemporaryDirectory() as root:
+            nested = Path(root)
+            for index in range(9):
+                nested = nested / str(index)
+                nested.mkdir()
+            (nested / "state.sidb").write_bytes(b"PRIVATE_SYNTHETIC")
+            result = observer.inventory(root)
+        self.assertTrue(result["limit_reached"])
+        self.assertEqual(result["sidb_files"], 0)
+
     def test_inventory_does_not_follow_directory_symlinks(self):
         with tempfile.TemporaryDirectory() as root:
             path = Path(root)

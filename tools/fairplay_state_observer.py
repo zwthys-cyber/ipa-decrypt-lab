@@ -17,7 +17,8 @@ PATHS = {
 }
 STATUS = {"missing", "permission_denied", "regular_empty", "regular_nonempty", "symlink", "other_type", "unavailable"}
 ROOTS = {"fpsd": "/private/var/db/fpsd", "shared": "/Users/Shared",
-         "system_support": "/Library/Application Support"}
+         "system_support": "/Library/Application Support",
+         "system_preferences": "/Library/Preferences"}
 MAX_ENTRIES = 12000
 
 
@@ -61,6 +62,8 @@ def inventory(root, max_entries=MAX_ENTRIES, max_seconds=8):
                     if entry.is_dir(follow_symlinks=False):
                         if depth < 7:
                             pending.append((Path(entry.path), depth + 1))
+                        else:
+                            result["limit_reached"] = True
                         continue
                     if not entry.is_file(follow_symlinks=False):
                         continue
