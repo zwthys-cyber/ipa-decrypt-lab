@@ -87,3 +87,13 @@ GitHub 手动导出也在依赖构建前检查应用条件；仍保留下载时�
 [QQ 9.3.55 真实验证 41931938986](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41931938986)已完成指定版本下载、版本核对、20 个加密切片及 126580 页的明文校验；清理后的 IPA 为 324952532 字节。只保留一天加密交付产物，安装运行仍未验证。此运行本身不代表 Telegram 已收到文件。
 
 [发布部署 41932870509](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41932870509)已通过两套环境各 386 项 Python 测试（1 项跳过）及健康检查，以上旧版入口已部署。
+
+## 文件名称与图标（2026-11-04）
+
+交付时从已校验的 IPA 根应用 Info.plist 读取 CFBundleDisplayName（缺失时使用 CFBundleName）及 CFBundleShortVersionString，文件名为“名称_版本.ipa”，例如 `QQ_9.3.55.ipa`。文件名去除控制符和路径字符并限制 UTF-8 长度；缺失字段回退 App ID / unknown。仅重命名临时文件，不改变 IPA 内容或摘要。新任务与 /get 取回已有加密产物均适用，已发送的旧附件不自动替换或重发。
+
+优先尝试 IPA 声明的 PNG 图标，无法读取（例如仅含 Assets.car 或不支持的优化图片）时尝试 Apple 商店公开图标。商店图标可能是当前版本的图标，不保证与历史版本完全相同。图片读取限制 4 MiB、2048 像素边长，解码后缩至 320 像素内、重新编码成小于 200 kB 的 JPEG，不保留图片元数据。仅请求经核对的 App ID 和 HTTPS mzstatic.com 子域，不跟随重定向或携带账号凭据。
+
+缩略图使用 multipart 上传，IPA 继续由本地 Bot API 读取私有文件路径，不将大 IPA 装入 HTTP 请求内存。图标获取失败时发送无缩略图文件；发送接口报错后不自动尝试无图重发，保持结果不明时的防重复规则。格式依据 [Telegram sendDocument 文档](https://core.telegram.org/bots/api#senddocument)。
+
+[部署 41934737382](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41934737382)在 Ubuntu 和 Debian 13 各运行 396 项 Python 测试（1 项跳过），包含图标解码、中文文件名、multipart 内容和发送异常不重试检查，发布与健康检查成功。VPS 安装发行版预编译 python3-pil 运行库，不在服务器编译或运行测试。本轮尚未通过真实 Telegram 文件回执确认缩略图展示。
