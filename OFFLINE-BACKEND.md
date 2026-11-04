@@ -228,3 +228,56 @@ Before another authenticated trial, integration must establish a compatible way 
 - The private provider state is saved/reloaded only in memory and is discarded when the worker exits. No headers, machine identifiers, ADI files, model material or raw errors are uploaded or cached.
 - The workflow is manual, main-only, read-only, limited to GitHub-hosted runner choices, and uploads no artifacts. The public APK is removed afterward.
 - All implementation, dependency installation, compilation, tests and experiments remain on GitHub; no Debian server, external Mac, personal phone or TG integration is used.
+
+## Native callback contract and private authentication trial (2026-11-04)
+
+### Current provider contract
+
+[Account-free run 41748357798](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41748357798), commit 8a6b135204c5de082e4b56bf031144c4419f06d6, compiled and exercised the real macOS-15 AuthKit proxy with synthetic data. The context retained our provider; _AKAnisetteProviderProxy called fetchAnisetteDataAndProvisionIfNecessary:withCompletion:. The positive and missing-data cases both passed, with two provider fetch calls and no other provider operations. No account credentials were supplied.
+
+The callback shape was found in [historical protocol declarations](https://github.com/phatblat/macOSPrivateFrameworks/blob/9047371eb80f925642c8a7c4f1e00095aec66044/PrivateFrameworks/HomeKit/AKAnisetteServiceProtocol-Protocol.h) and [newer proxy declarations](https://github.com/userlandkernel/ios17-dyld-headers/blob/89931f35a750ed18297df97f009524ed37e60d67/AuthKit/_AKAnisetteProviderProxy.h), then verified against the actual hosted Mac. This establishes a local callback contract; it does not establish that an authentication request can cross the AuthKit daemon boundary.
+
+### One authenticated controller invocation
+
+[Run 41749424573](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41749424573), commit 12bbfe45e7ca2637946001e3ae3460ca4dab8a67, ran on macos-15. Seven independent-provider tests, nine private-authentication tests, both Objective-C compilations and the account-free callback contract passed. The final authentication step correctly failed:
+
+| Observation | Result |
+| --- | --- |
+| Independent provider initialized using private current-runner device context | true |
+| Apple provisioning requests | 3 |
+| Ephemeral / no interactive auth / no optional security upgrade / no persistent service-token update policies read back | verified |
+| Authentication controller invocations | 1 |
+| Authentication completion callback | received |
+| Error | NSCocoaErrorDomain 4099 |
+| Custom provider callbacks / fresh data requests | 0 / 0 |
+| Account identity / IDMS token returned | neither |
+| Native Store session / enrollment / model / plaintext | not established |
+
+The account_login_attempted flag means the client invoked authenticateWithContext:completion:. It does not prove that an account request reached Apple's servers. The provider initialized successfully, but this call failed before asking it for data; neither acceptance nor rejection of the independent Anisette headers by the account server was tested.
+
+Apple describes [NSXPCConnectionInvalid](https://developer.apple.com/documentation/foundation/nsxpcconnectioninvalid-c.enum.case) as an invalid XPC connection. The follow-up below compares that SDK constant directly and classifies the connection failure without supplying an account. Code 4099 alone does not identify a missing entitlement, missing service, invalid client setup, incorrect password, enabled two-factor authentication or VM exclusion.
+
+### Private data handling and limits
+
+tools/NativeAnisetteAuth.m obtains the current runner's device context only through a private pipe to tools/native_anisette_auth.py. The independent provider is configured with those values; callbacks would obtain fresh data over a bounded private pipe, up to four times. State is memory-only. Neither device values, authentication headers, server responses, tokens nor errors with free text are printed.
+
+Only the final manual workflow step receives the existing Apple Secrets. Helpers receive a minimal environment; raw stdout/stderr are captured or discarded. Workers have time limits and run in a process group that is terminated during cleanup. The result file is private and temporary; reports use fixed statuses, boolean flags, bounded counts and allowlisted error codes. Tests exercise actual synthetic IPC, repeated fresh-data requests, unexpected output, request limits, timeout cleanup, error redaction and failed-exit handling.
+
+The native context explicitly declines optional security upgrade, prevents interactive authentication, uses ephemeral operation and disables persistent service-token updates; those flags must read back correctly before the single call. No challenge-solving loop, retries, native Store account creation or model generation is implemented in this probe. The trial used the default service type (observed 0), so even a successful generic AuthKit result would require a separate Store-specific enrollment implementation.
+
+This work remains GitHub-only. It does not use the Debian server, an external Mac, the user's phone or Telegram.
+
+### Account-free daemon transport comparison
+
+[Run 41749842285](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41749842285), commit d14722128468ac1412ed040beef585a740e161d6, passed four report/isolation tests and native compilation. It made four account-free public-URL-bag calls: command-line versus our own ad-hoc-signed app bundle, each using default versus explicit own client identification.
+
+All four calls received completion with NSCocoaErrorDomain 4099 and no bag result. The compiled SDK identified 4099 as NSXPCConnectionInvalid. Error text matched only the fixed connection_invalidated category; it did not match the allowlisted missing-service, lookup, sandbox, code-signing or entitlement-denial phrases. Packaging and explicit identification did not fix the tested connection.
+
+The current GUI session had a registered com.apple.akd service and the system launch-agent plist existed. The separate user-domain registration check was false; this is not proof that the GUI service is absent. The native App Store's public signing metadata included com.apple.authkit.client.internal=true. This observation by itself does not prove which permission caused rejection.
+
+The workflow's success means the bounded diagnosis completed, not that the transport, login or model succeeded. No Apple account, Anisette provisioning, authentication call or account-state mutation was used in these transport-only controls. The app bundle uses our own identifier and ordinary ad-hoc signing; no Apple identity or private entitlement was added.
+
+
+[Diagnostic follow-up 41750036044](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41750036044), commit b35229f935f3273940f121ed19237a7d0423297c, passed six tests and repeated the four account-free failures. Captured client stderr contained none of the fixed entitlement-denial, own-client or code-requirement phrases. A one-minute akd query filtered to entitlement/own-client terms returned zero matching events. This is absence of evidence from that filter/window, not proof that no access check occurred. The internal-entitlement hypothesis remains unconfirmed.
+
+The next research boundary is the AuthKit client-to-daemon path or a complete independent Store-enrollment protocol. Further unchanged credential retries are not justified by these results. Local callback success does not establish cross-process callback delivery, and a successful public bag request would still not establish authentication permissions. No FairPlay state or portable model has been recovered.

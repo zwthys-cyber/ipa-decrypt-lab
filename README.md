@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | 下载客户端账号登录 | Swift 签名下载路径已成功登录，无需本次输入 OTP | 不代表系统 FairPlay 注册完成 |
 | 原生 App Store 首次注册研究 | ARM 与 Intel 均完成原生表单提交；精确登录窗口已观察到 Anisette 获取及初始化失败 | 原生登录仍被拒绝，预期 SIDB/SIDS 未生成，未得到模型 |
-| 独立 Anisette 前置条件 | GitHub Linux 与 ARM Mac 均已直接向 Apple 初始化成功；内存保存、重新加载及再次生成认证数据通过 | 尚未接入原生认证流程，不等于系统登录或 FairPlay 模型 |
+| 独立 Anisette 与原生接入 | Linux / ARM Mac 初始化及复用成功；原生代理回调契约通过 | 实际 AuthKit 调用返回 XPC 4099，数据提供器未被调用，未生成模型 |
 | 原始 IPA 下载 | 目标 App ID 6599842047 已成功下载并检查到 62 个加密 Mach-O 切片 | 原始包仍然加密，不是砸壳产物 |
 | macOS 原生实验 | 62 次实际调用均返回 EPERM；已区分路径、文件布局和调用前检查 | 没有生成已验证明文；不能仅凭 EPERM 确定原因 |
 | 离线解密引擎 | 固定版本 UnfairPlay 在 GitHub Linux x86_64 编译成功，相关 Go 测试及 52 项 Python 测试通过 | 缺少匹配的私有 FairPlay enrollment 模型，未验证真实 IPA 解密 |
@@ -29,7 +29,7 @@
 
 Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直接作为该模型传入。同一 Apple ID 也不能代替对实际 IPA 与 enrollment 是否匹配的验证。
 
-目前没有匹配模型，也没有在现有 GitHub-only 条件下验证成功的首次注册实现。原生 UI 实验已证明 GitHub ARM 与 Intel macOS 运行器都能够操作 App Store；当前卡在原生账号登录被拒绝。后续将日志缩小到提交凭据后的 14 秒，观察到 Anisette 初始化失败及 -7018 与下层 Anisette 错误同条出现。独立 Anisette 组件现已在 GitHub Linux 和 ARM Mac 成功初始化，但尚未证明这些数据能接入原生登录并生成 FairPlay 状态。仅重新编译、重复登录或重跑已失败的原生调用不会补齐这些材料。[源码依据与后续验收条件](OFFLINE-BACKEND.md#enrollment-bootstrap-source-review)。
+目前没有匹配模型，也没有在现有 GitHub-only 条件下验证成功的首次注册实现。原生 UI 实验已证明 GitHub ARM 与 Intel macOS 运行器都能够操作 App Store；当前卡在原生账号登录被拒绝。后续将日志缩小到提交凭据后的 14 秒，观察到 Anisette 初始化失败及 -7018 与下层 Anisette 错误同条出现。独立 Anisette 组件现已在 GitHub Linux 和 ARM Mac 成功初始化；自定义提供器的本地原生回调已验证。一次受限 AuthKit 认证在系统进程通信处返回 XPC 4099，尚未调用提供器，未完成系统登录或生成 FairPlay 状态。仅重新编译、重复登录或重跑已失败的原生调用不会补齐这些材料。[源码依据与后续验收条件](OFFLINE-BACKEND.md#enrollment-bootstrap-source-review)。
 
 ## GitHub 验证入口
 
@@ -43,6 +43,9 @@ Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直�
 | Native enrollment environment probe | 原生 App Store UI 探测与日志过滤测试 | 不传入账号 |
 | Native App Store enrollment login trial | 有界限的原生账号登录研究 | 使用现有 Apple Secrets；未完成登录返回失败 |
 | Independent Anisette prerequisite probe | 独立初始化、私有状态复用；Mac 上另查 AuthKit 接口元数据 | 不传入 Apple 账号，不发布认证数据 |
+| Native Anisette callback contract | 用合成数据验证原生代理回调与缺失数据处理 | 不传入 Apple 账号 |
+| Native AuthKit independent Anisette trial | 一次临时认证调用；通过私有管道按需获取新数据 | 仅最后一步使用 Apple Secrets；拒绝可选安全升级 |
+| Account-free AuthKit transport diagnosis | 对照命令行 / App 包和默认 / 显式客户端标识，检查系统通信 | 不传入 Apple 账号 |
 
 在 Independent Swift Store trial 中选择：
 
@@ -51,7 +54,9 @@ Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直�
 
 真实 IPA、模型、账号信息和候选明文在运行器内部处理，不发布为仓库文件、公开日志或 Actions artifact。当前试验没有可领取的 IPA 下载产物。
 
-[精确时间范围的原生诊断](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41746379142)：23 项检查和编译通过，登录仍被拒绝。[独立前置条件 Linux 试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41747047524)与[ARM Mac 复测](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41747343222)均成功，每次 7 项检查通过，均未使用 Apple 账号。Mac 上确认存在自定义 Anisette 数据提供器的 setter，但提供器回调协议及系统接入尚未验证。未启用双重认证升级，未得到 FairPlay 模型。[详细证据与边界](OFFLINE-BACKEND.md#isolated-authentication-failure-and-independent-anisette-prerequisite-2026-11-04)。
+[精确时间范围的原生诊断](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41746379142)：23 项检查和编译通过，登录仍被拒绝。[独立前置条件 Linux 试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41747047524)与[ARM Mac 复测](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41747343222)均成功，每次 7 项检查通过，均未使用 Apple 账号。后续[原生回调试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41748357798)已通过；[真实认证试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41749424573)的 16 项测试与编译通过，但认证调用返回 XPC 4099，提供器调用次数为 0。未启用双重认证升级，未得到 FairPlay 模型。[详细证据与边界](OFFLINE-BACKEND.md#native-callback-contract-and-private-authentication-trial-2026-11-04)。
+
+[不带账号的通信诊断](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41750036044)通过 6 项检查；命令行 / App 包及默认 / 显式标识四种组合均返回 XPC 4099。系统认证服务已注册，但尚未找到明确拒绝原因，不能把内部权限线索认定为根因。后续先研究系统通信边界，不重复提交相同登录请求。
 
 ## 固定约束
 
