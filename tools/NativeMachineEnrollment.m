@@ -180,6 +180,34 @@ static NSURLRequest *PreparedRequest(NSDictionary *input,NSMutableDictionary *re
  return request;
 }
 
+static NSDictionary *KeybagShape(NSData *data) {
+ NSString *size=data.length<32?@"under_32":data.length<256?@"under_256":data.length<4096?@"under_4096":@"larger";
+ const unsigned char *bytes=data.bytes;
+ BOOL gzip=data.length>=2 && bytes[0]==0x1f && bytes[1]==0x8b;
+ BOOL bplist=data.length>=8 && !memcmp(bytes,"bplist00",8);
+ BOOL xml=data.length>=5 && !memcmp(bytes,"<?xml",5);
+ NSString *text=data.length<=2097152?[[NSString alloc] initWithData:data encoding:NSASCIIStringEncoding]:nil;
+ NSData *decoded=text.length && text.length%4==0?[[NSData alloc] initWithBase64EncodedString:text options:0]:nil;
+ BOOL base64=decoded.length>0 && [[decoded base64EncodedStringWithOptions:0] isEqual:text];
+ return @{@"keybag_size_bucket":size,@"keybag_gzip":B(gzip),@"keybag_binary_plist":B(bplist),
+   @"keybag_xml":B(xml),@"keybag_base64_text":B(base64)};
+}
+static BOOL KeybagShapeContract(void) {
+ NSDictionary *raw=KeybagShape([@"ipa-lab-invalid-keybag" dataUsingEncoding:NSUTF8StringEncoding]);
+ if(![raw[@"keybag_size_bucket"] isEqual:@"under_32"] || [raw[@"keybag_base64_text"] boolValue])return NO;
+ if(![KeybagShape([@"U1lOVEhFVElD" dataUsingEncoding:NSASCIIStringEncoding])[@"keybag_base64_text"] boolValue])return NO;
+ if(![KeybagShape([@"<?xml synthetic" dataUsingEncoding:NSASCIIStringEncoding])[@"keybag_xml"] boolValue])return NO;
+ if(![KeybagShape([@"bplist00synthetic" dataUsingEncoding:NSASCIIStringEncoding])[@"keybag_binary_plist"] boolValue])return NO;
+ unsigned char gzip[]={0x1f,0x8b,0,0};
+ if(![KeybagShape([NSData dataWithBytes:gzip length:sizeof(gzip)])[@"keybag_gzip"] boolValue])return NO;
+ for(NSNumber *length in @[@32,@256,@4096]) {
+   NSString *expected=length.unsignedIntegerValue==32?@"under_256":length.unsignedIntegerValue==256?@"under_4096":@"larger";
+   if(![KeybagShape([NSMutableData dataWithLength:length.unsignedIntegerValue])[@"keybag_size_bucket"] isEqual:expected])return NO;
+ }
+ NSString *serialized=[[NSString alloc] initWithData:[NSJSONSerialization dataWithJSONObject:raw options:0 error:NULL] encoding:NSUTF8StringEncoding];
+ return ![serialized containsString:@"ipa-lab-invalid-keybag"];
+}
+
 static void ImportErrorFields(NSMutableDictionary *report,NSError *error) {
  if(![error.domain isEqual:@"AMSErrorDomain"] || error.code!=505 || error.userInfo.count>32)return;
  NSMutableArray *values=[NSMutableArray arrayWithArray:error.userInfo.allValues];
@@ -307,6 +335,7 @@ static void Authorize(NSDictionary *input,NSMutableDictionary *r) {
  id blob=body[@"keybag"];
  BOOL keybag=[blob isKindOfClass:NSData.class] && [blob length]>0 && [blob length]<=2097152;
  r[@"keybag_present"]=B(keybag);
+ if(keybag)[r addEntriesFromDictionary:KeybagShape(blob)];
  if(delegate.response.statusCode!=200 || hasFailure || !keybag) {r[@"status"]=@"keybag_not_issued";return;}
  Class cls=NSClassFromString(@"AMSKeybag");SEL shared=NSSelectorFromString(@"sharedInstance");
  if(!ABI(cls,shared,@"@",@[])){r[@"status"]=@"import_interface_unavailable";return;}
@@ -323,7 +352,7 @@ static void Authorize(NSDictionary *input,NSMutableDictionary *r) {
 int main(int argc,const char **argv) { @autoreleasepool {
  if((argc!=2 && argc!=3) || !getenv("GITHUB_ACTIONS") || strcmp(getenv("GITHUB_ACTIONS"),"true"))return 2;
  if(!strcmp(argv[1],"--response-contract")) {
-   BOOL ok=ResponseContract() && ClientContextContract() && ImportErrorContract();puts(ok?"response and client context contracts passed":"response and client context contracts failed");return ok?0:4;
+   BOOL ok=ResponseContract() && ClientContextContract() && ImportErrorContract() && KeybagShapeContract();puts(ok?"response and client context contracts passed":"response and client context contracts failed");return ok?0:4;
  }
  NSMutableDictionary *r=[@{@"schema":@"ipa-lab-machine-enrollment-v1",@"status":@"invalid_private_input",
    @"authorization_request_attempted":@NO,@"enrollment_created":@NO,@"decryption_proven":@NO} mutableCopy];

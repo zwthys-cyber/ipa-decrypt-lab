@@ -146,6 +146,17 @@ class MachineEnrollmentContracts(unittest.TestCase):
         for invalid in (True, str(-42000), -(2**31)-1, 2**31):
             self.assertNotIn("import_fairplay_status", mod.clean({"import_fairplay_status": invalid}))
 
+    def test_keybag_shape_never_reports_bytes_or_unbounded_labels(self):
+        result = mod.clean({"keybag_size_bucket": "under_256", "keybag_gzip": False,
+            "keybag_base64_text": True, "keybag_binary_plist": False, "keybag_xml": False,
+            "keybag": "PRIVATE", "keybag_prefix": "PRIVATE"})
+        self.assertEqual(result["keybag_size_bucket"], "under_256")
+        self.assertIs(result["keybag_base64_text"], True)
+        self.assertNotIn("PRIVATE", json.dumps(result))
+        result = mod.clean({"keybag_size_bucket": "PRIVATE", "keybag_gzip": 1})
+        self.assertNotIn("keybag_size_bucket", result)
+        self.assertNotIn("keybag_gzip", result)
+
     def test_boolean_numbers_and_unknown_types_rejected(self):
         r = mod.clean({"status": [], "error_domain": [], "error_code": True,
                        "keybag_import_succeeded": 1, "http_status": True})
