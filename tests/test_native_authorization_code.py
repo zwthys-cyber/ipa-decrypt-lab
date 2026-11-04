@@ -27,6 +27,14 @@ class AuthorizationCodeContracts(unittest.TestCase):
         self.assertEqual(value[mod.METHODS[0]]["instruction_count"], 2)
         self.assertEqual(value[mod.METHODS[0]]["field_context"][0]["offset"], 0)
 
+    def test_commerce_methods_require_their_exact_module(self):
+        name = mod.COMMERCE_METHODS[0]
+        good = mod.extract("CommerceKit\x60" + name + ":\n  0x1000 <+0>: bl 0x2000 ; kbSyncForTransactionType")
+        self.assertIn(name, good)
+        for module in ("OtherModule", "AppleMediaServices"):
+            self.assertEqual(mod.extract(module + "\x60" + name + ":\n  0x1000 <+0>: PRIVATE"), {})
+        self.assertEqual(mod.extract("CommerceKit\x60" + mod.METHODS[0] + ":\n  0x1000 <+0>: PRIVATE"), {})
+
     def test_bad_or_oversized_output_is_rejected(self):
         for value in (None, [], "x" * 524289):
             self.assertEqual(mod.extract(value), {})

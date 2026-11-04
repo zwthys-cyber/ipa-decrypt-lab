@@ -27,9 +27,18 @@ METHODS = (
     "-[AMSKeybag importDiversityBagWithData:error:]",
     "__46-[AMSKeybag importDiversityBagWithData:error:]_block_invoke",
 )
+COMMERCE_METHODS = (
+    "-[CKMachineAuthorizationContext _requestBodyForAccount:bagURLKey:]",
+    "-[CKMachineAuthorizationContext _runRequestWithAccount:bagURLKey:authenticationContext:completionHandler:]",
+    "+[ServiceProxy _commerceConnection]",
+    "+[ServiceProxy commerceServiceInterface]",
+    "-[CKStoreAccount _legacyStoreAccount]",
+    "+[CKStoreAccount _storeAccountFromACAccount:client:]",
+)
+METHODS += COMMERCE_METHODS
 LINE = re.compile(r"^\s*(?:->\s*)?0x[0-9a-fA-F]+\s+<\+([0-9]+)>:\s+(.+)$")
 HEADER = re.compile(r"^([^\s\x60]+)\x60(.+):$")
-FOCUS = re.compile(r"xToken|needDiv|ownerDsid|kbsync|setAnisetteType|ams_.*(?:[Tt]oken|[Pp]assword)|[Aa]uthentication|[Aa]nisette|MDM|AMD|[Ee]phemeral|setCredentialSource|setAuthenticationType|[Ii]mport|[Ss]tatus|AMSError|ha0d|[Ff]air[Pp]lay|[Cc]ontext|SC Info|fpsd|Shared|XtCq|directory|Directory|42023|42032|42018|5bd9|5bd0|5bde|a427|a430|a422|open|mkdir|stat|access|fcntl|File|[Dd]iversity|divbag|keybag")
+FOCUS = re.compile(r"xToken|needDiv|ownerDsid|kbsync|setAnisetteType|ams_.*(?:[Tt]oken|[Pp]assword)|[Aa]uthentication|[Aa]nisette|MDM|AMD|[Ee]phemeral|setCredentialSource|setAuthenticationType|[Ii]mport|[Ss]tatus|AMSError|ha0d|[Ff]air[Pp]lay|[Cc]ontext|SC Info|fpsd|Shared|XtCq|directory|Directory|42023|42032|42018|5bd9|5bd0|5bde|a427|a430|a422|open|mkdir|stat|access|fcntl|File|[Dd]iversity|divbag|keybag|kbSync|dsID|_legacy|[Rr]eply|[Ee]ntitle|MachService")
 
 def extract(output):
     methods = {}
@@ -40,7 +49,7 @@ def extract(output):
         header = HEADER.fullmatch(line.strip())
         if header:
             name = re.sub(r"\([^)]*\)", "", header[2])
-            current = name if header[1] == "AppleMediaServices" and name in METHODS else None
+            current = name if name in METHODS and header[1] == ("CommerceKit" if name in COMMERCE_METHODS else "AppleMediaServices") else None
             continue
         match = LINE.fullmatch(line)
         if current and match and len(match[2]) <= 1024:
