@@ -9,7 +9,7 @@
 | 下载客户端账号登录 | Swift 签名下载路径已成功登录，无需本次输入 OTP | 不代表系统 FairPlay 注册完成 |
 | 原生 App Store 首次注册研究 | ARM 与 Intel 均完成原生表单提交；精确登录窗口已观察到 Anisette 获取及初始化失败 | 原生登录仍被拒绝，预期 SIDB/SIDS 未生成，未得到模型 |
 | 独立 Anisette 与原生接入 | Linux / ARM Mac 初始化及复用成功；原生代理回调契约通过 | 实际 AuthKit 调用返回 XPC 4099，数据提供器未被调用，未生成模型 |
-| 原生 keybag / 机器授权 | 绑定正文令牌并统一登录/授权 User-Agent 后，服务器首次返回非空 keybag，业务错误 2002 消失 | macOS 导入返回 AMSErrorDomain 505 / 底层 -42023；尚未导入成功、恢复模型或验证真实解密 |
+| 原生 keybag / 机器授权 | 统一登录与授权身份后，服务器返回 keybag 和 diversitybag；已补齐两步导入及文件访问诊断 | keybag 为 -42023、diversitybag 为 -42032；root 下仍失败，未取得模型 |
 | App Store 守护进程 FairPlay 接口 | 双架构接口存在，固定零值和非零值对照完成 | 均返回 ASDErrorDomain 505，错误提到 entitlement，未生成请求数据 |
 | 原始 IPA 下载 | 目标 App ID 6599842047 已成功下载并检查到 62 个加密 Mach-O 切片 | 原始包仍然加密，不是砸壳产物 |
 | macOS 原生实验 | 62 次实际调用均返回 EPERM；已区分路径、文件布局和调用前检查 | 没有生成已验证明文；不能仅凭 EPERM 确定原因 |
@@ -25,9 +25,13 @@
 
 最新进展：[真实机器授权试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41764672563)首次取得服务器返回的 keybag。该次试验在正文 xToken 已绑定、Cookie 已携带的基础上，使授权请求使用与登录相同的 User-Agent；服务器返回 HTTP 200，未含业务失败码，keybag 非空。23 项 Python、11 项 Swift 测试及原生合成检查通过。
 
-[最新真实复测](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41766951830)再次取得 keybag，36 项测试通过，但导入仍失败：AMSErrorDomain 505，底层状态 -42023。已确认使用同一个 FairPlay 上下文，实际存储目录存在且可写。返回数据未匹配 Base64 文本、XML、二进制 plist 或 gzip 特征；这些检查仍不足以证明它是可导入的 FairPlay 数据。
+[补齐 diversitybag 的真实试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41768524362)通过 37 项测试，确认服务器同时返回两份数据。客户端按 macOS 原生顺序分别导入，结果为 keybag `-42023`、diversitybag `-42032`，未触发重试。
 
-另做了[双架构 App Store 服务对照](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41767422349)：每架构 4 项测试及编译通过，但两个固定测试账号值均返回 ASDErrorDomain 505，错误提到 entitlement（调用权限声明），没有生成请求数据。这与 AMS 导入错误分开记录。[完整证据](OFFLINE-BACKEND.md#native-client-identity-and-first-keybag-response-2026-11-04)。尚未取得模型，也没有已验证的砸壳产物。
+[最新 root 对照](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41770295634)通过 40 项测试及原生检查。无账号对照先发现 ARM 普通用户存在 `EACCES`，root 下对应打开操作成功；但真实 root 试验中的两步导入仍返回上述错误，未生成已确认的授权状态或模型。文件访问诊断只覆盖指定函数，不能据此排除全部存储或权限问题。
+
+该次响应还出现“五台电脑”相关措辞。现有关键词摘要不能确定已超限，也没有保存原始消息；暂不重复真实授权请求，不撤销其他设备授权。[最终无账号检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41770552591)在两个架构各通过 19 项 Python 测试及原生检查，包括 root 子进程超时清理。[完整证据与局限](OFFLINE-BACKEND.md#bounded-native-import-file-io-observations-2026-11-04)。
+
+另有[App Store 服务对照](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41767422349)：接口存在，但固定测试值均返回 ASDErrorDomain 505，错误提到 entitlement，没有生成请求数据。这与 AMS 导入错误分开记录。**尚未取得模型，也没有已验证的砸壳产物。**
 
 ## 当前阻塞：keybag 导入与模型恢复
 
@@ -58,8 +62,8 @@ Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直�
 | Account-free native authorization code inspection | 双架构检查指定原生函数的机器指令及令牌/认证类型来源 | 不传入账号，不读取私有运行时状态 |
 | Account-free native request signing policy | 检查公开配置及原生 Mescal 签名策略；不发送授权请求 | 不传入账号 |
 | Account-free App Store FairPlay service probe | 双架构检查本地 App Store FairPlay 服务能否为固定测试值生成请求 | 不传入 Apple 账号，不提交授权或导入 |
-| Account-free keybag import rejection probe | 双架构固定错误 keybag 拒绝及上下文检查 | 不传入账号、不发送授权请求 |
-| Private native machine enrollment trial | 复用下载会话，检查身份后最多发起一次设备授权请求并单独检查 keybag 导入 | 最后一步使用 Apple Secrets；不导出会话或 keybag |
+| Account-free keybag import rejection probe | 双架构无效 keybag/diversitybag、文件访问、普通用户/root 与超时清理检查 | 不传入账号、不发送授权请求 |
+| Private native machine enrollment trial | 最多一次授权请求，分别检查 keybag/diversitybag；可选有界文件诊断与 root 对照 | 最后一步使用 Apple Secrets；不导出会话或 keybag |
 
 在 Independent Swift Store trial 中选择：
 
