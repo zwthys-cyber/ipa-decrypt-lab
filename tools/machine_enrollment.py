@@ -129,6 +129,8 @@ def clean(value):
         r["import_verified"] = False
         r["keybag_import_succeeded"] = False
         r["diversity_import_succeeded"] = False
+        if r["status"] == "keybag_imported_model_unverified":
+            r["status"] = "probe_failed"
     if r["status"] in {"commerce_request_prepared", "commerce_import_unverified"}:
         valid = (backend == "commerce" and r.get("running_as_root") is False
             and all(r.get(k) is True for k in COMMERCE_READY)

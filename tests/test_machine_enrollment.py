@@ -350,5 +350,17 @@ class MachineEnrollmentContracts(unittest.TestCase):
         for private in ("PRIVATE", "private@example.invalid", "001122334455"):
             self.assertNotIn(private, json.dumps(result))
 
+    def test_commerce_backend_cannot_reuse_direct_import_success_status(self):
+        value = dict(backend="commerce", status="keybag_imported_model_unverified",
+            authorization_request_attempted=True, session_identity_verified=True, body_token_bound=True,
+            keybag_present=True, keybag_import_succeeded=True, context_ready_before_request=True,
+            context_stable_before_import=True, keybag_import_attempted=True, diversitybag_present=False,
+            keybag_retry_attempted=False, http_status=200, error_present=False,
+            apple_failure_present=False, redirect_blocked=False, response_oversized=False)
+        result = mod.clean(value)
+        self.assertEqual(result["status"], "probe_failed")
+        self.assertFalse(result["keybag_import_succeeded"])
+        self.assertFalse(result["import_verified"])
+
 if __name__ == "__main__":
     unittest.main()
