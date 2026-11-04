@@ -81,7 +81,7 @@ static id SyntheticAccount(BOOL nonzero,NSMutableDictionary *r) {
  BOOL accountABI=InstanceABI(accountClass,@selector(_initWithStoreClient:plist:),@"@",@[@"@",@"@"]);
  r[@"client_factory_abi_verified"]=B(clientABI);r[@"account_initializer_abi_verified"]=B(accountABI);
  if(!clientABI || !accountABI)return nil;
- id client=((id(*)(id,SEL,id))objc_msgSend)(clientClass,factory,@"com.apple.AppStore");
+ id client=((id(*)(id,SEL,id))objc_msgSend)(clientClass,factory,@"com.apple.configurator.ui");
  r[@"client_created"]=B(client!=nil);if(!client)return nil;
  NSNumber *expected=nonzero?@1234567:@0;
  id account=[(id<LabCommerceInitializing>)[accountClass alloc] _initWithStoreClient:client
