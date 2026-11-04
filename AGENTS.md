@@ -13,3 +13,5 @@
 
 - The account owner declines the optional two-factor security upgrade. Never enable or accept that upgrade automatically.
 - Do not infer an enabled two-factor setting or a definite verification challenge from MZFinance.BadLogin.Configurator_message. Treat it as ambiguous until stronger response evidence is available.
+
+- Current user priority: research first-time FairPlay enrollment entirely on GitHub-hosted runners. Do not start Telegram integration or assume an exception for a separate Mac unless the user changes this direction.

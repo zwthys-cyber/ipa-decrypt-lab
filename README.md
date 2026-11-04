@@ -6,7 +6,8 @@
 
 | 环节 | 已有证据 | 尚未完成 |
 | --- | --- | --- |
-| Apple 账号登录 | Swift 原生签名路径已成功登录，无需本次输入 OTP | 不代表系统 FairPlay 注册完成 |
+| 下载客户端账号登录 | Swift 签名下载路径已成功登录，无需本次输入 OTP | 不代表系统 FairPlay 注册完成 |
+| 原生 App Store 首次注册研究 | 已在 GitHub macOS 15 自动打开原生登录表单并提交账号密码 | 原生登录显示未知错误；预期 SIDB/SIDS 路径未生成，未得到模型 |
 | 原始 IPA 下载 | 目标 App ID 6599842047 已成功下载并检查到 62 个加密 Mach-O 切片 | 原始包仍然加密，不是砸壳产物 |
 | macOS 原生实验 | 62 次实际调用均返回 EPERM；已区分路径、文件布局和调用前检查 | 没有生成已验证明文；不能仅凭 EPERM 确定原因 |
 | 离线解密引擎 | 固定版本 UnfairPlay 在 GitHub Linux x86_64 编译成功，相关 Go 测试及 52 项 Python 测试通过 | 缺少匹配的私有 FairPlay enrollment 模型，未验证真实 IPA 解密 |
@@ -27,7 +28,7 @@
 
 Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直接作为该模型传入。同一 Apple ID 也不能代替对实际 IPA 与 enrollment 是否匹配的验证。
 
-目前没有匹配模型，也没有在现有 GitHub-only 条件下验证成功的首次注册实现。仅重新编译、重复登录或重跑已失败的原生调用不会补齐这些材料。[源码依据与后续验收条件](OFFLINE-BACKEND.md#enrollment-bootstrap-source-review)。
+目前没有匹配模型，也没有在现有 GitHub-only 条件下验证成功的首次注册实现。新增原生 UI 实验已证明 GitHub macOS 运行器能够操作 App Store；当前卡在原生账号登录被拒绝，而非没有图形会话或自动化权限。仅重新编译、重复登录或重跑已失败的原生调用不会补齐这些材料。[源码依据与后续验收条件](OFFLINE-BACKEND.md#enrollment-bootstrap-source-review)。
 
 ## GitHub 验证入口
 
@@ -38,6 +39,8 @@ Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直�
 | Native engine feasibility | C 引擎跨平台编译、合成解析与调用对照 | 不使用账号 |
 | Independent Swift Store trial | 手动执行原始下载及后续诊断 | 使用 Actions Secrets 中的 Apple 账号 |
 | Offline engine contracts | 编译离线引擎并测试适配器 | 不使用真实账号或模型 |
+| Native enrollment environment probe | 原生 App Store UI 探测与日志过滤测试 | 不传入账号 |
+| Native App Store enrollment login trial | 有界限的原生账号登录研究 | 使用现有 Apple Secrets；未完成登录返回失败 |
 
 在 Independent Swift Store trial 中选择：
 
@@ -45,6 +48,8 @@ Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直�
 - `offline`：下载后调用离线验证器。必须先配置匹配模型的 `FAIRPLAY_MODEL_B64` Secret；缺少模型时在登录、下载与依赖编译前退出。通过编码检查也不等于模型匹配。
 
 真实 IPA、模型、账号信息和候选明文在运行器内部处理，不发布为仓库文件、公开日志或 Actions artifact。当前试验没有可领取的 IPA 下载产物。
+
+[GitHub 原生首次注册试验结果](OFFLINE-BACKEND.md#github-only-native-enrollment-trial)：8 项检查通过，实际登录被拒绝。工作流显示失败反映的是这次登录结果，不是编译失败。未启用双重认证升级，也未生成授权模型。
 
 ## 固定约束
 
