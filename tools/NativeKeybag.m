@@ -82,6 +82,13 @@ static BOOL BindToken(id account,NSString *token) {
  return YES;
 }
 
+static void TokenShape(NSMutableDictionary *r,id token) {
+ r[@"x_token_is_string"]=B([token isKindOfClass:NSString.class]);
+ r[@"x_token_is_number"]=B([token isKindOfClass:NSNumber.class]);
+ r[@"x_token_is_one"]=B([token isEqual:@1] || [token isEqual:@"1"]);
+ r[@"x_token_is_zero"]=B([token isEqual:@0] || [token isEqual:@"0"]);
+ r[@"x_token_is_empty"]=B([token isEqual:@""]);
+}
 static void Parameters(NSMutableDictionary *r) {
  Class cls=NSClassFromString(@"ACAccount");
  SEL create=NSSelectorFromString(@"ams_createEphemeralAccount");
@@ -129,6 +136,7 @@ static void Parameters(NSMutableDictionary *r) {
  r[@"machine_name_present"]=B([params[@"machineName"] isKindOfClass:NSString.class] && [params[@"machineName"] length]>0);
  r[@"parameter_names_valid"]=B(valid && [[NSSet setWithArray:[params allKeys]] isEqualToSet:[NSSet setWithArray:@[@"kbsync",@"guid",@"machineName",@"ownerDsid",@"needDiv",@"xToken"]]]);
  r[@"token_is_synthetic"]=B([params[@"xToken"] isEqual:@"ipa-lab-synthetic-token"]);
+ TokenShape(r,params[@"xToken"]);
  r[@"need_div_zero"]=B([params[@"needDiv"] isEqual:@0] || [params[@"needDiv"] isEqual:@"0"]);
  r[@"need_div_one"]=B([params[@"needDiv"] isEqual:@1] || [params[@"needDiv"] isEqual:@"1"]);
  r[@"status"]=valid && present && !error?@"synthetic_parameters_ready":@"synthetic_parameters_failed";
@@ -209,6 +217,12 @@ static void Request(NSMutableDictionary *r) {
    NSDictionary *body=request.HTTPBody?[NSPropertyListSerialization propertyListWithData:request.HTTPBody options:NSPropertyListImmutable format:NULL error:NULL]:nil;
    BOOL dict=[body isKindOfClass:NSDictionary.class];r[@"request_body_is_plist"]=B(dict);
    r[@"token_is_synthetic"]=B(dict && [body[@"xToken"] isEqual:@"ipa-lab-synthetic-token"]);
+   if(dict)TokenShape(r,body[@"xToken"]);
+   r[@"token_header_is_synthetic"]=B([[request valueForHTTPHeaderField:@"X-Token"] isEqual:@"ipa-lab-synthetic-token"]);
+   NSMutableArray *headers=[NSMutableArray array];
+   for(id name in request.allHTTPHeaderFields)
+     if([name isKindOfClass:NSString.class] && [name rangeOfString:@"^[A-Za-z][A-Za-z-]{0,79}$" options:NSRegularExpressionSearch].location!=NSNotFound)[headers addObject:[name lowercaseString]];
+   r[@"request_header_names"]=[headers sortedArrayUsingSelector:@selector(compare:)];
    r[@"owner_is_synthetic"]=B(dict && [body[@"ownerDsid"] isEqual:@1234567]);
    r[@"sap_header_present"]=B([request valueForHTTPHeaderField:@"X-Apple-ActionSignature"].length>0);
    r[@"anisette_header_present"]=B([request valueForHTTPHeaderField:@"X-Apple-I-MD"].length>0);

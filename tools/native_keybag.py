@@ -47,7 +47,9 @@ def clean(value):
                 "bag_url_present", "endpoint_supported", "endpoint_query_present",
                 "owner_field_present", "account_dsid_is_synthetic", "token_is_synthetic", "need_div_zero",
                 "need_div_one", "request_present", "request_is_post", "request_body_is_plist",
-                "sap_header_present", "anisette_header_present", "secure_token_provider_used"):
+                "sap_header_present", "anisette_header_present", "secure_token_provider_used",
+                "x_token_is_string", "x_token_is_number", "x_token_is_one", "x_token_is_zero",
+                "x_token_is_empty", "token_header_is_synthetic"):
         if type(value.get(key)) is bool:
             r[key] = value[key]
     if type(value.get("error_domain")) is str and value["error_domain"] in DOMAINS:
@@ -87,6 +89,9 @@ def clean(value):
                    "AMSBagKeyDeauthorizeMachineURL": {"deauthorizeMachine", "deauthorize-machine"}}
         r["bag_keys"] = {k: keys[k] for k, vals in allowed.items()
                          if type(keys.get(k)) is str and keys[k] in vals}
+    headers = value.get("request_header_names")
+    if type(headers) is list:
+        r["request_header_names"] = sorted({h for h in headers if type(h) is str and re.fullmatch(r"[a-z][a-z-]{0,79}", h)})[:40]
     names = value.get("parameter_names")
     if type(names) is list:
         r["parameter_names"] = sorted({n for n in names if type(n) is str and re.fullmatch(r"[A-Za-z][A-Za-z-]{0,63}", n)})[:24]
