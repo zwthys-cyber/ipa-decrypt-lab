@@ -1,0 +1,39 @@
+name: Sanitized progress channel verification
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  checks: write
+jobs:
+  progress:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Test progress boundaries without credentials
+        run: python3 -m unittest discover -s tests -p 'test_task_progress.py' -v
+      - name: Verify synthetic stage write and readback
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: tools
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os
+          from task_progress import WorkerProgress, parse_stage
+          from telegram_queue import GitHub
+          rid=hashlib.sha256(("progress-probe:"+os.environ["GITHUB_RUN_ID"]).encode()).hexdigest()[:32]
+          worker=WorkerProgress(rid)
+          api=GitHub(os.environ["GH_TOKEN"])
+          for stage in ("metadata","downloading","artifact_ready"):
+              worker.advance(stage)
+              if worker.disabled or worker.check is None:
+                  raise SystemExit("progress_channel_write_failed")
+              actual=api.call("/check-runs/"+str(worker.check))
+              if parse_stage(actual,rid,os.environ["GITHUB_RUN_ID"])!=stage:
+                  raise SystemExit("progress_channel_readback_failed")
+          print(json.dumps({"schema":"ipa-progress-probe-v1","status":"check_readback_verified",
+                            "stage_count":3,"synthetic":True}))
+          PY
