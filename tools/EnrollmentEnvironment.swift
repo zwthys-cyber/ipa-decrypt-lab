@@ -219,6 +219,8 @@ func fill(_ field: AXUIElement, _ text: String) -> Bool {
     RunLoop.current.run(until: Date().addingTimeInterval(1))
     return true
 }
+// Private timestamps delimit the account operation; the wrapper never publishes them.
+var nativeAuthStartedAt: Int?
 func nativeLogin(_ element: AXUIElement, email: String, password: String) -> [String: Any] {
     var result: [String: Any] = ["status": "native_login_form_unavailable", "account_login_attempted": false,
                                  "password_submitted": false, "optional_upgrade_declined": false,
@@ -234,6 +236,7 @@ func nativeLogin(_ element: AXUIElement, email: String, password: String) -> [St
         passwordSent = true
         form = scan(element)
     }
+    nativeAuthStartedAt = Int(Date().timeIntervalSince1970)
     guard let submit = form.signIn, AXUIElementPerformAction(submit, kAXPressAction as CFString) == .success else {
         result["status"] = "native_submit_unavailable"; return result
     }
@@ -368,6 +371,13 @@ if let application = application, AXIsProcessTrusted() {
             let auth = nativeLogin(element, email: email, password: password)
             report["authentication"] = auth
             report["account_login_attempted"] = auth["account_login_attempted"]
+            if let started = nativeAuthStartedAt, auth["account_login_attempted"] as? Bool == true {
+                let ended = Int(ceil(Date().timeIntervalSince1970))
+                report["_authentication_window"] = ["started": started, "ended": ended]
+                // log show uses whole-second bounds. Keep termination beyond the
+                // upper bound so cleanup cannot be mistaken for login rejection.
+                RunLoop.current.run(until: Date(timeIntervalSince1970: Double(ended) + 0.2))
+            }
         } else {
             report["authentication"] = ["status": "missing_credentials"]
         }

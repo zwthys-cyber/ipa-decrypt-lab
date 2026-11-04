@@ -47,6 +47,37 @@ class NativeAuthDiagnosticsTests(unittest.TestCase):
         self.assertEqual([r["domain_or_symbol"] for r in result["records"] if r["kind"] == "symbol"],
                          ["MZFinance.BadLogin.Configurator_message"])
 
+    def test_underlying_domains_and_fixed_reason_flags_share_one_event(self):
+        message = ('Attempting to show login error: Error Domain=AKAuthenticationError Code=-7018 '
+                   'NSUnderlyingError={Error Domain=com.apple.AppleIDAuthSupport Code=2 '
+                   'NSDescription=private-password}; selected protocol key missing; user=private-email')
+        result = diagnostics.summarize(json.dumps([self.event(message, "akd")]))
+        self.assertEqual(result["reason_records"],
+                         [{"process": "akd", "reason_flag": "selected_protocol_missing", "events": 1}])
+        self.assertEqual(result["cooccurrences"], [{
+            "process": "akd", "errors": [{"domain": "AKAuthenticationError", "code": -7018},
+                                       {"domain": "com.apple.AppleIDAuthSupport", "code": 2}],
+            "reason_flags": ["selected_protocol_missing"], "events": 1,
+        }])
+        self.assertNotIn("private", json.dumps(result))
+
+    def test_separate_events_cannot_become_an_underlying_error_chain(self):
+        result = diagnostics.summarize(json.dumps([
+            self.event("Error Domain=AKAuthenticationError Code=-7018", "akd"),
+            self.event("Error Domain=com.apple.AppleIDAuthSupport Code=2", "akd"),
+            self.event("selected protocol key missing; private context", "akd"),
+        ]))
+        self.assertEqual(result["cooccurrences"], [])
+        self.assertEqual(len(result["reason_records"]), 1)
+
+    def test_complex_events_do_not_create_unbounded_error_groups(self):
+        message = " ".join("Error Domain=AKAuthenticationError Code=" + str(i) for i in range(100))
+        result = diagnostics.summarize(json.dumps([self.event(message, "akd")]))
+        self.assertEqual(result["complex_events_skipped"], 1)
+        self.assertEqual(result["cooccurrences"], [])
+        self.assertEqual(len(result["records"]), 64)
+        self.assertTrue(result["record_limit_reached"])
+
     def test_invalid_and_oversized_input_cannot_emit_raw_data(self):
         for raw in (b"private-invalid-json", b"{}", None):
             self.assertNotEqual(diagnostics.summarize(raw)["capture_status"], "ok")

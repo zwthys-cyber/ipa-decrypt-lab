@@ -19,6 +19,9 @@ DOMAINS = (
     "AMSErrorDomain", "ASDErrorDomain", "AKAuthenticationError", "AKAppleIDAuthenticationError",
     "com.apple.AuthKit.Errors", "NSURLErrorDomain", "NSCocoaErrorDomain",
     "NSOSStatusErrorDomain", "kCFErrorDomainCFNetwork", "MZErrorDomain", "SSErrorDomain",
+    "com.apple.AppleIDAuthSupport", "AppleIDAuthSupport", "AKAuthenticationServerError",
+    "AKAnisetteError", "AKUnderlyingADIErrors", "AKAttestationErrorDomain",
+    "com.apple.devicecheck.error.baa", "ACErrorDomain",
 )
 CANONICAL = {value.lower(): value for value in DOMAINS}
 DOMAIN_PATTERN = "(?:" + "|".join(re.escape(value) for value in DOMAINS) + ")"
@@ -37,10 +40,24 @@ SYMBOL_PATTERNS = {
     value: re.compile(r"(?<![A-Za-z0-9_.])" + re.escape(value) + r"(?![A-Za-z0-9_.])")
     for value in SYMBOLS
 }
+# A flag means this fixed phrase occurred, not that it is the root cause.
+REASON_TERMS = {
+    "selected_protocol_missing": ("selected protocol key missing",),
+    "srp_server_proof_missing": ("m2 missing",),
+    "device_identity_unavailable": ("deviceidentity not available",),
+    "attestation_headers_failed": ("failed to fetch attestation headers",),
+    "host_attestation_failed": ("failed to fetch host attestation headers",),
+    "anisette_provisioning_failed": ("provisioning failed. no anisette",),
+    "anisette_fetch_failed": ("failed to fetch anisette data", "error getting anisette data"),
+    "sap_init_failed": ("sapinit failed",),
+    "server_authentication_failed": ("authentication with server failed",),
+    "authentication_cancelled": ("authentication cancelled", "authentication canceled"),
+}
 PROCESS_PREDICATE = "(" + " OR ".join('process == "' + name + '"' for name in sorted(PROCESSES)) + ")"
 # Filter before serialization: ordinary Store browsing can exceed the output
 # budget in seconds. Keep only messages that can feed the fixed-code parser.
-ERROR_TERMS = DOMAINS + SYMBOLS + ("failureType", "HTTPStatus", "statusCode", "status code")
+ERROR_TERMS = (DOMAINS + SYMBOLS + ("failureType", "HTTPStatus", "statusCode", "status code")
+               + tuple(term for terms in REASON_TERMS.values() for term in terms))
 ERROR_PREDICATE = "(" + " OR ".join('eventMessage CONTAINS[c] "' + term + '"' for term in ERROR_TERMS) + ")"
 PREDICATE = PROCESS_PREDICATE + " AND " + ERROR_PREDICATE
 
@@ -101,8 +118,11 @@ def summarize(raw):
     if not isinstance(values, list) or len(values) > MAX_EVENTS:
         return {"capture_status": "event_limit_or_invalid_log"}
     counts = Counter()
+    reason_counts = Counter()
+    cooccurrences = Counter()
     examined = 0
     oversized = 0
+    complex_events = 0
     for value in values:
         if not isinstance(value, dict):
             continue
@@ -131,13 +151,31 @@ def summarize(raw):
                 matches.add(("symbol", name, 0))
         for kind, domain, code in matches:
             counts[(process, auth, kind, domain, code)] += 1
+        lower = message.lower()
+        reasons = tuple(sorted(name for name, terms in REASON_TERMS.items()
+                               if any(term in lower for term in terms)))
+        for reason in reasons:
+            reason_counts[(process, reason)] += 1
+        errors = tuple(sorted((domain, code) for kind, domain, code in matches if kind == "error"))
+        if len(errors) > 8:
+            complex_events += 1
+        elif errors and (len(errors) > 1 or reasons):
+            cooccurrences[(process, errors, reasons)] += 1
     records = [
         {"process": process, "authentication_context": auth, "kind": kind,
          "domain_or_symbol": domain, "code": code, "events": count}
         for (process, auth, kind, domain, code), count in sorted(counts.items())
     ]
+    reason_records = [{"process": process, "reason_flag": reason, "events": count}
+                      for (process, reason), count in sorted(reason_counts.items())]
+    grouped = [{"process": process, "errors": [{"domain": domain, "code": code} for domain, code in errors],
+                "reason_flags": list(reasons), "events": count}
+               for (process, errors, reasons), count in sorted(cooccurrences.items())]
     return {"capture_status": "ok", "events_examined": examined, "oversized_events_skipped": oversized,
-            "record_limit_reached": len(records) > 64, "records": records[:64]}
+            "record_limit_reached": len(records) > 64, "records": records[:64],
+            "reason_limit_reached": len(reason_records) > 32, "reason_records": reason_records[:32],
+            "cooccurrence_limit_reached": len(grouped) > 32, "cooccurrences": grouped[:32],
+            "complex_events_skipped": complex_events}
 
 def collect(started, *, ended=None):
     if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "darwin":

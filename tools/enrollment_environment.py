@@ -125,12 +125,28 @@ def clean(value):
     result.update(enrollment_created=False, decryption_proven=False)
     return result
 
+def authentication_window(raw, launched, finished):
+    """Accept only a bounded native account window contained in this child run."""
+    if not isinstance(raw, dict):
+        return None
+    auth = raw.get("authentication")
+    window = raw.get("_authentication_window")
+    if not isinstance(auth, dict) or auth.get("account_login_attempted") is not True or not isinstance(window, dict):
+        return None
+    started, ended = window.get("started"), window.get("ended")
+    if type(started) is not int or type(ended) is not int:
+        return None
+    if not launched <= started <= ended <= finished or ended - started > 180:
+        return None
+    return started, ended
+
 def main():
     result = {"status": "probe_failed", "enrollment_created": False, "decryption_proven": False}
     if os.environ.get("GITHUB_ACTIONS") != "true":
         result["status"] = "requires_github_actions"
     else:
         diagnostic_start = None
+        window = None
         try:
             before = privileged_state()
             diagnostic_start = int(time.time())
@@ -140,7 +156,9 @@ def main():
             run = subprocess.run(command,
                                  capture_output=True, text=True, timeout=220, stdin=subprocess.DEVNULL)
             if run.returncode == 0 and len(run.stdout) <= 16384:
-                result = clean(json.loads(run.stdout))
+                raw = json.loads(run.stdout)
+                window = authentication_window(raw, diagnostic_start, int(time.time()))
+                result = clean(raw)
                 result["privileged_state_before"] = before
                 result["privileged_state_after"] = privileged_state()
         except subprocess.TimeoutExpired:
@@ -150,7 +168,13 @@ def main():
         finally:
             if diagnostic_start is not None and os.environ.get("LAB_NATIVE_AUTH_DIAGNOSTICS") == "1":
                 try:
-                    result["native_auth_diagnostics"] = collect_auth_diagnostics(diagnostic_start)
+                    if window is None:
+                        result["native_auth_diagnostics"] = {"capture_status": "authentication_window_unavailable"}
+                    else:
+                        diagnostics = collect_auth_diagnostics(window[0], ended=window[1])
+                        diagnostics["window_scope"] = "credential_submission_to_terminal_ui"
+                        diagnostics["window_seconds"] = window[1] - window[0]
+                        result["native_auth_diagnostics"] = diagnostics
                 except Exception:
                     result["native_auth_diagnostics"] = {"capture_status": "collector_failed"}
     output = json.dumps(result, sort_keys=True)

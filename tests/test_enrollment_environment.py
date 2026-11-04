@@ -103,7 +103,7 @@ class EnrollmentEnvironmentTests(unittest.TestCase):
         raw["authentication"]["last_ui"] = {"error_codes": [-50, True, "private", 123456789, -50, 301]}
         self.assertEqual(probe.clean(raw)["authentication"]["last_ui"]["error_codes"], [-50, 301])
 
-    def test_failed_and_timed_out_login_still_collects_private_diagnostics(self):
+    def test_missing_or_timed_out_auth_window_never_queries_unrelated_logs(self):
         import subprocess
         for timeout in (False, True):
             with self.subTest(timeout=timeout), patch.dict(os.environ, {
@@ -114,9 +114,41 @@ class EnrollmentEnvironmentTests(unittest.TestCase):
             ), contextlib.redirect_stdout(io.StringIO()) as output:
                 self.collector.reset_mock()
                 self.assertEqual(probe.main(), 2)
-                self.collector.assert_called_once()
-                self.assertIs(type(self.collector.call_args.args[0]), int)
-                self.assertEqual(json.loads(output.getvalue())["native_auth_diagnostics"], {"capture_status": "ok"})
+                self.collector.assert_not_called()
+                self.assertEqual(json.loads(output.getvalue())["native_auth_diagnostics"],
+                                 {"capture_status": "authentication_window_unavailable"})
+
+    def test_auth_window_must_be_inside_child_and_excludes_non_auth_work(self):
+        raw = self.result("native_login_rejected")
+        for started, ended, expected in [
+            (100, 110, (100, 110)), (90, 110, None), (100, 121, None),
+            (100, 99, None), (True, 110, None), ("private", 110, None),
+        ]:
+            with self.subTest(started=started, ended=ended):
+                raw["_authentication_window"] = {"started": started, "ended": ended}
+                self.assertEqual(probe.authentication_window(raw, 95, 120), expected)
+        raw["_authentication_window"] = {"started": 100, "ended": 300}
+        self.assertIsNone(probe.authentication_window(raw, 90, 310))
+        raw["_authentication_window"] = {"started": 100, "ended": 110}
+        raw["authentication"]["account_login_attempted"] = False
+        self.assertIsNone(probe.authentication_window(raw, 95, 120))
+
+    def test_exact_auth_window_is_used_and_private_timestamps_are_not_reported(self):
+        raw = self.result("native_login_rejected")
+        raw["_authentication_window"] = {"started": 100, "ended": 110, "private": "secret"}
+        with patch.dict(os.environ, {"GITHUB_ACTIONS": "true", "LAB_NATIVE_UI_AUTH": "1",
+                                   "LAB_NATIVE_AUTH_DIAGNOSTICS": "1"}, clear=True), patch(
+            "enrollment_environment.time.time", side_effect=[90, 120]
+        ), patch("enrollment_environment.subprocess.run", return_value=SimpleNamespace(
+            returncode=0, stdout=json.dumps(raw), stderr="private native output"
+        )), contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(probe.main(), 2)
+            self.collector.assert_called_once_with(100, ended=110)
+        result = json.loads(output.getvalue())
+        self.assertEqual(result["native_auth_diagnostics"]["window_seconds"], 10)
+        self.assertEqual(result["native_auth_diagnostics"]["window_scope"], "credential_submission_to_terminal_ui")
+        for key in ("_authentication_window", "started", "ended", "secret", "private native"):
+            self.assertNotIn(key, output.getvalue())
 
     def test_workspace_execution_is_rejected_before_launch(self):
         with patch.dict(os.environ, {}, clear=True), patch("enrollment_environment.subprocess.run") as run:
