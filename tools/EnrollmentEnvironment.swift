@@ -73,6 +73,7 @@ struct UIResult {
     var verificationPrompt = false
     var errorPrompt = false
     var errors: Set<String> = []
+    var errorCodes: Set<Int> = []
     var report: [String: Any] {
         ["window_count": windows, "nodes_examined": nodes, "text_fields": textFields,
          "secure_fields": secureFields, "sign_in_control_found": signIn != nil,
@@ -172,6 +173,17 @@ func scan(_ app: AXUIElement) -> UIResult {
             "account_locked": ["account is locked", "account has been locked", "account is disabled"],
             "terms_required": ["agree to the terms", "review your account"],
         ]
+        let codePattern = #"(?i)\b(?:unknown error(?: occurred)?|unexpected error(?: occurred)?|an error occurred|error(?: code)?)\s*(?:[.:]\s*)?\((-?[0-9]{1,6})\)"#
+        if let regex = try? NSRegularExpression(pattern: codePattern) {
+            for text in strings where text.utf8.count <= 2048 {
+                let range = NSRange(text.startIndex..<text.endIndex, in: text)
+                for match in regex.matches(in: text, range: range).prefix(8) {
+                    if let digits = Range(match.range(at: 1), in: text), let code = Int(text[digits]) {
+                        result.errorCodes.insert(code)
+                    }
+                }
+            }
+        }
         for (kind, phrases) in errorPhrases where strings.contains(where: { text in phrases.contains(where: { text.contains($0) }) }) {
             result.errors.insert(kind)
         }
@@ -240,7 +252,7 @@ func nativeLogin(_ element: AXUIElement, email: String, password: String) -> [St
             "sign_in_enabled": form.signIn != nil, "sign_out_enabled": form.signOut != nil,
             "security_prompt": form.securityPrompt, "upgrade_prompt": form.upgradePrompt,
             "verification_prompt": form.verificationPrompt, "scan_limited": form.limited,
-            "error_kinds": form.errors.sorted(),
+            "error_kinds": form.errors.sorted(), "error_codes": Array(form.errorCodes.sorted().prefix(8)),
         ]
         if form.verificationPrompt { result["status"] = "native_verification_required"; return result }
         if form.errorPrompt || !form.errors.isEmpty { result["status"] = "native_login_rejected"; return result }

@@ -3,6 +3,8 @@ import json
 import os
 import subprocess
 import sys
+import time
+from native_auth_diagnostics import collect as collect_auth_diagnostics
 
 BOOLS = {
     "account_credentials_supplied", "account_login_attempted", "enrollment_created",
@@ -106,6 +108,11 @@ def clean(value):
                 or (k in {"sign_in_enabled", "sign_out_enabled", "security_prompt", "upgrade_prompt",
                           "verification_prompt", "scan_limited"} and type(v) is bool)
             }
+            codes = last.get("error_codes", [])
+            if isinstance(codes, list):
+                result["authentication"]["last_ui"]["error_codes"] = sorted({
+                    x for x in codes[:8] if type(x) is int and -999999 <= x <= 999999
+                })
             kinds = last.get("error_kinds")
             if isinstance(kinds, list):
                 allowed = {"device_unverified", "invalid_credentials", "cannot_connect", "unknown_error",
@@ -123,8 +130,10 @@ def main():
     if os.environ.get("GITHUB_ACTIONS") != "true":
         result["status"] = "requires_github_actions"
     else:
+        diagnostic_start = None
         try:
             before = privileged_state()
+            diagnostic_start = int(time.time())
             command = ["./enrollment-environment", "--open-signin"]
             if os.environ.get("LAB_NATIVE_UI_AUTH") == "1":
                 command.append("--authenticate")
@@ -138,6 +147,12 @@ def main():
             result["status"] = "probe_timeout"
         except Exception:
             pass
+        finally:
+            if diagnostic_start is not None and os.environ.get("LAB_NATIVE_AUTH_DIAGNOSTICS") == "1":
+                try:
+                    result["native_auth_diagnostics"] = collect_auth_diagnostics(diagnostic_start)
+                except Exception:
+                    result["native_auth_diagnostics"] = {"capture_status": "collector_failed"}
     output = json.dumps(result, sort_keys=True)
     print(output)
     if os.environ.get("GITHUB_STEP_SUMMARY"):

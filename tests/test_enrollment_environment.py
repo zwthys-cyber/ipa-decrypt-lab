@@ -15,6 +15,9 @@ class EnrollmentEnvironmentTests(unittest.TestCase):
         state = patch("enrollment_environment.privileged_state", return_value={})
         state.start()
         self.addCleanup(state.stop)
+        collector = patch("enrollment_environment.collect_auth_diagnostics", return_value={"capture_status": "ok"})
+        self.collector = collector.start()
+        self.addCleanup(collector.stop)
 
     def result(self, status="native_login_unresolved"):
         return {"schema": "ipa-lab-enrollment-environment-v1", "status": "probe_complete",
@@ -72,6 +75,7 @@ class EnrollmentEnvironmentTests(unittest.TestCase):
         ) as run, contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(probe.main(), 0)
             self.assertNotIn("--authenticate", run.call_args.args[0])
+            self.collector.assert_not_called()
 
     def test_privileged_stat_distinguishes_denied_and_missing(self):
         for code, out, error, expected in [
@@ -93,6 +97,26 @@ class EnrollmentEnvironmentTests(unittest.TestCase):
         output = json.dumps(probe.clean(raw))
         self.assertIn("cannot_connect", output)
         self.assertNotIn("private", output)
+
+    def test_ui_codes_are_strictly_bounded_integers(self):
+        raw = self.result()
+        raw["authentication"]["last_ui"] = {"error_codes": [-50, True, "private", 123456789, -50, 301]}
+        self.assertEqual(probe.clean(raw)["authentication"]["last_ui"]["error_codes"], [-50, 301])
+
+    def test_failed_and_timed_out_login_still_collects_private_diagnostics(self):
+        import subprocess
+        for timeout in (False, True):
+            with self.subTest(timeout=timeout), patch.dict(os.environ, {
+                "GITHUB_ACTIONS": "true", "LAB_NATIVE_UI_AUTH": "1", "LAB_NATIVE_AUTH_DIAGNOSTICS": "1"
+            }, clear=True), patch("enrollment_environment.subprocess.run",
+                return_value=SimpleNamespace(returncode=0, stdout=json.dumps(self.result("native_login_rejected")), stderr=""),
+                side_effect=subprocess.TimeoutExpired("native", 220) if timeout else None
+            ), contextlib.redirect_stdout(io.StringIO()) as output:
+                self.collector.reset_mock()
+                self.assertEqual(probe.main(), 2)
+                self.collector.assert_called_once()
+                self.assertIs(type(self.collector.call_args.args[0]), int)
+                self.assertEqual(json.loads(output.getvalue())["native_auth_diagnostics"], {"capture_status": "ok"})
 
     def test_workspace_execution_is_rejected_before_launch(self):
         with patch.dict(os.environ, {}, clear=True), patch("enrollment_environment.subprocess.run") as run:

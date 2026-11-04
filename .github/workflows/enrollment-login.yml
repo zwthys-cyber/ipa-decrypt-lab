@@ -16,13 +16,18 @@ jobs:
         with:
           persist-credentials: false
       - name: Test private diagnostics before supplying credentials
-        run: python3 -m unittest discover -s tests -p 'test_enrollment_environment.py' -v
+        run: |
+          python3 -m unittest discover -s tests -p 'test_enrollment_environment.py' -v
+          python3 -m unittest discover -s tests -p 'test_native_auth_diagnostics.py' -v
+      - name: Confirm bounded system-log query before credentials are supplied
+        run: python3 tools/native_auth_diagnostics.py --check
       - name: Compile native UI research helper before supplying credentials
         run: swiftc -swift-version 5 -framework AppKit -framework ApplicationServices -framework SystemConfiguration tools/EnrollmentEnvironment.swift -o enrollment-environment
       - name: One native account login with private diagnostics
-        timeout-minutes: 4
+        timeout-minutes: 5
         env:
           LAB_NATIVE_UI_AUTH: '1'
+          LAB_NATIVE_AUTH_DIAGNOSTICS: '1'
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
         run: |
