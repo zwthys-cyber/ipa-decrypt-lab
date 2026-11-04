@@ -46,16 +46,43 @@ static void LoaderFields(NSMutableDictionary *r,const char *message) {
  r[@"loader_mentions_architecture"]=B([text containsString:@"architecture"] || [text containsString:@"incompatible"]);
  r[@"loader_mentions_signature"]=B([text containsString:@"code signature"] || [text containsString:@"library validation"]);
 }
+@protocol LabCommerceInitializing <NSObject>
+- (instancetype)initWithClientIdentifier:(id)identifier;
+- (instancetype)_initWithStoreClient:(id)client plist:(id)plist __attribute__((objc_method_family(init)));
+@end
+static BOOL InstanceABI(Class cls,SEL selector,NSString *ret,NSArray<NSString *> *args) {
+ Method method=class_getInstanceMethod(cls,selector);
+ const char *encoding=method?method_getTypeEncoding(method):NULL;
+ NSMethodSignature *signature=encoding?[NSMethodSignature signatureWithObjCTypes:encoding]:nil;
+ if(!signature || signature.numberOfArguments!=args.count+2 || ![@(signature.methodReturnType) isEqual:ret])return NO;
+ for(NSUInteger i=0;i<args.count;i++)if(![@([signature getArgumentTypeAtIndex:i+2]) isEqual:args[i]])return NO;
+ return YES;
+}
+@interface LabReplacingFactory : NSObject <LabCommerceInitializing>
+@end
+@implementation LabReplacingFactory
+- (instancetype)initWithClientIdentifier:(id)identifier { return (id)[NSMutableDictionary dictionaryWithObject:identifier forKey:@"fixture"]; }
+- (instancetype)_initWithStoreClient:(id)client plist:(id)plist { return (id)[NSMutableDictionary dictionaryWithDictionary:plist]; }
+@end
+static BOOL InitializationContract(void) {
+ if(!InstanceABI(LabReplacingFactory.class,@selector(initWithClientIdentifier:),@"@",@[@"@"]) ||
+    !InstanceABI(LabReplacingFactory.class,@selector(_initWithStoreClient:plist:),@"@",@[@"@",@"@"]))return NO;
+ id client=[(id<LabCommerceInitializing>)[LabReplacingFactory alloc] initWithClientIdentifier:@"synthetic"];
+ id account=[(id<LabCommerceInitializing>)[LabReplacingFactory alloc] _initWithStoreClient:client plist:@{@"fixture":@"synthetic"}];
+ return [client isKindOfClass:NSMutableDictionary.class] && [account isKindOfClass:NSMutableDictionary.class]
+   && [client[@"fixture"] isEqual:@"synthetic"] && [account[@"fixture"] isEqual:@"synthetic"];
+}
+
 static id SyntheticAccount(BOOL nonzero,NSMutableDictionary *r) {
  Class clientClass=NSClassFromString(@"CKStoreClient"),accountClass=NSClassFromString(@"CKStoreAccount");
  r[@"client_class_present"]=B(clientClass!=Nil);r[@"account_class_present"]=B(accountClass!=Nil);
- id client=[clientClass alloc];SEL initClient=NSSelectorFromString(@"initWithClientIdentifier:");
- if(!ABI(client,initClient,@"@",@[@"@"]))return nil;
- client=((id(*)(id,SEL,id))objc_msgSend)(client,initClient,@"com.apple.AppStore");
- id account=[accountClass alloc];SEL initAccount=NSSelectorFromString(@"_initWithStoreClient:plist:");
- if(!client || !ABI(account,initAccount,@"@",@[@"@",@"@"]))return nil;
+ if(!InstanceABI(clientClass,@selector(initWithClientIdentifier:),@"@",@[@"@"]) ||
+    !InstanceABI(accountClass,@selector(_initWithStoreClient:plist:),@"@",@[@"@",@"@"]))return nil;
+ id client=[(id<LabCommerceInitializing>)[clientClass alloc] initWithClientIdentifier:@"com.apple.AppStore"];
+ if(!client)return nil;
  NSNumber *expected=nonzero?@1234567:@0;
- account=((id(*)(id,SEL,id,id))objc_msgSend)(account,initAccount,client,@{@"dsPersonID":expected,@"appleId":@"ipa-lab@example.invalid"});
+ id account=[(id<LabCommerceInitializing>)[accountClass alloc] _initWithStoreClient:client
+   plist:@{@"dsPersonID":expected,@"appleId":@"ipa-lab@example.invalid"}];
  SEL dsid=NSSelectorFromString(@"dsID");
  if(!ABI(account,dsid,@"@",@[]))return nil;
  id observed=((id(*)(id,SEL))objc_msgSend)(account,dsid);
@@ -122,7 +149,7 @@ int main(int argc,const char **argv) { @autoreleasepool {
  if(!getenv("GITHUB_ACTIONS") || strcmp(getenv("GITHUB_ACTIONS"),"true"))return 2;
  signal(SIGALRM,Deadline);alarm(30);
  if(argc==2 && !strcmp(argv[1],"--error-contract")) {
-   BOOL ok=ServiceErrorContract();puts(ok?"service error contract passed":"service error contract failed");return ok?0:4;
+   BOOL ok=ServiceErrorContract() && InitializationContract();puts(ok?"service error contract passed":"service error contract failed");return ok?0:4;
  }
  if(argc!=3 || (strcmp(argv[2],"zero") && strcmp(argv[2],"nonzero")))return 2;
  NSMutableDictionary *r=[@{@"schema":@"ipa-lab-commerce-keybag-v1",@"status":@"interface_unavailable",
