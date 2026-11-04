@@ -1,6 +1,21 @@
 name: Private native machine enrollment trial
 on:
   workflow_dispatch:
+    inputs:
+      purpose:
+        description: Store authentication purpose for this bounded trial
+        type: choice
+        default: signIn
+        options:
+          - signIn
+          - machineAuthorize
+      session_context:
+        description: Store session context forwarded to the authorization request
+        type: choice
+        default: store
+        options:
+          - store
+          - token
 permissions:
   contents: read
 concurrency:
@@ -61,8 +76,10 @@ jobs:
       - name: Authenticate once and attempt one machine authorization request
         timeout-minutes: 4
         env:
+          LAB_SESSION_CONTEXT: ${{ inputs.session_context }}
+          LAB_PURPOSE: ${{ inputs.purpose }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
         run: |
           ulimit -c 0
-          python3 tools/machine_enrollment.py --login-binary native-source/ApplePackage/.build/debug/ApplePackageTool --native-binary native-machine-enrollment
+          python3 tools/machine_enrollment.py --login-binary native-source/ApplePackage/.build/debug/ApplePackageTool --native-binary native-machine-enrollment --purpose "$LAB_PURPOSE" --session-context "$LAB_SESSION_CONTEXT"

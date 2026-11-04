@@ -70,7 +70,9 @@ def run_private(argv, env, *, data=None, timeout=120):
         p.communicate()
         raise
 
-def trial(login_binary, native_binary):
+def trial(login_binary, native_binary, purpose="signIn", session_context="store"):
+    if purpose not in {"signIn", "machineAuthorize"} or session_context not in {"token", "store"}:
+        return clean({"status": "invalid_private_input"})
     email, password = os.environ.get("APPLE_ID"), os.environ.get("APPLE_PASSWORD")
     if not email or not password:
         return clean({"status": "missing_credentials"})
@@ -80,7 +82,7 @@ def trial(login_binary, native_binary):
         env = {"PATH": "/usr/bin:/bin", "GITHUB_ACTIONS": "true"}
         if os.environ.get("HOME"):
             env["HOME"] = os.environ["HOME"]
-        login_env = dict(env, APPLEPACKAGE_PASSWORD=password, LAB_ENROLLMENT_INPUT_PATH=str(handoff))
+        login_env = dict(env, APPLEPACKAGE_PASSWORD=password, LAB_ENROLLMENT_INPUT_PATH=str(handoff), LAB_AUTHORIZATION_PURPOSE=purpose)
         try:
             code, out, err = run_private([login_binary, "login", email], login_env, timeout=120)
         except subprocess.TimeoutExpired:
@@ -92,6 +94,10 @@ def trial(login_binary, native_binary):
             return clean({"status": "private_handoff_failed"})
         data = handoff.read_bytes()
         handoff.unlink()
+        if session_context == "token":
+            private = json.loads(data)
+            data = json.dumps({key: private[key] for key in ("dsid", "token", "guid")}).encode()
+            del private
         try:
             code, _, _ = run_private([native_binary, str(report)], env, data=data, timeout=75)
         except subprocess.TimeoutExpired:
@@ -103,18 +109,22 @@ def trial(login_binary, native_binary):
         if not report.is_file() or report.stat().st_size > 65536:
             return clean({"status": "private_handoff_failed"})
         result = clean(json.loads(report.read_text()))
-        result["download_session_authenticated"] = True
+        result["store_session_authenticated"] = True
+        result["authentication_purpose"] = purpose
+        result["session_context"] = session_context
         return result
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--login-binary", required=True)
     parser.add_argument("--native-binary", required=True)
+    parser.add_argument("--purpose", choices=("signIn", "machineAuthorize"), default="signIn")
+    parser.add_argument("--session-context", choices=("token", "store"), default="store")
     args = parser.parse_args()
     if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "darwin":
         raise SystemExit("GitHub-hosted macOS required")
     try:
-        r = trial(str(Path(args.login_binary).resolve()), str(Path(args.native_binary).resolve()))
+        r = trial(str(Path(args.login_binary).resolve()), str(Path(args.native_binary).resolve()), args.purpose, args.session_context)
     except Exception:
         r = clean({"status": "probe_failed"})
     print(json.dumps(r, sort_keys=True))

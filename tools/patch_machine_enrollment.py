@@ -26,7 +26,42 @@ for before, after in changes:
     if source.count(before) != 1:
         raise SystemExit("pinned private session source changed")
     source = source.replace(before, after)
+purpose_changes = [
+    ("                sapSigner: signer,", """                sapSigner: signer,
+                machineAuthorization: ProcessInfo.processInfo.environment["LAB_AUTHORIZATION_PURPOSE"] == "machineAuthorize","""),
+    ("        sapSigner: any SAPRequestSigning,", "        sapSigner: any SAPRequestSigning, machineAuthorization: Bool = false,"),
+    ('"rmp": "0", "why": "signIn",', '"rmp": "0", "why": machineAuthorization ? "machineAuthorize" : "signIn",'),
+]
+for before, after in purpose_changes:
+    if source.count(before) != 1:
+        raise SystemExit("pinned authentication purpose source changed")
+    source = source.replace(before, after)
 auth.write_text(source)
+
+tests = root / "Tests/ApplePackageTests/SAPAuthenticationRequestTests.swift"
+source_tests = tests.read_text()
+before = "    func testSignatureCoversExactSerializedHTTPBody() async throws {"
+after = """    func testMachineAuthorizationPurposeIsSignedIntoTheExactBody() async throws {
+        let signer = RecordingSigner()
+        let request = try await Authenticator.makeRequest(
+            endpoint: XCTUnwrap(URL(string: "https://auth.itunes.apple.com/login")),
+            email: "reader@example.invalid", password: "synthetic-password", code: "",
+            cookies: [], deviceIdentifier: "001122334455", sapSigner: signer, machineAuthorization: true,
+        )
+        let body = try bodyData(request)
+        let signedBodies = await signer.recordedBodies()
+        XCTAssertEqual(signedBodies, [body])
+        let parameters = try XCTUnwrap(PropertyListSerialization.propertyList(from: body, format: nil) as? [String: String])
+        XCTAssertEqual(parameters["why"], "machineAuthorize")
+        XCTAssertEqual(parameters["password"], "synthetic-password")
+        XCTAssertEqual(parameters["guid"], "001122334455")
+    }
+
+""" + before
+if source_tests.count(before) != 1:
+    raise SystemExit("pinned authentication purpose test changed")
+tests.write_text(source_tests.replace(before, after))
+
 account = root / "Sources/ApplePackage/Models/Account.swift"
 source = account.read_text()
 before = "    public var pod: String?"
