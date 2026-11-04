@@ -9,12 +9,12 @@ import sys
 import tempfile
 from native_keybag import DOMAINS, STATE_KEYS
 
-STATUSES = {"invalid_private_input", "request_preparation_failed", "request_timeout", "request_stopped",
+STATUSES = {"invalid_keybag_rejected", "invalid_keybag_unexpected_result", "invalid_private_input", "request_preparation_failed", "request_timeout", "request_stopped",
     "response_not_plist", "keybag_not_issued", "import_interface_unavailable",
     "keybag_imported_model_unverified", "keybag_import_failed", "native_exception", "probe_failed",
     "missing_credentials", "login_failed", "login_ambiguous", "login_timeout", "native_timeout",
     "native_process_failed", "private_handoff_failed"}
-BOOLS = {"client_agent_bound", "client_agent_changed", "md_data_present", "md_data_valid", "amd_data_present", "amd_data_valid", "authorization_request_attempted", "ephemeral_account", "session_identity_verified", "body_token_bound",
+BOOLS = {"context_stable_after_rejection", "context_ready_before_request", "context_stable_before_import", "expected_invalid_keybag_rejected", "client_agent_bound", "client_agent_changed", "md_data_present", "md_data_valid", "amd_data_present", "amd_data_valid", "authorization_request_attempted", "ephemeral_account", "session_identity_verified", "body_token_bound",
     "redirect_blocked", "response_oversized", "error_present", "apple_failure_present",
     "dialog_present", "keybag_present", "keybag_import_succeeded", "redirect_seen",
     "redirect_query_supported", "redirect_method_post", "redirect_https", "storefront_header_present",
@@ -51,6 +51,8 @@ def clean(value):
     for key in ("error_code", "apple_failure_code", "fairplay_status"):
         if type(value.get(key)) is int and -999999 <= value[key] <= 999999:
             r[key] = value[key]
+    if type(value.get("import_fairplay_status")) is int and -(2**31) <= value["import_fairplay_status"] < 2**31:
+        r["import_fairplay_status"] = value["import_fairplay_status"]
     if type(value.get("http_status")) is int and 100 <= value["http_status"] <= 599:
         r["http_status"] = value["http_status"]
     if type(value.get("error_domain")) is str and value["error_domain"] in DOMAINS:
@@ -142,7 +144,7 @@ def main():
     parser.add_argument("--native-binary", required=True)
     parser.add_argument("--purpose", choices=("signIn", "machineAuthorize", "machineSession", "booleanSession"), default="signIn")
     parser.add_argument("--session-context", choices=("token", "cookies", "storefront", "store"), default="token")
-    parser.add_argument("--client-context", choices=("native", "login_agent"), default="native")
+    parser.add_argument("--client-context", choices=("native", "login_agent"), default="login_agent")
     args = parser.parse_args()
     if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "darwin":
         raise SystemExit("GitHub-hosted macOS required")

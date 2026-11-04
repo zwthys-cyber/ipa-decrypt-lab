@@ -179,8 +179,65 @@ static NSURLRequest *PreparedRequest(NSDictionary *input,NSMutableDictionary *re
  request.timeoutInterval=30;
  return request;
 }
+
+static void ImportErrorFields(NSMutableDictionary *report,NSError *error) {
+ if(![error.domain isEqual:@"AMSErrorDomain"] || error.code!=505)return;
+ NSString *reason=error.localizedFailureReason;
+ if(![reason isKindOfClass:NSString.class] || reason.length>128)return;
+ NSRegularExpression *pattern=[NSRegularExpression regularExpressionWithPattern:@"^Import error with status: (-?[0-9]{1,10})$" options:0 error:NULL];
+ NSTextCheckingResult *match=[pattern firstMatchInString:reason options:0 range:NSMakeRange(0,reason.length)];
+ if(!match)return;
+ long long status=[[reason substringWithRange:[match rangeAtIndex:1]] longLongValue];
+ if(status>=INT32_MIN && status<=INT32_MAX)report[@"import_fairplay_status"]=@(status);
+}
+static BOOL ImportErrorContract(void) {
+ NSMutableDictionary *report=[NSMutableDictionary dictionary];
+ NSError *error=[NSError errorWithDomain:@"AMSErrorDomain" code:505 userInfo:@{
+   NSLocalizedDescriptionKey:@"PRIVATE_DESCRIPTION",NSLocalizedFailureReasonErrorKey:@"Import error with status: -42000"}];
+ ImportErrorFields(report,error);
+ if(![report isEqual:@{@"import_fairplay_status":@(-42000)}])return NO;
+ for(NSString *reason in @[@"PRIVATE_REASON",@"Import error with status: 9999999999",@"Import error with status: -42000 PRIVATE", @"Import error with status: 1234567890123"]) {
+   NSMutableDictionary *bad=[NSMutableDictionary dictionary];
+   ImportErrorFields(bad,[NSError errorWithDomain:@"AMSErrorDomain" code:505 userInfo:@{NSLocalizedFailureReasonErrorKey:reason}]);
+   if(bad.count)return NO;
+ }
+ for(NSError *other in @[
+   [NSError errorWithDomain:@"OTHER_PRIVATE" code:505 userInfo:@{NSLocalizedFailureReasonErrorKey:@"Import error with status: -42000"}],
+   [NSError errorWithDomain:@"AMSErrorDomain" code:500 userInfo:@{NSLocalizedFailureReasonErrorKey:@"Import error with status: -42000"}]]) {
+   NSMutableDictionary *bad=[NSMutableDictionary dictionary];ImportErrorFields(bad,other);if(bad.count)return NO;
+ }
+ return YES;
+}
+static unsigned int ContextIdentifier(id bag) {
+ SEL context=NSSelectorFromString(@"fairplayContextWithError:");
+ if(!ABI(bag,context,@"I",@[@"^@"]))return 0;
+ NSError *error=nil;
+ unsigned int value=((unsigned int(*)(id,SEL,NSError *__autoreleasing *))objc_msgSend)(bag,context,&error);
+ return error?0:value;
+}
+static id SharedKeybag(void) {
+ Class cls=NSClassFromString(@"AMSKeybag");SEL shared=NSSelectorFromString(@"sharedInstance");
+ return ABI(cls,shared,@"@",@[])?((id(*)(id,SEL))objc_msgSend)(cls,shared):nil;
+}
+static void InvalidImportProbe(NSMutableDictionary *r) {
+ r[@"status"]=@"import_interface_unavailable";r[@"state_before"]=State();
+ id bag=SharedKeybag();unsigned int context=ContextIdentifier(bag);
+ r[@"context_ready_before_request"]=B(context!=0);
+ SEL import=NSSelectorFromString(@"importKeybagWithData:error:");
+ if(!(ABI(bag,import,@"B",@[@"@",@"^@"])||ABI(bag,import,@"c",@[@"@",@"^@"])))return;
+ NSData *invalid=[@"ipa-lab-invalid-keybag" dataUsingEncoding:NSUTF8StringEncoding];
+ NSError *error=nil;
+ BOOL ok=((BOOL(*)(id,SEL,id,NSError *__autoreleasing *))objc_msgSend)(bag,import,invalid,&error);
+ ErrorFields(r,error);ImportErrorFields(r,error);
+ r[@"expected_invalid_keybag_rejected"]=B(!ok && error!=nil);
+ r[@"context_stable_after_rejection"]=B(context!=0 && context==ContextIdentifier(bag));
+ r[@"status"]=!ok && error?@"invalid_keybag_rejected":@"invalid_keybag_unexpected_result";
+}
+
 static void Authorize(NSDictionary *input,NSMutableDictionary *r) {
  r[@"state_before"]=State();
+ id initialKeybag=SharedKeybag();unsigned int initialContext=ContextIdentifier(initialKeybag);
+ r[@"context_ready_before_request"]=B(initialContext!=0);
  NSURLRequest *request=PreparedRequest(input,r);
  if(!request){r[@"status"]=@"request_preparation_failed";return;}
  LabEnrollmentResponse *delegate=[LabEnrollmentResponse new];
@@ -234,28 +291,31 @@ static void Authorize(NSDictionary *input,NSMutableDictionary *r) {
  if(!(ABI(bag,import,@"B",@[@"@",@"^@"]) || ABI(bag,import,@"c",@[@"@",@"^@"]))) {
    r[@"status"]=@"import_interface_unavailable";return;
  }
+ r[@"context_stable_before_import"]=B(initialContext!=0 && initialKeybag==bag && initialContext==ContextIdentifier(bag));
  NSError *error=nil;
  BOOL imported=((BOOL(*)(id,SEL,id,NSError *__autoreleasing *))objc_msgSend)(bag,import,blob,&error);
- ErrorFields(r,error);r[@"keybag_import_succeeded"]=B(imported && !error);
+ ErrorFields(r,error);ImportErrorFields(r,error);r[@"keybag_import_succeeded"]=B(imported && !error);
  r[@"status"]=imported && !error?@"keybag_imported_model_unverified":@"keybag_import_failed";
 }
 int main(int argc,const char **argv) { @autoreleasepool {
- if(argc!=2 || !getenv("GITHUB_ACTIONS") || strcmp(getenv("GITHUB_ACTIONS"),"true"))return 2;
+ if((argc!=2 && argc!=3) || !getenv("GITHUB_ACTIONS") || strcmp(getenv("GITHUB_ACTIONS"),"true"))return 2;
  if(!strcmp(argv[1],"--response-contract")) {
-   BOOL ok=ResponseContract() && ClientContextContract();puts(ok?"response and client context contracts passed":"response and client context contracts failed");return ok?0:4;
+   BOOL ok=ResponseContract() && ClientContextContract() && ImportErrorContract();puts(ok?"response and client context contracts passed":"response and client context contracts failed");return ok?0:4;
  }
  NSMutableDictionary *r=[@{@"schema":@"ipa-lab-machine-enrollment-v1",@"status":@"invalid_private_input",
    @"authorization_request_attempted":@NO,@"enrollment_created":@NO,@"decryption_proven":@NO} mutableCopy];
  @try {
-   NSData *data=[[NSFileHandle fileHandleWithStandardInput] readDataOfLength:65537];
-   id input=data.length<=65536?[NSJSONSerialization JSONObjectWithData:data options:0 error:NULL]:nil;
-   if([input isKindOfClass:NSDictionary.class]) {
-     dlopen("/System/Library/PrivateFrameworks/AppleMediaServices.framework/AppleMediaServices",RTLD_NOW|RTLD_GLOBAL);
-     dlopen("/System/Library/Frameworks/Accounts.framework/Accounts",RTLD_NOW|RTLD_GLOBAL);
-     Authorize(input,r);
+   dlopen("/System/Library/PrivateFrameworks/AppleMediaServices.framework/AppleMediaServices",RTLD_NOW|RTLD_GLOBAL);
+   dlopen("/System/Library/Frameworks/Accounts.framework/Accounts",RTLD_NOW|RTLD_GLOBAL);
+   if(argc==3 && !strcmp(argv[1],"--import-probe")) {
+     InvalidImportProbe(r);
+   } else if(argc==2) {
+     NSData *data=[[NSFileHandle fileHandleWithStandardInput] readDataOfLength:65537];
+     id input=data.length<=65536?[NSJSONSerialization JSONObjectWithData:data options:0 error:NULL]:nil;
+     if([input isKindOfClass:NSDictionary.class])Authorize(input,r);
    }
  } @catch(NSException *e) {r[@"status"]=@"native_exception";}
  r[@"state_after"]=State();
  NSData *report=[NSJSONSerialization dataWithJSONObject:r options:0 error:NULL];
- return report && [report writeToFile:@(argv[1]) options:NSDataWritingAtomic error:NULL]?0:3;
+ return report && [report writeToFile:@(argv[argc==3?2:1]) options:NSDataWritingAtomic error:NULL]?0:3;
 }}

@@ -137,6 +137,15 @@ class MachineEnrollmentContracts(unittest.TestCase):
                 self.assertNotIn("private-client/1", json.dumps(result))
                 self.assertNotIn("SECRET", json.dumps(result))
 
+    def test_import_status_is_a_bounded_integer_without_error_text(self):
+        for status in (-42000, -(2**31), 2**31-1):
+            result = mod.clean({"status": "keybag_import_failed", "import_fairplay_status": status,
+                                "failure_reason": "PRIVATE", "keybag": "PRIVATE"})
+            self.assertEqual(result["import_fairplay_status"], status)
+            self.assertNotIn("PRIVATE", json.dumps(result))
+        for invalid in (True, str(-42000), -(2**31)-1, 2**31):
+            self.assertNotIn("import_fairplay_status", mod.clean({"import_fairplay_status": invalid}))
+
     def test_boolean_numbers_and_unknown_types_rejected(self):
         r = mod.clean({"status": [], "error_domain": [], "error_code": True,
                        "keybag_import_succeeded": 1, "http_status": True})

@@ -1,0 +1,32 @@
+name: Account-free keybag import rejection probe
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-keybag-import
+  cancel-in-progress: false
+jobs:
+  probe:
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Check private report and import error contracts
+        run: python3 -m unittest discover -s tests -p 'test_machine_enrollment.py' -v
+      - name: Compile native client and run synthetic error contracts
+        run: |
+          clang -fobjc-arc -framework Foundation tools/NativeMachineEnrollment.m -o native-machine-enrollment
+          ./native-machine-enrollment --response-contract
+      - name: Check fixed invalid keybag rejection without account requests
+        timeout-minutes: 3
+        run: |
+          ulimit -c 0
+          python3 tools/native_import_probe.py

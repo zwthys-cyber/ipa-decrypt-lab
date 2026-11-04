@@ -23,10 +23,10 @@ on:
       client_context:
         description: Keep native User-Agent or bind the exact login client agent
         type: choice
-        default: native
+        default: login_agent
         options:
-          - native
           - login_agent
+          - native
 permissions:
   contents: read
 concurrency:
