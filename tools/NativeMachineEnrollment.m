@@ -181,29 +181,43 @@ static NSURLRequest *PreparedRequest(NSDictionary *input,NSMutableDictionary *re
 }
 
 static void ImportErrorFields(NSMutableDictionary *report,NSError *error) {
- if(![error.domain isEqual:@"AMSErrorDomain"] || error.code!=505)return;
- NSString *reason=error.localizedFailureReason;
- if(![reason isKindOfClass:NSString.class] || reason.length>128)return;
+ if(![error.domain isEqual:@"AMSErrorDomain"] || error.code!=505 || error.userInfo.count>32)return;
+ NSMutableArray *values=[NSMutableArray arrayWithArray:error.userInfo.allValues];
+ if(error.localizedFailureReason)[values addObject:error.localizedFailureReason];
+ if(error.localizedDescription)[values addObject:error.localizedDescription];
  NSRegularExpression *pattern=[NSRegularExpression regularExpressionWithPattern:@"^Import error with status: (-?[0-9]{1,10})$" options:0 error:NULL];
- NSTextCheckingResult *match=[pattern firstMatchInString:reason options:0 range:NSMakeRange(0,reason.length)];
- if(!match)return;
- long long status=[[reason substringWithRange:[match rangeAtIndex:1]] longLongValue];
- if(status>=INT32_MIN && status<=INT32_MAX)report[@"import_fairplay_status"]=@(status);
+ NSNumber *observed=nil;
+ for(id reason in values) {
+   if(![reason isKindOfClass:NSString.class] || [reason length]>128)continue;
+   NSTextCheckingResult *match=[pattern firstMatchInString:reason options:0 range:NSMakeRange(0,[reason length])];
+   if(!match || match.range.length!=[reason length])continue;
+   long long status=[[reason substringWithRange:[match rangeAtIndex:1]] longLongValue];
+   if(status<INT32_MIN || status>INT32_MAX)continue;
+   NSNumber *value=@(status);
+   if(observed && ![observed isEqual:value])return;
+   observed=value;
+ }
+ if(observed)report[@"import_fairplay_status"]=observed;
 }
 static BOOL ImportErrorContract(void) {
- NSMutableDictionary *report=[NSMutableDictionary dictionary];
- NSError *error=[NSError errorWithDomain:@"AMSErrorDomain" code:505 userInfo:@{
-   NSLocalizedDescriptionKey:@"PRIVATE_DESCRIPTION",NSLocalizedFailureReasonErrorKey:@"Import error with status: -42000"}];
- ImportErrorFields(report,error);
- if(![report isEqual:@{@"import_fairplay_status":@(-42000)}])return NO;
- for(NSString *reason in @[@"PRIVATE_REASON",@"Import error with status: 9999999999",@"Import error with status: -42000 PRIVATE", @"Import error with status: 1234567890123"]) {
+ for(NSString *key in @[NSLocalizedFailureReasonErrorKey,NSDebugDescriptionErrorKey,@"AMSDebugDescription"]) {
+   NSMutableDictionary *report=[NSMutableDictionary dictionary];
+   NSError *error=[NSError errorWithDomain:@"AMSErrorDomain" code:505 userInfo:@{
+     NSLocalizedDescriptionKey:@"PRIVATE_DESCRIPTION",key:@"Import error with status: -42000"}];
+   ImportErrorFields(report,error);
+   if(![report isEqual:@{@"import_fairplay_status":@(-42000)}])return NO;
+ }
+ for(NSString *reason in @[@"PRIVATE_REASON",@"Import error with status: 9999999999",@"Import error with status: -42000 PRIVATE",
+     @"Import error with status: 1234567890123",@"Import error with status: -42000\n"]) {
    NSMutableDictionary *bad=[NSMutableDictionary dictionary];
    ImportErrorFields(bad,[NSError errorWithDomain:@"AMSErrorDomain" code:505 userInfo:@{NSLocalizedFailureReasonErrorKey:reason}]);
    if(bad.count)return NO;
  }
  for(NSError *other in @[
    [NSError errorWithDomain:@"OTHER_PRIVATE" code:505 userInfo:@{NSLocalizedFailureReasonErrorKey:@"Import error with status: -42000"}],
-   [NSError errorWithDomain:@"AMSErrorDomain" code:500 userInfo:@{NSLocalizedFailureReasonErrorKey:@"Import error with status: -42000"}]]) {
+   [NSError errorWithDomain:@"AMSErrorDomain" code:500 userInfo:@{NSLocalizedFailureReasonErrorKey:@"Import error with status: -42000"}],
+   [NSError errorWithDomain:@"AMSErrorDomain" code:505 userInfo:@{NSLocalizedFailureReasonErrorKey:@"Import error with status: -42000",
+     @"AMSDebugDescription":@"Import error with status: -42001"}]]) {
    NSMutableDictionary *bad=[NSMutableDictionary dictionary];ImportErrorFields(bad,other);if(bad.count)return NO;
  }
  return YES;
