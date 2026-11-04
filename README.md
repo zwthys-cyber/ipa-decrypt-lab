@@ -1,5 +1,7 @@
 # IPA Decrypt Lab
 
+当前私有交付上限为 **2000 MB（2,000,000,000 字节）**，已部署；超限会明确拒绝，不提供 4 GB 文件直传。容量与验证范围见 [Telegram 说明](docs/TELEGRAM.md)。
+
 **已在 GitHub-hosted macOS 上恢复 FairPlay 模型，并验证指定应用的原始 IPA 解密。** 真实私有加密导出已通过，Telegram 管理员私聊与 92 MB 完整 IPA 交付已通过实测。管理员常驻服务已部署；应用安装运行及收费服务尚未完成。
 
 ## 当前阶段与使用入口
