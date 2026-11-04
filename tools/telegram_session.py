@@ -105,7 +105,7 @@ class Controller:
         if self.submitted>=3:
             self.say("本次测试会话已提交 3 个任务，请重新启动测试会话后继续。")
             return
-        if time.monotonic()-self.last_submission<30:
+        if self.submitted and time.monotonic()-self.last_submission<30:
             self.say("请稍候 30 秒再提交。")
             return
         rid = opaque_id(self.token,self.owner,update_number,app)

@@ -4,7 +4,7 @@ import sys
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"tools"))
 from telegram_api import APIError
 from telegram_queue import QueueError, validate_receipt, request_id
@@ -30,6 +30,12 @@ class SessionTests(unittest.TestCase):
         old=update();old["message"]["date"]-=1000;c.handle(old)
         gh.dispatch.assert_not_called()
         bot.message.assert_not_called()
+
+    def test_first_submission_is_allowed_on_a_fresh_runner(self):
+        c,bot,gh=self.controller()
+        with patch("telegram_session.time.monotonic",return_value=1):
+            c.handle(update())
+        gh.dispatch.assert_called_once()
 
     def test_duplicate_update_dispatches_once(self):
         c,bot,gh=self.controller()
