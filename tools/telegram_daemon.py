@@ -17,8 +17,9 @@ from capacity import MIN_FREE_BYTES
 
 KEYS={"TELEGRAM_BOT_TOKEN","TELEGRAM_OWNER_ID","TELEGRAM_API_ID",
       "TELEGRAM_API_HASH","DELIVERY_AGE_IDENTITY","GH_TOKEN"}
-HELP=("发送美区免费 App Store 链接或数字 App ID创建任务。\n"
+HELP=("直接发送美区免费 App Store 链接或数字 App ID，默认下载最新版。\n"
       "IPA 最大 2000 MB，超过上限不支持直接交付。\n"
+      "/latest AppID 下载最新版\n"
       "/version AppID 版本号 下载指定旧版\n"
       "/status 查看进度\n/get 任务编号 取回文件\n/cancel 取消当前任务\n/id 查看身份\n"
       "当前仅向管理员开放；尚未开放付费服务。")

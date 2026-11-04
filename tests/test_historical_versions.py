@@ -53,6 +53,23 @@ class HistoricalVersionTests(unittest.TestCase):
         gh.dispatch.assert_called_once_with(APP,c.current["rid"],version="9.3.55")
         self.assertEqual(c.current["version"],"9.3.55")
 
+    def test_latest_and_legacy_alias_do_not_pin_a_historical_version(self):
+        for text in ("/latest 444934666", "/decrypt 444934666",
+                     "/latest@ipazake_bot https://apps.apple.com/us/app/id444934666"):
+            gh=Mock()
+            gh.dispatch.return_value={"status":"queued"}
+            c=Controller(Mock(),gh,OWNER,"crypt","synthetic")
+            c.handle(update(text))
+            gh.preflight_app.assert_called_once_with(APP)
+            gh.dispatch.assert_called_once_with(APP,c.current["rid"])
+            self.assertEqual(c.current["version"],"")
+
+    def test_latest_menu_prompt_does_not_submit_until_app_is_given(self):
+        gh,bot=Mock(),Mock()
+        Controller(bot,gh,OWNER,"crypt","synthetic").handle(update("/latest"))
+        gh.dispatch.assert_not_called()
+        self.assertIn("最新版",bot.message.call_args.args[1])
+
     def test_bad_command_does_not_dispatch(self):
         for text in ("/version","/version 444934666","/version 444934666 ../x"):
             gh=Mock()

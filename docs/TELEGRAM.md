@@ -25,9 +25,10 @@
 | 指令 | 行为 |
 | --- | --- |
 | /start 或 /help | 使用说明 |
-| /decrypt | 提示输入链接或 App ID |
+| /latest AppID或商店链接 | 下载最新版；单独点击菜单会提示输入应用 |
+| /decrypt | 保留为最新版入口的兼容别名 |
 | /version AppID或商店链接 版本号 | 实时请求指定旧版，例如 `/version 444934666 9.3.55`；也接受 Apple 历史版本 ID |
-| App Store 链接或数字 ID | 创建任务 |
+| App Store 链接或数字 ID | 默认创建最新版任务 |
 | /id | 显示管理员自己的数字 ID |
 | /status | 查看当前任务 |
 | /cancel | 请求取消当前任务 |

@@ -12,7 +12,8 @@ from app_preflight import PreflightError, MESSAGES
 from task_progress import ProgressCard, LABELS
 from delivery_scheduler import app_from_run, queued_too_long, retryable, MAX_RUNS
 
-HELP = ("发送美区免费 App Store 链接或数字 App ID，创建下载与解密任务。\n"
+HELP = ("直接发送美区免费 App Store 链接或数字 App ID，默认下载最新版。\n"
+        "/latest AppID 下载最新版\n"
         "/version AppID 版本号 下载指定旧版（也可填历史版本 ID）\n"
         "/status 查看当前任务\n/cancel 取消当前任务\n"
         "/get 任务编号 重新获取已完成文件（保留约一天）\n/id 查看自己的数字 ID\n"
@@ -110,9 +111,15 @@ class Controller:
         if command in ("/start","/help"):
             self.say(HELP)
             return
-        if command=="/decrypt":
-            self.say("请发送应用的 App Store 链接或数字 App ID。当前支持美区免费应用。")
-            return
+        if command in ("/latest","/decrypt"):
+            parts = text.split()
+            if len(parts) == 1:
+                self.say("下载最新版：请发送美区免费应用的 App Store 链接或数字 App ID。\n也可直接输入：/latest 444934666")
+                return
+            if len(parts) != 2:
+                self.say("用法：/latest AppID或商店链接。指定旧版请用 /version AppID 版本号。")
+                return
+            text = parts[1]
         if command=="/id":
             self.say("你的 Telegram 数字用户 ID："+str(self.owner))
             return

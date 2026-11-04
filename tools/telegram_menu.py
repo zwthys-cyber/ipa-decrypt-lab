@@ -2,8 +2,8 @@
 from telegram_api import APIError
 
 COMMANDS = [
+    {"command":"latest", "description":"下载最新版：发送 App Store 链接或 ID"},
     {"command":"version", "description":"下载旧版：/version AppID 版本号"},
-    {"command":"decrypt", "description":"开始砸壳：发送 App Store 链接"},
     {"command":"status", "description":"查看当前任务进度"},
     {"command":"get", "description":"按任务编号取回已完成文件"},
     {"command":"cancel", "description":"取消当前任务"},
