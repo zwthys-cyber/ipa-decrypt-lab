@@ -9,7 +9,7 @@
 | 下载客户端账号登录 | Swift 签名下载路径已成功登录，无需本次输入 OTP | 不代表系统 FairPlay 注册完成 |
 | 原生 App Store 首次注册研究 | ARM 与 Intel 均完成原生表单提交；精确登录窗口已观察到 Anisette 获取及初始化失败 | 原生登录仍被拒绝，预期 SIDB/SIDS 未生成，未得到模型 |
 | 独立 Anisette 与原生接入 | Linux / ARM Mac 初始化及复用成功；原生代理回调契约通过 | 实际 AuthKit 调用返回 XPC 4099，数据提供器未被调用，未生成模型 |
-| 原生 keybag / 机器授权 | 双架构前置条件通过；真实会话已到达授权接口，分别观察到业务错误 2002 与 HTTP 500 | 尚未签发或导入 keybag，未恢复模型；不能把登录或 HTTP 200 当作授权成功 |
+| 原生 keybag / 机器授权 | 绑定正文令牌并统一登录/授权 User-Agent 后，服务器首次返回非空 keybag，业务错误 2002 消失 | macOS 导入返回 AMSErrorDomain 505；尚未导入成功、恢复模型或验证真实解密 |
 | 原始 IPA 下载 | 目标 App ID 6599842047 已成功下载并检查到 62 个加密 Mach-O 切片 | 原始包仍然加密，不是砸壳产物 |
 | macOS 原生实验 | 62 次实际调用均返回 EPERM；已区分路径、文件布局和调用前检查 | 没有生成已验证明文；不能仅凭 EPERM 确定原因 |
 | 离线解密引擎 | 固定版本 UnfairPlay 在 GitHub Linux x86_64 编译成功，相关 Go 测试及 52 项 Python 测试通过 | 缺少匹配的私有 FairPlay enrollment 模型，未验证真实 IPA 解密 |
@@ -22,11 +22,11 @@
 
 用户已说明该目标应用此前没有下载过。购买接口的通用 5002 响应仍标记为未确认，不能解释成“账号已经拥有此应用”。
 
-最新进展：[双架构原生代码检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41761399542)找到了一个实际缺陷：机器授权正文 xToken 留成了缺失值 "0"，应绑定登录响应 passwordToken。修复已通过[双架构检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41761683677)。修复后分别测试普通登录、机器授权用途、Cookie 与布尔值会话创建，均登录成功，但授权仍返回 2002，没有 keybag。最新[布尔值试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41762837405)通过 20 项 Python、10 项 Swift 测试与原生编译。
+最新进展：[真实机器授权试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41764672563)首次取得服务器返回的 keybag。该次试验在正文 xToken 已绑定、Cookie 已携带的基础上，使授权请求使用与登录相同的 User-Agent；服务器返回 HTTP 200，未含业务失败码，keybag 非空。23 项 Python、11 项 Swift 测试及原生合成检查通过。
 
-[设备认证代码检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41762566901)另确认：临时账号跳过原生 Anisette 头；机器授权的账号范围与现有 AuthKit Anisette 提供器不同，不能直接把“独立初始化成功”解释成机器授权可用。新增的[响应头试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41763040212)通过 21 项 Python、10 项 Swift 测试及原生合成检查；授权响应仍为 2002，且没有 MD/AMD 初始化指令或数据。进一步的[登录阶段对照](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41763584459)通过 22 项 Python、11 项 Swift 测试，登录过程所有响应也未观察到这些指令；授权仍未成功。 [本轮证据](OFFLINE-BACKEND.md#native-authorization-body-token-correction-2026-11-04)。
+下一步导入仍失败，返回 AMSErrorDomain 505，因此该工作流整体失败，尚未取得可用模型。已补充同一 FairPlay 上下文检查与有界错误诊断。[双架构无账号导入探针](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41765392466)验证固定错误样本被拒绝；不能将样本的 505 解释成真实 keybag 的具体失败原因。[当前详细证据](OFFLINE-BACKEND.md#native-client-identity-and-first-keybag-response-2026-11-04)。
 
-## 当前阻塞：解密授权材料
+## 当前阻塞：keybag 导入与模型恢复
 
 现有下载器创建临时账号会话并生成下载用 kbsync；这条代码路径不创建离线引擎需要的系统 FairPlay enrollment 状态。
 
@@ -34,7 +34,7 @@
 
 Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直接作为该模型传入。同一 Apple ID 也不能代替对实际 IPA 与 enrollment 是否匹配的验证。
 
-目前没有匹配模型，也没有在现有 GitHub-only 条件下验证成功的首次注册实现。原生 UI 实验已证明 GitHub ARM 与 Intel macOS 运行器都能够操作 App Store；当前卡在原生账号登录被拒绝。后续将日志缩小到提交凭据后的 14 秒，观察到 Anisette 初始化失败及 -7018 与下层 Anisette 错误同条出现。独立 Anisette 组件现已在 GitHub Linux 和 ARM Mac 成功初始化；自定义提供器的本地原生回调已验证。一次受限 AuthKit 认证在系统进程通信处返回 XPC 4099，尚未调用提供器，未完成系统登录或生成 FairPlay 状态。绕开 AuthKit 的直接机器授权试验已取得服务端响应，但成功的 Store 会话仍收到错误 2002，未取得 keybag。仅重新编译、重复登录或重跑已失败的原生调用不会补齐这些材料。[源码依据与后续验收条件](OFFLINE-BACKEND.md#enrollment-bootstrap-source-review)。
+目前没有匹配模型，也没有在现有 GitHub-only 条件下完成首次注册。原生 UI 登录及独立 AuthKit 路径此前未成功；直接机器授权路径现已推进到服务器返回 keybag，但本机导入失败。keybag 返回、原生导入、模型恢复和真实 IPA 完整验证是分别检查的阶段，前一阶段成功不能代替后续证据。[源码依据与验收条件](OFFLINE-BACKEND.md#enrollment-bootstrap-source-review)。
 
 ## GitHub 验证入口
 
@@ -53,6 +53,8 @@ Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直�
 | Account-free AuthKit transport diagnosis | 检查服务查找、客户端标识、进程权限与实际代理错误 | 不传入 Apple 账号；限时诊断 |
 | Account-free native keybag prerequisites | 双架构检查 FairPlay 上下文、合成 kbsync、公开授权地址与请求边界 | 不传入真实账号，不提交授权请求 |
 | Account-free native authorization code inspection | 双架构检查指定原生函数的机器指令及令牌/认证类型来源 | 不传入账号，不读取私有运行时状态 |
+| Account-free native request signing policy | 检查公开配置及原生 Mescal 签名策略；不发送授权请求 | 不传入账号 |
+| Account-free native keybag import probe | 双架构固定错误 keybag 拒绝及上下文检查 | 不传入账号、不发送授权请求 |
 | Private native machine enrollment trial | 复用下载会话，检查身份后最多发起一次设备授权请求并单独检查 keybag 导入 | 最后一步使用 Apple Secrets；不导出会话或 keybag |
 
 在 Independent Swift Store trial 中选择：
@@ -62,17 +64,7 @@ Apple ID 密码、下载会话 token、SINF 文件和 kbsync 数据都不能直�
 
 真实 IPA、模型、账号信息和候选明文在运行器内部处理，不发布为仓库文件、公开日志或 Actions artifact。当前试验没有可领取的 IPA 下载产物。
 
-[精确时间范围的原生诊断](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41746379142)：23 项检查和编译通过，登录仍被拒绝。[独立前置条件 Linux 试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41747047524)与[ARM Mac 复测](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41747343222)均成功，每次 7 项检查通过，均未使用 Apple 账号。后续[原生回调试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41748357798)已通过；[真实认证试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41749424573)的 16 项测试与编译通过，但认证调用返回 XPC 4099，提供器调用次数为 0。未启用双重认证升级，未得到 FairPlay 模型。[详细证据与边界](OFFLINE-BACKEND.md#native-callback-contract-and-private-authentication-trial-2026-11-04)。
-
-[最新通信诊断](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41751601120)通过 13 项检查与原生编译。普通用户及管理员的 6 次实际请求都成功找到认证服务端口，随后返回 XPC 4099；另 2 次桌面上下文启动命令未执行成功，不能算成有效认证对照。[内部权限声明试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41750678118)中，自有程序两次被 SIGKILL 终止，该变体已移出后续工作流。本轮没有重新提交账号登录，尚未找到可用的首次模型生成方案。[证据与局限](OFFLINE-BACKEND.md#authkit-service-signing-and-caller-scope-controls-2026-11-04)。
-
-[原生 keybag 前置验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41755075728)已在 ARM 和 Intel 上通过每架构 11 项 Python 检查及原生正反例。系统能创建 FairPlay 上下文，公开配置返回设备授权地址；合成会话请求可构造，但没有签发或导入 keybag，未证明生成 SIDB/SIDS。真实会话试验另外执行，结果不得与此前置检查混同。[接口证据及候选项目核对](OFFLINE-BACKEND.md#native-keybag-prerequisites-and-upstream-candidates-2026-11-04)。
-
-**以下为正文令牌修复前的历史对照，修复后的结果见上文。**
-
-[机器授权路由试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41757256880)完成一次受限 Apple 跳转，收到 HTTP 200，但正文为业务错误 2002，未包含 keybag。[补齐 Cookie / 店面信息的试验](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41758396250)登录成功，授权接口返回 HTTP 500。两次均通过编译及 18 项 Python、7 项 Swift 检查，均未完成授权。[机器授权用途对照](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41758811569)通过 20 项 Python 与 8 项 Swift 检查，登录成功后仍收到 2002，未签发 keybag。[Cookie 单独携带](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41759197723)仍返回 2002；[店面信息单独携带](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41759651890)返回 HTTP 500。后续默认不复制该店面头；工作流保留独立对照选项。
-
-[创建机器会话的进一步对照](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41760174263)通过 20 项 Python、9 项 Swift 检查与编译。增加会话创建字段后登录成功，授权仍返回 2002，没有 keybag。当前仍未获得模型或验证真实砸壳，不能把测试通过当作项目完成。
+较早的原生 UI、AuthKit、Anisette、路由、Cookie、会话创建与正文令牌对照保留在 [OFFLINE-BACKEND.md](OFFLINE-BACKEND.md)。这些历史试验尚未获得 keybag；最新进展以上方真实机器授权记录为准。
 
 用户提供的 [fairplay-decrypt](https://github.com/EthanArbuckle/fairplay-decrypt) 是可在 Linux / macOS 使用的离线解密器，但其凭据获取工具要求越狱设备及已安装应用；仅编译工具不能生成匹配的 16 字节账号凭据。它没有补齐当前 GitHub-only 首次授权缺口。
 

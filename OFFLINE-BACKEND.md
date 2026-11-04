@@ -481,3 +481,40 @@ The user-supplied fairplay-decrypt repository's [Mac credential discussion](http
 Store login succeeded. All twelve aggregated login challenge flags were false. The final machine-authorization response likewise contained no observed MD/AMD action or challenge data, returned HTTP 200 / failureType 2002, and contained no keybag. The actual body token, account/GUID identity and eight eligible cookies were verified. This control found no skipped provisioning instruction in the observed login/authorization exchange.
 
 The current blocker is still an unaccepted first-time machine-authorization exchange. The code does not yet implement a verified way to obtain the matching initial FairPlay state using GitHub alone. It must not fabricate an SP challenge, rename AuthKit data into account-scoped headers, treat the new tests as enrollment, or claim a plaintext artifact. Further authenticated trials should follow new protocol evidence rather than repeat these unchanged rejected configurations.
+
+
+## Native client identity and first keybag response (2026-11-04)
+
+### Account-free signing policy control
+
+The pinned iOS AppleMediaServices source shows request encoding defaults to Mescal type 1, while ephemeral accounts skip ordinary Anisette and Mescal decoration. The account-free macOS probe tests the actual runtime matcher against the public machine-authorize bag and a fixed synthetic request; it does not send an authorization request.
+
+Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41764373913 passed on ARM and Intel, including four Python contracts per architecture. The native default was type 1, both configured policy matchers returned false for the root machine-authorize endpoint, and invoking the native signing hook produced no signature and no error. Body, destination and other headers were unchanged. This rules out an automatically requested Mescal signature under that observed public configuration, not every possible URL or authenticated session.
+
+### Consistent client identity reaches a new stage
+
+The pinned ApplePackage Configuration.swift uses a Configurator User-Agent for Store login. The native request builder instead derives its User-Agent from the current process. The private handoff now carries the exact configured login agent; the explicit login_agent option replaces only that authorization header after existing body-token, GUID, DSID and destination checks. Printable ASCII and length bounds reject malformed headers; the request body remains unchanged. Synthetic contracts also verify untouched unrelated headers. No User-Agent, session values or payload bytes are printed.
+
+Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41764672563 used signIn + cookies + login_agent. It passed 23 Python and 11 Swift tests, native compilation and synthetic request/response/header checks before supplying credentials. The private phase observed:
+
+- Store login succeeded, body_token_bound and session_identity_verified were true.
+- client_agent_bound and client_agent_changed were true; eight filtered cookies were applied and the problematic storefront header was omitted.
+- The single authorization request returned HTTP 200, apple_failure_present=false and keybag_present=true. The earlier 2002 response was absent in this trial.
+- No redirect, oversize response or MD/AMD provisioning instruction was observed.
+- Native import returned AMSErrorDomain 505: keybag_import_succeeded=false and status=keybag_import_failed. All four observed nonempty-readable SIDB/SIDS path flags remained false.
+- enrollment_created=false and decryption_proven=false. The run failed overall, as required for an unsuccessful import. No private keybag was retained as an artifact.
+
+This is the first observed server keybag response in the project. A nonempty response is not proof that the keybag is importable, that computer enrollment completed, or that a model was recovered. The known successful request configuration is preserved while investigation moves to local import; further authentication-purpose variants are not being retried without new evidence.
+
+An account-free code inspection, run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41764812740, confirmed native authenticationType=2, credentialSource=2 and canMakeAccountActive=false on both architectures. These observations alone do not justify changing the now-working server request.
+
+### Import diagnostic baseline
+
+Import diagnostics compare the shared AMSKeybag object and FairPlay context before request generation and before importing the response, without publishing the context identifier. Only allowlisted error domains/codes and a bounded numeric import status may leave the runner; descriptions, failure reasons and keybag contents stay private.
+
+Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41765392466 passed on both architectures with 12 Python checks per architecture plus native error/header contracts. A fixed invalid keybag, with no login or authorization request, produced AMSErrorDomain 505 and was rejected while its context remained stable. The first diagnostic parser did not extract a numeric status from either macOS runtime; its iOS-derived message template therefore cannot yet explain the real import failure.
+
+The macOS import block was then inspected directly on both architectures in run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41765844311 (four Python reporting contracts per architecture). It confirms the low-level import call and the exact numeric message template; an initial probe with the iOS-style block symbol was unavailable and is superseded by this actual macOS symbol check. The error text is stored in AMS error information rather than necessarily localizedFailureReason. The parser now examines at most 32 userInfo values plus the standard description/reason, accepts only the complete fixed message and signed 32-bit integer, rejects conflicting matches and never publishes text or keys.
+
+Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41766070751 passed on both architectures: 12 Python checks per architecture and native extraction/header contracts. Both fixed invalid samples produced import_fairplay_status=-42023, context_ready_before_request=true and context_stable_after_rejection=true. This validates numeric extraction without using an account; it does not assign the real response the same cause.
+
