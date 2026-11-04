@@ -37,7 +37,12 @@ SYMBOL_PATTERNS = {
     value: re.compile(r"(?<![A-Za-z0-9_.])" + re.escape(value) + r"(?![A-Za-z0-9_.])")
     for value in SYMBOLS
 }
-PREDICATE = "(" + " OR ".join('process == "' + name + '"' for name in sorted(PROCESSES)) + ")"
+PROCESS_PREDICATE = "(" + " OR ".join('process == "' + name + '"' for name in sorted(PROCESSES)) + ")"
+# Filter before serialization: ordinary Store browsing can exceed the output
+# budget in seconds. Keep only messages that can feed the fixed-code parser.
+ERROR_TERMS = DOMAINS + SYMBOLS + ("failureType", "HTTPStatus", "statusCode", "status code")
+ERROR_PREDICATE = "(" + " OR ".join('eventMessage CONTAINS[c] "' + term + '"' for term in ERROR_TERMS) + ")"
+PREDICATE = PROCESS_PREDICATE + " AND " + ERROR_PREDICATE
 
 def capture(command, *, timeout=15, limit=MAX_BYTES):
     """Drain a child with hard time/output limits. Raw bytes stay in memory."""

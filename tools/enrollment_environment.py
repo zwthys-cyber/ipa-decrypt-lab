@@ -48,7 +48,7 @@ def clean(value):
     for key in BOOLS:
         if key in value and type(value[key]) is bool:
             result[key] = value[key]
-    if value.get("architecture") in {"arm64", "other"}:
+    if value.get("architecture") in {"arm64", "x86_64", "other"}:
         result["architecture"] = value["architecture"]
     if value.get("status") == "app_store_not_found":
         result["status"] = "app_store_not_found"

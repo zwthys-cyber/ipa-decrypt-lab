@@ -1,6 +1,15 @@
 name: Native App Store enrollment login trial
 on:
   workflow_dispatch:
+    inputs:
+      runner:
+        description: GitHub-hosted architecture for one bounded native login trial
+        required: true
+        default: macos-15
+        type: choice
+        options:
+          - macos-15
+          - macos-15-intel
 permissions:
   contents: read
 concurrency:
@@ -8,8 +17,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   login:
-    if: github.ref == 'refs/heads/main'
-    runs-on: macos-15
+    if: github.ref == 'refs/heads/main' && (inputs.runner == 'macos-15' || inputs.runner == 'macos-15-intel')
+    runs-on: ${{ inputs.runner }}
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683

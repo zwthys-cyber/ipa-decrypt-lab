@@ -300,6 +300,8 @@ var report: [String: Any] = [
 ]
 #if arch(arm64)
 report["architecture"] = "arm64"
+#elseif arch(x86_64)
+report["architecture"] = "x86_64"
 #else
 report["architecture"] = "other"
 #endif
