@@ -160,7 +160,7 @@ static BOOL ApplySessionHeadersWithRouting(NSMutableURLRequest *request,NSNumber
     [token rangeOfCharacterFromSet:[NSCharacterSet controlCharacterSet]].location!=NSNotFound ||
     ![guid isKindOfClass:NSString.class] || [guid rangeOfString:@"^[A-Fa-f0-9]{12}$" options:NSRegularExpressionSearch].location==NSNotFound)return NO;
  NSURLComponents *url=[NSURLComponents componentsWithURL:request.URL resolvingAgainstBaseURL:NO];
- BOOL host=[url.host isEqual:@"buy.itunes.apple.com"] || (allowPod && [url.host rangeOfString:@"^p[0-9]{1,3}-buy\\.itunes\\.apple\\.com$" options:NSRegularExpressionSearch].location!=NSNotFound);
+ BOOL host=[url.host isEqual:@"buy.itunes.apple.com"] || (allowPod && url.host.length>0 && [url.host rangeOfString:@"^p[0-9]{1,3}-buy\\.itunes\\.apple\\.com$" options:NSRegularExpressionSearch].location!=NSNotFound);
  if(![url.scheme isEqual:@"https"] || !host ||
     ![url.path isEqual:@"/commerce/machine/authorize"] || url.user || url.password ||
     url.fragment || (url.port && url.port.integerValue!=443) ||
@@ -234,6 +234,8 @@ static void Request(NSMutableDictionary *r) {
    routed=routed && !ApplySessionHeadersWithRouting(pod,@1234567,@"ipa-lab-synthetic-token",guid,YES);
    pod.URL=[NSURL URLWithString:@"https://p17-buy.itunes.apple.com/commerce/machine/authorize"];
    pod.HTTPMethod=@"GET";
+   routed=routed && !ApplySessionHeadersWithRouting(pod,@1234567,@"ipa-lab-synthetic-token",guid,YES);
+   pod.URL=[NSURL URLWithString:@"https:/commerce/machine/authorize"];pod.HTTPMethod=@"POST";
    routed=routed && !ApplySessionHeadersWithRouting(pod,@1234567,@"ipa-lab-synthetic-token",guid,YES);
    r[@"redirect_policy_verified"]=B(routed);
    r[@"session_policy_verified"]=B(negative);
