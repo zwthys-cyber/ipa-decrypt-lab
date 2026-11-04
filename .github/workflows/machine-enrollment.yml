@@ -10,6 +10,7 @@ on:
           - signIn
           - machineAuthorize
           - machineSession
+          - booleanSession
       session_context:
         description: Store session context forwarded to the authorization request
         type: choice

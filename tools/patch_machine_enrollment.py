@@ -142,3 +142,47 @@ after = """    func testMachineSessionFieldsAreSignedIntoTheExactBody() async th
 if source_tests.count(before) != 1:
     raise SystemExit("pinned machine session test changed")
 tests.write_text(source_tests.replace(before, after))
+
+# Preserve the native plist boolean type rather than the legacy string "true".
+source = auth.read_text()
+boolean_changes = [
+    ('                createMachineSession: ProcessInfo.processInfo.environment["LAB_AUTHORIZATION_PURPOSE"] == "machineSession",',
+     '''                createMachineSession: ["machineSession", "booleanSession"].contains(ProcessInfo.processInfo.environment["LAB_AUTHORIZATION_PURPOSE"] ?? ""),
+                booleanMachineSession: ProcessInfo.processInfo.environment["LAB_AUTHORIZATION_PURPOSE"] == "booleanSession",'''),
+    ("createMachineSession: Bool = false,", "createMachineSession: Bool = false, booleanMachineSession: Bool = false,"),
+    ("        var parameters: [String: String] = [", "        var parameters: [String: Any] = ["),
+    ('            parameters["createSession"] = "true"', '            parameters["createSession"] = booleanMachineSession ? (true as Any) : ("true" as Any)'),
+]
+for before, after in boolean_changes:
+    if source.count(before) != 1:
+        raise SystemExit("pinned boolean session source changed")
+    source = source.replace(before, after)
+auth.write_text(source)
+
+source_tests = tests.read_text()
+before = "    func testMachineSessionFieldsAreSignedIntoTheExactBody() async throws {"
+after = """    func testBooleanMachineSessionPreservesNativePlistTypeAndSignature() async throws {
+        let signer = RecordingSigner()
+        let request = try await Authenticator.makeRequest(
+            endpoint: XCTUnwrap(URL(string: "https://auth.itunes.apple.com/login")),
+            email: "reader@example.invalid", password: "synthetic-password", code: "",
+            cookies: [], deviceIdentifier: "001122334455", sapSigner: signer,
+            createMachineSession: true, booleanMachineSession: true,
+        )
+        let body = try bodyData(request)
+        let signedBodies = await signer.recordedBodies()
+        XCTAssertEqual(signedBodies, [body])
+        let parameters = try XCTUnwrap(PropertyListSerialization.propertyList(from: body, format: nil) as? [String: Any])
+        XCTAssertEqual(parameters["createSession"] as? Bool, true)
+        XCTAssertNil(parameters["createSession"] as? String)
+        XCTAssertTrue(String(decoding: body, as: UTF8.self).contains("<true/>"))
+        XCTAssertEqual(parameters["why"] as? String, "machineAuthorize")
+        XCTAssertEqual(parameters["attempt"] as? String, "1")
+        XCTAssertEqual(parameters["guid"] as? String, "001122334455")
+        XCTAssertNil(parameters["rmp"])
+    }
+
+""" + before
+if source_tests.count(before) != 1:
+    raise SystemExit("pinned boolean session test changed")
+tests.write_text(source_tests.replace(before, after))

@@ -71,7 +71,7 @@ def run_private(argv, env, *, data=None, timeout=120):
         raise
 
 def trial(login_binary, native_binary, purpose="signIn", session_context="token"):
-    if purpose not in {"signIn", "machineAuthorize", "machineSession"} or session_context not in {"token", "cookies", "storefront", "store"}:
+    if purpose not in {"signIn", "machineAuthorize", "machineSession", "booleanSession"} or session_context not in {"token", "cookies", "storefront", "store"}:
         return clean({"status": "invalid_private_input"})
     email, password = os.environ.get("APPLE_ID"), os.environ.get("APPLE_PASSWORD")
     if not email or not password:
@@ -122,7 +122,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--login-binary", required=True)
     parser.add_argument("--native-binary", required=True)
-    parser.add_argument("--purpose", choices=("signIn", "machineAuthorize", "machineSession"), default="signIn")
+    parser.add_argument("--purpose", choices=("signIn", "machineAuthorize", "machineSession", "booleanSession"), default="signIn")
     parser.add_argument("--session-context", choices=("token", "cookies", "storefront", "store"), default="token")
     args = parser.parse_args()
     if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "darwin":
