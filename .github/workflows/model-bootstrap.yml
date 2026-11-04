@@ -1,0 +1,166 @@
+name: Private same-runner model bootstrap
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Build and test only, or one bounded enrollment and model-recovery trial
+        type: choice
+        default: preflight
+        options:
+          - preflight
+          - trial
+permissions:
+  contents: read
+concurrency:
+  group: private-machine-enrollment
+  cancel-in-progress: false
+jobs:
+  trial:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: Lakr233/ApplePackage
+          ref: 391bfe6ee6598d73e4f94b88b38b50bd6f6ec67b
+          path: native-source/ApplePackage
+          persist-credentials: false
+      - name: Check session isolation, privacy, and request policy
+        run: |
+          python3 -m unittest discover -s tests -p 'test_native_keybag.py' -v
+          python3 -m unittest discover -s tests -p 'test_machine_enrollment.py' -v
+          python3 -m unittest discover -s tests -p 'test_store_account_summary.py' -v
+          python3 -m unittest discover -s tests -p 'test_fairplay_state_observer.py' -v
+          python3 -m unittest discover -s tests -p 'test_observed_enrollment.py' -v
+          python3 -m unittest discover -s tests -p 'test_model_bootstrap.py' -v
+          python3 -m unittest discover -s tests -p 'test_offline_verify.py' -v
+          python3 -m unittest discover -s tests -p 'test_native_store.py' -v
+          python3 -m unittest discover -s tests -p 'test_native_commerce*.py' -v
+          python3 -m unittest discover -s tests -p 'test_commerce_import_logs.py' -v
+      - name: Build native prerequisite and one-request client
+        timeout-minutes: 2
+        run: |
+          clang -fobjc-arc -framework Foundation tools/NativeKeybag.m -o native-keybag
+          clang -dynamiclib -Wall -Wextra tools/NativeImportIO.c -install_name @rpath/libNativeImportIO.dylib -o libNativeImportIO.dylib
+          clang -fobjc-arc -DLAB_IMPORT_IO -framework Foundation tools/NativeMachineEnrollment.m -L. -lNativeImportIO -Wl,-rpath,@executable_path -o native-machine-enrollment
+          ./native-machine-enrollment --io-contract
+          ./native-machine-enrollment --response-contract
+          swiftc native-source/ApplePackage/Sources/ApplePackage/Configuration/DeviceIdentifier.swift tools/NativeDeviceIdentity.swift -o native-device-identity
+      - name: Verify synthetic prerequisites before exposing account secrets
+        if: false
+        timeout-minutes: 3
+        run: |
+          ulimit -c 0
+          python3 tools/native_keybag.py
+      - name: Verify the actual commerce constructor before exposing account secrets
+        if: true
+        timeout-minutes: 2
+        run: |
+          ulimit -c 0
+          python3 tools/commerce_enrollment_preflight.py
+      - name: Patch bounded private login handoff without saving account
+        run: python3 tools/patch_machine_enrollment.py native-source/ApplePackage
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: swift-cache
+        with:
+          path: native-source/ApplePackage/.build
+          key: swift-machine-enrollment-391bfe6-${{ hashFiles('tools/patch_machine_enrollment.py') }}
+          restore-keys: |
+            swift-machine-enrollment-391bfe6-
+            swift-macos15-arm64-xcode26.2-391bfe6-
+      - name: Build and check private login client
+        working-directory: native-source/ApplePackage
+        run: |
+          swift test -j 2 --filter SAPAuthenticationRequestTests
+          swift build -j 2 --product ApplePackageTool
+      - name: Cache public build products before supplying credentials
+        if: steps.swift-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: native-source/ApplePackage/.build
+          key: ${{ steps.swift-cache.outputs.cache-primary-key }}
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: Lakr233/ApplePackage
+          ref: 391bfe6ee6598d73e4f94b88b38b50bd6f6ec67b
+          path: native-source/StoreDownload
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: majd/ipatool
+          ref: d9c0247daea564d3ec7d04a9b015d0a29af66b04
+          path: native-source/ipatool
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: DrWhax/unfairplay
+          ref: 26a099fcb2292eaacd9e0ce89793cdbc88e516d1
+          path: native-source/unfairplay
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: native-source/ipatool/go.mod
+          cache: true
+          cache-dependency-path: |
+            native-source/ipatool/go.sum
+            native-source/unfairplay/go.sum
+      - name: Build pinned download helper and repository-key model sealer
+        run: |
+          mkdir -p native-source/ipatool/cmd/lab-kbsync native-source/ipatool/cmd/lab-model-seal
+          cp tools/kbsync_main.go native-source/ipatool/cmd/lab-kbsync/main.go
+          cp tests/kbsync_main_test.go native-source/ipatool/cmd/lab-kbsync/main_test.go
+          cp tools/seal_model.go native-source/ipatool/cmd/lab-model-seal/main.go
+          cp tests/seal_model_test.go native-source/ipatool/cmd/lab-model-seal/main_test.go
+          cd native-source/ipatool
+          go test -p 2 ./cmd/lab-kbsync ./cmd/lab-model-seal
+          go build -p 2 -o ../../lab-kbsync ./cmd/lab-kbsync
+          go build -p 2 -o ../../lab-model-seal ./cmd/lab-model-seal
+      - name: Build and test pinned recovery and verification engine
+        working-directory: native-source/unfairplay
+        run: |
+          go test -p 2 -timeout 180s ./internal/fairplay ./cmd/unfairplay
+          go build -p 2 -trimpath -o ../../offline-engine ./cmd/unfairplay
+      - name: Patch separately isolated proven download client
+        run: |
+          python3 tools/patch_swift_diagnostics.py native-source/StoreDownload
+          python3 tools/patch_ent_download.py native-source/StoreDownload
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: download-cache
+        with:
+          path: native-source/StoreDownload/.build
+          key: swift-bootstrap-download-391bfe6-${{ hashFiles('tools/patch_swift_diagnostics.py', 'tools/patch_ent_download.py', 'tools/LabEntDownload.swift', 'tests/LabEntDownloadTests.swift') }}
+          restore-keys: |
+            swift-bootstrap-download-391bfe6-
+      - name: Test and compile original-IPA downloader
+        working-directory: native-source/StoreDownload
+        run: |
+          swift test -j 2 --filter 'SAPAuthenticationRequestTests|LabEntDownloadTests'
+          swift build -j 2 --product ApplePackageTool
+      - name: Cache downloader public build products before credentials
+        if: steps.download-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: native-source/StoreDownload/.build
+          key: ${{ steps.download-cache.outputs.cache-primary-key }}
+      - name: Prepare pinned Apple download assets without account credentials
+        timeout-minutes: 4
+        run: ./lab-kbsync --prewarm
+      - name: Confirm administrator state observer before account credentials
+        timeout-minutes: 2
+        run: python3 tools/fairplay_state_observer.py
+      - name: Enroll once, recover candidate model, and verify full original IPA
+        if: inputs.mode == 'trial'
+        timeout-minutes: 20
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          LAB_KBSYNC_HELPER: ${{ github.workspace }}/lab-kbsync
+        run: |
+          ulimit -c 0
+          python3 tools/model_bootstrap.py --login-binary native-source/ApplePackage/.build/debug/ApplePackageTool --native-binary native-machine-enrollment --download-binary native-source/StoreDownload/.build/debug/ApplePackageTool --engine offline-engine --sealer lab-model-seal
