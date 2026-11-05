@@ -67,7 +67,7 @@
 
 四个固定 Apple 公共资源单独缓存，每次仍校验长度和 SHA-256。缓存只包含公开资源，不包含账号会话、授权模型或 IPA。跨 macOS 运行器的实测中，恢复和校验合计约 6 秒；之前重新准备资源曾用 24–71 秒。
 
-[My BVF 最新回归](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41953586939)约 59 秒，包准备 7 秒、公共资源恢复及校验 8 秒。QQ 历史首批 10 项约 2 分 22 秒，下一批约 1 分 2 秒。这里记录的是工作流作业耗时，排队和 Telegram 展示、文件传输另计。
+[My BVF 最新回归](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41953586939)约 59 秒，包准备 7 秒、公共资源恢复及校验 8 秒。历史查询进一步复用同批连接和公开端点后，[QQ 首批 10 项](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41956106639)约 55 秒，[下一批](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41956309828)约 1 分 3 秒。下一批与前次耗时接近，并非每次都会明显提速。这里记录的是工作流作业耗时，排队和 Telegram 展示、文件传输另计。
 
 Actions 运行包保留 30 天，每周刷新。源码更新后需要先完成新构建；缺包时运行 `native-runtime-build.yml` 补齐，再提交任务。
 
