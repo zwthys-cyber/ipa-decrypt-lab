@@ -29,7 +29,11 @@ class RuntimeTests(unittest.TestCase):
                 info.size = len(raw)
                 output.addfile(info, io.BytesIO(raw))
             if extra:
-                output.addfile(extra)
+                if extra.size:
+                    # Deliberately oversized header, without allocating its declared payload.
+                    output.fileobj.write(extra.tobuf())
+                else:
+                    output.addfile(extra)
 
     def extract(self, **kwargs):
         return unpack(self.archive, self.destination, "a"*64, "macos-26-intel", **kwargs)
