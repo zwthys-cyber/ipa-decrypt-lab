@@ -114,8 +114,9 @@ class AppPreflightTests(unittest.TestCase):
     def test_workflow_checks_before_external_source_and_apple_secrets(self):
         root=Path(__file__).resolve().parents[1]
         workflow=(root/".github/workflows/private-delivery.yml").read_text()
-        self.assertLess(workflow.index("python3 tools/app_preflight.py"),
-                        workflow.index("repository: DrWhax/unfairplay"))
+        acquisition = ("python3 tools/native_runtime.py fetch" if "tools/native_runtime.py fetch" in workflow
+                       else "repository: DrWhax/unfairplay")
+        self.assertLess(workflow.index("python3 tools/app_preflight.py"), workflow.index(acquisition))
         self.assertLess(workflow.index("python3 tools/app_preflight.py"),
                         workflow.index("secrets.APPLE_PASSWORD"))
 
