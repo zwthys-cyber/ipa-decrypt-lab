@@ -1,0 +1,136 @@
+name: Build verified native runtime
+on:
+  push:
+    branches: [main]
+    paths: ['tools/**', 'tests/**', '.github/workflows/native-runtime-build.yml']
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 1'
+permissions:
+  contents: read
+concurrency:
+  group: native-runtime-build
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-26-intel, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+      LAB_BUILD_JOBS: '4'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Identify tested source
+        id: source
+        run: echo "fingerprint=$(python3 tools/native_runtime.py fingerprint)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: DrWhax/unfairplay
+          ref: 26a099fcb2292eaacd9e0ce89793cdbc88e516d1
+          path: native-source/unfairplay
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: Lakr233/ApplePackage
+          ref: 391bfe6ee6598d73e4f94b88b38b50bd6f6ec67b
+          path: native-source/ApplePackage
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: majd/ipatool
+          ref: d9c0247daea564d3ec7d04a9b015d0a29af66b04
+          path: native-source/ipatool
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: native-source/ipatool/go.mod
+          cache: true
+          cache-dependency-path: native-source/ipatool/go.sum
+      - name: Build and test bounded kbsync helper
+        run: |
+          mkdir -p native-source/ipatool/cmd/lab-kbsync
+          cp tools/kbsync_main.go native-source/ipatool/cmd/lab-kbsync/main.go
+          cp tests/kbsync_main_test.go native-source/ipatool/cmd/lab-kbsync/main_test.go
+          cd native-source/ipatool
+          go test ./cmd/lab-kbsync
+          go build -o ../../lab-kbsync ./cmd/lab-kbsync
+      - name: Build and test offline backend
+        working-directory: native-source/unfairplay
+        run: |
+          go test -p 2 -timeout 180s ./internal/fairplay ./cmd/unfairplay
+          go build -p 2 -trimpath -o ../../offline-engine ./cmd/unfairplay
+      - name: Test Python orchestrator before native compilation
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Check Swift toolchain and correct ambiguous diagnostics
+        run: |
+          swift --version
+          python3 tools/patch_swift_diagnostics.py native-source/ApplePackage
+          python3 tools/patch_ent_download.py native-source/ApplePackage
+      - name: Restore public-source Swift build cache
+        id: swift-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: native-source/ApplePackage/.build
+          key: swift-macos${{ startsWith(matrix.runner, 'macos-26') && '26' || '15' }}-${{ runner.arch }}-xcode26.2-391bfe6-${{ hashFiles('tools/patch_swift_diagnostics.py', 'tools/patch_ent_download.py', 'tools/LabEntDownload.swift', 'tests/LabEntDownloadTests.swift') }}
+          restore-keys: |
+            swift-macos${{ startsWith(matrix.runner, 'macos-26') && '26' || '15' }}-${{ runner.arch }}-xcode26.2-391bfe6-
+      - name: Compile native client and test targets
+        if: steps.swift-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 15
+        working-directory: native-source/ApplePackage
+        run: swift build -j "$LAB_BUILD_JOBS" --build-tests
+      - name: Test independent signing request construction
+        timeout-minutes: 3
+        working-directory: native-source/ApplePackage
+        run: swift test --skip-build --filter 'SAPAuthenticationRequestTests|LabEntDownloadTests'
+      - name: Build independent native client
+        if: steps.swift-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 8
+        working-directory: native-source/ApplePackage
+        run: swift build -j "$LAB_BUILD_JOBS" --product ApplePackageTool
+      - name: Verify cached or freshly built native client exists
+        run: test -x native-source/ApplePackage/.build/debug/ApplePackageTool
+      - name: Save public-source build cache before credentials are supplied
+        if: steps.swift-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: native-source/ApplePackage/.build
+          key: ${{ steps.swift-cache.outputs.cache-primary-key }}
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: FiloSottile/age
+          ref: b74dce4cdbe35b5e5f66c06d9612b72f89028758
+          path: native-source/age
+          persist-credentials: false
+      - name: Build and test private delivery encryption
+        run: |
+          mkdir -p native-source/age/cmd/lab-delivery-crypt
+          cp tools/delivery_crypto.go native-source/age/cmd/lab-delivery-crypt/main.go
+          cp tests/delivery_crypto_test.go native-source/age/cmd/lab-delivery-crypt/main_test.go
+          cd native-source/age
+          go test -p 2 -timeout 120s ./cmd/lab-delivery-crypt
+          go build -p 2 -trimpath -o ../../delivery-crypt ./cmd/lab-delivery-crypt
+      - name: Package only runtime binaries and public resources
+        run: python3 tools/native_runtime.py pack
+      - name: Verify relocation without the original Swift build directory
+        run: |
+          python3 tools/native_runtime.py verify --output relocated-runtime
+          mv native-source/ApplePackage/.build native-source/ApplePackage/.build-hidden
+          relocated-runtime/ApplePackageTool --help
+          relocated-runtime/offline-engine --help
+          otool -L relocated-runtime/ApplePackageTool
+      - name: Publish tested credential-free runtime
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: runtime-${{ matrix.runner }}-${{ steps.source.outputs.fingerprint }}
+          path: runtime-out/native-runtime.tar.gz
+          compression-level: 0
+          retention-days: 30
+          if-no-files-found: error
