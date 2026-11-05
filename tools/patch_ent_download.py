@@ -75,3 +75,30 @@ replace("Sources/ApplePackageTool/Commands/Download.swift",
                 return
             }
             if let requested = ProcessInfo.processInfo.environment["LAB_REQUESTED_VERSION"], !requested.isEmpty {''')
+
+# A historical lookup batch borrows one redirect-disabled connection pool.
+# Keep the upstream parser and normal single-call ownership semantics intact.
+replace("Sources/ApplePackage/Commands/VersionLookup.swift",
+        "        versionID: String,",
+        "        versionID: String,\n        client suppliedClient: HTTPClient? = nil,\n        entEndpoint: URL? = nil,")
+replace("Sources/ApplePackage/Commands/VersionLookup.swift",
+        "        let client = Configuration.makeHTTPClient(redirectConfiguration: .disallow)\n        defer { _ = client.shutdown() }",
+        "        let client = suppliedClient ?? Configuration.makeHTTPClient(redirectConfiguration: .disallow)\n        defer { if suppliedClient == nil { _ = client.shutdown() } }")
+replace("Sources/ApplePackage/Commands/VersionLookup.swift",
+        """        let dict = try await StoreDownloadEndpoint.fetchProductWithFallback(
+            client: client,
+            account: &account,
+            app: app,
+            deviceIdentifier: Configuration.deviceIdentifier,
+            externalVersionID: versionID,
+        )""",
+        """        let dict: [String: Any]
+        if let endpoint = entEndpoint,
+           let helper = ProcessInfo.processInfo.environment["LAB_KBSYNC_HELPER"], !helper.isEmpty {
+            dict = try await LabEntDownload.fetch(client: client, account: &account, app: app,
+                guid: Configuration.deviceIdentifier, version: versionID, helper: helper, endpoint: endpoint)
+        } else {
+            dict = try await StoreDownloadEndpoint.fetchProductWithFallback(
+                client: client, account: &account, app: app,
+                deviceIdentifier: Configuration.deviceIdentifier, externalVersionID: versionID)
+        }""")

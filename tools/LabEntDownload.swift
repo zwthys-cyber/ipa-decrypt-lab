@@ -29,10 +29,16 @@ enum LabEntDownload {
     }
 
     static func fetch(client: HTTPClient, account: inout Account, app: Software,
-                      guid: String, version: String, helper: String) async throws -> [String: Any] {
+                      guid: String, version: String, helper: String, endpoint suppliedEndpoint: URL? = nil) async throws -> [String: Any] {
         print("IPA_LAB_STAGE:resolve_ent_endpoint")
-        let bag = try await Bag.fetchBag(redirectConfiguration: .disallow)
-        guard let endpoint = bag.entDownloadEndpoint, approved(endpoint) else {
+        let resolvedEndpoint: URL?
+        if let suppliedEndpoint {
+            resolvedEndpoint = suppliedEndpoint
+        } else {
+            print("IPA_LAB_BAG:fetch")
+            resolvedEndpoint = try await Bag.fetchBag(redirectConfiguration: .disallow).entDownloadEndpoint
+        }
+        guard let endpoint = resolvedEndpoint, approved(endpoint) else {
             throw NSError(domain: "LabEntEndpointMissing", code: 1)
         }
         print("IPA_LAB_STAGE:generate_kbsync")
@@ -86,6 +92,30 @@ enum LabEntDownload {
 }
 
  
+// One sequential lookup batch owns its connection pool and public endpoint.
+// Account state and kbsync are still supplied freshly for every version request.
+final class LabVersionSession {
+    let client: HTTPClient
+    let endpoint: URL?
+
+    init() async throws {
+        if let helper = ProcessInfo.processInfo.environment["LAB_KBSYNC_HELPER"], !helper.isEmpty {
+            print("IPA_LAB_BAG:fetch")
+            let bag = try await Bag.fetchBag(redirectConfiguration: .disallow)
+            guard let endpoint = bag.entDownloadEndpoint, LabEntDownload.approved(endpoint) else {
+                throw NSError(domain: "LabEntEndpointMissing", code: 1)
+            }
+            self.endpoint = endpoint
+        } else {
+            endpoint = nil
+        }
+        client = Configuration.makeHTTPClient(redirectConfiguration: .disallow)
+        print("IPA_LAB_LOOKUP_POOL:created")
+    }
+
+    func close() { _ = client.shutdown() }
+}
+
 // Historical selection uses authenticated Apple metadata, never a third-party index.
 public enum LabVersionResolver {
     static let limit = 120
@@ -123,6 +153,8 @@ public enum LabVersionResolver {
         let remaining = try catalogCandidates(identifiers, before: before)
         print("IPA_LAB_CATALOG_TOTAL:" + String(identifiers.count))
         let deadline = Date().addingTimeInterval(180)
+        let session = try await LabVersionSession()
+        defer { session.close() }
         var failures = 0
         var examined = 0
         var cursor = before
@@ -133,7 +165,8 @@ public enum LabVersionResolver {
             cursor = identifier
             do {
                 let metadata = try await VersionLookup.getVersionMetadata(
-                    account: &account, app: app, versionID: identifier)
+                    account: &account, app: app, versionID: identifier,
+                    client: session.client, entEndpoint: session.endpoint)
                 guard isDisplay(metadata.displayVersion) else {
                     throw NSError(domain: "LabVersionMetadata", code: 1)
                 }
@@ -165,13 +198,16 @@ public enum LabVersionResolver {
                     account: &account, bundleIdentifier: app.bundleID,
                     entityType: .iPhone, externalVersionID: seed))
             }
+            let session = try await LabVersionSession()
+            defer { session.close() }
             for identifier in identifiers.prefix(limit) {
                 guard Date() < deadline else {
                     print("IPA_LAB_VERSION_ERROR:version_search_limit")
                     throw NSError(domain: "LabVersionReported", code: 1)
                 }
                 let metadata = try await VersionLookup.getVersionMetadata(
-                    account: &account, app: app, versionID: identifier)
+                    account: &account, app: app, versionID: identifier,
+                    client: session.client, entEndpoint: session.endpoint)
                 guard isDisplay(metadata.displayVersion) else {
                     throw NSError(domain: "LabVersionMetadata", code: 1)
                 }

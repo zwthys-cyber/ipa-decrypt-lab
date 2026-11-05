@@ -70,7 +70,10 @@ def main():
                                   "last_stage":last_stage,
                                   "classification":classify_download(result) if result.returncode else "completed",
                                   "total_markers":len(re.findall(r"^IPA_LAB_CATALOG_TOTAL:",result.stdout or "",re.M)),
-                                  "item_markers":len(re.findall(r"^IPA_LAB_CATALOG_ITEM:",result.stdout or "",re.M))}))
+                                  "item_markers":len(re.findall(r"^IPA_LAB_CATALOG_ITEM:",result.stdout or "",re.M)),
+                                  "bag_fetches":len(re.findall(r"^IPA_LAB_BAG:fetch$",result.stdout or "",re.M)),
+                                  "lookup_pools":len(re.findall(r"^IPA_LAB_LOOKUP_POOL:created$",result.stdout or "",re.M)),
+                                  "signing_requests":len(re.findall(r"^IPA_LAB_STAGE:generate_kbsync$",result.stdout or "",re.M))}))
                 if result.returncode!=0 or list(Path(directory).glob("*.ipa")):
                     raise ValueError("catalog_query_failed")
                 stage="catalog_parse"
