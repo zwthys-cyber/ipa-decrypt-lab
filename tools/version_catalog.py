@@ -359,7 +359,7 @@ class VersionBrowser:
                 # Durable dispatch intent, if recorded, is retained; never repost here.
                 self.c.say("暂时无法启动查询，已有列表仍可查看。")
             return None
-        if not 0<=index<len(view["rows"]]):
+        if not 0<=index<len(view["rows"]):
             answer("版本按钮无效。")
             return None
         if index in view["used"]:
