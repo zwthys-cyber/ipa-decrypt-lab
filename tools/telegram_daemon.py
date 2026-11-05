@@ -120,7 +120,7 @@ def main():
         scratch.mkdir(mode=0o700,exist_ok=True)
         # No shared upload directory: these are exclusively this service's temporary exports.
         for child in scratch.iterdir():
-            if child.name.startswith("tg-private-delivery-") and child.is_dir() and not child.is_symlink():
+            if child.name.startswith(("tg-private-delivery-","version-catalog-")) and child.is_dir() and not child.is_symlink():
                 shutil.rmtree(child)
         os.environ["TMPDIR"]=str(scratch)
         import tempfile
