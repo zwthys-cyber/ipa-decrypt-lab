@@ -9,11 +9,13 @@ from version_request import selector, VersionError
 from telegram_api import APIError, private_message
 from telegram_queue import QueueError, failure_kind
 from app_preflight import PreflightError, MESSAGES
+from version_catalog import VersionBrowser
 from task_progress import ProgressCard, LABELS
 from delivery_scheduler import app_from_run, queued_too_long, retryable, MAX_RUNS
 
 HELP = ("直接发送美区免费 App Store 链接或数字 App ID，默认下载最新版。\n"
         "/latest AppID 下载最新版\n"
+        "/versions AppID 点击选择历史版本\n"
         "/version AppID 版本号 下载指定旧版（也可填历史版本 ID）\n"
         "/status 查看当前任务\n/cancel 取消当前任务\n"
         "/get 任务编号 重新获取已完成文件（保留约一天）\n/id 查看自己的数字 ID\n"
@@ -57,6 +59,7 @@ class Controller:
         self.last_notice = 0
         self.delivered = set()
         self.cards = {}
+        self.browser = VersionBrowser(self)
 
     def record(self,rid,state,app=""):
         if self.journal is not None:
@@ -97,6 +100,10 @@ class Controller:
         return self.cards[rid]
 
     def handle(self, update):
+        if isinstance(update,dict) and "callback_query" in update:
+            update = self.browser.callback(update)
+            if update is None:
+                return
         item = private_message(update)
         if not item or item[0]!=self.owner or item[2]<self.started-60 or item[2]>time.time()+60:
             return
@@ -120,16 +127,34 @@ class Controller:
                 self.say("用法：/latest AppID或商店链接。指定旧版请用 /version AppID 版本号。")
                 return
             text = parts[1]
+        if command=="/versions":
+            parts=text.split()
+            if len(parts)!=2:
+                self.say("用法：/versions AppID或商店链接。查询后可点击版本按钮下载。")
+                return
+            try:
+                self.browser.begin(target_id(parts[1]),update_number)
+            except PreflightError as exc:
+                self.say(MESSAGES[exc.status])
+            except (ValueError,TypeError):
+                self.say("请提供完整 App Store 链接或数字 App ID。")
+            return
         if command=="/id":
             self.say("你的 Telegram 数字用户 ID："+str(self.owner))
             return
         if command=="/status":
+            if self.browser.state.get("pending"):
+                self.say("历史版本正在 GitHub 查询，完成后会自动显示按钮列表。")
+                return
             if self.current:
                 self.card(self.current["rid"],self.current["app"]).update(self.current.get("stage","queued"),force=True)
             else:
                 self.say("当前没有正在处理的任务。")
             return
         if command=="/cancel":
+            if self.browser.state.get("pending"):
+                self.browser.cancel()
+                return
             if not self.current:
                 self.say("当前没有可取消的任务。")
                 return
@@ -162,7 +187,7 @@ class Controller:
         except (ValueError,TypeError):
             self.say("请发送完整 App Store 链接或数字 App ID。用 /help 查看指令。")
             return
-        if self.current:
+        if self.current or self.browser.state.get("pending"):
             self.say("已有任务处理中，请用 /status 查询，或先 /cancel。")
             return
         if self.submitted>=self.submission_limit:
@@ -184,6 +209,8 @@ class Controller:
         except PreflightError as exc:
             self.say(MESSAGES[exc.status]+"\n未创建任务，不占用提交额度。")
             return
+        if update.get("_version_choice"):
+            self.browser.consume(update["_version_choice"])
         self.record(rid,"pending",app)
         # Record before dispatch: an ambiguous network outcome must not cause a duplicate POST.
         self.current = {"rid":rid,"app":app,"state":"dispatch_pending","since":time.monotonic()}
@@ -319,6 +346,7 @@ class Controller:
         return False
 
     def tick(self):
+        self.browser.tick()
         if not self.current:
             return
         rid=self.current["rid"]

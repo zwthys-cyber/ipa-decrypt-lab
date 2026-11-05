@@ -106,6 +106,31 @@ public enum LabVersionResolver {
             $0.count == $1.count ? $0 > $1 : $0.count > $1.count
         }
     }
+    public static func catalog(account: inout Account, app: Software, seed: String) async throws {
+        let identifiers = try candidates(try await VersionFinder.list(
+            account: &account, bundleIdentifier: app.bundleID,
+            entityType: .iPhone, externalVersionID: seed))
+        print("IPA_LAB_CATALOG_TOTAL:" + String(identifiers.count))
+        let deadline = Date().addingTimeInterval(180)
+        var failures = 0
+        for identifier in identifiers.prefix(60) {
+            if Date() >= deadline || failures >= 3 { break }
+            do {
+                let metadata = try await VersionLookup.getVersionMetadata(
+                    account: &account, app: app, versionID: identifier)
+                guard isDisplay(metadata.displayVersion) else {
+                    throw NSError(domain: "LabVersionMetadata", code: 1)
+                }
+                let date = String(ISO8601DateFormatter().string(from: metadata.releaseDate).prefix(10))
+                print("IPA_LAB_CATALOG_ITEM:" + identifier + ":" + metadata.displayVersion + ":" + date)
+                failures = 0
+            } catch {
+                // No account data or server error messages leave this process.
+                failures += 1
+            }
+        }
+    }
+
     public static func resolve(account: inout Account, app: Software, seed: String,
                                requested: String) async throws -> String {
         guard isID(requested) || isDisplay(requested) else {

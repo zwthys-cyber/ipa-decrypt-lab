@@ -72,3 +72,5 @@
 Checks 不是 fine-grained PAT 的必填权限。遇到 Checks 权限拒绝时，服务器改用 Actions 任务/步骤状态；不再基于缺失的 Checks 证据提前交付或取消排队任务，等待正常完成后校验交付。
 
 - Persistent VPS deployment is verified by run 41899775076 at code commit 06bcf81fab70e597c823d1096877d3d6df4c01bd (347 Python tests, 1 skip, on both Ubuntu and Debian 13; Go and actual systemd credential mount tests). The owner-only daemon is enabled and healthy, and Telegram startup notification was acknowledged. Do not describe a fresh post-migration IPA task as verified without separate evidence. Legacy polling source has been removed; never start another poller alongside the VPS.
+
+- Owner-authorized historical version browsing may dispatch the fixed version-catalog.yml workflow with Actions write. Only sanitized app version IDs, display versions and dates may enter its short-lived public metadata artifact. Apple credentials stay on GitHub, no IPA is downloaded by the catalog workflow. Callback selection must pass owner/private-chat, message binding, expiry, durable one-use and ordinary task quota checks.

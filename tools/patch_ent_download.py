@@ -67,3 +67,11 @@ replace("Sources/ApplePackageTool/Commands/Download.swift",
                     account: &account, app: app, seed: resolvedVersionID, requested: requested)
             }
             print("IPA_LAB_STAGE:request_product")''')
+
+replace("Sources/ApplePackageTool/Commands/Download.swift",
+        '            if let requested = ProcessInfo.processInfo.environment["LAB_REQUESTED_VERSION"], !requested.isEmpty {',
+        '''            if ProcessInfo.processInfo.environment["LAB_VERSION_CATALOG"] == "1" {
+                try await LabVersionResolver.catalog(account: &account, app: app, seed: resolvedVersionID)
+                return
+            }
+            if let requested = ProcessInfo.processInfo.environment["LAB_REQUESTED_VERSION"], !requested.isEmpty {''')

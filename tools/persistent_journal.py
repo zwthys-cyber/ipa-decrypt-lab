@@ -1,5 +1,6 @@
 """Private SQLite recovery ledger for a single persistent Telegram controller."""
 import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -85,6 +86,17 @@ class PersistentJournal:
     def offset(self):
         row=self.db.execute("SELECT value FROM metadata WHERE scope=? AND name='offset'",(self.scope,)).fetchone()
         return int(row[0]) if row else 0
+
+    def browser_load(self):
+        row=self.db.execute("SELECT value FROM metadata WHERE scope=? AND name='version_browser'",(self.scope,)).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def browser_save(self,state):
+        data=json.dumps(state,separators=(",",":"))
+        require(len(data)<=131072,"version_browser_state_too_large")
+        with self.db:
+            self.db.execute("""INSERT INTO metadata(scope,name,value) VALUES(?,'version_browser',?)
+                ON CONFLICT(scope,name) DO UPDATE SET value=excluded.value""",(self.scope,data))
 
     def close(self):
         self.db.close()

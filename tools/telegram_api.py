@@ -27,7 +27,7 @@ class Telegram:
     def call(self, method, payload=None, timeout=40):
         if method not in {"getMe", "getWebhookInfo", "getUpdates", "sendMessage",
                           "editMessageText", "sendDocument", "logOut", "close", "setMyCommands", "getMyCommands",
-                          "setChatMenuButton", "getChatMenuButton"}:
+                          "setChatMenuButton", "getChatMenuButton", "answerCallbackQuery"}:
             raise APIError("unsupported_telegram_method")
         data = json.dumps(payload or {}, ensure_ascii=True).encode()
         return self._request(method, data, "application/json", timeout)
