@@ -8,7 +8,7 @@
 
 | 部分 | 当前实现 |
 | --- | --- |
-| Telegram | 最新版、指定旧版、可点击历史列表、任务查询、取消和文件取回 |
+| Telegram | 最新版、指定旧版、按需加载的历史列表、任务查询、取消和文件取回 |
 | 服务器 | Debian 13、非 root systemd 服务、私有 SQLite、异常重启、开机自启 |
 | macOS 任务 | 默认 macOS 26 Intel，备用 macOS 15 Intel |
 | 运行包 | 两个平台分别构建，普通任务直接获取约 28 MB 的成品包 |
@@ -68,9 +68,30 @@ My BVF 之前的 [41935307617](https://github.com/zwthys-cyber/ipa-decrypt-lab/a
 
 Actions 运行包保留 30 天，每周重建一次。改动 tools/、tests/ 或构建工作流后，要先等新包构建成功。缺包或过期时任务会在读取 Apple 凭据前停止；手动运行构建流程即可补包。公开 Release 是版本快照，普通任务目前仍从 Actions 获取匹配包。
 
+## 公共资源与历史列表加速
+
+四个固定 Apple 公共资源使用精确路径和固定键缓存，每次恢复后仍检查长度和 SHA-256。缓存保存发生在读取账号凭据之前，不包含账号会话、授权模型、IPA 或整个用户目录。
+
+[冷缓存准备 41951203095](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41951203095) 和 [另一平台恢复 41951409995](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41951409995) 均成功。后一次恢复约 5 秒、校验约 1 秒；此前重新准备资源的样本为 24–71 秒。
+
+历史列表改为每批最多核对 10 个标识，以排他游标加载更早版本，单个应用最多展示 200 项。缓存扩大为 50 个应用，24 小时内直接使用，未满 7 天的旧缓存先显示并在空闲时刷新。已加载页面的翻页不启动 GitHub；按钮有效期仍为 6 小时。远程查询仍受每滚动 24 小时 20 次限制，包含首屏、刷新和加载更早版本。
+
+[构建 41952137194](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41952137194) 的两个 macOS 平台各通过 424 项 Python 测试（各跳过 2 项）、11 项所选 Swift 测试及 Go 检查。[服务器构建 41952137779](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41952137779) 在 Ubuntu 和 Debian 13 各通过 424 项 Python 测试（各跳过 1 项）。
+
+实测 QQ 历史目录仍返回 335 个标识：
+
+| 查询 | 结果 | 工作流作业耗时 |
+| --- | --- | --- |
+| [首批 41952989754](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41952989754) | 10 项，从 9.3.80 到 9.3.35；元数据步骤约 102 秒 | 2 分 22 秒 |
+| [下一批 41953354529](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41953354529) | 另 10 项，从 9.3.30 到 9.2.85；元数据步骤约 41 秒 | 1 分 2 秒 |
+
+两批标识不重叠，第二批从首批返回的排他游标继续。旧目录样本 [41941095718](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41941095718) 用时 8 分 32 秒、返回 33 项；新首屏返回项数更少，因此这是“更早看到可选列表”的对比，不是同等完整目录吞吐量的对比。以上不包含 Telegram 展示延迟，Apple 响应波动仍明显。
+
+[My BVF 导出 41953586939](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41953586939) 作业总计约 59 秒：运行包 7 秒、资源恢复及校验 8 秒、完整导出步骤 27 秒；22 个加密切片、704 页校验通过，明文大小 10,251,249 字节。此前预编译版同应用样本约 1 分 49 秒。本次只核实 GitHub 加密导出，没有把 Telegram 发送或安装计入验证。
+
 ## 服务器与容量
 
-在 [41940545752](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41940545752) 部署了带历史列表的服务器版本，Ubuntu 和 Debian 13 各通过 407 项 Python 测试（1 项跳过），以及 Go、systemd 和健康检查。后续预编译升级只改 GitHub 工作流，没有重启服务器。
+在 [41953590065](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41953590065) 部署了按需历史列表和扩展缓存，运行代码提交为 `631fa149eac1b95d8c2dd9bc787541152a3e8ee4`。Ubuntu 和 Debian 13 各通过 424 项 Python 测试（各跳过 1 项），以及 Go、systemd 和部署健康检查。服务器只安装经过 GitHub 验证的成品，没有在服务器编译或执行测试。
 
 IPA 审计采用分块临时文件和只读映射，避免把大程序整体读进内存。2,000,000,000 字节的加密、解密和摘要比对，以及超出 1 字节的拒绝行为，已在 [41910544129](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41910544129) 用合成数据验证；尚未把 2000 MB 的真实游戏交付计为已验证。
 

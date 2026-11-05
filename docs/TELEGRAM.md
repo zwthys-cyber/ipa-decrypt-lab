@@ -29,13 +29,17 @@
 
 两种入口都接受 App Store 链接，不接受 Bundle ID。至少 6 位、非零开头的纯数字按 Apple externalVersionID 处理，它与 Info.plist 的 CFBundleVersion 不是同一个字段。
 
-列表最多核对较新的 60 个标识，在请求之间检查 180 秒预算；连续 3 次元数据查询失败就停止。未查完整时会标注“非完整历史”。结果缓存 6 小时，最多保留 4 个应用；翻页和缓存命中不启动 GitHub。新查询间隔至少 60 秒，每滚动 24 小时最多 20 次。
+首次查询最多核对最近 10 个历史标识，完成后立即显示按钮。需要更早版本时，点击“加载更早版本”，每次再核对最多 10 个标识。已经加载的页面可直接翻页，不启动 GitHub；单个应用最多展示 200 个版本。每批在请求之间检查 180 秒预算，连续 3 次元数据查询失败就停止；游标会跳过已尝试的标识，避免反复卡在同一版本。
+
+最多缓存 50 个应用，24 小时内直接使用。超过 24 小时、未满 7 天的列表先显示旧缓存，空闲时后台刷新；忙碌时可以继续浏览，稍后点“刷新列表”。超过 7 天的缓存会删除。缓存和查询状态写入数据库，重启后保留。
+
+首次查询和刷新至少间隔 60 秒，加载更早版本至少间隔 5 秒；这些远程查询合计每滚动 24 小时最多 20 次。点击“刷新列表”会重新查询最近一批。按钮仍在 6 小时后过期；重新发送 `/versions AppID` 可以从缓存打开新按钮。
 
 指定显示版本号时，搜索上限为 120 个标识，同样有时间预算。Apple 不再提供下载、账号没有许可或版本匹配失败时，任务会停止，不退回最新版。旧版请求不拿最新版的商店大小作拒绝依据，实际文件仍受 2000 MB 限制。
 
 按钮绑定管理员、私聊、列表消息和有效期，使用状态先写入数据库，再提交任务。同一列表的同一按钮只提交一次。需要再次下载时，可以重新查询列表。
 
-已实测 QQ 的历史目录：Apple 返回 335 个标识，预算内查到 33 个版本。[运行记录](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41941095718)。Apple 的 releaseDate 在这个样本里是应用首次发布日期，所以没有把它显示成每个版本的发布时间。
+已实测 QQ 的按需历史目录：Apple 返回 335 个标识，[首批](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41952989754)和[下一批](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41953354529)各返回 10 项，标识不重叠。Apple 的 releaseDate 在这个样本里是应用首次发布日期，所以没有把它显示成每个版本的发布时间。
 
 ## 进度和文件
 
@@ -55,13 +59,15 @@
 
 没有把解密成功等同于安装成功；重签名和实际运行仍需另行验证。
 
-一次只处理一个任务。普通下载默认每 UTC 日最多 20 次提交（包含失败任务），提交间隔至少 30 秒；历史列表查询单独计数。工作流默认使用 macOS 26 Intel，备用 macOS 15 Intel。只有确认原任务未执行且已终止，才允许安全切换，最多两次逻辑运行。
+同一时间只运行一个 Apple 下载或查询工作流；旧缓存后台刷新时可以提交下载，由 GitHub 串行执行。普通下载默认每 UTC 日最多 20 次提交（包含失败任务），提交间隔至少 30 秒；历史列表查询单独计数。工作流默认使用 macOS 26 Intel，备用 macOS 15 Intel。只有确认原任务未执行且已终止，才允许安全切换，最多两次逻辑运行。
 
 ## 运行包和速度
 
 已把逐任务编译改成约 28 MB 的成品包。代码更新时在 GitHub 构建和测试，普通任务直接下载并验证源码指纹、平台和摘要。
 
-[My BVF 回归](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41947479965)总计约 1 分 49 秒，包准备 8 秒；[历史列表回归](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41947789366)约 1 分 43 秒，包准备 4 秒。这里记录的是工作流耗时，排队和 Telegram 文件传输另计。
+四个固定 Apple 公共资源单独缓存，每次仍校验长度和 SHA-256。缓存只包含公开资源，不包含账号会话、授权模型或 IPA。跨 macOS 运行器的实测中，恢复和校验合计约 6 秒；之前重新准备资源曾用 24–71 秒。
+
+[My BVF 最新回归](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41953586939)约 59 秒，包准备 7 秒、公共资源恢复及校验 8 秒。QQ 历史首批 10 项约 2 分 22 秒，下一批约 1 分 2 秒。这里记录的是工作流作业耗时，排队和 Telegram 展示、文件传输另计。
 
 Actions 运行包保留 30 天，每周刷新。源码更新后需要先完成新构建；缺包时运行 `native-runtime-build.yml` 补齐，再提交任务。
 
@@ -71,4 +77,4 @@ Actions 运行包保留 30 天，每周刷新。源码更新后需要先完成�
 
 恢复记录保存在私有 SQLite。重启后继续跟踪原任务，不重复提交；发送结果不明时不自动重发。不要在另一台机器启动同一个机器人的轮询进程。具体规则见 [任务恢复](SESSION-RECOVERY.md)。
 
-已取得过 [92 MB 文件的 Telegram 发送回执](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41864719056)，也在 [41940545752](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41940545752) 部署了带历史版本列表的服务。更多验证记录见 [项目状态](PROJECT-STATUS.md)。
+已取得过 [92 MB 文件的 Telegram 发送回执](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41864719056)，也在 [41940545752](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41940545752) 部署了带历史版本列表的服务。按需历史列表和扩展缓存已在 [41953590065](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41953590065) 部署。更多验证记录见 [项目状态](PROJECT-STATUS.md)。

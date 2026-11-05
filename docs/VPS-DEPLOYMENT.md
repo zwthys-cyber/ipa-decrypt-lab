@@ -71,6 +71,6 @@ cat /var/lib/ipazake/health.json
 
 ## 验证记录
 
-在 [41899775076](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41899775076) 完成首次部署和服务健康验证；带历史列表的版本部署记录为 [41940545752](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41940545752)，对应提交 `772d7dfe173815cbb3d19f3609624af29a1db18c`。
+在 [41899775076](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41899775076) 完成首次部署。按需历史列表和扩展缓存的部署记录为 [41953590065](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41953590065)，对应运行代码提交 `631fa149eac1b95d8c2dd9bc787541152a3e8ee4`，服务健康检查通过。
 
 预编译运行包的升级只切换了 GitHub 上的下载和查询流程，没有重新部署 VPS。公开 Release 的构建记录与源码提交会写入 `BUILDINFO.json`；发布成功不代表线上服务已自动切换到该版本。
