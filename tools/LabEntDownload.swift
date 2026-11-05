@@ -106,15 +106,31 @@ public enum LabVersionResolver {
             $0.count == $1.count ? $0 > $1 : $0.count > $1.count
         }
     }
+    static func older(_ value: String, than boundary: String) -> Bool {
+        value.count == boundary.count ? value < boundary : value.count < boundary.count
+    }
+    static func catalogCandidates(_ values: [String], before: String) throws -> [String] {
+        guard before.isEmpty || isID(before) else {
+            throw NSError(domain: "LabVersionCursor", code: 1)
+        }
+        return try candidates(values).filter { before.isEmpty || older($0, than: before) }
+    }
     public static func catalog(account: inout Account, app: Software, seed: String) async throws {
+        let before = ProcessInfo.processInfo.environment["LAB_CATALOG_BEFORE"] ?? ""
         let identifiers = try candidates(try await VersionFinder.list(
             account: &account, bundleIdentifier: app.bundleID,
             entityType: .iPhone, externalVersionID: seed))
+        let remaining = try catalogCandidates(identifiers, before: before)
         print("IPA_LAB_CATALOG_TOTAL:" + String(identifiers.count))
         let deadline = Date().addingTimeInterval(180)
         var failures = 0
-        for identifier in identifiers.prefix(60) {
+        var examined = 0
+        var cursor = before
+        let pageLimit = ProcessInfo.processInfo.environment["LAB_CATALOG_PAGED"] == "1" ? 10 : 60
+        for identifier in remaining.prefix(pageLimit) {
             if Date() >= deadline || failures >= 3 { break }
+            examined += 1
+            cursor = identifier
             do {
                 let metadata = try await VersionLookup.getVersionMetadata(
                     account: &account, app: app, versionID: identifier)
@@ -125,10 +141,12 @@ public enum LabVersionResolver {
                 print("IPA_LAB_CATALOG_ITEM:" + identifier + ":" + metadata.displayVersion + ":" + date)
                 failures = 0
             } catch {
-                // No account data or server error messages leave this process.
                 failures += 1
             }
         }
+        // Advance past attempted IDs, including inaccessible versions; never loop on a failed ID.
+        let next = examined < remaining.count && examined > 0 ? cursor : ""
+        print("IPA_LAB_CATALOG_NEXT:" + (next.isEmpty ? "end" : next))
     }
 
     public static func resolve(account: inout Account, app: Software, seed: String,

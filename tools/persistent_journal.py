@@ -93,7 +93,7 @@ class PersistentJournal:
 
     def browser_save(self,state):
         data=json.dumps(state,separators=(",",":"))
-        require(len(data)<=131072,"version_browser_state_too_large")
+        require(len(data)<=2*1024*1024,"version_browser_state_too_large")
         with self.db:
             self.db.execute("""INSERT INTO metadata(scope,name,value) VALUES(?,'version_browser',?)
                 ON CONFLICT(scope,name) DO UPDATE SET value=excluded.value""",(self.scope,data))

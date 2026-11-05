@@ -11,6 +11,14 @@ on:
         description: Opaque 32-character lowercase hex request ID
         type: string
         required: true
+      paged:
+        description: Return a bounded cursor page (new controller)
+        type: boolean
+        default: false
+      before:
+        description: Optional exclusive Apple external-version cursor
+        type: string
+        default: ''
       runner:
         description: GitHub hosted macOS pool
         type: choice
@@ -74,6 +82,8 @@ jobs:
           LAB_KBSYNC_HELPER: ${{ github.workspace }}/runtime/lab-kbsync
           CATALOG_APP_ID: ${{ inputs.app_id }}
           CATALOG_REQUEST_ID: ${{ inputs.request_id }}
+          CATALOG_BEFORE: ${{ inputs.before }}
+          CATALOG_PAGED: ${{ inputs.paged && '1' || '0' }}
         run: |
           ulimit -c 0
           python3 tools/version_catalog_worker.py runtime/ApplePackageTool

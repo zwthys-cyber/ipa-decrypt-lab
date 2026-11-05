@@ -3,6 +3,11 @@ import Foundation
 import XCTest
 
 final class LabEntDownloadTests: XCTestCase {
+    func testCatalogCursorIsExclusiveAndStableWhenNewIDsAppear() throws {
+        XCTAssertEqual(try LabVersionResolver.catalogCandidates(["842461702","842461701","842461700"], before: "842461701"), ["842461700"])
+        XCTAssertEqual(try LabVersionResolver.catalogCandidates(["999999","1000000"], before: "1000000"), ["999999"])
+        XCTAssertThrowsError(try LabVersionResolver.catalogCandidates(["842461700"], before: "../bad"))
+    }
     func testHistoricalSelectionBoundsAndOrdering() throws {
         XCTAssertEqual(try LabVersionResolver.candidates(["842461647","842461648","842461647"]),
                        ["842461648","842461647"])

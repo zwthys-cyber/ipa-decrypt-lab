@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"tools"))
-from version_catalog import validate, CatalogAPI, VersionBrowser
-from version_catalog_worker import parse_rows
+from version_catalog import validate, CatalogAPI, VersionBrowser, FRESH_TTL, STALE_TTL, MAX_APPS, MAX_ROWS
+from version_catalog_worker import parse_rows, parse_page
 from telegram_controller import Controller
 from persistent_journal import PersistentJournal
 from telegram_daemon import process_update
@@ -159,3 +159,119 @@ class CatalogTests(unittest.TestCase):
         self.c.browser.begin(APP,11)
         self.c.browser.api.dispatch.assert_called_once()
         self.assertIsNotNone(self.journal.browser_load()["pending"])
+
+
+class CatalogPagingTests(unittest.TestCase):
+    setUp=CatalogTests.setUp
+    callback=CatalogTests.callback
+    def page(self,before="",offset=0,count=10,total=30):
+        result=payload()
+        items=[dict(id=str(842461700-i),version="9.3."+str(100-i),date="2026-10-01")
+               for i in range(offset,offset+count)]
+        result.update(schema="ipa-version-catalog-v2",rows=items,total=total,before=before,
+                      next_before=items[-1]["id"] if offset+count<total and items else "")
+        return result
+
+    def test_cursor_binds_page_and_rejects_reverse_duplicate_or_mismatch(self):
+        value=self.page()
+        self.assertEqual(validate(value,RID,APP,1,COMMIT)["next_before"],"842461691")
+        before="842461691"
+        value=self.page(before,10)
+        self.assertEqual(len(validate(value,RID,APP,1,COMMIT,before)["rows"]),10)
+        for key,new in (("before","842461690"),("next_before",before),("rows",list(reversed(value["rows"])))):
+            bad=copy.deepcopy(value);bad[key]=new
+            with self.assertRaises(QueueError):
+                validate(bad,RID,APP,1,COMMIT,before)
+        with self.assertRaises(QueueError):
+            validate(self.page(count=11),RID,APP,1,COMMIT)
+
+    def test_empty_page_can_advance_past_unavailable_versions(self):
+        output="IPA_LAB_CATALOG_TOTAL:50\nIPA_LAB_CATALOG_NEXT:842461680\n"
+        self.assertEqual(parse_page(output,"842461691"),(50,[],"842461680"))
+        self.assertEqual(parse_page("IPA_LAB_CATALOG_TOTAL:50\nIPA_LAB_CATALOG_NEXT:end\n","842461680"),(50,[],""))
+        with self.assertRaises(ValueError):
+            parse_page(output,"842461670")
+
+    def test_load_more_is_durable_and_retains_previous_rows_and_used_buttons(self):
+        entry=validate(self.page(),RID,APP,1,COMMIT)
+        entry["at"]=int(time.time())
+        self.c.browser.state["cache"]={APP:entry}
+        self.c.browser.open(APP,RID,entry)
+        self.c.browser.state["view"]["used"]=[0]
+        self.c.browser.api=Mock()
+        self.c.handle(self.callback(action="m",index=0))
+        pending=copy.deepcopy(self.c.browser.state["pending"])
+        self.assertEqual(pending["before"],"842461691")
+        self.c.browser.api.dispatch.assert_called_once()
+        self.c.handle(self.callback(number=3,action="m",index=0))
+        self.c.browser.api.dispatch.assert_called_once()
+        value=validate(self.page("842461691",10),RID,APP,1,COMMIT,"842461691")
+        self.c.browser.api.find.return_value={"status":"completed","conclusion":"success"}
+        self.c.browser.api.result.return_value=value
+        self.c.browser.tick()
+        self.assertEqual(len(self.c.browser.state["cache"][APP]["rows"]),20)
+        self.assertEqual(self.c.browser.state["view"]["used"],[0])
+        self.assertEqual(self.c.browser.state["view"]["rid"],RID)
+        self.gh.dispatch.assert_not_called()
+
+    def test_stale_cache_is_displayed_before_single_background_refresh(self):
+        self.c.browser.state["cache"]={APP:dict(rows=rows(),total=12,at=int(time.time())-FRESH_TTL-1)}
+        self.c.browser.api=Mock()
+        self.c.handle(message(10))
+        self.assertTrue(self.c.browser.state["pending"]["background"])
+        self.assertIn("旧缓存",self.bot.call.call_args.args[1]["text"])
+        self.c.handle(message(11))
+        self.c.browser.api.dispatch.assert_called_once()
+
+    def test_fresh_cache_can_be_browsed_while_download_is_busy(self):
+        self.c.browser.state["cache"]={APP:dict(rows=rows(),total=12,at=int(time.time()))}
+        self.c.current={"rid":"c"*32}
+        self.c.browser.api=Mock()
+        self.c.handle(message(10))
+        self.c.browser.api.dispatch.assert_not_called()
+        self.assertEqual(self.c.browser.state["view"]["app"],APP)
+        self.gh.dispatch.assert_not_called()
+
+    def test_background_refresh_does_not_block_explicit_download_selection(self):
+        self.c.browser.state["pending"]={"background":True,"app":APP,"rid":"d"*32,"at":int(time.time())}
+        self.c.handle(self.callback())
+        self.gh.dispatch.assert_called_once()
+        self.assertEqual(self.gh.dispatch.call_args.kwargs,{"version":"842461647"})
+
+    def test_prune_retains_fifty_apps_and_expires_after_seven_days(self):
+        now=int(time.time())
+        self.c.browser.state["cache"]={str(10000+i):dict(rows=rows(),total=12,at=now,used_at=now+i)
+                                      for i in range(MAX_APPS+1)}
+        self.c.browser.prune()
+        self.assertEqual(len(self.c.browser.state["cache"]),MAX_APPS)
+        self.assertNotIn("10000",self.c.browser.state["cache"])
+        for entry in self.c.browser.state["cache"].values():
+            entry["at"]=now-STALE_TTL-1
+        self.c.browser.prune()
+        self.assertEqual(self.c.browser.state["cache"],{})
+
+    def test_explicit_refresh_uses_new_request_and_preserves_download_quota(self):
+        self.c.browser.api=Mock()
+        self.c.handle(self.callback(action="r",index=0))
+        self.c.browser.api.dispatch.assert_called_once()
+        self.assertEqual(self.journal.daily_submissions(),0)
+        self.gh.dispatch.assert_not_called()
+
+    def test_callback_selection_above_index_99_remains_bound(self):
+        entry=dict(rows=rows(120),total=120,at=int(time.time()))
+        self.c.browser.open(APP,RID,entry)
+        self.c.handle(self.callback(index=119))
+        self.gh.dispatch.assert_called_once()
+        self.assertEqual(self.gh.dispatch.call_args.kwargs,{"version":str(842461647+119)})
+
+    def test_cursor_drift_does_not_merge_into_replaced_cache(self):
+        entry=validate(self.page(),RID,APP,1,COMMIT)
+        entry["at"]=int(time.time())
+        self.c.browser.state["cache"]={APP:entry}
+        self.c.browser.state["pending"]={"rid":RID,"app":APP,"at":int(time.time()),"before":"842461690"}
+        self.c.browser.api=Mock()
+        self.c.browser.api.find.return_value={"status":"completed","conclusion":"success"}
+        self.c.browser.api.result.return_value={"rows":rows(),"total":30,"next_before":""}
+        self.c.browser.tick()
+        self.assertEqual(len(self.c.browser.state["cache"][APP]["rows"]),10)
+        self.assertIsNone(self.c.browser.state["pending"])

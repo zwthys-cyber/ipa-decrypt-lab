@@ -143,7 +143,7 @@ class Controller:
             self.say("你的 Telegram 数字用户 ID："+str(self.owner))
             return
         if command=="/status":
-            if self.browser.state.get("pending"):
+            if self.browser.state.get("pending") and not self.current:
                 self.say("历史版本正在 GitHub 查询，完成后会自动显示按钮列表。")
                 return
             if self.current:
@@ -152,7 +152,7 @@ class Controller:
                 self.say("当前没有正在处理的任务。")
             return
         if command=="/cancel":
-            if self.browser.state.get("pending"):
+            if self.browser.state.get("pending") and not self.current:
                 self.browser.cancel()
                 return
             if not self.current:
@@ -187,7 +187,8 @@ class Controller:
         except (ValueError,TypeError):
             self.say("请发送完整 App Store 链接或数字 App ID。用 /help 查看指令。")
             return
-        if self.current or self.browser.state.get("pending"):
+        pending_catalog=self.browser.state.get("pending")
+        if self.current or (pending_catalog and not pending_catalog.get("background")):
             self.say("已有任务处理中，请用 /status 查询，或先 /cancel。")
             return
         if self.submitted>=self.submission_limit:

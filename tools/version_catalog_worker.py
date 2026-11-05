@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 from app_preflight import check_app
+from version_request import external_id
 from native_store import run, classify, classify_download, DOWNLOAD_STAGES
 
 def parse_rows(output):
@@ -18,6 +19,23 @@ def parse_rows(output):
         raise ValueError("catalog_invalid")
     return int(totals[0]),[dict(id=i,version=v,date=d) for i,v,d in rows]
 
+def parse_page(output, before=""):
+    totals=re.findall(r"^IPA_LAB_CATALOG_TOTAL:([0-9]{1,5})$",output,re.M)
+    matches=re.findall(r"^IPA_LAB_CATALOG_NEXT:(end|[1-9][0-9]{5,19})$",output,re.M)
+    rows=re.findall(r"^IPA_LAB_CATALOG_ITEM:([1-9][0-9]{5,19}):([0-9]{1,5}(?:\.[0-9]{1,5}){0,4}):([0-9]{4}-[0-9]{2}-[0-9]{2})$",output,re.M)
+    if (len(totals)!=1 or len(matches)!=1 or not 0<=len(rows)<=10
+            or not len(rows)<=int(totals[0])<=10000 or len({r[0] for r in rows})!=len(rows)):
+        raise ValueError("catalog_invalid")
+    next_before="" if matches[0]=="end" else matches[0]
+    if ((before and (not external_id(before) or any(int(r[0])>=int(before) for r in rows)))
+            or (next_before and before and int(next_before)>=int(before))
+            or any(next_before and int(r[0])<int(next_before) for r in rows)
+            or [int(r[0]) for r in rows]!=sorted((int(r[0]) for r in rows),reverse=True)):
+        raise ValueError("catalog_invalid")
+    if not rows and not next_before and not before:
+        raise ValueError("catalog_unavailable")
+    return int(totals[0]),[dict(id=i,version=v,date=d) for i,v,d in rows],next_before
+
 def main():
     os.umask(0o077)
     stage="input"
@@ -26,13 +44,17 @@ def main():
             raise ValueError("requires_github_actions")
         rid=os.environ.get("CATALOG_REQUEST_ID","")
         app=os.environ.get("CATALOG_APP_ID","")
+        paged=os.environ.get("CATALOG_PAGED")=="1"
+        before=os.environ.get("CATALOG_BEFORE","")
+        if before and (not paged or not external_id(before)):
+            raise ValueError("invalid_request")
         if not re.fullmatch(r"[a-f0-9]{32}",rid):
             raise ValueError("invalid_request")
         stage="metadata"
         info=check_app(app,historical=True)
         email=os.environ["APPLE_ID"].strip()
         env={k:os.environ[k] for k in ("HOME","PATH","LANG","LAB_KBSYNC_HELPER") if k in os.environ}
-        env.update(APPLEPACKAGE_PASSWORD=os.environ["APPLE_PASSWORD"],LAB_VERSION_CATALOG="1")
+        env.update(APPLEPACKAGE_PASSWORD=os.environ["APPLE_PASSWORD"],LAB_VERSION_CATALOG="1",LAB_CATALOG_BEFORE=before,LAB_CATALOG_PAGED="1" if paged else "0")
         binary=str(Path(sys.argv[1]).resolve())
         try:
             stage="authenticating"
@@ -52,13 +74,17 @@ def main():
                 if result.returncode!=0 or list(Path(directory).glob("*.ipa")):
                     raise ValueError("catalog_query_failed")
                 stage="catalog_parse"
-                total,rows=parse_rows(result.stdout or "")
+                if paged:
+                    total,rows,next_before=parse_page(result.stdout or "",before)
+                else:
+                    total,rows=parse_rows(result.stdout or "")
+                    next_before=""
         finally:
             try: run(binary,["logout",email],env)
             except Exception: pass
-        payload={"schema":"ipa-version-catalog-v1","request_id":rid,"app_id":app,
+        payload={"schema":"ipa-version-catalog-v2" if paged else "ipa-version-catalog-v1","request_id":rid,"app_id":app,
                  "run_id":os.environ["GITHUB_RUN_ID"],"source_commit":os.environ["GITHUB_SHA"],
-                 "total":total,"rows":rows}
+                 "total":total,"rows":rows,"before":before,"next_before":next_before}
         Path("catalog-out").mkdir(mode=0o700)
         Path("catalog-out/versions.json").write_text(json.dumps(payload))
         print(json.dumps({"status":"version_catalog_ready","count":len(rows),"total":total}))

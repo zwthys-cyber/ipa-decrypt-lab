@@ -12,16 +12,21 @@ from telegram_queue import QueueError, require, request_id, sha256
 from version_request import selector, external_id
 
 WORKFLOW="version-catalog.yml"
-TTL=21600
+TTL=21600  # Button lifetime remains six hours.
+FRESH_TTL=86400
+STALE_TTL=7*86400
+MAX_APPS=50
+MAX_ROWS=200
 PAGE=10
 
-def validate(payload,rid,app,run_id,commit):
-    require(isinstance(payload,dict) and payload.get("schema")=="ipa-version-catalog-v1"
+def validate(payload,rid,app,run_id,commit,before=""):
+    require(isinstance(payload,dict) and payload.get("schema") in ("ipa-version-catalog-v1","ipa-version-catalog-v2")
             and payload.get("request_id")==rid and payload.get("app_id")==app
             and payload.get("run_id")==str(run_id) and payload.get("source_commit")==commit,
             "invalid_version_catalog")
+    paged=payload["schema"]=="ipa-version-catalog-v2"
     rows=payload.get("rows")
-    require(isinstance(rows,list) and 0<len(rows)<=60
+    require(isinstance(rows,list) and (0 if paged else 1)<=len(rows)<=(10 if paged else 60)
             and type(payload.get("total")) is int and len(rows)<=payload["total"]<=10000,
             "invalid_version_catalog")
     seen=set()
@@ -36,7 +41,23 @@ def validate(payload,rid,app,run_id,commit):
         require(isinstance(row["date"],str) and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}",row["date"]),
                 "invalid_version_catalog")
         seen.add(row["id"])
-    return {"rows":rows,"total":payload["total"]}
+    result={"rows":rows,"total":payload["total"]}
+    if paged:
+        cursor=payload.get("next_before")
+        require(payload.get("before")==before and isinstance(cursor,str)
+                and (not cursor or external_id(cursor)) and (not before or external_id(before)),
+                "invalid_catalog_cursor")
+        numbers=[int(row["id"]) for row in rows]
+        require(numbers==sorted(numbers,reverse=True)
+                and (not before or all(n<int(before) for n in numbers))
+                and (not cursor or not before or int(cursor)<int(before))
+                and (not cursor or all(n>=int(cursor) for n in numbers)),
+                "invalid_catalog_cursor")
+        require(bool(rows) or bool(before) or bool(cursor),"empty_version_catalog")
+        result["next_before"]=cursor
+    else:
+        require(not before,"legacy_catalog_cursor")
+    return result
 
 class CatalogAPI:
     def __init__(self,github):
@@ -57,13 +78,13 @@ class CatalogAPI:
                 break
         return None
 
-    def dispatch(self,rid,app):
+    def dispatch(self,rid,app,before=""):
         if self.find(rid,app):
             return
         self.github.call("/actions/workflows/"+WORKFLOW+"/dispatches",
-                         {"ref":"main","inputs":{"app_id":app,"request_id":rid,"runner":"macos-26-intel"}},"POST")
+                         {"ref":"main","inputs":{"app_id":app,"request_id":rid,"runner":"macos-26-intel","paged":"true","before":before}},"POST")
 
-    def result(self,run,rid,app):
+    def result(self,run,rid,app,before=""):
         require(run.get("status")=="completed" and run.get("conclusion")=="success","catalog_not_ready")
         run_id=run["id"]
         data=self.github.call("/actions/runs/"+str(run_id)+"/artifacts?per_page=100")
@@ -81,7 +102,7 @@ class CatalogAPI:
                 require(archive.namelist()==["versions.json"] and archive.getinfo("versions.json").file_size<=32768,
                         "invalid_catalog_archive")
                 payload=json.loads(archive.read("versions.json"))
-        return validate(payload,rid,app,run_id,run["head_sha"])
+        return validate(payload,rid,app,run_id,run["head_sha"],before)
 
 class VersionBrowser:
     def __init__(self,controller):
@@ -98,31 +119,61 @@ class VersionBrowser:
         if self.c.journal is not None and hasattr(self.c.journal,"browser_save"):
             self.c.journal.browser_save(self.state)
 
+    def prune(self):
+        now=int(time.time())
+        cache=self.state.setdefault("cache",{})
+        for app in list(cache):
+            entry=cache[app]
+            if not 0<=now-entry.get("at",0)<STALE_TTL:
+                del cache[app]
+        while len(cache)>MAX_APPS:
+            del cache[min(cache,key=lambda key:cache[key].get("used_at",cache[key]["at"]))]
+
     def begin(self,app,update_id):
         now=int(time.time())
+        self.prune()
+        entry=self.state.get("cache",{}).get(app)
+        rid=self.query_id(app,update_id,"view")
+        if entry:
+            entry["used_at"]=now
+            self.open(app,rid,entry)
+            if now-entry["at"]<FRESH_TTL:
+                return
+            if self.c.current or self.state.get("pending"):
+                self.c.say("已显示缓存列表，空闲时可点击“刷新列表”更新。")
+                return
+            self.start(app,update_id,background=True)
+            return
+        self.start(app,update_id)
+
+    def query_id(self,app,update_id,suffix=""):
+        text="versions:"+str(self.c.owner)+":"+str(update_id)+":"+app+":"+suffix
+        return hmac.new(self.c.token.encode(),text.encode(),hashlib.sha256).hexdigest()[:32]
+
+    def start(self,app,update_id,before="",background=False):
+        now=int(time.time())
         if self.c.current:
-            self.c.say("已有下载任务处理中，请完成后再查询历史版本。")
+            self.c.say("已有下载任务处理中；缓存列表仍可查看，新查询请稍后再试。")
             return
         if self.state.get("pending"):
-            self.c.say("历史版本正在查询，请稍候；用 /status 查看状态。")
-            return
-        rid=hmac.new(self.c.token.encode(),("versions:"+str(self.c.owner)+":"+str(update_id)+":"+app).encode(),hashlib.sha256).hexdigest()[:32]
-        cache=self.state.get("cache",{})
-        entry=cache.get(app)
-        if entry and 0<=now-entry["at"]<TTL:
-            self.open(app,rid,entry)
+            self.c.say("历史版本正在查询，请稍候；已有列表仍可翻页。")
             return
         queries=[stamp for stamp in self.state.get("queries",[]) if now-86400<stamp<=now]
-        if len(queries)>=20 or (queries and now-queries[-1]<60):
+        interval=5 if before else 60
+        if len(queries)>=20 or (queries and now-queries[-1]<interval):
             self.c.say("版本查询较频繁，请稍后再试。缓存列表可直接翻页。")
             return
         self.c.github.preflight_app(app,historical=True)
+        rid=self.query_id(app,update_id,before or "first")
+        view=self.state.get("view")
         self.state["queries"]=queries+[now]
-        self.state["pending"]={"rid":rid,"app":app,"at":now}
-        self.save()  # Durable intent before POST; never repeat an ambiguous dispatch.
-        self.c.say("正在查询 Apple 历史版本，首次加载需要等待 GitHub 运行器。完成后会显示可点击列表。")
+        self.state["pending"]={"rid":rid,"app":app,"at":now,"before":before,
+            "background":background,"view_rid":view["rid"] if before and view else ""}
+        self.save()
+        self.c.say("已显示缓存，正在后台刷新最近版本。" if background else
+                   "正在加载更早版本…" if before else "正在查询最近 10 个历史版本，完成后显示选择列表。")
         try:
-            self.api.dispatch(rid,app)
+            self.api.dispatch(rid,app,before=before)
         except QueueError:
             self.c.say("查询提交结果尚未确认，正在核对，不会重复提交。")
 
@@ -170,7 +221,7 @@ class VersionBrowser:
             self.c.say("历史版本查询未完成，请稍后重试；仍可使用 /version AppID 版本号。")
             return
         try:
-            entry=self.api.result(run,pending["rid"],pending["app"])
+            entry=self.api.result(run,pending["rid"],pending["app"],before=pending.get("before",""))
         except QueueError:
             pending["result_failures"]=pending.get("result_failures",0)+1
             if pending["result_failures"]>=3:
@@ -178,28 +229,49 @@ class VersionBrowser:
                 self.c.say("历史版本结果暂时无法取回，请重新使用 /versions。")
             self.save()
             return
-        entry["at"]=int(time.time())
+        now=int(time.time())
         cache=self.state.setdefault("cache",{})
+        before=pending.get("before","")
+        old=cache.get(pending["app"])
+        view=self.state.get("view")
+        if before:
+            # Append only to the exact cursor that was durably dispatched.
+            if not old or old.get("next_before")!=before:
+                self.state["pending"]=None
+                self.save()
+                self.c.say("列表已更新，请重新打开 /versions。")
+                return
+            known={row["id"] for row in old["rows"]}
+            merged=old["rows"]+[row for row in entry["rows"] if row["id"] not in known]
+            entry=dict(entry,rows=merged[:MAX_ROWS],at=old["at"],used_at=now,
+                       total=max(old["total"],entry["total"],len(merged)))
+            if len(entry["rows"])>=MAX_ROWS:
+                entry["next_before"]=""
+        else:
+            entry.update(at=now,used_at=now)
         cache[pending["app"]]=entry
-        for app in list(cache):
-            if time.time()-cache[app]["at"]>=TTL:
-                del cache[app]
-        while len(cache)>4:
-            del cache[min(cache,key=lambda app:cache[app]["at"])]
+        self.prune()
         self.state["pending"]=None
         self.save()
-        self.open(pending["app"],pending["rid"],entry)
+        if (before and view and view["rid"]==pending.get("view_rid") and view["app"]==pending["app"]):
+            old_count=len(view["rows"])
+            view.update(rows=entry["rows"],total=entry["total"],next_before=entry.get("next_before",""))
+            self.save()
+            self.render(min(old_count//PAGE,max(0,(len(view["rows"])-1)//PAGE)))
+        elif not before:
+            self.open(pending["app"],pending["rid"],entry)
 
     def open(self,app,rid,entry):
         self.state["view"]={"rid":rid,"app":app,"at":int(time.time()),"rows":entry["rows"],
-                            "total":entry["total"],"message_id":0,"used":[]}
+                            "total":entry["total"],"message_id":0,"used":[],
+                            "next_before":entry.get("next_before",""),"cache_at":entry["at"]}
         self.save()
         self.render(0,False)
 
     def render(self,page,edit=True):
         view=self.state["view"]
         rows=view["rows"]
-        pages=(len(rows)+PAGE-1)//PAGE
+        pages=max(1,(len(rows)+PAGE-1)//PAGE)
         if not 0<=page<pages:
             return
         prefix="vc:"+view["rid"]+":"
@@ -207,18 +279,31 @@ class VersionBrowser:
         chunk=[]
         text="App ID："+view["app"]+" · 请选择版本\n第 "+str(page+1)+"/"+str(pages)+" 页"
         text+="\n点击版本即提交下载解密；实际可下载性以 Apple 响应为准。"
+        if time.time()-view.get("cache_at",view["at"])>=FRESH_TTL:
+            text+="\n当前显示旧缓存，可先查看；刷新后会提供新列表。"
         if len(rows)<view["total"]:
-            text+="\n当前显示 "+str(len(rows))+" 个已查询版本，非完整历史。"
+            text+="\n已加载 "+str(len(rows))+" 个版本，非完整历史。"
+        if not rows:
+            text+="\n本批没有可读取的版本，可继续加载更早版本。"
+        if len(rows)>=MAX_ROWS and len(rows)<view["total"]:
+            text+="\n已达单应用 200 个版本的展示上限。"
         for index in range(page*PAGE,min((page+1)*PAGE,len(rows))):
             row=rows[index]
             chunk.append({"text":row["version"],"callback_data":prefix+"v:"+str(index)})
             if len(chunk)==2:
                 keyboard.append(chunk);chunk=[]
-        if chunk: keyboard.append(chunk)
+        if chunk:
+            keyboard.append(chunk)
         navigation=[]
-        if page>0: navigation.append({"text":"上一页","callback_data":prefix+"p:"+str(page-1)})
-        if page+1<pages: navigation.append({"text":"下一页","callback_data":prefix+"p:"+str(page+1)})
-        if navigation: keyboard.append(navigation)
+        if page>0:
+            navigation.append({"text":"上一页","callback_data":prefix+"p:"+str(page-1)})
+        if page+1<pages:
+            navigation.append({"text":"下一页","callback_data":prefix+"p:"+str(page+1)})
+        if navigation:
+            keyboard.append(navigation)
+        if view.get("next_before") and page==pages-1 and len(rows)<MAX_ROWS:
+            keyboard.append([{"text":"加载更早版本","callback_data":prefix+"m:0"}])
+        keyboard.append([{"text":"刷新列表","callback_data":prefix+"r:0"}])
         payload={"chat_id":self.c.owner,"text":text,"reply_markup":{"inline_keyboard":keyboard}}
         if edit:
             payload["message_id"]=view["message_id"]
@@ -247,7 +332,7 @@ class VersionBrowser:
             try: self.c.bot.call("answerCallbackQuery",{"callback_query_id":query_id,"text":text})
             except APIError: pass
         data=query.get("data")
-        match=re.fullmatch(r"vc:([a-f0-9]{32}):([pv]):([0-9]{1,2})",data) if isinstance(data,str) else None
+        match=re.fullmatch(r"vc:([a-f0-9]{32}):([pvmr]):([0-9]{1,3})",data) if isinstance(data,str) else None
         view=self.state.get("view")
         if (not match or not view or match[1]!=view["rid"]
                 or message.get("message_id")!=view["message_id"]
@@ -259,13 +344,29 @@ class VersionBrowser:
             answer("正在翻页")
             self.render(index)
             return None
-        if not 0<=index<len(view["rows"]):
+        if match[2] in ("m","r"):
+            if index!=0:
+                answer("按钮无效。")
+                return None
+            before=view.get("next_before","") if match[2]=="m" else ""
+            if match[2]=="m" and (not before or len(view["rows"])>=MAX_ROWS):
+                answer("没有更多可加载版本。")
+                return None
+            answer("正在准备查询")
+            try:
+                self.start(view["app"],update["update_id"],before=before,background=not before)
+            except Exception:
+                # Durable dispatch intent, if recorded, is retained; never repost here.
+                self.c.say("暂时无法启动查询，已有列表仍可查看。")
+            return None
+        if not 0<=index<len(view["rows"]]):
             answer("版本按钮无效。")
             return None
         if index in view["used"]:
             answer("此按钮已提交过，请用 /status 查看任务。")
             return None
-        if self.c.current or self.state.get("pending"):
+        pending=self.state.get("pending")
+        if self.c.current or (pending and not pending.get("background")):
             answer("已有任务处理中，请稍后再选择。")
             return None
         answer("已选择 "+view["rows"][index]["version"]+"，正在检查")
