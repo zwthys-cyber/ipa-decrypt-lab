@@ -1,6 +1,8 @@
 # 原始 IPA 下载模块
 
-自研 Python 编排层，App Store 私有协议使用 MIT 许可的 majd/ipatool，固定提交 d9c0247daea564d3ec7d04a9b015d0a29af66b04；不是自研 FairPlay 算法，也不调用第三方下载网站。
+本文记录早期 Go 下载器的实现与认证排查。当前使用的 Swift 下载、模型复用和 Telegram 交付流程见 [项目状态](PROJECT-STATUS.md)。
+
+使用 Python 编写编排层，App Store 私有协议使用 MIT 许可的 majd/ipatool，固定提交 d9c0247daea564d3ec7d04a9b015d0a29af66b04；不是自研 FairPlay 算法，也不调用第三方下载网站。
 
 原始依赖代码仅在 Actions 临时检出并从源码构建；保留其 LICENSE，不重新声明依赖版权。所有构建和试运行仅 GitHub-hosted。
 
@@ -17,11 +19,11 @@
 
 真实下载需要上述账号配置。仓库没有账号时，只能完成编译、CLI兼容性和模拟认证测试，不得宣称真实下载已验证。下载与解密分别判断，downloaded=true 仍不代表 decryption_proven=true。
 
-当前仍是诊断原型，无支付、商业分发或常驻服务。账号操作可能受地区、协议变化和验证码有效期影响。后续需验证真实账号下载，再决定长期凭据和私人存储方案。
+当时仅完成了诊断原型，还没有接入常驻服务。账号操作可能受地区、协议变化和验证码有效期影响。后续转向 Swift 客户端，完成了真实下载验证。
 
 ## 认证误判修正
 
-固定的上游提交会把 MZFinance.BadLogin.Configurator_message 映射成 ErrAuthCodeRequired；该通用响应本身不足以证明 Apple 明确要求双重认证。本项目通过可校验的构建补丁修正此分支，Go 回归测试直接调用上游响应解析器。Python 层不再以帮助文本中出现 auth-code 和 required 来推断需要验证码。
+固定的上游提交会把 MZFinance.BadLogin.Configurator_message 映射成 ErrAuthCodeRequired；该通用响应本身不足以证明 Apple 明确要求双重认证。通过构建补丁修正了这个分支，Go 回归测试直接调用上游响应解析器。Python 层不再以帮助文本中出现 auth-code 和 required 来推断需要验证码。
 
 [修正后 Intel 验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41723998603)：回归测试、编译及无账号测试通过，真实登录返回 authentication_unresolved_generic_bad_login，未下载 IPA。该结果不等于密码一定错误，也不等于无需认证即可继续。
 
@@ -29,4 +31,4 @@
 
 上方旧版说明中的 requires_2fa 不再用来解释该通用 BadLogin 响应。只有获得进一步可验证证据后，才可定位具体账号或协议问题。
 
-[ARM 对照验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41725046970)同样通过回归测试和构建，真实登录仍返回 authentication_unresolved_generic_bad_login。切换这两种 GitHub 托管运行器未解决问题；不能由此宣称已排除所有网络或协议因素。原始 IPA 仍未获取。需要替代认证实现或可验证的合法会话来源，不能靠修改状态名、禁用认证检查或无限重试获得真实授权。
+[ARM 对照验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41725046970)同样通过回归测试和构建，真实登录仍返回 authentication_unresolved_generic_bad_login。切换这两种 GitHub 托管运行器未解决问题；不能由此宣称已排除所有网络或协议因素。在这次 Go 客户端对照中，仍未取得原始 IPA。需要替代认证实现或可验证的合法会话来源，不能靠修改状态名、禁用认证检查或无限重试获得真实授权。

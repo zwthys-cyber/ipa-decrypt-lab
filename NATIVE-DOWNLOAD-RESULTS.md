@@ -1,5 +1,7 @@
 # Native download investigation — 2026-11-03
 
+This document records the original download investigation. The later model-based decryption path is documented in [project status](docs/PROJECT-STATUS.md).
+
 ## Latest verified result: original IPA acquisition works
 
 Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41734345727 completed successfully on commit 1b131e6e6a452987febefbf6bbf4f131118d98c0.
@@ -15,9 +17,9 @@ Run https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41734345727 com
 
 The workflow's success means acquisition and diagnosis completed; it does not mean successful decryption.
 
-## Owner clarification
+## Account history
 
-The owner explicitly states that target app 6599842047 had not been downloaded with the account. Do not infer prior ownership from purchase failure 5002. The trial treats that response as unconfirmed, continues with an authenticated download request, and requires a matching app/bundle/version response. This does not establish whether the account had a license before the trial.
+App 6599842047 had not been downloaded with the test account before the trial. Purchase failure 5002 was not treated as evidence of prior ownership. The trial treats that response as unconfirmed, continues with an authenticated download request, and requires a matching app/bundle/version response. This does not establish whether the account had a license before the trial.
 
 ## Earlier failures, retained as history
 
@@ -30,8 +32,8 @@ The owner explicitly states that target app 6599842047 had not been downloaded w
 
 The pinned ipatool implementation uses the bag-advertised ent/download endpoint with account/device-bound kbsync. The Swift client now preserves the full storefront header and uses that endpoint with the same authenticated session. Token-bearing requests reject redirects and non-allowlisted destinations. A bounded helper uses pinned, checksum-verified Apple assets; private helper input/output travels through pipes.
 
-## Remaining decryption work
+## Decryption work that remained at this stage
 
 The mremap_encrypted approach has now failed on a real authorized original IPA in the hosted environment. The upstream StoreAgent decryption code examined in ipatool handles macOS package streams using dpInfo and validates XAR packages; it is not evidence of support for encrypted iOS Mach-O slices. Do not transplant it as if it were a working iOS decryptor, or clear cryptid to manufacture success.
 
-This repository is still a research prototype, not a production paid Telegram service.
+At this point the downloader worked, but the decryption path was not yet verified. Later results are in the project status linked above.

@@ -1,5 +1,7 @@
 # iOS native decryption follow-up
 
+These notes cover the native remap investigation. The model-based route was completed later; see [project status](docs/PROJECT-STATUS.md) for the current implementation.
+
 The previous real-package result counted 62 failed engine invocations, not necessarily 62 kernel calls. This follow-up records preflight failures separately from actual mremap_encrypted returns.
 
 Changes:
@@ -41,4 +43,4 @@ Commit: 27657d5e69167dd218eebe52a4d197be2afdae41
 
 This result rules out missing declared sibling SINF copies and local start-alignment preflight rejection for this sample after staging. It does NOT prove that the system FairPlay service accepted those licenses, that API login initialized the macOS App Store session, or that virtualization alone caused EPERM.
 
-The blocking work is now an actually compatible iOS FairPlay runtime/authorization path or a separately verified software iOS decryption implementation. Repeating the same remap on this runner, adding a Telegram queue, or clearing cryptid would not resolve or demonstrate decryption. No user phone, server execution or third-party decryption service was used.
+At this stage, the remaining work was an actually compatible iOS FairPlay runtime/authorization path or a separately verified software iOS decryption implementation. Repeating the same remap on this runner, adding a Telegram queue, or clearing cryptid would not resolve or demonstrate decryption. These trials ran on GitHub-hosted runners without a personal phone, VPS execution, or third-party decryption service.

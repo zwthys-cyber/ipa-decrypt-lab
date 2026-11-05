@@ -14,6 +14,6 @@ SwiftPM依赖由固定主项目清单解析；该上游未提交Package.resolved
 
 [首次独立客户端验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41727238337)：签名请求测试、程序构建和编排测试通过。真实运行返回 authenticated=true，随后 native_download_failed；因此已确认此账号在该认证实现中能登录，不需要验证码或安全升级。失败点已经转移到下载。
 
-用户提供的页面为可选安全升级邀请，且明确选择不升级。不得据此启用双重认证，也不得将旧客户端 generic BadLogin 误判为该账号已开启双重认证。
+出现的是可选的账号安全升级提示，当时选择了不升级。程序不会自动接受升级，也不会根据 generic BadLogin 就判断账号开启了双重认证。
 
 后续下载修正见 NATIVE-DOWNLOAD-FIX.md。首次诊断未保留具体下载错误类别，不能断言首次失败必定由缺许可或重复认证造成；源码中的这两处流程缺口已分别修正，需以后续真实运行验证效果。

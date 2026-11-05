@@ -1,0 +1,136 @@
+name: Publish verified project packages
+on:
+  workflow_dispatch:
+    inputs:
+      vps_run:
+        description: Successful build-only vps-release run for this source commit
+        type: string
+        required: true
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: public-release-v0.1.0-alpha.1
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Verify producers and public package contents
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VPS_RUN: ${{ inputs.vps_run }}
+        run: |
+          python3 - <<'PY'
+          import base64,hashlib,json,os,re,shutil,subprocess,sys,tarfile,tempfile,zipfile
+          from pathlib import Path
+          sys.path.insert(0,"tools")
+          from native_runtime import fingerprint,unpack
+          from telegram_queue import GitHub
+          repo=os.environ["GITHUB_REPOSITORY"]
+          sha=os.environ["GITHUB_SHA"]
+          identifier=os.environ["VPS_RUN"]
+          assert re.fullmatch(r"[1-9][0-9]{0,19}",identifier), "invalid_run_id"
+          def api(path):
+              return json.loads(subprocess.check_output(["gh","api","repos/"+repo+path],text=True))
+          def producer(identifier,path):
+              run=api("/actions/runs/"+str(identifier))
+              assert run["status"]=="completed" and run["conclusion"]=="success", "producer_not_successful"
+              assert run["path"]==".github/workflows/"+path and run["head_branch"]=="main", "wrong_producer"
+              assert run["event"] in ("push","schedule","workflow_dispatch"), "wrong_producer_event"
+              return run
+          vps=producer(identifier,"vps-release.yml")
+          assert vps["head_sha"]==sha and vps["display_title"]=="VPS-controller-build", "vps_source_or_mode_mismatch"
+          native=producer(41946086966,"native-runtime-build.yml")
+          stamp=fingerprint(".")
+          out=Path("release-assets")
+          out.mkdir()
+          client=GitHub(os.environ["GH_TOKEN"])
+          info={"schema":"ipa-lab-release-v1","tag":"v0.1.0-alpha.1","source_commit":sha,"packages":[]}
+          def digest(path):
+              with path.open("rb") as stream:
+                  return hashlib.file_digest(stream,"sha256").hexdigest()
+          def download(run,name,target):
+              artifacts=api("/actions/runs/"+str(run["id"])+"/artifacts")["artifacts"]
+              found=[a for a in artifacts if a["name"]==name and not a["expired"]]
+              assert len(found)==1, "artifact_missing"
+              item=found[0]
+              assert 0<item["size_in_bytes"]<=256*1024*1024, "artifact_size"
+              archive=target/"artifact.zip"
+              client.archive(item["id"],archive,max_bytes=256*1024*1024)
+              assert "sha256:"+digest(archive)==item.get("digest"), "artifact_digest"
+              with zipfile.ZipFile(archive) as zipped:
+                  entries=zipped.infolist()
+                  expected={"vps-controller.tar.gz","vps-controller.sha256"} if name.startswith("vps-") else {"native-runtime.tar.gz"}
+                  assert len(entries)==len(expected) and {e.filename for e in entries}==expected, "artifact_inventory"
+                  assert sum(e.file_size for e in entries)<=256*1024*1024
+                  for entry in entries:
+                      with zipped.open(entry) as src,(target/entry.filename).open("xb") as dst:
+                          shutil.copyfileobj(src,dst,1024*1024)
+              return item
+          with tempfile.TemporaryDirectory() as tmp:
+              root=Path(tmp)
+              for pool in ("macos-26-intel","macos-15-intel"):
+                  folder=root/pool
+                  folder.mkdir()
+                  artifact=download(native,"runtime-"+pool+"-"+stamp,folder)
+                  packed=folder/"native-runtime.tar.gz"
+                  unpack(packed,folder/"verified",stamp,pool,native["head_sha"],native["id"])
+                  name="ipazake-runtime-"+pool+".tar.gz"
+                  shutil.copyfile(packed,out/name)
+                  info["packages"].append({"file":name,"run_id":native["id"],"commit":native["head_sha"],"artifact_id":artifact["id"],"source_fingerprint":stamp})
+              folder=root/"vps"
+              folder.mkdir()
+              artifact=download(vps,"vps-controller-"+sha,folder)
+              packed=folder/"vps-controller.tar.gz"
+              assert digest(packed)==(folder/"vps-controller.sha256").read_text().split()[0]
+              modules="version_catalog app_presentation version_request app_preflight capacity telegram_daemon persistent_journal telegram_controller telegram_runtime telegram_api telegram_menu telegram_queue task_progress delivery_scheduler ipa_audit".split()
+              sourcefiles={"tools/"+m+".py" for m in modules}|{"deploy/ipazake.service","deploy/install.sh","deploy/prune_releases.py"}
+              expected_files=sourcefiles|{"SOURCE_COMMIT","bin/telegram-bot-api","bin/delivery-crypt"}
+              seen=set()
+              with tarfile.open(packed,"r:gz") as archive:
+                  total=0
+                  for member in archive:
+                      name=member.name.removeprefix("./").rstrip("/")
+                      assert not member.issym() and not member.islnk(), "vps_link"
+                      if member.isdir():
+                          assert name in ("",".","bin","tools","deploy"), "vps_directory"
+                          continue
+                      assert member.isfile() and not member.sparse and name in expected_files and name not in seen, "vps_inventory"
+                      seen.add(name)
+                      total+=member.size
+                      assert total<=512*1024*1024
+                      if name in sourcefiles:
+                          assert archive.extractfile(member).read()==Path(name).read_bytes(), "vps_source_content"
+                      elif name=="SOURCE_COMMIT":
+                          assert archive.extractfile(member).read().decode().strip()==sha, "vps_source_commit"
+                  assert seen==expected_files, "vps_missing_files"
+              name="ipazake-vps-linux-amd64.tar.gz"
+              shutil.copyfile(packed,out/name)
+              info["packages"].append({"file":name,"run_id":vps["id"],"commit":sha,"artifact_id":artifact["id"]})
+          shutil.copyfile("LICENSE",out/"LICENSE")
+          shutil.copyfile("docs/RELEASES.md",out/"README-release.md")
+          bot_ref="e3e9dd8e5b3d7ab8537cd5a10dc31d5ffa8f82d1"
+          td=json.loads(subprocess.check_output(["gh","api","repos/tdlib/telegram-bot-api/contents/td?ref="+bot_ref],text=True))["sha"]
+          notices=[]
+          for project,ref,path in (("tdlib/telegram-bot-api",bot_ref,"LICENSE_1_0.txt"),("tdlib/td",td,"LICENSE_1_0.txt"),("FiloSottile/age","b74dce4cdbe35b5e5f66c06d9612b72f89028758","LICENSE")):
+              obj=json.loads(subprocess.check_output(["gh","api","repos/"+project+"/contents/"+path+"?ref="+ref],text=True))
+              notices.append(project+" @ "+ref+"\nhttps://github.com/"+project+"/tree/"+ref+"\n\n"+base64.b64decode(obj["content"]).decode())
+          (out/"THIRD_PARTY_NOTICES.txt").write_text("\n\n".join(notices))
+          (out/"BUILDINFO.json").write_text(json.dumps(info,indent=2)+"\n")
+          sums=[digest(path)+"  "+path.name for path in sorted(out.iterdir())]
+          (out/"SHA256SUMS").write_text("\n".join(sums)+"\n")
+          print(json.dumps({"packages":len(info["packages"]),"source_commit":sha,"attachments":len(list(out.iterdir()))}))
+          PY
+      - name: Publish preview release after package verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v0.1.0-alpha.1 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "v0.1.0-alpha.1 — 首个预览版" --notes-file docs/releases/v0.1.0-alpha.1.md --draft --prerelease
+          gh release upload v0.1.0-alpha.1 release-assets/* --repo "$GITHUB_REPOSITORY"
+          gh release edit v0.1.0-alpha.1 --repo "$GITHUB_REPOSITORY" --draft=false --prerelease

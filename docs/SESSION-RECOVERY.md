@@ -1,8 +1,8 @@
 # 常驻服务任务恢复
 
-当前恢复实现为 `tools/persistent_journal.py`，状态保存在 VPS 私有 SQLite 数据库，不再向 GitHub Checks 写入恢复记录。旧 Checks 实现和实验工作流已删除，历史证据可从 Git 历史与 [41890117885](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41890117885) 查阅。
+将任务恢复逻辑放在 `tools/persistent_journal.py`，状态保存在 VPS 私有 SQLite 数据库，不再向 GitHub Checks 写入恢复记录。旧 Checks 实现和实验工作流已删除，历史证据可从 Git 历史与 [41890117885](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41890117885) 查阅。
 
-## 行为
+## 采用的恢复规则
 
 - 提交前持久记录任务，失败即不提交；重启追踪已有任务，不重复下载。
 - 更新处理意图先于副作用写入 SQLite，已认领的更新不会因崩溃自动重放。
@@ -20,6 +20,6 @@
 
 ## 验证
 
-`tests/test_persistent_service.py` 验证持久化、权限、更新去重、备份和运行边界；`tests/test_controller_recovery.py` 使用真实临时 SQLite 验证恢复控制器、写入失败阻断副作用、取消失败与发送不确定时不重发。这些测试仅在 GitHub 运行。
+`tests/test_persistent_service.py` 验证持久化、权限、更新去重、备份和运行边界；`tests/test_controller_recovery.py` 使用真实临时 SQLite 验证恢复控制器、写入失败阻断副作用、取消失败与发送不确定时不重发。仅在 GitHub 上运行这些测试。
 
 部署与回滚见 [VPS 部署说明](VPS-DEPLOYMENT.md)。合成故障测试不代替真实 IPA 上传中断实测。

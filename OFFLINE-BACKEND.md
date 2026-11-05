@@ -1,12 +1,12 @@
 # Offline decryption backend
 
-For the maintained milestone summary and workflow choices, see [Project status and usage](docs/PROJECT-STATUS.md). This document retains the chronological research evidence.
+This document contains the detailed research history. For the current workflow and results, see [Project status and usage](docs/PROJECT-STATUS.md). The sections below retain the conclusions available at each stage; later sections may supersede earlier blockers.
 
 ## Current verified status (2026-11-04)
 
-**A real model has now been recovered entirely on GitHub-hosted macOS and validated against the complete original IPA.** [Successful bootstrap 41846142942](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41846142942) verified 62 encrypted slices and 12,524 plaintext pages. The model and private native-state checkpoint were saved as GitHub Secrets at 14:22:53 UTC; neither plaintext nor a decrypted IPA artifact was published.
+**Model recovery on GitHub-hosted macOS passed validation against the complete original IPA.** [Successful bootstrap 41846142942](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41846142942) verified 62 encrypted slices and 12,524 plaintext pages. The model and private native-state checkpoint were saved as GitHub Secrets at 14:22:53 UTC; neither plaintext nor a decrypted IPA artifact was published.
 
-The latest measured computer count is 4 of 5. The user's approved all-computer deauthorization was performed once earlier (5 -> 0); four subsequent controlled enrollments account for the current measurement. The independent cross-runner reuse check [41846974302](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41846974302) also passed with 62 encrypted slices and 12,524 verified pages, using the stored model and a freshly downloaded IPA. It does not invoke machine authorization.
+The latest measured computer count is 4 of 5. One all-computer deauthorization was performed earlier (5 -> 0); four subsequent controlled enrollments account for the current measurement. The independent cross-runner reuse check [41846974302](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41846974302) also passed with 62 encrypted slices and 12,524 verified pages, using the stored model and a freshly downloaded IPA. It does not invoke machine authorization.
 
 Real checkpoint replay also passed in [41847775765](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41847775765): a third fresh runner derived a model from the saved SIDB/IOMAC data and verified the complete newly downloaded IPA without invoking enrollment. Installation/runtime behavior, independent Apple CMS trust, other accounts/apps and a production Telegram service remain unverified or out of the current scope. See [the successful recovery record](#first-verified-github-only-model-recovery-2026-11-04) below. Earlier blocker/failed-run sections are historical evidence, not the current outcome.
 
@@ -28,7 +28,7 @@ No account, model, real IPA or decrypted artifact is used in offline-engine.yml.
 
 ## Historical credential prerequisite blocker
 
-The user states target app 6599842047 had not previously been downloaded. Generic purchase 5002 remains unconfirmed rather than proof of ownership.
+App 6599842047 had not previously been downloaded with this account. Generic purchase 5002 remains unconfirmed rather than proof of ownership.
 
 Source review:
 - EthanArbuckle/fairplay-decrypt bb09a61046f5c99eb1795589a307646df04b26d0 performs Python offline decryption with an account-matching 16-byte credential. Its documented acquisition uses a supported jailbroken device.
@@ -36,7 +36,7 @@ Source review:
 - DrWhax/unfairplay 26a099fcb2292eaacd9e0ce89793cdbc88e516d1 can decrypt on Linux after a model has been recovered. Its documented setup requires an enrolled native Mac App Store state and matching installed app/IPA.
 - The pinned ipatool kbsync helper used here does not create that enrollment state: the examined shim only opens CoreFP.icxs and rejects other open requests. API login and kbsync generation do not constitute enrollment-model recovery.
 
-At this earlier implementation stage, no matching private model was configured and no recovery was claimed. That blocker was resolved by the later successful GitHub-only bootstrap recorded above. The user's personal phone and Debian server have not been used.
+At this earlier implementation stage, no matching private model was configured and no recovery was claimed. That blocker was resolved by the later successful GitHub-only bootstrap recorded above. This stage used neither a personal phone nor the Debian server.
 
 ## Historical synthetic CI baseline
 
@@ -73,7 +73,7 @@ This review concerns the pinned implementations, not a claim that a new protocol
 - [The emulated account framework](https://github.com/majd/ipatool/blob/d9c0247daea564d3ec7d04a9b015d0a29af66b04/internal/store/emulator/accounts.go) keeps ephemeral values without host account-store or keychain writes. [The session path](https://github.com/majd/ipatool/blob/d9c0247daea564d3ec7d04a9b015d0a29af66b04/internal/store/emulator/session.go) constructs an ephemeral account; successful API authentication is not evidence of native enrollment.
 - The existence of an authorizeMachine URL or experimental HTTP request code is not evidence that a reusable decryption model has been produced. No such working bootstrap was established in this review.
 
-The upstream acquisition route starts with an enrolled Mac, not the user's personal phone. Using a Mac outside GitHub would change the current execution constraint. This does not establish that native enrollment inside a GitHub-hosted Mac is impossible: that path is now under direct investigation below. No external-machine execution, collection or model recovery was performed.
+The upstream acquisition route starts with an enrolled Mac, not a personal phone. Using a Mac outside GitHub would change the current execution constraint. This does not establish that native enrollment inside a GitHub-hosted Mac is impossible: that path is now under direct investigation below. No external-machine execution, collection or model recovery was performed.
 
 Before a future real offline trial, require all of the following:
 
@@ -86,7 +86,7 @@ A successful future model recovery would remove one prerequisite; it would not i
 
 ## GitHub-only native enrollment trial
 
-Direction during this historical trial: research enrollment entirely within GitHub-hosted Actions and defer Telegram. The user resumed owner-only Telegram integration on 2026-11-04; GitHub-only execution and the personal-phone restriction continue to apply.
+Direction during this historical trial: research enrollment entirely within GitHub-hosted Actions and defer Telegram. Administrator-only Telegram integration resumed on 2026-11-04; GitHub-only execution and the personal-phone restriction continue to apply.
 
 This experiment uses the real App Store application on a disposable hosted Mac. It is separate from the already-working Swift download-client login.
 
@@ -232,7 +232,7 @@ The obsolete mas sign-in command is not a verified shortcut: [mas issue 164](htt
 
 The new account-free AuthKit capability probe checks only class/method/protocol metadata on the hosted Mac. It does not instantiate an account, call authentication, attach a provider, mutate system state, or infer successful enrollment from the existence of a selector.
 
-Before another authenticated trial, integration must establish a compatible way to supply the independently provisioned data to the account-authentication path, obey any real verification challenge, and preserve the user's refusal of the optional security upgrade. Even successful account authentication must then create and recover matching FairPlay state and validate a real IPA. Copying an Android ADI blob into native macOS storage, renaming it as FAIRPLAY_MODEL_B64, or treating the successful prerequisite probe as decryption would be unsupported.
+Before another authenticated trial, integration must establish a compatible way to supply the independently provisioned data to the account-authentication path, obey any real verification challenge, and preserve the decision to decline the optional security upgrade. Even successful account authentication must then create and recover matching FairPlay state and validate a real IPA. Copying an Android ADI blob into native macOS storage, renaming it as FAIRPLAY_MODEL_B64, or treating the successful prerequisite probe as decryption would be unsupported.
 
 ### Isolation and implementation
 
@@ -277,7 +277,7 @@ Only the final manual workflow step receives the existing Apple Secrets. Helpers
 
 The native context explicitly declines optional security upgrade, prevents interactive authentication, uses ephemeral operation and disables persistent service-token updates; those flags must read back correctly before the single call. No challenge-solving loop, retries, native Store account creation or model generation is implemented in this probe. The trial used the default service type (observed 0), so even a successful generic AuthKit result would require a separate Store-specific enrollment implementation.
 
-This work remains GitHub-only. It does not use the Debian server, an external Mac, the user's phone or Telegram.
+This work remains GitHub-only. It does not use the Debian server, an external Mac, a personal phone or Telegram.
 
 ### Account-free daemon transport comparison
 
@@ -370,11 +370,11 @@ The private machine-enrollment workflow uses a fresh successful Store login as t
 
 Interface research used the [iOS 18.2 AMSAuthorizeMachineTask implementation](https://github.com/EthanArbuckle/iPhone17-1_18.2_22C152_Restore/blob/e26ed4563f78871c59d2d96856756a65d62517e5/System/Library/PrivateFrameworks/AppleMediaServices.framework/AMSAuthorizeMachineTask.m), [AMSKeybag implementation](https://github.com/EthanArbuckle/iPhone17-1_18.2_22C152_Restore/blob/e26ed4563f78871c59d2d96856756a65d62517e5/System/Library/PrivateFrameworks/AppleMediaServices.framework/AMSKeybag.m), and macOS runtime headers. Runtime observations take precedence where macOS differs from those iOS sources.
 
-### User-supplied candidate projects
+### Candidate projects reviewed
 
 [EEliberto/Pastel-macOS at 82576f2](https://github.com/EEliberto/Pastel-macOS/tree/82576f2295516e84b6eaa99a4e364af5e8de7664) is a downloader. Its active StoreHelper calls ipatool Download followed by ReplicateSinf, using the same pinned ipatool d9c0247 dependency already investigated here. Its November 2 fix adds missing account license files to downloaded IPAs; it does not remove Mach-O encryption. The README requires a physical Apple-silicon Mac and says virtual machines are unsupported. It is a download-flow reference, not evidence of GitHub-only enrollment.
 
-[EthanArbuckle/fairplay-decrypt at bb09a610](https://github.com/EthanArbuckle/fairplay-decrypt/tree/bb09a61046f5c99eb1795589a307646df04b26d0) implements offline decryption using a matching 16-byte account credential. Its Python decryptor runs on macOS/Linux; its credential-retrieval workflow requires a paired jailbroken iOS device with root SSH and an installed app owned by the account. The Mac build produces iPhoneOS arm64 retriever/driver/trigger binaries; compiling them does not create a credential. This is a possible alternative offline backend, not a verified credential bootstrap for a fresh GitHub runner. No code has been imported from this GPL-3.0 repository, and no user phone has been used.
+[EthanArbuckle/fairplay-decrypt at bb09a610](https://github.com/EthanArbuckle/fairplay-decrypt/tree/bb09a61046f5c99eb1795589a307646df04b26d0) implements offline decryption using a matching 16-byte account credential. Its Python decryptor runs on macOS/Linux; its credential-retrieval workflow requires a paired jailbroken iOS device with root SSH and an installed app owned by the account. The Mac build produces iPhoneOS arm64 retriever/driver/trigger binaries; compiling them does not create a credential. This is a possible alternative offline backend, not a verified credential bootstrap for a fresh GitHub runner. No code has been imported from this GPL-3.0 repository, and no personal phone was used.
 
 For decrypt.day, a read-only request from this research environment returned HTTP 451 and the body "error code: 1026"; that observation is not a global outage diagnosis. No current public decryption API contract was verified. The same-name [decrypt-day organization](https://github.com/decrypt-day) exposes idevice-tools with only a one-line libimobiledevice archive-build README, not the service backend. No account was registered, credentials supplied, API job submitted or message sent to its operators.
 
@@ -484,7 +484,7 @@ These findings narrow the missing contract but do not prove GitHub-only enrollme
 
 ### Upstream Mac credential follow-up
 
-The user-supplied fairplay-decrypt repository's [Mac credential discussion](https://github.com/EthanArbuckle/fairplay-decrypt/issues/21) points to UnfairPlay. This matches the backend already reviewed here; that discussion supplies no first-time GitHub-runner enrollment implementation. The currently listed credential-bundle CI changes build the iOS retrieval helper, while the retrieval and device compatibility changes still rely on an enrolled device. No reviewed issue or PR is treated as proof of a device-free credential bootstrap.
+The fairplay-decrypt repository's [Mac credential discussion](https://github.com/EthanArbuckle/fairplay-decrypt/issues/21) points to UnfairPlay. This matches the backend already reviewed here; that discussion supplies no first-time GitHub-runner enrollment implementation. The currently listed credential-bundle CI changes build the iOS retrieval helper, while the retrieval and device compatibility changes still rely on an enrolled device. No reviewed issue or PR is treated as proof of a device-free credential bootstrap.
 
 ### Login-stage challenge control
 
@@ -707,7 +707,7 @@ The CommerceKit backend always reports import_verified=false and cannot reuse th
 
 ## Account-management entry points without a personal computer (2026-11-04)
 
-The owner has no available computer. The existing project constraint remains GitHub-hosted execution only; this research does not require the owner's iPhone or a separate Mac as project infrastructure.
+These experiments stayed on GitHub-hosted runners without a separate computer or an iPhone node.
 
 Read-only static inspection https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41779680901 at 43eae55b06455719058cc08f8df99ba2eb75e13f found all six selected methods on ARM and Intel. The workflow loaded system frameworks into its own account-free process and disassembled the allowlisted methods. It did not invoke those methods or use account secrets.
 
@@ -859,7 +859,7 @@ At the time of the preparation above, no account-wide approval or real execution
 
 ## Approved computer deauthorization (2026-11-04)
 
-The user explicitly approved one account-wide computer deauthorization in chat before dispatch of run 41837099155. The approved workflow was dispatched once at commit 294c5184c8656def5eddeb4ea21f1a079a1f7319. This is not permission to repeat the yearly account-wide operation.
+One account-wide computer deauthorization was explicitly confirmed before run 41837099155. The approved workflow was dispatched once at commit 294c5184c8656def5eddeb4ea21f1a079a1f7319. This is not permission to repeat the yearly account-wide operation.
 
 [Run 41837099155](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41837099155) completed successfully. Linux and macOS verification passed; the real job passed the 20 session tests and 11 Swift authentication tests before receiving account credentials. A fresh signed login and account-summary query confirmed five computers. The single empty-body POST to the reviewed Apple endpoint returned HTTP 200, without redirect or oversized response. The follow-up read-only query confirmed **zero** computers.
 
