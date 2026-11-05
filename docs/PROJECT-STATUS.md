@@ -1,6 +1,6 @@
 # 项目状态与使用说明
 
-更新日期：2026-11-04。当前阶段：**GitHub-only 模型获取、真实 IPA 解密校验及跨运行器复用已完成验证**；真实 IPA 私有加密导出已验证，Telegram 限时私有交付已通过真实收发，跨会话恢复已通过合成验证；管理员常驻内测已部署到用户的 Debian 13 VPS，收费服务尚未开放。
+更新日期：2026-11-05。当前阶段：**GitHub-only 模型获取、真实 IPA 解密校验及跨运行器复用已完成验证**；真实 IPA 私有加密导出已验证，Telegram 限时私有交付已通过真实收发，跨会话恢复已通过合成验证；管理员常驻内测已部署到用户的 Debian 13 VPS，收费服务尚未开放。
 
 ## 已完成的三条路径
 
@@ -184,3 +184,22 @@ GitHub 查询最多检查较新的 60 个标识，并在请求之间检查 180 �
 [机器人查询 41941057460](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41941057460)对 6749145363 取得 1.0.4、1.0.3、1.0.2 三项；线上 SQLite 已记录 Telegram 按钮列表消息回执，服务 active、NRestarts=0。点击 1.0.4 后触发 [下载 41941946764](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41941946764)，固定版本 ID 879995305，按钮已使用状态已持久化。记录时该下载仍在执行，未计作完整交付。
 
 [QQ 列表复核 41941095718](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41941095718)取得 335 个历史标识中的 33 个版本，覆盖本次 9.3.80 至 9.2.21 的查询结果，可分页展示。首次 QQ 查询失败的具体原因未保留；后续增加安全阶段诊断并规范化账号输入后复核通过，不将猜测写作根因。更早版本可继续使用 /version 指定版本或已知 externalVersionID；列表未覆盖全部历史。
+
+## 预编译运行包加速（2026-11-05）
+
+普通下载 `private-delivery.yml` 与历史版本查询 `version-catalog.yml` 已改为获取经验证的约 28 MB 运行包，不再逐任务安装 Go、编译原生工具、恢复整个 Swift .build 或重复运行测试套件。保留应用资格预检查、Apple 公共资源准备、账号许可、实际大小限制、完整明文校验、交付加密和清理。
+
+代码更新时，`native-runtime-build.yml` 在 GitHub-hosted macOS 26 Intel / macOS 15 Intel 分别构建和测试。包内只有四个可执行程序、必要的公开 Swift 资源和许可证；没有 Apple 账号、模型、下载的 Apple 公共资源或 IPA。按 tools/、tests/ 和构建工作流生成源码指纹，清单记录平台、生产提交/运行及逐文件 SHA-256。消费端只接受成功的 main 分支生产运行，并核对归档摘要、清单、平台和源码；拒绝路径穿越、链接、重复条目、超限和摘要不符。
+
+运行包保留 30 天，每周重新生成；账号/IPA 交付产物仍只保留一天。运行时源码或测试更新后，必须先等待新生产流程成功。缺包、过期或构建未完成会在传入 Apple 凭据前明确失败，不静默使用旧包；可手动执行 [Build verified native runtime](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/workflows/native-runtime-build.yml) 修复包缺失，再执行 [fresh-runner verification](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/workflows/native-runtime-smoke.yml)。无需在 VPS 编译或运行测试，也无需为本次工作流切换重启机器人。
+
+实测证据：
+
+| 验证 | 结果 |
+| --- | --- |
+| [生产 41946086966](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41946086966) | 两个平台成功；各 414 项 Python 测试（2 项环境跳过）、10 项所选 Swift 测试及 Go 检查通过。移走原 .build 后启动成功。26/15 的公开运行包分别为 28,332,638 / 28,328,254 字节（Actions ZIP）。 |
+| [全新机器 41947134774](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41947134774) | 两个平台成功；下载、解压和完整校验分别约 4 / 3 秒，未安装 Go 或恢复 Swift 构建树。 |
+| [My BVF 真实导出 41947479965](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41947479965) | 运行包准备 8 秒、Apple 公共资源准备 24 秒、导出处理约 42 秒；从提交到工作流完成约 1 分 49 秒。22 个加密切片、704 页明文校验通过；IPA 10,251,249 字节，仅发布一天密文。 |
+| [历史版本查询 41947789366](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41947789366) | App ID 6749145363 返回全部 3 个版本；运行包准备 4 秒，总耗时约 1 分 43 秒。 |
+
+之前同一 My BVF 应用的 [41935307617](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41935307617) 从提交到工作流完成约 4 分 2 秒，本次缩短约 55%。这是不同时间的两次样本，不是所有应用的速度保证；排队、Apple 网络、IPA 大小及 Telegram 上传仍影响总耗时。本轮真实导出是直接调度的工作流回归，不代表新增 Telegram 文件收件回执，也不证明安装运行。

@@ -114,3 +114,11 @@ GitHub 手动导出也在依赖构建前检查应用条件；仍保留下载时�
 [机器人真实查询 41941057460](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41941057460)对 App ID 6749145363 取得全部 3 个返回版本：1.0.4、1.0.3、1.0.2。线上数据库已记录 Telegram 列表消息成功回执，查询状态已结束，服务 active、NRestarts=0。随后已观察到点击 1.0.4 按钮后的真实提交：[41941946764](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41941946764)，版本固定为 externalVersionID 879995305，SQLite 已持久化该按钮的使用状态。记录时下载任务仍在执行，不计为完整交付。
 
 [QQ 复核 41941095718](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41941095718)成功：Apple 返回 335 个历史标识，180 秒查询预算内取得 33 个版本，按每页 10 项可显示 4 页。首项为 9.3.80，本次末项为 9.2.21；未查询的其余标识不冒充不可用或已下架。Apple 返回的 releaseDate 在此样本中是应用首次发布日期，不作为各版本的发布时间展示。首次 QQ 试验未记录具体失败类别，不能事后确定原始原因；后续补充固定阶段/错误分类并规范化账号输入后复核成功。
+
+## 普通任务准备加速（2026-11-05）
+
+下载和历史版本查询已直接使用 GitHub 验证过的约 28 MB 成品包，省去逐任务 Go 安装、编译、测试和 Swift 构建树恢复。默认 macOS 26 Intel，备用 macOS 15 Intel；每个平台单独构建。所有编译和测试继续只在 GitHub 执行，VPS 不增加编译环境，不需重启机器人。
+
+[构建及两平台验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41946086966)和[全新机器验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41947134774)均成功。My BVF [真实回归](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41947479965)约 1 分 49 秒完成，相比之前同应用约 4 分 2 秒缩短约 55%；包准备 8 秒。历史列表[回归](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41947789366)约 1 分 43 秒取得全部 3 个返回版本，包准备 4 秒。这是工作流耗时，不包含新增 Telegram 发送确认；排队、Apple 响应与大文件传输速度仍会变化。
+
+成品包需与当前源码指纹和系统匹配，且来自成功的 main 分支构建；源码更新后须先等待新构建完成。包保留 30 天并每周刷新，缺失/过期时明确停止，可手动执行 native-runtime-build.yml 后再提交任务。完整记录见 [项目状态](PROJECT-STATUS.md) 的“预编译运行包加速”。

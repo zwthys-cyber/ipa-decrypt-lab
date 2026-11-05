@@ -15,7 +15,7 @@
 - **Telegram 管理员常驻内测**：已迁移到用户的 Debian 13 VPS，见 [部署与运维说明](docs/VPS-DEPLOYMENT.md)。旧 GitHub 限时会话和身份引导源文件已删除，避免轮询冲突。
 - **持久恢复**：现行实现为 VPS 私有 SQLite，支持任务追踪和未知发送结果防重发；旧 Checks 日志已移除。见 [恢复机制与限制](docs/SESSION-RECOVERY.md)。
 
-下载交付已升级为 **macOS 26 Intel 默认、macOS 15 Intel 备用**。26 上的真实样本验证已通过，构建缓存复用、排队切换和不等待迟到总状态的安全交付已接入。[升级与实测记录](docs/TELEGRAM.md)。
+下载交付已升级为 **macOS 26 Intel 默认、macOS 15 Intel 备用**。26 上的真实样本验证已通过，普通下载和历史版本查询已采用约 28 MB 预编译运行包，省去逐任务编译和 Swift 构建树恢复；新包的构建与测试仍全部在 GitHub 执行。[升级与实测记录](docs/TELEGRAM.md)。
 
 另一个实际用户请求 App ID 1530340312 已完成 6 个加密切片、164 页校验，2,035,796 字节完整文件通过 Telegram 发出，用户确认收到；该样本也在 macOS 26 上复核通过。
 
