@@ -216,7 +216,7 @@ class Controller:
         self.current = {"rid":rid,"app":app,"state":"dispatch_pending","since":time.monotonic()}
         self.current["version"] = version
         if version:
-            self.say("请求历史版本："+version+"。查不到或版本不匹配会停止，不回退最新版。")
+            self.say("请求历史版本："+update.get("_version_label",version)+"。查不到或版本不匹配会停止，不回退最新版。")
         self.card(rid,app).update("dispatch_pending")
         self.submitted+=1
         self.last_submission=time.monotonic()

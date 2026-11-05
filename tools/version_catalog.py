@@ -28,7 +28,7 @@ def validate(payload,rid,app,run_id,commit):
     for row in rows:
         require(isinstance(row,dict) and set(row)=={"id","version","date"},"invalid_version_catalog")
         try:
-            require(external_id(row["id"]) and selector(row["version"])==row["version"]
+            require(external_id(row["id"]) and bool(row["version"]) and selector(row["version"])==row["version"]
                     and not external_id(row["version"]) and row["id"] not in seen,
                     "invalid_version_catalog")
         except (ValueError,TypeError):
@@ -75,7 +75,7 @@ class CatalogAPI:
                 and re.fullmatch(r"sha256:[a-f0-9]{64}",artifact["digest"]),"catalog_digest_missing")
         with tempfile.TemporaryDirectory(prefix="version-catalog-") as directory:
             path=Path(directory)/"metadata.zip"
-            self.github.archive(artifact["id"],path)
+            self.github.archive(artifact["id"],path,max_bytes=131072)
             require(path.stat().st_size<=131072 and sha256(path)==artifact["digest"][7:],"catalog_digest_mismatch")
             with zipfile.ZipFile(path) as archive:
                 require(archive.namelist()==["versions.json"] and archive.getinfo("versions.json").file_size<=32768,
@@ -152,6 +152,11 @@ class VersionBrowser:
         if not pending or time.monotonic()-self.last_poll<15:
             return
         self.last_poll=time.monotonic()
+        if time.time()-pending["at"]>3600:
+            self.state["pending"]=None
+            self.save()
+            self.c.say("历史版本查询等待超时，请稍后重新使用 /versions。")
+            return
         run=self.api.find(pending["rid"],pending["app"])
         if run is None or run.get("status")!="completed":
             if time.time()-pending["at"]>3600:
@@ -164,7 +169,15 @@ class VersionBrowser:
             self.save()
             self.c.say("历史版本查询未完成，请稍后重试；仍可使用 /version AppID 版本号。")
             return
-        entry=self.api.result(run,pending["rid"],pending["app"])
+        try:
+            entry=self.api.result(run,pending["rid"],pending["app"])
+        except QueueError:
+            pending["result_failures"]=pending.get("result_failures",0)+1
+            if pending["result_failures"]>=3:
+                self.state["pending"]=None
+                self.c.say("历史版本结果暂时无法取回，请重新使用 /versions。")
+            self.save()
+            return
         entry["at"]=int(time.time())
         cache=self.state.setdefault("cache",{})
         cache[pending["app"]]=entry
@@ -255,9 +268,10 @@ class VersionBrowser:
         if self.c.current or self.state.get("pending"):
             answer("已有任务处理中，请稍后再选择。")
             return None
-        answer("正在检查并提交所选版本")
+        answer("已选择 "+view["rows"][index]["version"]+"，正在检查")
         # Convert only authenticated, bound selections into the normal guarded command path.
         return {"update_id":update["update_id"],"_version_choice":(view["rid"],index),
+                "_version_label":view["rows"][index]["version"],
                 "message":{"date":int(time.time()),"from":{"id":self.c.owner,"is_bot":False},
                            "chat":{"id":self.c.owner,"type":"private"},
                            "text":"/version "+view["app"]+" "+view["rows"][index]["id"]}}

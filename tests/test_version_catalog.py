@@ -142,6 +142,16 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(saved["view"]["message_id"],77)
         self.assertEqual(len(saved["cache"][APP]["rows"]),12)
 
+    def test_unavailable_result_stops_after_bounded_attempts(self):
+        self.c.browser.state["pending"]={"rid":RID,"app":APP,"at":int(time.time())}
+        self.c.browser.api=Mock()
+        self.c.browser.api.find.return_value={"status":"completed","conclusion":"success"}
+        self.c.browser.api.result.side_effect=QueueError("catalog_artifact_unavailable")
+        for attempt in range(3):
+            self.c.browser.last_poll=0
+            self.c.browser.tick()
+        self.assertIsNone(self.journal.browser_load()["pending"])
+
     def test_ambiguous_catalog_dispatch_is_not_repeated(self):
         self.c.browser.api=Mock()
         self.c.browser.api.dispatch.side_effect=QueueError("github_transport_unknown")

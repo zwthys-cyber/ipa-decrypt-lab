@@ -227,13 +227,14 @@ class GitHub:
         if run.get("status") != "completed":
             self.call("/actions/runs/" + str(int(run["id"])) + "/cancel", {}, "POST")
 
-    def archive(self, artifact_id, destination):
+    def archive(self, artifact_id, destination, max_bytes=MAX_ARTIFACT_BYTES):
+        require(type(max_bytes) is int and 0<max_bytes<=MAX_ARTIFACT_BYTES,"invalid_artifact_budget")
         destination=Path(destination)
         require(not destination.exists() and not destination.is_symlink(),"artifact_destination_exists")
         # GET-only transport retry. Never retry Telegram sends or job submissions.
         for attempt in range(2):
             try:
-                return self._archive_once(artifact_id,destination)
+                return self._archive_once(artifact_id,destination,max_bytes)
             except (OSError,http.client.HTTPException) as exc:
                 print(json.dumps({"schema":"artifact-retrieval-v1","status":"transport_exception",
                                   "exception_kind":failure_kind(exc),"attempt":attempt+1}),flush=True)
@@ -247,7 +248,7 @@ class GitHub:
                 if attempt:
                     raise
 
-    def _archive_once(self, artifact_id, destination):
+    def _archive_once(self, artifact_id, destination, max_bytes=MAX_ARTIFACT_BYTES):
         require(type(artifact_id) is int and artifact_id > 0, "invalid_artifact_id")
         request = urllib.request.Request("https://api.github.com/repos/" + REPOSITORY
             + "/actions/artifacts/" + str(artifact_id) + "/zip",
@@ -277,7 +278,7 @@ class GitHub:
                     if not block:
                         break
                     total += len(block)
-                    require(total <= MAX_ARTIFACT_BYTES, "artifact_too_large")
+                    require(total <= max_bytes, "artifact_too_large")
                     output.write(block)
                 require(total > 0, "empty_artifact")
         except (OSError, http.client.HTTPException):
