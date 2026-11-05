@@ -44,9 +44,29 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 tools/native_runtime.py fetch --output runtime
+      - name: Restore fixed Apple resource cache
+        id: apple-assets
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/AppleMediaServices
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/commerce
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/CoreFP
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/CoreFP.icxs
+          key: apple-public-assets-d9c0247-26A434-arm64-v1
       - name: Prepare pinned Apple assets without account credentials
         timeout-minutes: 4
         run: runtime/lab-kbsync --prewarm
+      - name: Save validated Apple resources before account access
+        if: steps.apple-assets.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/AppleMediaServices
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/commerce
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/CoreFP
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/CoreFP.icxs
+          key: apple-public-assets-d9c0247-26A434-arm64-v1
       - name: Query authenticated historical metadata without downloading IPA
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
