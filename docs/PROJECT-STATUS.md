@@ -172,3 +172,15 @@
 该运行完成 386 项 Python 测试（1 项跳过）和 10 项所选 Swift 测试。[部署 41932870509](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41932870509)在 Ubuntu 与 Debian 13 各完成 386 项 Python 测试（1 项跳过）、2000 MB age 流式验证、真实 systemd 凭据挂载与服务健康检查，部署成功。VPS 菜单配置包含 version 指令。重启恢复及备用运行器保留版本绑定，VPS 在发送前再次核对收据和 IPA 实际版本。
 
 第一版仍限美区免费应用、管理员私聊、2000 MB 实际 IPA；未开放 Bundle ID 输入、多用户或收费。一个旧版成功不代表所有历史版本都可取得，也不代表已验证安装运行。
+
+## Telegram 历史版本按钮列表已接入（2026-11-05）
+
+管理员可用 `/versions AppID或商店链接` 查询历史版本，按按钮选择并提交固定 externalVersionID 的下载任务。每页 10 项，提供上一页/下一页；列表、已使用按钮、查询意图和缓存保存在私有 SQLite，重启不盲目重发查询或下载。现有 /latest 和 /version 保留。
+
+GitHub 查询最多检查较新的 60 个标识，并在请求之间检查 180 秒预算；部分结果明确标识“非完整历史”。缓存 6 小时、最多 4 个应用；每 24 小时最多 20 次新查询，至少间隔 60 秒。Apple 凭据只用于 GitHub 查询，公开产物仅为版本号、标识和元数据日期，无 IPA、账号或下载地址。日期字段可能是应用首次发布日期，不用作各版本发布日期展示。
+
+[部署 41940545752](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41940545752)在 Ubuntu 和 Debian 13 各运行 407 项 Python 测试（1 项跳过），Go、systemd 及服务健康检查通过。权限、消息绑定、过期按钮、分页、配额、一次性选择和重启恢复均有回归测试。
+
+[机器人查询 41941057460](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41941057460)对 6749145363 取得 1.0.4、1.0.3、1.0.2 三项；线上 SQLite 已记录 Telegram 按钮列表消息回执，服务 active、NRestarts=0。点击 1.0.4 后触发 [下载 41941946764](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41941946764)，固定版本 ID 879995305，按钮已使用状态已持久化。记录时该下载仍在执行，未计作完整交付。
+
+[QQ 列表复核 41941095718](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41941095718)取得 335 个历史标识中的 33 个版本，覆盖本次 9.3.80 至 9.2.21 的查询结果，可分页展示。首次 QQ 查询失败的具体原因未保留；后续增加安全阶段诊断并规范化账号输入后复核通过，不将猜测写作根因。更早版本可继续使用 /version 指定版本或已知 externalVersionID；列表未覆盖全部历史。

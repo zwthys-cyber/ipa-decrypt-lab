@@ -27,6 +27,7 @@
 | /start 或 /help | 使用说明 |
 | /latest AppID或商店链接 | 下载最新版；单独点击菜单会提示输入应用 |
 | /decrypt | 保留为最新版入口的兼容别名 |
+| /versions AppID或商店链接 | 查询历史版本并显示可点击、可翻页的按钮 |
 | /version AppID或商店链接 版本号 | 实时请求指定旧版，例如 `/version 444934666 9.3.55`；也接受 Apple 历史版本 ID |
 | App Store 链接或数字 ID | 默认创建最新版任务 |
 | /id | 显示管理员自己的数字 ID |
@@ -97,3 +98,19 @@ GitHub 手动导出也在依赖构建前检查应用条件；仍保留下载时�
 缩略图使用 multipart 上传，IPA 继续由本地 Bot API 读取私有文件路径，不将大 IPA 装入 HTTP 请求内存。图标获取失败时发送无缩略图文件；发送接口报错后不自动尝试无图重发，保持结果不明时的防重复规则。格式依据 [Telegram sendDocument 文档](https://core.telegram.org/bots/api#senddocument)。
 
 [部署 41934737382](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41934737382)在 Ubuntu 和 Debian 13 各运行 396 项 Python 测试（1 项跳过），包含图标解码、中文文件名、multipart 内容和发送异常不重试检查，发布与健康检查成功。VPS 安装发行版预编译 python3-pil 运行库，不在服务器编译或运行测试。本轮尚未通过真实 Telegram 文件回执确认缩略图展示。
+
+## 可点击历史版本列表（2026-11-05）
+
+菜单选择 versions，或发送 `/versions 444934666`；也接受完整 App Store 链接。首次查询由固定 GitHub-hosted `version-catalog.yml` 执行，使用现有 Apple 账号读取历史标识、显示版本及 Apple 元数据中的日期字段，不下载 IPA、不访问模型 Secret。账号材料和原生响应不公开，仅发布经过严格字段检查的版本元数据，保留一天。该工作流与下载工作流串行执行。
+
+首次查询最多核对较新的 60 个标识，在请求之间检查 180 秒预算；连续 3 个元数据查询失败停止。部分结果明确标注“非完整历史”，不会把最近版本当成全部历史。每页 10 个版本、每行 2 个按钮，支持上一页和下一页。点击某个版本即进入现有下载流程，固定使用该按钮绑定的 Apple externalVersionID。
+
+查询结果缓存 6 小时，保留最近最多 4 个应用；翻页与缓存命中不启动 GitHub。新查询间隔至少 60 秒，每滚动 24 小时最多 20 次，不计入 IPA 下载提交额度。仅管理员私聊可查询和点击；回调绑定列表随机标识、原消息 ID 和有效期。下载选择仍受普通任务额度与单任务限制；提交前持久化按钮已使用状态，同一列表中同一按钮不重复提交。明确重新执行 /versions 可打开新的选择列表。
+
+查询意图、缓存、列表消息 ID 和已使用按钮保存在私有 SQLite 中。重启继续跟踪已有查询，不盲目再次 dispatch；/status 显示查询状态，/cancel 可停止跟踪并请求取消查询。查询最长跟踪一小时，结果取回最多 3 次；归档下载上限 128 KiB，JSON 上限 32 KiB，并核对 SHA-256 和请求、应用、运行、提交绑定。临时归档正常结束删除，进程异常残留在启动时清理。
+
+[部署 41940545752](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41940545752)通过 Ubuntu 与 Debian 13 各 407 项 Python 测试（1 项跳过）、Go/systemd 验证和服务健康检查。原生目录查询编译及所选 10 项 Swift 测试通过。
+
+[机器人真实查询 41941057460](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41941057460)对 App ID 6749145363 取得全部 3 个返回版本：1.0.4、1.0.3、1.0.2。线上数据库已记录 Telegram 列表消息成功回执，查询状态已结束，服务 active、NRestarts=0。随后已观察到点击 1.0.4 按钮后的真实提交：[41941946764](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41941946764)，版本固定为 externalVersionID 879995305，SQLite 已持久化该按钮的使用状态。记录时下载任务仍在执行，不计为完整交付。
+
+[QQ 复核 41941095718](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41941095718)成功：Apple 返回 335 个历史标识，180 秒查询预算内取得 33 个版本，按每页 10 项可显示 4 页。首项为 9.3.80，本次末项为 9.2.21；未查询的其余标识不冒充不可用或已下架。Apple 返回的 releaseDate 在此样本中是应用首次发布日期，不作为各版本的发布时间展示。首次 QQ 试验未记录具体失败类别，不能事后确定原始原因；后续补充固定阶段/错误分类并规范化账号输入后复核成功。
