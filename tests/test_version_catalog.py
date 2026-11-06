@@ -12,6 +12,7 @@ from telegram_controller import Controller
 from persistent_journal import PersistentJournal
 from telegram_daemon import process_update
 from telegram_queue import QueueError
+from telegram_api import APIError
 
 OWNER=123456789
 APP="444934666"
@@ -275,3 +276,42 @@ class CatalogPagingTests(unittest.TestCase):
         self.c.browser.tick()
         self.assertEqual(len(self.c.browser.state["cache"][APP]["rows"]),10)
         self.assertIsNone(self.c.browser.state["pending"])
+
+class CatalogCollapseTests(unittest.TestCase):
+    setUp=CatalogTests.setUp
+    callback=CatalogTests.callback
+
+    def test_selected_list_collapses_and_all_old_buttons_stay_closed_after_restart(self):
+        process_update(self.c,self.journal,self.callback())
+        edits=[call.args[1] for call in self.bot.call.call_args_list if call.args[0]=="editMessageText"]
+        self.assertEqual(edits[-1]["reply_markup"],{"inline_keyboard":[]})
+        self.assertEqual(edits[-1]["text"],"已选择版本：9.3.0")
+        fresh=Controller(self.bot,self.gh,OWNER,"crypt","synthetic",journal=self.journal)
+        self.bot.call.reset_mock()
+        for number,action in enumerate(("v","p","m","r"),10):
+            process_update(fresh,self.journal,self.callback(number=number,action=action,index=1))
+        self.gh.dispatch.assert_called_once()
+        self.assertFalse(any(call.args[0]=="editMessageText" for call in self.bot.call.call_args_list))
+
+    def test_cosmetic_edit_failure_does_not_lose_or_repeat_submission(self):
+        def reply(method,payload):
+            if method=="editMessageText":
+                raise APIError("telegram_transport_unknown")
+            return {"message_id":77,"chat":{"id":OWNER}}
+        self.bot.call.side_effect=reply
+        process_update(self.c,self.journal,self.callback())
+        process_update(self.c,self.journal,self.callback(number=3,index=1))
+        self.gh.dispatch.assert_called_once()
+        self.assertEqual(self.journal.daily_submissions(),1)
+
+    def test_background_result_updates_cache_without_reopening_selected_list(self):
+        self.c.browser.state["pending"]={"rid":"d"*32,"app":APP,"at":int(time.time()),"background":True}
+        process_update(self.c,self.journal,self.callback())
+        self.c.browser.api=Mock()
+        self.c.browser.api.find.return_value={"status":"completed","conclusion":"success"}
+        self.c.browser.api.result.return_value={"rows":rows(),"total":12}
+        self.bot.call.reset_mock()
+        self.c.browser.tick()
+        self.assertTrue(self.c.browser.state["view"]["closed"])
+        self.assertEqual(len(self.journal.browser_load()["cache"][APP]["rows"]),12)
+        self.bot.call.assert_not_called()

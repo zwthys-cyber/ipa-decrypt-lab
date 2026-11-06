@@ -258,7 +258,7 @@ class VersionBrowser:
             view.update(rows=entry["rows"],total=entry["total"],next_before=entry.get("next_before",""))
             self.save()
             self.render(min(old_count//PAGE,max(0,(len(view["rows"])-1)//PAGE)))
-        elif not before:
+        elif not before and not pending.get("suppress_open"):
             self.open(pending["app"],pending["rid"],entry)
 
     def open(self,app,rid,entry):
@@ -270,6 +270,8 @@ class VersionBrowser:
 
     def render(self,page,edit=True):
         view=self.state["view"]
+        if view.get("closed"):
+            return
         rows=view["rows"]
         pages=max(1,(len(rows)+PAGE-1)//PAGE)
         if not 0<=page<pages:
@@ -334,7 +336,7 @@ class VersionBrowser:
         data=query.get("data")
         match=re.fullmatch(r"vc:([a-f0-9]{32}):([pvmr]):([0-9]{1,3})",data) if isinstance(data,str) else None
         view=self.state.get("view")
-        if (not match or not view or match[1]!=view["rid"]
+        if (not match or not view or view.get("closed") or match[1]!=view["rid"]
                 or message.get("message_id")!=view["message_id"]
                 or not 0<=time.time()-view["at"]<TTL):
             answer("列表已过期，请重新发送 /versions AppID。")
@@ -382,4 +384,16 @@ class VersionBrowser:
         rid,index=choice
         require(view and rid==view["rid"] and index not in view["used"],"version_button_already_used")
         view["used"].append(index)
+        view["closed"]=True
+        pending=self.state.get("pending")
+        if pending and pending["app"]==view["app"]:
+            pending["suppress_open"]=True
         self.save()
+        # Cosmetic edit cannot abort or repeat the durable task submission.
+        try:
+            self.c.bot.call("editMessageText",{
+                "chat_id":self.c.owner,"message_id":view["message_id"],
+                "text":"已选择版本："+view["rows"][index]["version"],
+                "reply_markup":{"inline_keyboard":[]}})
+        except APIError:
+            pass
