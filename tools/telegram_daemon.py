@@ -11,19 +11,13 @@ from telegram_api import APIError
 from telegram_queue import GitHub, QueueError, failure_kind
 from telegram_runtime import local_bot
 from telegram_controller import Controller, owner_id, event
-from telegram_menu import configure
+from telegram_menu import configure, HOME_TEXT, show_menu
 from persistent_journal import PersistentJournal
 from capacity import MIN_FREE_BYTES
 
 KEYS={"TELEGRAM_BOT_TOKEN","TELEGRAM_OWNER_ID","TELEGRAM_API_ID",
       "TELEGRAM_API_HASH","DELIVERY_AGE_IDENTITY","GH_TOKEN"}
-HELP=("直接发送美区免费 App Store 链接或数字 App ID，默认下载最新版。\n"
-      "IPA 最大 2000 MB，超过上限不支持直接交付。\n"
-      "/latest AppID 下载最新版\n"
-      "/versions AppID 点击选择历史版本\n"
-      "/version AppID 版本号 下载指定旧版\n"
-      "/status 查看进度\n/get 任务编号 取回文件\n/cancel 取消当前任务\n/id 查看身份\n"
-      "当前仅向管理员开放；尚未开放付费服务。")
+HELP=HOME_TEXT
 
 def load_credentials(path, systemd=False):
     path=Path(path)
@@ -60,15 +54,6 @@ class ServerController(Controller):
         # in-memory update ceiling must not accumulate forever in a daemon.
         self.handled.clear()
         self.submitted=self.journal.daily_submissions()
-        item=update.get("message",{}) if isinstance(update,dict) else {}
-        text=item.get("text","")
-        # Retain the base class's owner, private-chat and timestamp validation.
-        if text.split(" ",1)[0].split("@",1)[0] in ("/start","/help"):
-            from telegram_api import private_message
-            parsed=private_message(update)
-            if parsed and parsed[0]==self.owner and self.started-60<=parsed[2]<=time.time()+60:
-                self.say(HELP)
-            return
         super().handle(update)
 
     def deliver(self,rid):
@@ -145,7 +130,7 @@ def main():
             controller.started=time.time()-86400
             event(**configure(bot,owner))
             controller.recover()
-            controller.say("机器人常驻服务已启动，任务记录已恢复。\n\n"+HELP)
+            show_menu(bot,owner)
             heartbeat(root/"health.json","ready",controller.current)
             event("persistent_service_ready")
             last_backup=0

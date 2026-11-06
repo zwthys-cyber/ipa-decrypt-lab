@@ -11,15 +11,10 @@ from telegram_queue import QueueError, failure_kind
 from app_preflight import PreflightError, MESSAGES
 from version_catalog import VersionBrowser
 from task_progress import ProgressCard, LABELS
+from telegram_menu import HOME_TEXT, show_menu, navigation
 from delivery_scheduler import app_from_run, queued_too_long, retryable, MAX_RUNS
 
-HELP = ("直接发送美区免费 App Store 链接或数字 App ID，默认下载最新版。\n"
-        "/latest AppID 下载最新版\n"
-        "/versions AppID 点击选择历史版本\n"
-        "/version AppID 版本号 下载指定旧版（也可填历史版本 ID）\n"
-        "/status 查看当前任务\n/cancel 取消当前任务\n"
-        "/get 任务编号 重新获取已完成文件（保留约一天）\n/id 查看自己的数字 ID\n"
-        "当前仅管理员可用，一次处理一个任务；文件需要自行重签名安装。")
+HELP = HOME_TEXT
 
 def target_id(text):
     if not isinstance(text,str) or len(text)>1024:
@@ -101,6 +96,8 @@ class Controller:
 
     def handle(self, update):
         if isinstance(update,dict) and "callback_query" in update:
+            if navigation(self.bot,self.owner,update):
+                return
             update = self.browser.callback(update)
             if update is None:
                 return
@@ -116,7 +113,7 @@ class Controller:
             raise QueueError("session_update_limit_reached")
         command = text.split(" ",1)[0].split("@",1)[0]
         if command in ("/start","/help"):
-            self.say(HELP)
+            show_menu(self.bot,self.owner,"home" if command=="/start" else "help")
             return
         if command in ("/latest","/decrypt"):
             parts = text.split()
