@@ -1,7 +1,7 @@
 """Persistent Chinese command menu for the configured owner's private chat."""
 from telegram_api import APIError
 
-HOME_TEXT=("🤖 IPA 下载助手\n\n"
+HOME_TEXT=("IPA 下载助手\n\n"
            "最新版：直接发送 App Store 链接或 App ID。\n"
            "旧版本：点击下方按钮查看用法。\n\n"
            "支持美区免费应用 · IPA 最大 2000 MB")
