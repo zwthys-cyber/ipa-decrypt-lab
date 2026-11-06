@@ -14,10 +14,10 @@ COMMANDS = [
 def show_menu(bot,owner,page="home",message_id=None):
     if page=="home":
         text=HOME_TEXT
-        buttons=[[{"text":"🕘 下载旧版本","callback_data":"menu:versions"},
+        buttons=[[{"text":"下载旧版本","callback_data":"menu:versions"},
                   {"text":"使用帮助","callback_data":"menu:help"}]]
     elif page=="versions":
-        text=("🕘 下载旧版本\n\n"
+        text=("下载旧版本\n\n"
               "点击选择版本：\n/versions AppID或商店链接\n\n"
               "指定版本下载：\n/version AppID或商店链接 版本号\n\n"
               "例如：\n/versions 444934666\n/version 444934666 9.3.55\n\n"
