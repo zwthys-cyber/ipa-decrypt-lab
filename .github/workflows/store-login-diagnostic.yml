@@ -1,6 +1,12 @@
 name: Diagnose Store login
 on:
   workflow_dispatch:
+    inputs:
+      runner:
+        description: GitHub-hosted macOS pool for login comparison
+        type: choice
+        default: macos-26-intel
+        options: [macos-26-intel, macos-15-intel]
 permissions:
   contents: read
   actions: read
@@ -10,7 +16,7 @@ concurrency:
 jobs:
   login:
     if: github.ref == 'refs/heads/main'
-    runs-on: macos-26-intel
+    runs-on: ${{ inputs.runner == 'macos-15-intel' && 'macos-15-intel' || 'macos-26-intel' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
