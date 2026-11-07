@@ -89,7 +89,7 @@ jobs:
       - name: Test independent signing request construction
         timeout-minutes: 3
         working-directory: native-source/ApplePackage
-        run: swift test --skip-build --filter 'SAPAuthenticationRequestTests|LabEntDownloadTests'
+        run: swift test --skip-build --filter 'SAPAuthenticationRequestTests|LabEntDownloadTests|LabAuthRouteTests'
       - name: Build independent native client
         if: steps.swift-cache.outputs.cache-hit != 'true'
         timeout-minutes: 8

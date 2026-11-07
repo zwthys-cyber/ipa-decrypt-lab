@@ -2,6 +2,11 @@ name: Diagnose Store login
 on:
   workflow_dispatch:
     inputs:
+      auth_route:
+        description: Compare advertised route with the client's built-in native Apple endpoint
+        type: choice
+        default: bag
+        options: [bag, native]
       runner:
         description: GitHub-hosted macOS pool for login comparison
         type: choice
@@ -56,6 +61,7 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_2FA_CODE: ${{ secrets.APPLE_2FA_CODE }}
+          LAB_NATIVE_AUTH_ROUTE: ${{ inputs.auth_route == 'native' && '1' || '0' }}
           LAB_KBSYNC_HELPER: ${{ github.workspace }}/runtime/lab-kbsync
         run: |
           ulimit -c 0
@@ -69,7 +75,7 @@ jobs:
               print(json.dumps({"schema":"login-account-comparison-v1",
                                 "matches":candidate == os.environ["APPLE_ID"].strip().casefold()}), flush=True)
           binary = str(Path("runtime/ApplePackageTool").resolve())
-          env = {k: os.environ[k] for k in ("HOME", "PATH", "LANG", "LAB_KBSYNC_HELPER") if k in os.environ}
+          env = {k: os.environ[k] for k in ("HOME", "PATH", "LANG", "LAB_KBSYNC_HELPER", "LAB_NATIVE_AUTH_ROUTE") if k in os.environ}
           env["APPLEPACKAGE_PASSWORD"] = os.environ["APPLE_PASSWORD"]
           args = ["login", os.environ["APPLE_ID"].strip(), "--verbose"]
           if os.environ.get("APPLE_2FA_CODE"):

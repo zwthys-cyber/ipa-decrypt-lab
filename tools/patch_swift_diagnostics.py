@@ -80,3 +80,49 @@ for before, after in changes:
         raise SystemExit("pinned endpoint diagnostics changed; refusing patch")
     source = source.replace(before, after)
 endpoint.write_text(source)
+
+
+# Optional diagnostic route comparison. Production keeps the advertised route
+# unless the caller explicitly selects the built-in native Apple endpoint.
+source = p.read_text()
+before = "baseURL: bag.authEndpoint, deviceIdentifier: deviceIdentifier)"
+after = 'baseURL: Self.loginEndpoint(bag.authEndpoint, useNative: ProcessInfo.processInfo.environment["LAB_NATIVE_AUTH_ROUTE"] == "1"), deviceIdentifier: deviceIdentifier)'
+if source.count(before) != 1:
+    raise SystemExit("pinned auth initialization changed; refusing route patch")
+source = source.replace(before, after)
+anchor = "    static func approvedEndpoint(_ url: URL) throws -> URL {"
+addition = '''    static func loginEndpoint(_ advertised: URL, useNative: Bool) throws -> URL {
+        _ = try approvedEndpoint(advertised)
+        if useNative {
+            return URL(string: "https://auth.itunes.apple.com/auth/v1/native/fast/")!
+        }
+        return advertised
+    }
+
+'''
+if source.count(anchor) != 1:
+    raise SystemExit("pinned endpoint approval changed; refusing route patch")
+p.write_text(source.replace(anchor, addition + anchor))
+test = Path(sys.argv[1])/"Tests/ApplePackageTests/LabAuthRouteTests.swift"
+test.write_text('''@testable import ApplePackage
+import Foundation
+import XCTest
+
+final class LabAuthRouteTests: XCTestCase {
+    func testDefaultKeepsAdvertisedEndpoint() throws {
+        let url = URL(string: "https://p25-buy.itunes.apple.com/WebObjects/MZFinance.woa/wa/authenticate/")!
+        XCTAssertEqual(try Authenticator.loginEndpoint(url, useNative: false), url)
+    }
+    func testDiagnosticUsesOnlyBuiltInAppleEndpoint() throws {
+        let url = URL(string: "https://p25-buy.itunes.apple.com/WebObjects/MZFinance.woa/wa/authenticate/")!
+        XCTAssertEqual(try Authenticator.loginEndpoint(url, useNative: true).absoluteString,
+                       "https://auth.itunes.apple.com/auth/v1/native/fast/")
+    }
+    func testUntrustedAdvertisedEndpointIsStillRejected() throws {
+        for value in ["http://buy.itunes.apple.com/", "https://example.invalid/",
+                      "https://user:password@apple.com/"] {
+            XCTAssertThrowsError(try Authenticator.loginEndpoint(URL(string:value)!, useNative:true))
+        }
+    }
+}
+''')
