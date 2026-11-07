@@ -54,6 +54,8 @@ def classify(result):
     diagnostic = authentication_diagnostics(result)
     if diagnostic["http_statuses"]:
         last = diagnostic["http_statuses"][-1]
+        if last in (401, 403):
+            return "native_auth_access_denied"
         if last == 429:
             return "native_rate_limited"
         if last in (502, 503, 504):

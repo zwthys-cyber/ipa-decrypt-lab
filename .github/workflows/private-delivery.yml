@@ -126,6 +126,9 @@ jobs:
       - name: Apple login temporarily unavailable
         if: failure() && steps.export.outputs.authentication_failure == 'temporary_unavailable'
         run: exit 1
+      - name: Apple login access denied
+        if: failure() && steps.export.outputs.authentication_failure == 'access_denied'
+        run: exit 1
       - name: Retain encrypted delivery for at most one day
         if: success() && inputs.mode == 'export'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

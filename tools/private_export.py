@@ -294,10 +294,13 @@ def main():
     if category and os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"],"a") as stream:
             stream.write("capacity_failure="+category+"\n")
-    if status in {"native_auth_service_unavailable", "native_auth_transport_failed"}:
+    auth_failure = ("temporary_unavailable" if status in {
+        "native_auth_service_unavailable", "native_auth_transport_failed"
+    } else "access_denied" if status == "native_auth_access_denied" else "")
+    if auth_failure:
         if os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("GITHUB_OUTPUT"):
             with open(os.environ["GITHUB_OUTPUT"], "a") as stream:
-                stream.write("authentication_failure=temporary_unavailable\n")
+                stream.write("authentication_failure=" + auth_failure + "\n")
     version_codes = {"invalid_version","version_not_found","version_search_limit",
                      "version_lookup_unavailable","version_download_rejected",
                      "version_resolution_unconfirmed","downloaded_version_mismatch"}

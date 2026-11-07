@@ -10,7 +10,9 @@
 
 登录流程对 HTTP 502/503/504 和明确的临时连接故障最多尝试三次，间隔 5 秒、10 秒，每次最多 45 秒。密码、验证码、限流及未分类错误不自动重试。最新版导出与历史版本列表共用该逻辑；日志只保留固定类别、HTTP 状态和尝试次数。Telegram 显示等待重试阶段，耗尽重试后明确说明登录服务暂不可用。此处理不能保证 Apple 服务持续故障时仍可下载。
 
-可用 `store-login-diagnostic.yml` 单独验证登录，不下载 IPA，也不上传账号日志。修复后的自动化检查与真实登录验证待完成。
+可用 `store-login-diagnostic.yml` 单独验证登录，不下载 IPA，也不上传账号日志。首轮修复通过 438 项 Python 回归测试，并完成 [VPS 部署](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42323311571) 和 [两种 macOS 运行包构建](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42323310919)。
+
+真实应用复测 [42323329697 / attempt 2](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42323329697/attempts/2) 返回 HTTP 403，程序未重试，也未开始下载。401/403 单独分类为访问被拒绝，不能据此认定密码错误、账号封禁或出口 IP 被封。当前已解决临时故障立即失败及原因不透明的问题；Apple 登录是否恢复仍需后续实测，不能标记为下载已恢复。
 
 ## 当前实现
 

@@ -106,6 +106,14 @@ class AuthenticationRetryTests(unittest.TestCase):
                 self.assertEqual(main(),2)
             self.assertEqual(output.read_text(), "authentication_failure=temporary_unavailable\n")
 
+    def test_access_denied_is_explicit_and_does_not_retry(self):
+        self.assertEqual(classify(response(error="HTTP 403")), "native_auth_access_denied")
+        github = GitHub("synthetic")
+        github.jobs = Mock(return_value=[{"steps":[{"name":"Apple login access denied",
+                                                  "conclusion":"failure"}]}])
+        self.assertIn("401/403", github.failure_reason({}))
+        self.assertIn("不能单独证明密码错误", github.failure_reason({}))
+
     def test_bot_reports_exhausted_retry_and_waiting_stage(self):
         github = GitHub("synthetic")
         github.jobs = Mock(return_value=[{"steps":[{"name":"Apple login temporarily unavailable",
