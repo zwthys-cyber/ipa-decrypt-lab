@@ -52,6 +52,7 @@ jobs:
           key: apple-public-assets-d9c0247-26A434-arm64-v1
       - name: Bounded login with fixed diagnostic fields only
         env:
+          LOGIN_EXPECTED_APPLE_ID: ${{ secrets.LOGIN_EXPECTED_APPLE_ID }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_2FA_CODE: ${{ secrets.APPLE_2FA_CODE }}
@@ -59,10 +60,14 @@ jobs:
         run: |
           ulimit -c 0
           python3 - <<'PY'
-          import os, sys
+          import json, os, sys
           from pathlib import Path
           sys.path.insert(0, "tools")
           from native_store import authenticate, classify, run
+          candidate = os.environ.get("LOGIN_EXPECTED_APPLE_ID", "").strip().casefold()
+          if candidate:
+              print(json.dumps({"schema":"login-account-comparison-v1",
+                                "matches":candidate == os.environ["APPLE_ID"].strip().casefold()}), flush=True)
           binary = str(Path("runtime/ApplePackageTool").resolve())
           env = {k: os.environ[k] for k in ("HOME", "PATH", "LANG", "LAB_KBSYNC_HELPER") if k in os.environ}
           env["APPLEPACKAGE_PASSWORD"] = os.environ["APPLE_PASSWORD"]
