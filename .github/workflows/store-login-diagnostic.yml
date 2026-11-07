@@ -110,7 +110,7 @@ jobs:
               trace = http_trace(raw)
               last = trace[-1] if trace else {}
               if last.get("endpoint") in ("native_auth", "legacy_auth"):
-                  if last.get("status") == 204:
+                  if last.get("status") in (204, 500, 502, 503, 504):
                       return "native_auth_service_unavailable"
                   if last.get("status") == 403 and last.get("content_type") == "text/html":
                       return "native_auth_service_unavailable"
