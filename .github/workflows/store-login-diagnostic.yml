@@ -70,6 +70,7 @@ jobs:
           from urllib.parse import urlsplit
           from pathlib import Path
           sys.path.insert(0, "tools")
+          import native_store
           from native_store import authenticate, classify, run
           def http_trace(raw):
               records = []
@@ -100,6 +101,22 @@ jobs:
               return records[-12:]
           synthetic = http_trace(">>> POST https://user:private@auth.itunes.apple.com/auth/v1/native/fast/?private=token\n<<< 403 (12 bytes)\nContent-Type: text/html\nSet-Cookie: private")
           assert synthetic == [{"endpoint":"native_auth","method":"POST","status":403,"body_bytes":12,"content_type":"text/html"}]
+          original_classify = native_store.classify
+          def classify_transient_response(result):
+              state = original_classify(result)
+              if state == "authenticated":
+                  return state
+              raw = (result.stdout or "") + "\n" + (result.stderr or "")
+              trace = http_trace(raw)
+              last = trace[-1] if trace else {}
+              if last.get("endpoint") in ("native_auth", "legacy_auth"):
+                  if last.get("status") == 204:
+                      return "native_auth_service_unavailable"
+                  if last.get("status") == 403 and last.get("content_type") == "text/html":
+                      return "native_auth_service_unavailable"
+              return state
+          native_store.classify = classify_transient_response
+          native_store.AUTH_DELAYS = (10, 20)
           candidate = os.environ.get("LOGIN_EXPECTED_APPLE_ID", "").strip().casefold()
           if candidate:
               print(json.dumps({"schema":"login-account-comparison-v1",
