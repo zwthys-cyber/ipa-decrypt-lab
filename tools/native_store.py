@@ -1,18 +1,67 @@
 """Independent Swift authentication/download trial; GitHub-hosted only."""
-import argparse, json, os, re, subprocess, tempfile
+import argparse, json, os, re, subprocess, tempfile, time
 from pathlib import Path
 from store_download import app_id, metadata
 from private_trial import evaluate
 from offline_verify import verify as verify_offline, readiness as offline_readiness, outcome as offline_outcome
 
+
+# Retry only explicit temporary service/transport failures. Account challenges,
+# throttling, unknown failures and credential rejection must stop immediately.
+AUTH_RETRYABLE = {"native_auth_service_unavailable", "native_auth_transport_failed"}
+AUTH_DELAYS = (5, 10)
+
+def authentication_diagnostics(result):
+    raw = (result.stdout or "") + "\n" + (result.stderr or "")
+    codes = re.findall(r"\bHTTP\s+([1-5][0-9]{2})(?![0-9])|\brequest failed with status ([1-5][0-9]{2})(?![0-9])", raw)
+    http = [int(a or b) for a, b in codes][-8:]
+    lower = raw.lower()
+    transport = next((label for label, terms in (
+        ("timeout", ("readtimeout", "connecttimeout", "timed out", "ipa_auth_timeout")),
+        ("connection_reset", ("connection reset by peer", "connectionreset")),
+        ("connection_closed", ("remoteconnectionclosed",)),
+        ("dns", ("dns resolution failed", "nodename nor servname provided")),
+    ) if any(term in lower for term in terms)), "")
+    # Never return free-form stderr, response bodies, paths, URLs or account data.
+    return {"exit_code": result.returncode, "http_statuses": http, "transport": transport}
+
+def authenticate(binary, args, env, *, execute=None, on_retry=None):
+    execute = execute or run
+    for attempt in range(1, 4):
+        try:
+            result = execute(binary, args, env, timeout=45)
+        except subprocess.TimeoutExpired:
+            result = subprocess.CompletedProcess([], 124, "", "ipa_auth_timeout")
+        state = classify(result)
+        retry = state in AUTH_RETRYABLE and attempt <= len(AUTH_DELAYS)
+        print(json.dumps({"schema": "ipa-auth-v1", "attempt": attempt,
+                          "status": state, "retrying": retry,
+                          **authentication_diagnostics(result)}), flush=True)
+        if not retry:
+            return result
+        if on_retry is not None:
+            on_retry()
+        time.sleep(AUTH_DELAYS[attempt - 1])
+
 def classify(result):
-    text = (result.stdout + result.stderr).lower()
+    text = ((result.stdout or "") + (result.stderr or "")).lower()
     if "apple_auth_ambiguous_bad_login" in text:
         return "native_generic_bad_login"
     if result.returncode == 0:
         return "authenticated"
     if "verification" in text and "code" in text:
         return "native_verification_unresolved"
+    diagnostic = authentication_diagnostics(result)
+    if diagnostic["http_statuses"]:
+        last = diagnostic["http_statuses"][-1]
+        if last == 429:
+            return "native_rate_limited"
+        if last in (502, 503, 504):
+            return "native_auth_service_unavailable"
+        # Do not retry other explicit HTTP rejections, even if body text
+        # incidentally contains a transport keyword.
+    elif diagnostic["transport"]:
+        return "native_auth_transport_failed"
     if "sap" in text or "certificate" in text:
         return "native_signing_failed"
     if "429" in text:
@@ -86,7 +135,7 @@ def trial(binary, engine, target, offline_binary=None):
     if os.environ.get("APPLE_2FA_CODE"):
         login_args += ["--code", os.environ["APPLE_2FA_CODE"]]
     try:
-        state = classify(run(binary, login_args, env))
+        state = classify(authenticate(binary, login_args, env))
         if state != "authenticated":
             return {"status": state, "downloaded": False, "decryption_proven": False}
         with tempfile.TemporaryDirectory(prefix="native-store-trial-") as d:

@@ -8,7 +8,7 @@ import sys
 import tempfile
 from app_preflight import check_app
 from version_request import external_id
-from native_store import run, classify, classify_download, DOWNLOAD_STAGES
+from native_store import authenticate, run, classify, classify_download, DOWNLOAD_STAGES
 
 def parse_rows(output):
     totals=re.findall(r"^IPA_LAB_CATALOG_TOTAL:([0-9]{1,5})$",output,re.M)
@@ -58,7 +58,10 @@ def main():
         binary=str(Path(sys.argv[1]).resolve())
         try:
             stage="authenticating"
-            result=run(binary,["login",email],env)
+            login=["login",email]
+            if os.environ.get("APPLE_2FA_CODE"):
+                login += ["--code",os.environ["APPLE_2FA_CODE"]]
+            result=authenticate(binary,login,env,execute=run)
             if classify(result)!="authenticated":
                 raise ValueError("catalog_authentication_failed")
             with tempfile.TemporaryDirectory(prefix="catalog-private-") as directory:

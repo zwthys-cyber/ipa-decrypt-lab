@@ -13,7 +13,7 @@ import zipfile
 import urllib.error
 from ipa_audit import audit, AuditError
 from task_progress import WorkerProgress
-from native_store import classify, classify_download, run
+from native_store import authenticate, classify, classify_download, run
 from offline_verify import readiness
 from store_download import app_id, metadata
 from version_request import selector, resolved_marker, verify_version, VersionError
@@ -181,7 +181,8 @@ def export(binary, engine, crypt, target, request_id, recipient, output_dir, pro
         login += ["--code", os.environ["APPLE_2FA_CODE"]]
     try:
         progress("authenticating")
-        state = classify(run(binary, login, env))
+        state = classify(authenticate(binary, login, env, execute=run,
+                                      on_retry=lambda: progress("auth_retry")))
         require(state == "authenticated", state)
         with tempfile.TemporaryDirectory(prefix="ipa-delivery-private-") as directory:
             root = Path(directory)
@@ -293,6 +294,10 @@ def main():
     if category and os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"],"a") as stream:
             stream.write("capacity_failure="+category+"\n")
+    if status in {"native_auth_service_unavailable", "native_auth_transport_failed"}:
+        if os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("GITHUB_OUTPUT"):
+            with open(os.environ["GITHUB_OUTPUT"], "a") as stream:
+                stream.write("authentication_failure=temporary_unavailable\n")
     version_codes = {"invalid_version","version_not_found","version_search_limit",
                      "version_lookup_unavailable","version_download_rejected",
                      "version_resolution_unconfirmed","downloaded_version_mismatch"}

@@ -210,6 +210,7 @@ class GitHub:
 
     def failure_reason(self,run):
         messages = {
+            "Apple login temporarily unavailable": "Apple 登录服务暂不可用，已自动尝试 3 次仍未恢复；尚未开始下载。请稍后再试。",
             "IPA exceeds 2000 MB capacity": "IPA 超过当前容量上限：2000 MB（2,000,000,000 字节），或解压后的程序规模超出检查预算。",
             "Historical version unavailable": "指定旧版本查询或下载未完成，可能已不可下载或超过查询预算；未回退最新版。可核对版本号，或提供 Apple 历史版本 ID 重试。",
             "Insufficient private workspace": "处理所需磁盘空间不足，任务已停止，请稍后重试。",

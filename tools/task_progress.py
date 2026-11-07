@@ -6,6 +6,7 @@ import time
 from telegram_api import APIError
 
 LABELS = {
+ "auth_retry":"Apple 登录服务暂不可用，正在等待重试",
  "switching":"正在切换备用运行器", "capacity_wait":"运行器容量不足，正在核对切换状态",
  "dispatch_pending":"正在确认任务提交", "queued":"排队中", "preparing":"准备运行环境",
  "building":"构建并测试下载组件", "processing":"正在执行，等待阶段更新", "metadata":"查询应用信息", "authenticating":"验证下载账号", "downloading":"下载原始 IPA",
@@ -15,7 +16,7 @@ LABELS = {
  "uploading":"上传到 Telegram", "done":"完成 · 100%", "failed":"任务未完成",
  "cancelled":"已请求取消", "unknown":"暂时无法获取最新进度",
 }
-WORKER_STAGES = {"resolving_version","metadata","authenticating","downloading","auditing","decrypting",
+WORKER_STAGES = {"auth_retry","resolving_version","metadata","authenticating","downloading","auditing","decrypting",
                  "verifying","encrypting","artifact_ready","failed"}
 
 def parse_stage(check, rid, run_id):
