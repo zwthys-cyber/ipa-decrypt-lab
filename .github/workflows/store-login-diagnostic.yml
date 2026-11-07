@@ -67,9 +67,39 @@ jobs:
           ulimit -c 0
           python3 - <<'PY'
           import json, os, re, sys
+          from urllib.parse import urlsplit
           from pathlib import Path
           sys.path.insert(0, "tools")
           from native_store import authenticate, classify, run
+          def http_trace(raw):
+              records = []
+              for line in raw.splitlines():
+                  request = re.search(r">>> (GET|POST) (https://\S+)", line)
+                  if request:
+                      url = urlsplit(request.group(2))
+                      path = url.path.rstrip("/")
+                      kind = ("bag" if url.hostname == "init.itunes.apple.com" and path == "/bag.xml" else
+                              "native_auth" if url.hostname == "auth.itunes.apple.com" and path == "/auth/v1/native/fast" else
+                              "legacy_auth" if path == "/WebObjects/MZFinance.woa/wa/authenticate"
+                                  and (url.hostname == "buy.itunes.apple.com" or re.fullmatch(r"p[0-9]+-buy\.itunes\.apple\.com", url.hostname or "")) else "other")
+                      records.append({"endpoint":kind,"method":request.group(1)})
+                  status = re.search(r"<<< ([1-5][0-9]{2})(?: \(([0-9]{1,8}) bytes\))?", line)
+                  if status:
+                      if not records:
+                          records.append({"endpoint":"unknown"})
+                      records[-1]["status"] = int(status.group(1))
+                      if status.group(2):
+                          records[-1]["body_bytes"] = int(status.group(2))
+                  if records and "status" in records[-1]:
+                      content = re.search(r"(?i)content-type:\s*(.+)", line)
+                      if content:
+                          value = content.group(1).lower()
+                          records[-1]["content_type"] = next((name for name in
+                              ("text/html","text/xml","application/xml","application/x-apple-plist","application/json")
+                              if value.startswith(name)), "other")
+              return records[-12:]
+          synthetic = http_trace(">>> POST https://user:private@auth.itunes.apple.com/auth/v1/native/fast/?private=token\n<<< 403 (12 bytes)\nContent-Type: text/html\nSet-Cookie: private")
+          assert synthetic == [{"endpoint":"native_auth","method":"POST","status":403,"body_bytes":12,"content_type":"text/html"}]
           candidate = os.environ.get("LOGIN_EXPECTED_APPLE_ID", "").strip().casefold()
           if candidate:
               print(json.dumps({"schema":"login-account-comparison-v1",
@@ -105,7 +135,7 @@ jobs:
               }
               endpoints = {
                   "bag": "init.itunes.apple.com/bag.xml",
-                  "native_auth": "auth.itunes.apple.com/auth/v1/native/fast/",
+                  "native_auth": "auth.itunes.apple.com/auth/v1/native/fast",
                   "legacy_auth": "/WebObjects/MZFinance.woa/wa/authenticate",
               }
               print(json.dumps({"schema":"login-detail-v1",
@@ -115,6 +145,10 @@ jobs:
                   "failure_codes":[int(v) for v in re.findall(r"failureType:\s*(-?[0-9]{1,5})(?![0-9])", raw)][-4:],
                   "error_codes":[int(v) for v in re.findall(r"\bCode\s*=\s*(-?[0-9]{1,6})(?![0-9])", raw)][-4:],
               }), flush=True)
+              print(json.dumps({"schema":"login-http-trace-v1",
+                  "native_route_requested":env.get("LAB_NATIVE_AUTH_ROUTE") == "1",
+                  "native_route_supported":b"LAB_NATIVE_AUTH_ROUTE" in Path(binary).read_bytes(),
+                  "requests":http_trace(raw)}), flush=True)
               successful = classify(result) == "authenticated"
           finally:
               try:
