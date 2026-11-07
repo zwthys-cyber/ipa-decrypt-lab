@@ -134,3 +134,13 @@ IPA 审计采用分块临时文件和只读映射，避免把大程序整体读�
 - 继续锁定和审查传递依赖。现有包有构建来源与摘要，但不等于已经实现可复现构建。
 
 早期原生接口失败、认证排查和模型恢复过程，保留在 [OFFLINE-BACKEND.md](../OFFLINE-BACKEND.md)、[原始下载记录](../NATIVE-DOWNLOAD-RESULTS.md) 和 [研究记录](RESEARCH.md)。旧版本文档可从 Git 历史查看。
+
+## 2026-11-07 登录故障复核
+
+- [账号核对与 macOS 15 登录](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42324867557)：在任务内部比较用户提供的账号与 `APPLE_ID`，结果一致；仅输出布尔值，比较用临时 Secret 已删除。用户确认该账号在手机端可以登录并下载。
+- [默认地址诊断](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42325115683)：配置查询成功，日志中出现旧认证地址；登录返回 HTTP 204，没有可用的账号响应。
+- [内置新版地址对照](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42326093664)：显式选择 `auth_route=native` 后仍返回 HTTP 403。不能据此认定密码错误、账号封禁或某个出口 IP 被封；也不能宣称切换地址已解决问题。生产任务保持默认地址，未启用此实验选项。
+- 错误处理已部署：[42324205594](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42324205594)，439 项 Python 测试通过，Ubuntu/Debian 各跳过 1 项，服务健康检查通过。
+- 最新运行包：[42325368672](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42325368672)，两个 macOS 平台构建成功，14 项 Swift 测试通过，包含地址选择和不可信地址拒绝测试。
+
+**当前状态：重试与错误可见性已修复，真实账号登录尚未恢复，下载交付未完成。** 需要进一步区分认证服务响应、运行器访问条件和程序请求兼容性；不要无差别重复提交登录或把持续失败写成成功。
