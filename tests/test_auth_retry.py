@@ -44,6 +44,16 @@ class AuthenticationRetryTests(unittest.TestCase):
         self.assertEqual(execute.call_count, 3)
         self.assertEqual(sleep.call_args_list, [call(5), call(10)])
 
+    def test_empty_or_internal_server_response_retries_then_recovers(self):
+        for status in (204, 500, 502, 504):
+            execute = Mock(side_effect=[response(error="authentication failed: HTTP " + str(status)),
+                                        response(0, "")])
+            with patch("native_store.time.sleep") as sleep, contextlib.redirect_stdout(io.StringIO()):
+                result = authenticate("tool", ["login", "synthetic"], {}, execute=execute)
+            self.assertEqual(classify(result), "authenticated")
+            self.assertEqual(execute.call_count, 2)
+            sleep.assert_called_once_with(5)
+
     def test_account_challenges_and_unknown_errors_are_not_retried(self):
         for error in ("apple_auth_ambiguous_bad_login", "verification code required",
                       "invalid or expired 2FA code (failureType: 5005)",

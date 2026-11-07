@@ -58,7 +58,7 @@ def classify(result):
             return "native_auth_access_denied"
         if last == 429:
             return "native_rate_limited"
-        if last in (502, 503, 504):
+        if last in (204, 500, 502, 503, 504):
             return "native_auth_service_unavailable"
         # Do not retry other explicit HTTP rejections, even if body text
         # incidentally contains a transport keyword.
