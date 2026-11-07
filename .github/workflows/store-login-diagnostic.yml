@@ -60,7 +60,7 @@ jobs:
         run: |
           ulimit -c 0
           python3 - <<'PY'
-          import json, os, sys
+          import json, os, re, sys
           from pathlib import Path
           sys.path.insert(0, "tools")
           from native_store import authenticate, classify, run
@@ -71,11 +71,44 @@ jobs:
           binary = str(Path("runtime/ApplePackageTool").resolve())
           env = {k: os.environ[k] for k in ("HOME", "PATH", "LANG", "LAB_KBSYNC_HELPER") if k in os.environ}
           env["APPLEPACKAGE_PASSWORD"] = os.environ["APPLE_PASSWORD"]
-          args = ["login", os.environ["APPLE_ID"].strip()]
+          args = ["login", os.environ["APPLE_ID"].strip(), "--verbose"]
           if os.environ.get("APPLE_2FA_CODE"):
               args += ["--code", os.environ["APPLE_2FA_CODE"]]
           try:
               result = authenticate(binary, args, env)
+              raw = (result.stdout or "") + "\n" + (result.stderr or "")
+              lower = raw.lower()
+              categories = {
+                  "account_disabled": ("account has been disabled", "account is disabled", "account locked", "locked for security"),
+                  "credentials_rejected": ("incorrect password", "password is incorrect", "invalid credentials", "incorrect apple"),
+                  "account_review": ("review your account", "not yet been used", "complete your account", "verification failed"),
+                  "terms_required": ("terms and conditions", "terms of service", "accepting terms"),
+                  "missing_account_info": ("missing accountinfo", "missing address"),
+                  "missing_account_fields": ("unable to read",),
+                  "server_unavailable": ("service unavailable", "temporarily unavailable", "try again later"),
+                  "response_parse": ("propertylist", "not a dictionary", "decodingerror", "data is not in the correct format"),
+                  "bad_login": ("badlogin", "authentication failed"),
+                  "verification": ("verification code", "2fa", "two-factor"),
+                  "redirect": ("redirect",),
+                  "device_limit": ("too many", "maximum number", "associated with", "device limit"),
+                  "keychain": ("keychain", "security framework"),
+                  "permission": ("permission denied", "operation not permitted"),
+                  "tls": ("ssl", "tls", "certificate"),
+                  "connection": ("connection", "socket", "httpclienterror"),
+                  "signing": ("sap", "signature"),
+              }
+              endpoints = {
+                  "bag": "init.itunes.apple.com/bag.xml",
+                  "native_auth": "auth.itunes.apple.com/auth/v1/native/fast/",
+                  "legacy_auth": "/WebObjects/MZFinance.woa/wa/authenticate",
+              }
+              print(json.dumps({"schema":"login-detail-v1",
+                  "flags":[key for key, terms in categories.items() if any(term in lower for term in terms)],
+                  "request_endpoints":[key for key, marker in endpoints.items() if marker in raw],
+                  "response_statuses":[int(v) for v in re.findall(r"<<< ([1-5][0-9]{2})\b", raw)][-12:],
+                  "failure_codes":[int(v) for v in re.findall(r"failureType:\s*(-?[0-9]{1,5})(?![0-9])", raw)][-4:],
+                  "error_codes":[int(v) for v in re.findall(r"\bCode\s*=\s*(-?[0-9]{1,6})(?![0-9])", raw)][-4:],
+              }), flush=True)
               successful = classify(result) == "authenticated"
           finally:
               try:
