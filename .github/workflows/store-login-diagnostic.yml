@@ -1,0 +1,102 @@
+name: Diagnose Store login
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: private-ipa-delivery
+  cancel-in-progress: false
+jobs:
+  login:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-26-intel
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Prepare verified precompiled runtime
+        timeout-minutes: 4
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/native_runtime.py fetch --output runtime
+      - name: Restore fixed Apple resource cache
+        id: apple-assets
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/AppleMediaServices
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/commerce
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/CoreFP
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/CoreFP.icxs
+          key: apple-public-assets-d9c0247-26A434-arm64-v1
+      - name: Prepare pinned Apple assets without account credentials
+        timeout-minutes: 4
+        run: runtime/lab-kbsync --prewarm
+      - name: Save validated Apple resources before account access
+        if: steps.apple-assets.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/AppleMediaServices
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/commerce
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/CoreFP
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/CoreFP.icxs
+          key: apple-public-assets-d9c0247-26A434-arm64-v1
+      - name: Single login with fixed diagnostic fields only
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_2FA_CODE: ${{ secrets.APPLE_2FA_CODE }}
+          LAB_KBSYNC_HELPER: ${{ github.workspace }}/runtime/lab-kbsync
+        run: |
+          ulimit -c 0
+          python3 - <<'PY'
+          import json, os, re, subprocess, sys
+          from pathlib import Path
+          sys.path.insert(0, "tools")
+          from native_store import classify
+          binary = str(Path("runtime/ApplePackageTool").resolve())
+          env = {k: os.environ[k] for k in ("HOME", "PATH", "LANG", "LAB_KBSYNC_HELPER") if k in os.environ}
+          env["APPLEPACKAGE_PASSWORD"] = os.environ["APPLE_PASSWORD"]
+          args = [binary, "login", os.environ["APPLE_ID"].strip()]
+          if os.environ.get("APPLE_2FA_CODE"):
+              args += ["--code", os.environ["APPLE_2FA_CODE"]]
+          terms = {
+              "connection_reset": ["connection reset", "connectionreset"],
+              "connection_closed": ["remoteconnectionclosed", "connection closed"],
+              "timeout": ["timed out", "timeout"],
+              "dns": ["dns", "nodename nor servname", "name resolution"],
+              "tls": ["tls", "ssl", "certificate"],
+              "device_limit": ["too many", "maximum number", "associated with", "device limit"],
+              "account_disabled": ["account has been disabled", "account is disabled", "account locked", "locked for security"],
+              "credentials_rejected": ["incorrect password", "password is incorrect", "invalid credentials"],
+              "terms_required": ["terms and conditions", "terms of service"],
+              "verification_required": ["verification code", "two-factor"],
+              "missing_account_info": ["missing account info", "missingaccountinfo"],
+              "response_parse": ["propertylist", "not a dictionary", "decodingerror", "data is not in the correct format"],
+              "bag": ["bag", "auth endpoint"],
+              "signer": ["sap", "signature"],
+              "transport_error": ["httpclienterror", "nio", "network"],
+          }
+          try:
+              r = subprocess.run(args, env=env, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120)
+              raw = r.stdout + "\n" + r.stderr
+              lower = raw.lower()
+              codes = [int(x) for x in re.findall(r"\bHTTP\s+([1-5][0-9]{2})(?![0-9])", raw)]
+              numeric = [int(x) for x in re.findall(r"\bCode\s*=\s*(-?[0-9]{1,6})(?![0-9])", raw)]
+              print(json.dumps({"schema":"login-probe-v1", "status":classify(r), "exit_code":r.returncode,
+                  "http_statuses":codes[-8:], "error_codes":numeric[-8:],
+                  "flags":[key for key, values in terms.items() if any(v in lower for v in values)]}), flush=True)
+              result = r.returncode
+          except subprocess.TimeoutExpired:
+              print('{"schema":"login-probe-v1","status":"timeout"}')
+              result = 2
+          finally:
+              try:
+                  subprocess.run([binary,"logout",os.environ["APPLE_ID"].strip()], env=env, capture_output=True, timeout=15)
+              except Exception:
+                  pass
+          sys.exit(0 if result == 0 else 2)
+          PY
