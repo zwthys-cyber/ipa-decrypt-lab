@@ -164,46 +164,7 @@ assert value.count(anchor) == 1
 value = value.replace(anchor, '        headers += try StoreAMD.headers(for: endpoint)\n' + anchor)
 p.write_text(value)
 helper = Path(sys.argv[1])/"Sources/ApplePackage/Commands/StoreAMD.swift"
-helper.write_text('''import Foundation
-import ObjectiveC
-import Darwin
-
-// Private framework values remain in memory and never enter diagnostic output.
-enum StoreAMD {
-    static func headers(for endpoint: URL) throws -> [(String, String)] {
-        _ = try Authenticator.approvedEndpoint(endpoint)
-        guard endpoint.host?.lowercased() == "auth.itunes.apple.com" else { return [] }
-        return try autoreleasepool {
-            guard let handle = dlopen("/System/Library/PrivateFrameworks/AppleMediaServices.framework/AppleMediaServices", RTLD_NOW | RTLD_LOCAL) else {
-                throw NSError(domain: "StoreAMD", code: 1)
-            }
-            defer { dlclose(handle) }
-            let selector = NSSelectorFromString("_headersForRequest:account:type:")
-            guard let cls = NSClassFromString("AMSAnisette"),
-                  let method = class_getClassMethod(cls, selector) else {
-                throw NSError(domain: "StoreAMD", code: 2)
-            }
-            typealias Headers = @convention(c) (AnyObject, Selector, AnyObject, AnyObject?, Int64) -> Unmanaged<AnyObject>?
-            let call = unsafeBitCast(method_getImplementation(method), to: Headers.self)
-            let request = NSURLRequest(url: endpoint)
-            guard let values = call(cls as AnyObject, selector, request, nil, 2)?.takeUnretainedValue() as? [String: Any] else {
-                throw NSError(domain: "StoreAMD", code: 3)
-            }
-            return try validated(values)
-        }
-    }
-
-    static func validated(_ values: [String: Any]) throws -> [(String, String)] {
-        try ["X-Apple-AMD", "X-Apple-AMD-M"].map { key in
-            guard let value = values[key] as? String, !value.isEmpty,
-                  value.utf8.count <= 8192, !value.unicodeScalars.contains(where: { $0.value == 13 || $0.value == 10 }) else {
-                throw NSError(domain: "StoreAMD", code: 4)
-            }
-            return (key, value)
-        }
-    }
-}
-''')
+helper.write_text(Path("tools/StoreAMD.swift").read_text())
 proofTests = Path(sys.argv[1])/"Tests/ApplePackageTests/LabStoreAMDTests.swift"
 proofTests.write_text('''@testable import ApplePackage
 import Foundation
@@ -242,68 +203,25 @@ value = value.replace("https://p25-buy.itunes.apple.com/login", "https://p25-buy
 value = value.replace('"https://auth.itunes.apple.com/auth/v1/native/fast/?guid=example",', 'original,')
 signingTests.write_text(value)
 
-# On current macOS these private APIs return AMSPromise, not a dictionary.
-value = helper.read_text()
-value = value.replace('guard let values = call(cls as AnyObject, selector, request, nil, 2)?.takeUnretainedValue() as? [String: Any] else {',
-    'guard let pending = call(cls as AnyObject, selector, request, nil, 2)?.takeUnretainedValue(), let values = resolved(pending) as? [String: Any] else {')
-value = value.replace('            return try validated(values)', '            if values.isEmpty { return [] } // The first request may require an SP provisioning challenge.\n            return try validated(values)')
-anchor = '    static func validated('
-addition = '''    static func resolved(_ value: AnyObject) -> AnyObject? {
-        let selector = NSSelectorFromString("resultWithError:")
-        guard let method = class_getInstanceMethod(object_getClass(value), selector) else { return value }
-        typealias Wait = @convention(c) (AnyObject, Selector, UnsafeMutableRawPointer?) -> Unmanaged<AnyObject>?
-        let call = unsafeBitCast(method_getImplementation(method), to: Wait.self)
-        return call(value, selector, nil)?.takeUnretainedValue()
-    }
 
-    static func handle(_ response: HTTPURLResponse) throws -> Bool {
-        guard let url = response.url else { return false }
-        _ = try Authenticator.approvedEndpoint(url)
-        guard url.host == "auth.itunes.apple.com",
-              response.value(forHTTPHeaderField:"X-Apple-AMD-Action") == "SP" else { return false }
-        guard let cls = NSClassFromString("AMSAnisette"), let bagClass = NSClassFromString("AMSBag") else { return false }
-        let bagSelector = NSSelectorFromString("bagForProfile:profileVersion:")
-        guard let bagMethod = class_getClassMethod(bagClass, bagSelector) else { return false }
-        typealias Bag = @convention(c) (AnyObject, Selector, AnyObject, AnyObject) -> Unmanaged<AnyObject>?
-        let bagCall = unsafeBitCast(method_getImplementation(bagMethod), to: Bag.self)
-        guard let bag = bagCall(bagClass as AnyObject, bagSelector, "itunes" as NSString, "1" as NSString)?.takeUnretainedValue() else { return false }
-        let selector = NSSelectorFromString("handleResponse:type:bag:account:")
-        guard let method = class_getClassMethod(cls, selector) else { return false }
-        typealias Handle = @convention(c) (AnyObject, Selector, AnyObject, Int64, AnyObject, AnyObject?) -> Unmanaged<AnyObject>?
-        let call = unsafeBitCast(method_getImplementation(method), to: Handle.self)
-        guard let pending = call(cls as AnyObject, selector, response, 2, bag, nil)?.takeUnretainedValue(),
-              let result = resolved(pending) as? NSNumber else { return false }
-        return result.boolValue
-    }
-
-'''
-value = value.replace(anchor, addition + anchor)
-helper.write_text(value)
+# Only the native SP challenge can trigger one local provisioning exchange.
 value = p.read_text()
 value = value.replace('        var retried = false', '        var provisioned = false\n        var retried = false')
 anchor = '            let result = try parseResponse(response, email: email, password: password, code: code)'
 replacement = '''            if !provisioned, response.headers.first(name: "X-Apple-AMD-Action") == "SP" {
                 provisioned = true
-                let fields = Dictionary(response.headers.map { ($0.name, $0.value) }, uniquingKeysWith: { first, _ in first })
-                guard let native = HTTPURLResponse(url: endpoint, statusCode: Int(response.status.code), httpVersion: nil, headerFields: fields), try StoreAMD.handle(native) else {
+                APLogger.logResponse(status:response.status.code, headers:response.headers.map { ($0.name,$0.value) }, bodySize:response.body?.readableBytes)
+                let fields = Dictionary(response.headers.map { ($0.name,$0.value) }, uniquingKeysWith: { first,_ in first })
+                guard let native = HTTPURLResponse(url:endpoint, statusCode:Int(response.status.code), httpVersion:nil, headerFields:fields), try StoreAMD.handle(native) else {
                     try ensureFailed("store_device_provisioning_failed")
                 }
                 continue
             }
 ''' + anchor
 assert value.count(anchor) == 1
-p.write_text(value.replace(anchor, replacement))
-
-value = helper.read_text()
-value = value.replace('NSSelectorFromString("_headersForRequest:account:type:")', 'NSSelectorFromString("headersForRequest:account:type:bag:")')
-value = value.replace('(AnyObject, Selector, AnyObject, AnyObject?, Int64) -> Unmanaged<AnyObject>?', '(AnyObject, Selector, AnyObject, AnyObject?, Int64, AnyObject) -> Unmanaged<AnyObject>?')
-anchor = '            let request = NSURLRequest(url: endpoint)'
-addition = '''            let bagSelector = NSSelectorFromString("bagForProfile:profileVersion:")
-            guard let bagClass = NSClassFromString("AMSBag"), let bagMethod = class_getClassMethod(bagClass, bagSelector) else { throw NSError(domain: "StoreAMD", code: 2) }
-            typealias Bag = @convention(c) (AnyObject, Selector, AnyObject, AnyObject) -> Unmanaged<AnyObject>?
-            let bagCall = unsafeBitCast(method_getImplementation(bagMethod), to: Bag.self)
-            guard let bag = bagCall(bagClass as AnyObject, bagSelector, "itunes" as NSString, "1" as NSString)?.takeUnretainedValue() else { throw NSError(domain: "StoreAMD", code: 3) }
-'''
-value = value.replace(anchor, addition + anchor)
-value = value.replace('call(cls as AnyObject, selector, request, nil, 2)', 'call(cls as AnyObject, selector, request, nil, 2, bag)')
-helper.write_text(value)
+p.write_text(value.replace(anchor,replacement))
+purchase = Path(sys.argv[1])/"Sources/ApplePackage/Commands/Purchase.swift"
+value = purchase.read_text()
+anchor = '        APLogger.logRequest(method: "POST", url: urlString, headers: headers)'
+assert value.count(anchor) == 1
+purchase.write_text(value.replace(anchor, '        headers += try StoreAMD.commerceHeaders(for: URL(string:urlString)!)\n' + anchor))

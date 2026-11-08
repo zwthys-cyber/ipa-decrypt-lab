@@ -65,13 +65,14 @@ enum LabEntDownload {
         components.queryItems = [URLQueryItem(name: "guid", value: guid)]
         var headers = [
             ("Content-Type", "application/x-www-form-urlencoded; charset=utf-8"),
-            ("User-Agent", "Configurator/2.18 (Macintosh; OS X 15.3.2; 24D81) AppleWebKit/0620.2.4.11.6"),
+            ("User-Agent", Configuration.userAgent),
             ("iCloud-DSID", account.directoryServicesIdentifier),
             ("X-Dsid", account.directoryServicesIdentifier),
             ("X-Apple-Store-Front", account.labStoreFront ?? "\(account.store)-1"),
             ("X-Token", account.passwordToken)
         ]
         headers += account.cookie.buildCookieHeader(endpoint)
+        headers += try StoreAMD.commerceHeaders(for: components.url!)
         let request = try HTTPClient.Request(url: components.url!, method: .POST,
                                              headers: .init(headers), body: .data(data))
         print("IPA_LAB_STAGE:request_ent_product")
