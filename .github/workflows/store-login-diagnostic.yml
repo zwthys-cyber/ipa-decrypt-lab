@@ -81,6 +81,17 @@ jobs:
            SEL bagSel=NSSelectorFromString(@"bagForProfile:profileVersion:");
            if ([bagClass respondsToSelector:bagSel]) {
             id bag=((id(*)(id,SEL,id,id))objc_msgSend)(bagClass,bagSel,@"Configurator",@"1");
+            SEL provision=NSSelectorFromString(@"_provisionMachineWithActionData:type:account:bag:");
+            if ([anisette respondsToSelector:provision]) {
+             id pending=((id(*)(id,SEL,id,long long,id,id))objc_msgSend)(anisette,provision,nil,2,nil,bag);
+             SEL wait=NSSelectorFromString(@"resultWithError:");
+             if ([pending respondsToSelector:wait]) {
+              NSError *error=nil;
+              id result=((id(*)(id,SEL,NSError **))objc_msgSend)(pending,wait,&error);
+              report[@"provision_resolved"]=@(result!=nil);
+              report[@"provision_error_code"]=@(error.code);
+             }
+            }
             SEL headersSel=NSSelectorFromString(@"headersForRequest:account:type:bag:");
             if ([anisette respondsToSelector:headersSel]) {
              NSURLRequest *request=[NSURLRequest requestWithURL:[NSURL URLWithString:@"https://auth.itunes.apple.com/auth/v1/native"]];
