@@ -92,3 +92,5 @@ cat /var/lib/ipazake/health.json
 main 新增流程步骤比例、真实下载字节计数和完整耗时。VPS 通过既有 Actions read 权限读取经过摘要、任务、run 和源码绑定验证的小型进度快照，Checks 仍不是 PAT 必填权限。独立刷新线程只负责编辑进度消息，在阻塞取回、复核或上传期间继续计时。
 
 升级需要匹配的原生运行包，以及经过 Ubuntu/Debian 13 验证的新控制器部署；公开 alpha.2 包仍为此前版本快照。不要只更新 VPS 而让新源码缺少匹配原生包。实际文件发送结果不明的记录仍保持人工确认，不因进度升级重发。
+
+进度卡控制器已在 [42443436341](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443436341) 部署，服务源码为 `d59f3eb8ebd6f8ce0c98bfb0909817bc4345ac22`，健康检查通过。随后 [42443709848](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443709848) 用固定到 Node.js 24 的官方 Actions 重新通过服务器构建和 Ubuntu/Debian 13 检查；这次 build-only 没有再次重启服务。Node.js 24 是 GitHub Actions 的依赖运行时，不是新增的 VPS 安装要求。最新匹配原生包见 [42443706492](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443706492)，实际导出与数字计数见[项目状态](PROJECT-STATUS.md)。

@@ -5,11 +5,23 @@
 
 本轮为进度显示增加明确标注的流程步骤比例、真实下载字节计数、总耗时和本阶段耗时。总耗时覆盖排队到交付，重启按原始任务时间恢复；只有 Telegram 发送回执可完成整体 100%。没有可靠计数的解密内部阶段和 Telegram 远端上传不伪造字节百分比或预计剩余时间。
 
-后台以一天有效的小型数字快照补充 Checks，上报只包含绑定任务/run/源码的固定阶段、时间和计数，VPS 使用已有 Actions 权限读取。新的合成探针验证快照来源、摘要与真实计数；正式部署和实际任务结果以本轮 CI 与后续记录为准。公开 alpha.2 成品仍是进度升级前的快照。
+后台以一天有效的小型数字快照补充 Checks，上报只包含绑定任务/run/源码的固定阶段、时间和计数，VPS 使用已有 Actions 权限读取。合成探针、双平台构建、实际导出和控制器部署均已通过，具体证据见下方“进度升级验证与部署”。公开 alpha.2 成品仍是进度升级前的快照。
 
 
 当前公开成品版本：[v0.1.0-alpha.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.2)。下载、构建与发布步骤见[成品包说明](RELEASES.md)；完整文档导航见[文档索引](DOCUMENTATION.md)。旧版公开 Release 不再作为下载入口，历史构建与失败记录仍按各自日期保留。
 
+
+
+## 2026-11-08 进度升级验证与部署
+
+- [控制器部署](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443436341) 对应源码 `d59f3eb8ebd6f8ce0c98bfb0909817bc4345ac22`：Ubuntu 和 Debian 13 各运行 449 项 Python 测试（各跳过 1 项），通过 Node 边界测试、Go 检查和真实 systemd 凭据挂载检查；VPS 安装后返回 `persistent_service_ready_verified`。计时刷新与下载计数限流的竞争问题已有专门回归覆盖。
+- [最新双平台运行包](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443706492) 对应源码 `3c695191364daeb13951e77cd65327c92a1409f0`：两个 Intel 平台各通过 449 项 Python 测试（各跳过 2 项）、2 项 Node 测试、21 项 Swift 测试、Go 检查及脱离构建目录启动验证。
+- [新版数字快照探针](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443707998) 无 Apple/Telegram 凭据，成功读回 6 份快照与 0、512、1024 / 1024 的真实合成计数。
+- [X 的实际导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42444399936) 成功，生成 9 份有效数字快照。读取到原始下载计数 51,137,136 和 360,254,064 / 502,257,799 字节（约 10.2% 和 71.7%），随后依次进入审计、解密、复核、加密和就绪阶段；所读快照的 artifact SHA-256 均匹配。最终验证 32 个加密切片、86,704 页，清理后明文 271,261,630 字节；只保留一天的 age 密文和数字快照，没有额外发送 Telegram 文件，也未测试安装运行。
+
+官方 Actions 已统一固定到 Node.js 24 版本：checkout v7.0.1、setup-go v7.0.0、cache v6.1.0、upload-artifact v7.0.2。进度上传显式保留 ZIP 归档和隔离输出文件。新 downloader、两个原生生产任务、进度验证、服务器构建和本轮实际导出的注解数均为 0；历史运行的 Node.js 20 警告不会被改写。
+
+当前线上控制器的 Python 服务源码仍为上述 d59f3eb 提交；后续 3c69519 仅更新 GitHub Actions 依赖、上传参数和对应测试，没有再次重启服务。[最新服务器构建](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443709848) 同样通过 Ubuntu/Debian 13 验证。公开 `v0.1.0-alpha.2` 附件保持原快照，本轮没有重发该 Release。
 
 ## 2026-11-08 最新状态：真实下载与解密已恢复
 

@@ -15,7 +15,7 @@
 - 发送 App Store 链接或 App ID，默认下载最新版。
 - 用 `/versions` 先查看最近一批历史版本，按需加载更早版本并直接点选。
 - 用 `/version` 指定版本号或 Apple 历史版本 ID。
-- main 的升级进度卡在同一张 Telegram 消息中显示步骤进度条、真实下载字节比例、全程与阶段耗时；约 5 秒更新计时，重启后继续累计。
+- 已部署的进度卡在同一张 Telegram 消息中显示步骤进度条、真实下载字节比例、全程与阶段耗时；约 5 秒更新计时，重启后继续累计。
 - 收到带应用图标的 `名称_版本.ipa` 文件。
 - 服务重启后继续跟踪任务；发送结果不明时保留记录，避免重复发文件。
 
@@ -39,6 +39,8 @@ My BVF 的最新一次 GitHub 导出实测约 59 秒，此前预编译版样本�
 已在全新的 GitHub macOS 运行器上验证了模型恢复、模型复用、检查点重放和完整 IPA 校验，也完成过 92 MB 文件的 Telegram 私聊交付。历史版本下载、可点击列表和两个 Intel 平台的成品包也都有运行记录。
 
 解密成功的判断包含完整切片和页面校验，不能只看 `cryptid=0`。尚未把重签名、安装和实际运行纳入验证，所以结果里的 `runtime_verified` 仍为 `false`。
+
+进度卡升级已[部署](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443436341)，并通过[实际 X 导出与数字快照验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42444399936)。官方 Actions 已升级为固定提交的 Node.js 24 版本；新 downloader 和双平台生产任务均无 Node.js 20 弃用警告。公开 alpha.2 附件仍是升级前的版本快照。
 
 ## 部署与配置
 

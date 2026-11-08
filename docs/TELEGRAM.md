@@ -53,7 +53,7 @@
 
 ## 进度和文件
 
-当前 main 的进度卡升级显示流程进度条、已完成步骤数、当前阶段、总耗时、本阶段耗时、UTC 开始时间和任务编号。流程百分比按已完成步骤计算，明确标注“按步骤”，不代表已处理字节比例或预计剩余时间。只有 Telegram 确认文件发送成功后，整体才显示 100%。
+已部署的进度卡显示流程进度条、已完成步骤数、当前阶段、总耗时、本阶段耗时、UTC 开始时间和任务编号。流程百分比按已完成步骤计算，明确标注“按步骤”，不代表已处理字节比例或预计剩余时间。只有 Telegram 确认文件发送成功后，整体才显示 100%。
 
 下载阶段另外显示原生回调提供的真实字节百分比与已下载/总容量；没有可验证计数的阶段只显示阶段和耗时。Telegram 本地 Bot API 没有可靠的远端上传字节回调，因此上传时继续显示耗时，收到发送回执后完成。不会显示虚构的上传百分比或预计剩余时间。
 
@@ -94,3 +94,5 @@ Actions 运行包保留 30 天，每周刷新。源码更新后需要先完成�
 恢复记录保存在私有 SQLite。重启后继续跟踪原任务，不重复提交；发送结果不明时不自动重发。不要在另一台机器启动同一个机器人的轮询进程。具体规则见 [任务恢复](SESSION-RECOVERY.md)。
 
 已取得过 [92 MB 文件的 Telegram 发送回执](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41864719056)，也在 [41940545752](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41940545752) 部署了带历史版本列表的服务。按需历史列表和扩展缓存已在 [41953590065](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41953590065) 部署。更多验证记录见 [项目状态](PROJECT-STATUS.md)。
+
+新版卡片的[服务部署](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443436341)、[双平台运行包](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443706492)和[实际 X 导出计数](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42444399936)均已验证。本轮实际导出没有额外发送 Telegram 文件；新建任务使用新版卡片，旧消息不会因发布说明更新而自动重写。

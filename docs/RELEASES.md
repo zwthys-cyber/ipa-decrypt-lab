@@ -48,3 +48,9 @@ macOS 可用 `shasum -a 256 文件名`，再与清单中对应条目比较。只
 4. 发布器独立校验生产工作流身份、平台、源码指纹、artifact ZIP 摘要、包内清单、源码内容和许可证；验证后才创建草稿、上传附件并公开预览版。
 
 本版原生构建证据为 [42439002658](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439002658)。X 的[真实下载及完整解密验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)通过 32 个加密切片和 86,704 页。它不等于安装运行验证，也不是发布应用 IPA；Release 只提供项目运行组件。
+
+## main 的后续进度升级与构建依赖
+
+本轮没有覆盖 `v0.1.0-alpha.2` 的附件或标签。main 已加入实时数字快照、步骤进度和完整耗时，控制器已[部署](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443436341)；对应[双平台原生包](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443706492)和[服务器 build-only 包](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443709848)均已通过验证。普通任务使用新的匹配运行包；下载旧 Release 安装并不自动获得 main 的新功能。
+
+所有官方 Actions 固定到使用 Node.js 24 的发布提交：checkout v7.0.1、setup-go v7.0.0、cache v6.1.0 和 upload-artifact v7.0.2。后续正式发布应重新选择当前源码的生产运行、通过现有摘要与来源校验，并使用新版本号；不能把历史 alpha.2 的构建来源改写为本轮来源。
