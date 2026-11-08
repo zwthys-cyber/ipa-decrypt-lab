@@ -80,7 +80,7 @@ jobs:
                       url = urlsplit(request.group(2))
                       path = url.path.rstrip("/")
                       kind = ("bag" if url.hostname == "init.itunes.apple.com" and path == "/bag.xml" else
-                              "native_auth" if url.hostname == "auth.itunes.apple.com" and path == "/auth/v1/native/fast" else
+                              "native_auth" if url.hostname == "auth.itunes.apple.com" and path in ("/auth/v1/native", "/auth/v1/native/fast") else
                               "legacy_auth" if path == "/WebObjects/MZFinance.woa/wa/authenticate"
                                   and (url.hostname == "buy.itunes.apple.com" or re.fullmatch(r"p[0-9]+-buy\.itunes\.apple\.com", url.hostname or "")) else "other")
                       records.append({"endpoint":kind,"method":request.group(1)})
@@ -149,10 +149,11 @@ jobs:
                   "tls": ("ssl", "tls", "certificate"),
                   "connection": ("connection", "socket", "httpclienterror"),
                   "signing": ("sap", "signature"),
+                  "store_device_proof": ("storeamd", "amd-action"),
               }
               endpoints = {
                   "bag": "init.itunes.apple.com/bag.xml",
-                  "native_auth": "auth.itunes.apple.com/auth/v1/native/fast",
+                  "native_auth": "auth.itunes.apple.com/auth/v1/native",
                   "legacy_auth": "/WebObjects/MZFinance.woa/wa/authenticate",
               }
               print(json.dumps({"schema":"login-detail-v1",
