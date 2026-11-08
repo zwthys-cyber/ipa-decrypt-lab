@@ -85,6 +85,14 @@ jobs:
             if ([anisette respondsToSelector:headersSel]) {
              NSURLRequest *request=[NSURLRequest requestWithURL:[NSURL URLWithString:@"https://auth.itunes.apple.com/auth/v1/native"]];
              id headers=((id(*)(id,SEL,id,id,long long,id))objc_msgSend)(anisette,headersSel,request,nil,2,bag);
+             SEL wait=NSSelectorFromString(@"resultWithError:");
+             report[@"proof_pending"]=@([headers respondsToSelector:wait]);
+             if ([headers respondsToSelector:wait]) {
+              NSError *error=nil;
+              headers=((id(*)(id,SEL,NSError **))objc_msgSend)(headers,wait,&error);
+              report[@"proof_resolved"]=@(headers!=nil);
+              report[@"proof_error_code"]=@(error.code);
+             }
              report[@"proof_dictionary"]=@([headers isKindOfClass:NSDictionary.class]);
              report[@"proof_pair"]=@([headers isKindOfClass:NSDictionary.class]&&[headers[@"X-Apple-AMD"] length]>0&&[headers[@"X-Apple-AMD-M"] length]>0);
             }
