@@ -37,8 +37,9 @@ function launch(command,args,options) {
     const child=spawn(command,args,options);
     let done=false;
     const finish=code => {if(!done){done=true;resolve(code)}};
-    if(child.stdout)child.stdout.resume();
-    if(child.stderr)child.stderr.resume();
+    let diagnostic='';
+    for(const stream of [child.stdout,child.stderr]) if(stream) stream.on('data',chunk=>{diagnostic=(diagnostic+chunk.toString()).slice(-8192)});
+    child.once('close',code=>{if(code!==0 && process.env.INPUT_PROBE==='true') console.log(JSON.stringify({schema:'ipa-progress-upload-diagnostic-v1',code,errorLines:diagnostic.split('\n').filter(x=>/Error:|\[error\]/.test(x)).map(x=>x.replace(/https?:\/\/\S+/g,'[url]').replace(/[A-Za-z0-9_=-]{60,}/g,'[redacted]').slice(0,250)).slice(0,3)}))});
     child.once('error',()=>finish(1));
     child.once('exit',code=>finish(code === null ? 1 : code));
   });
