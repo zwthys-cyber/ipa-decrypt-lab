@@ -67,8 +67,8 @@ jobs:
           static IMP original, originalHeaders;
           static id nativeBag;
           static IMP originalBagRequest;
-          static id bagRequest(id task,SEL sel,id cookieNames,id storefront) {
-           id pending=((id(*)(id,SEL,id,id))originalBagRequest)(task,sel,cookieNames,storefront);
+          static id bagRequest(id task,SEL sel,id queryItems) {
+           id pending=((id(*)(id,SEL,id))originalBagRequest)(task,sel,queryItems);
            id request=pending;
            SEL wait=NSSelectorFromString(@"resultWithError:");
            BOOL promise=[pending respondsToSelector:wait];
@@ -195,7 +195,7 @@ jobs:
            free(requestMethods);
            NSData *requestMeta=[NSJSONSerialization dataWithJSONObject:@{@"schema":@"store-bag-request-api-v1",@"methods":requestNames} options:0 error:NULL];
            fprintf(stderr,"IPA_LAB_SP_DIAG:%s\n",[[NSString alloc]initWithData:requestMeta encoding:NSUTF8StringEncoding].UTF8String);
-           Method bagRequestMethod=class_getInstanceMethod(NSClassFromString(@"AMSBagNetworkTask"),NSSelectorFromString(@"_createRequestWithCookieNames:storefront:"));
+           Method bagRequestMethod=class_getInstanceMethod(NSClassFromString(@"AMSBagNetworkTask"),NSSelectorFromString(@"_createRequestWithQueryItems:"));
            if(bagRequestMethod)originalBagRequest=method_setImplementation(bagRequestMethod,(IMP)bagRequest);
            if(method) original=method_setImplementation(method,(IMP)observe);
            Method headers=class_getClassMethod(cls,NSSelectorFromString(@"headersForRequest:account:type:bag:"));
