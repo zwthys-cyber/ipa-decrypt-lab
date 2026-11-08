@@ -28,6 +28,7 @@ function uploaderEnvironment(env, folder, name) {
   result['INPUT_COMPRESSION-LEVEL']='0';
   result['INPUT_IF-NO-FILES-FOUND']='error';
   result.INPUT_OVERWRITE='false';
+  result['INPUT_INCLUDE-HIDDEN-FILES']='false';
   for(const key of ['GITHUB_OUTPUT','GITHUB_ENV','GITHUB_STATE','GITHUB_STEP_SUMMARY']) result[key]=path.join(folder,key.toLowerCase());
   return result;
 }

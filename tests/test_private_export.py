@@ -31,7 +31,7 @@ class PrivateExportTests(unittest.TestCase):
                     native.assert_not_called()
 
     def test_unknown_exception_reports_stage_without_private_details(self):
-        def failure(*args):
+        def failure(*args, **kwargs):
             args[-1]("auditing")
             raise ValueError("SECRET_ACCOUNT_AND_PATH")
         output=io.StringIO()
