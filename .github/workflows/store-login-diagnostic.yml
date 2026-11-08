@@ -84,6 +84,14 @@ jobs:
           }
           __attribute__((constructor)) static void install(void){@autoreleasepool{
            dlopen("/System/Library/PrivateFrameworks/AppleMediaServices.framework/AppleMediaServices",RTLD_NOW|RTLD_LOCAL);
+           Class transport=NSClassFromString(@"LabStoreBagTransport");
+           id bag=[transport respondsToSelector:NSSelectorFromString(@"nativeBag")]?((id(*)(id,SEL))objc_msgSend)(transport,NSSelectorFromString(@"nativeBag")):nil;
+           SEL set=NSSelectorFromString(@"setDefaultValue:forKey:");
+           if([bag respondsToSelector:set]) {
+            ((void(*)(id,SEL,id,id))objc_msgSend)(bag,set,@"https://auth.itunes.apple.com/auth/v1/otp/1.5/finish",@"amd-finish-provisioning");
+            ((void(*)(id,SEL,id,id))objc_msgSend)(bag,set,@"https://auth.itunes.apple.com/auth/v1/otp/1.5/sync",@"amd-sync-machine");
+            ((void(*)(id,SEL,id,id))objc_msgSend)(bag,set,@[@"auth.itunes.apple.com"],@"amd-domains");
+           }
            Method method=class_getClassMethod(NSClassFromString(@"AMSAnisette"),NSSelectorFromString(@"handleResponse:type:bag:account:"));
            if(method)original=method_setImplementation(method,(IMP)observe);
           }}
