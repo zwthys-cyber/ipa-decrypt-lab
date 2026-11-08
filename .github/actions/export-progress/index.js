@@ -37,9 +37,8 @@ function launch(command,args,options) {
     const child=spawn(command,args,options);
     let done=false;
     const finish=code => {if(!done){done=true;resolve(code)}};
-    let diagnostic='';
-    for(const stream of [child.stdout,child.stderr]) if(stream) stream.on('data',chunk=>{diagnostic=(diagnostic+chunk.toString()).slice(-8192)});
-    child.once('close',code=>{if(code!==0 && process.env.INPUT_PROBE==='true') console.log(JSON.stringify({schema:'ipa-progress-upload-diagnostic-v1',code,errorLines:diagnostic.split('\n').filter(x=>/Error:|\[error\]/.test(x)).map(x=>x.replace(/https?:\/\/\S+/g,'[url]').replace(/[A-Za-z0-9_=-]{60,}/g,'[redacted]').slice(0,250)).slice(0,3)}))});
+    if(child.stdout)child.stdout.resume();
+    if(child.stderr)child.stderr.resume();
     child.once('error',()=>finish(1));
     child.once('exit',code=>finish(code === null ? 1 : code));
   });
@@ -71,7 +70,9 @@ async function main() {
     fs.writeFileSync(path.join(folder,'progress.json'),JSON.stringify(value),{mode:0o600});
     const name=`progress-${identity.rid}-${String(value.sequence).padStart(6,'0')}`;
     lastUpload=Date.now();
-    inFlight=launch(process.execPath,[action],{env:uploaderEnvironment(env,folder,name),stdio:['ignore','pipe','pipe'],timeout:30000});
+    const uploadEnv=uploaderEnvironment(env,folder,name);
+    for(const key of ['GITHUB_OUTPUT','GITHUB_ENV','GITHUB_STATE','GITHUB_STEP_SUMMARY']) fs.writeFileSync(uploadEnv[key],'',{mode:0o600});
+    inFlight=launch(process.execPath,[action],{env:uploadEnv,stdio:['ignore','pipe','pipe'],timeout:30000});
     const status=await inFlight;
     inFlight=null;
     // An uncertain artifact upload is never repeated under the same name.
