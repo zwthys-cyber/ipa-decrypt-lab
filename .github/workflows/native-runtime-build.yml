@@ -9,7 +9,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: native-runtime-build
+  group: native-runtime-build-native-amd
   cancel-in-progress: false
 jobs:
   build:
