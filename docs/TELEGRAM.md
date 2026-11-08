@@ -96,3 +96,7 @@ Actions 运行包保留 30 天，每周刷新。源码更新后需要先完成�
 已取得过 [92 MB 文件的 Telegram 发送回执](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41864719056)，也在 [41940545752](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41940545752) 部署了带历史版本列表的服务。按需历史列表和扩展缓存已在 [41953590065](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41953590065) 部署。更多验证记录见 [项目状态](PROJECT-STATUS.md)。
 
 新版卡片的[服务部署](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443436341)、[双平台运行包](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443706492)和[实际 X 导出计数](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42444399936)均已验证。本轮实际导出没有额外发送 Telegram 文件；新建任务使用新版卡片，旧消息不会因发布说明更新而自动重写。
+
+## X 导出加速（2026-11-08）
+
+已上线保留压缩数据的账号清理流程，完整页面和 ZIP 校验不变。与截图对应的原任务比较，[新实测](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42445425200) 的复核从 40.4 秒降到 13.8 秒，GitHub 后台从 2 分 08 秒降到 1 分 43 秒。包体约大 3%；用户全程还包含排队、服务器取回和 Telegram 上传，本轮没有重复文件发送，不将后台时长当作聊天里的总耗时。新任务自动使用匹配的新运行包。详见[项目状态](PROJECT-STATUS.md)。

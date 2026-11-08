@@ -94,3 +94,7 @@ main 新增流程步骤比例、真实下载字节计数和完整耗时。VPS �
 升级需要匹配的原生运行包，以及经过 Ubuntu/Debian 13 验证的新控制器部署；公开 alpha.2 包仍为此前版本快照。不要只更新 VPS 而让新源码缺少匹配原生包。实际文件发送结果不明的记录仍保持人工确认，不因进度升级重发。
 
 进度卡控制器已在 [42443436341](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443436341) 部署，服务源码为 `d59f3eb8ebd6f8ce0c98bfb0909817bc4345ac22`，健康检查通过。随后 [42443709848](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443709848) 用固定到 Node.js 24 的官方 Actions 重新通过服务器构建和 Ubuntu/Debian 13 检查；这次 build-only 没有再次重启服务。Node.js 24 是 GitHub Actions 的依赖运行时，不是新增的 VPS 安装要求。最新匹配原生包见 [42443706492](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443706492)，实际导出与数字计数见[项目状态](PROJECT-STATUS.md)。
+
+## 后端导出提速（2026-11-08）
+
+[运行包 42445031389](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42445031389) 加入仅限 GitHub 的 raw ZIP 成员复制清理，替代导出阶段的 Python 全包重复压缩；[实际 X 导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42445425200) 通过全部检查。它不改变 VPS 的解密、恢复或 Telegram 发送协议，无需为此重启当前服务。旧 VPS 的 delivery-crypt 继续使用 decrypt 命令，新 scrub 命令在 VPS 模式下被拒绝。源码指纹校验仍生效，不能混用不匹配的包。
