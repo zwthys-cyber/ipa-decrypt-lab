@@ -64,9 +64,13 @@ jobs:
           #import <objc/runtime.h>
           #import <objc/message.h>
           #import <dlfcn.h>
-          static IMP original;
+          static IMP original, originalHeaders;
+          static id nativeBag;
+          static id proofHeaders(id cls,SEL sel,id request,id account,long long type,id bag) {
+           return ((id(*)(id,SEL,id,id,long long,id))originalHeaders)(cls,sel,request,account,type,type==2&&nativeBag?nativeBag:bag);
+          }
           static id observe(id cls,SEL sel,id response,long long type,id bag,id account) {
-           id pending=((id(*)(id,SEL,id,long long,id,id))original)(cls,sel,response,type,bag,account);
+           id pending=((id(*)(id,SEL,id,long long,id,id))original)(cls,sel,response,type,type==2&&nativeBag?nativeBag:bag,account);
            NSError *error=nil; id result=pending;
            SEL wait=NSSelectorFromString(@"resultWithError:");
            if ([pending respondsToSelector:wait]) result=((id(*)(id,SEL,NSError **))objc_msgSend)(pending,wait,&error);
@@ -88,7 +92,7 @@ jobs:
            }
            NSString *kind=result?NSStringFromClass([result class]):@"nil";
            if(kind.length>80||[kind rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_"].invertedSet].location!=NSNotFound)kind=@"other";
-           NSDictionary *safe=@{@"retry_action":@(actionRetry),@"result_class":kind,@"schema":@"store-sp-result-v1",@"pending":@([pending respondsToSelector:wait]),@"result_present":@(result!=nil),@"result_number":@([result isKindOfClass:NSNumber.class]),@"result_bool":@([result isKindOfClass:NSNumber.class]&&[result boolValue]),@"action_data_present":@(actionData),@"status":@([response isKindOfClass:NSHTTPURLResponse.class]?[response statusCode]:0),@"type":@(type==2?2:0),@"errors":errors};
+           NSDictionary *safe=@{@"native_bag":@(nativeBag!=nil),@"retry_action":@(actionRetry),@"result_class":kind,@"schema":@"store-sp-result-v1",@"pending":@([pending respondsToSelector:wait]),@"result_present":@(result!=nil),@"result_number":@([result isKindOfClass:NSNumber.class]),@"result_bool":@([result isKindOfClass:NSNumber.class]&&[result boolValue]),@"action_data_present":@(actionData),@"status":@([response isKindOfClass:NSHTTPURLResponse.class]?[response statusCode]:0),@"type":@(type==2?2:0),@"errors":errors};
            NSData *json=[NSJSONSerialization dataWithJSONObject:safe options:NSJSONWritingSortedKeys error:NULL];
            fprintf(stderr,"IPA_LAB_SP_DIAG:%s\n",[[NSString alloc]initWithData:json encoding:NSUTF8StringEncoding].UTF8String);
            if(type==2&&actionData&&actionRetry) return @YES;
@@ -98,7 +102,11 @@ jobs:
            dlopen("/System/Library/PrivateFrameworks/AppleMediaServices.framework/AppleMediaServices",RTLD_NOW|RTLD_LOCAL);
            Class cls=NSClassFromString(@"AMSAnisette");
            Method method=class_getClassMethod(cls,NSSelectorFromString(@"handleResponse:type:bag:account:"));
+           SEL bagSelector=NSSelectorFromString(@"createBagForSubProfile");
+           if([cls respondsToSelector:bagSelector]) nativeBag=((id(*)(id,SEL))objc_msgSend)(cls,bagSelector);
            if(method) original=method_setImplementation(method,(IMP)observe);
+           Method headers=class_getClassMethod(cls,NSSelectorFromString(@"headersForRequest:account:type:bag:"));
+           if(headers) originalHeaders=method_setImplementation(headers,(IMP)proofHeaders);
           } }
           OBJC
           clang -fobjc-arc -dynamiclib -framework Foundation "$RUNNER_TEMP/store-sp-observer.m" -o "$RUNNER_TEMP/store-sp-observer.dylib"
