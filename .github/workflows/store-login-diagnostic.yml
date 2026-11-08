@@ -70,6 +70,13 @@ jobs:
            NSError *error=nil; id result=pending;
            SEL wait=NSSelectorFromString(@"resultWithError:");
            if ([pending respondsToSelector:wait]) result=((id(*)(id,SEL,NSError **))objc_msgSend)(pending,wait,&error);
+           BOOL actionRetry=NO;
+           if ([result isKindOfClass:NSClassFromString(@"AMSURLAction")]) {
+            error=((id(*)(id,SEL))objc_msgSend)(result,NSSelectorFromString(@"error"));
+            long long action=((long long(*)(id,SEL))objc_msgSend)(result,NSSelectorFromString(@"actionType"));
+            id expected=((id(*)(id,SEL))objc_msgSend)(NSClassFromString(@"AMSURLAction"),NSSelectorFromString(@"retryAction"));
+            actionRetry=!error&&action==((long long(*)(id,SEL))objc_msgSend)(expected,NSSelectorFromString(@"actionType"));
+           }
            NSDictionary *headers=[response isKindOfClass:NSHTTPURLResponse.class]?[response allHeaderFields]:@{};
            BOOL actionData=NO;
            for(id key in headers) if([[key description] caseInsensitiveCompare:@"X-Apple-AMD-Data"]==NSOrderedSame) actionData=YES;
@@ -81,9 +88,10 @@ jobs:
            }
            NSString *kind=result?NSStringFromClass([result class]):@"nil";
            if(kind.length>80||[kind rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_"].invertedSet].location!=NSNotFound)kind=@"other";
-           NSDictionary *safe=@{@"result_class":kind,@"schema":@"store-sp-result-v1",@"pending":@([pending respondsToSelector:wait]),@"result_present":@(result!=nil),@"result_number":@([result isKindOfClass:NSNumber.class]),@"result_bool":@([result isKindOfClass:NSNumber.class]&&[result boolValue]),@"action_data_present":@(actionData),@"status":@([response isKindOfClass:NSHTTPURLResponse.class]?[response statusCode]:0),@"type":@(type==2?2:0),@"errors":errors};
+           NSDictionary *safe=@{@"retry_action":@(actionRetry),@"result_class":kind,@"schema":@"store-sp-result-v1",@"pending":@([pending respondsToSelector:wait]),@"result_present":@(result!=nil),@"result_number":@([result isKindOfClass:NSNumber.class]),@"result_bool":@([result isKindOfClass:NSNumber.class]&&[result boolValue]),@"action_data_present":@(actionData),@"status":@([response isKindOfClass:NSHTTPURLResponse.class]?[response statusCode]:0),@"type":@(type==2?2:0),@"errors":errors};
            NSData *json=[NSJSONSerialization dataWithJSONObject:safe options:NSJSONWritingSortedKeys error:NULL];
            fprintf(stderr,"IPA_LAB_SP_DIAG:%s\n",[[NSString alloc]initWithData:json encoding:NSUTF8StringEncoding].UTF8String);
+           if(type==2&&actionData&&actionRetry) return @YES;
            return pending;
           }
           __attribute__((constructor)) static void install(void) { @autoreleasepool {
