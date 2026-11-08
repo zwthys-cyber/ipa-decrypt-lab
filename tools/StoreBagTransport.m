@@ -49,7 +49,12 @@ __attribute__((constructor)) static void initializeStoreTransport(void) {
     NSURLComponents *p=[NSURLComponents componentsWithURL:request.URL resolvingAgainstBaseURL:NO];
     if(![p.scheme isEqual:@"https"]||![@[@"bag.itunes.apple.com",@"init.itunes.apple.com"] containsObject:p.host]||
        ![p.percentEncodedPath isEqual:@"/bag.xml"]||p.user||p.password||p.fragment||(p.port&&p.port.integerValue!=443)||![request.HTTPMethod isEqual:@"GET"])return request;
-    NSMutableURLRequest *updated=[NSMutableURLRequest requestWithURL:[NSURL URLWithString:@"https://init.itunes.apple.com/bag.xml?ix=6"] cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:20];
+    // Retain NSURLProtocol properties used by the native AMS session encoder.
+    NSMutableURLRequest *updated=[request mutableCopy];
+    updated.URL=[NSURL URLWithString:@"https://init.itunes.apple.com/bag.xml?ix=6"];
+    updated.allHTTPHeaderFields=@{};
+    updated.HTTPBody=nil;
+    updated.timeoutInterval=20;
     // Public configuration only. Never carry account headers across origins.
     updated.HTTPMethod=@"GET";
     [updated setValue:@"Configurator/2.21 (Macintosh; OS X 15.2; 24C5089c) AppleWebKit/0620.1.16.11.6" forHTTPHeaderField:@"User-Agent"];
