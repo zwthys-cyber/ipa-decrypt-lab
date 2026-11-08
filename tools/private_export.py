@@ -115,7 +115,15 @@ def account_member(name):
     return ("sc_info" in parts or parts[-1] == "itunesmetadata.plist"
             or parts[-1].endswith((".sinf", ".supf", ".supp")))
 
-def scrub_archive(source, target):
+def scrub_archive(source, target, crypt=None):
+    if crypt is not None:
+        env={k:os.environ[k] for k in ("PATH","HOME","LANG") if k in os.environ}
+        env["GITHUB_ACTIONS"]="true"
+        completed=subprocess.run([crypt,"scrub",str(source),str(target)], env=env,
+            stdin=subprocess.DEVNULL, capture_output=True, timeout=CRYPTO_TIMEOUT)
+        require(completed.returncode==0 and target.is_file(), "account_scrub_rejected")
+        return
+    # Reference implementation for small fixtures and CI performance comparison.
     # Remove Store metadata entirely, beyond upstream's known purchaser-field filter.
     with zipfile.ZipFile(source) as src, zipfile.ZipFile(target, "x") as dst:
         for entry in src.infolist():
@@ -222,7 +230,7 @@ def export(binary, engine, crypt, target, request_id, recipient, output_dir, pro
             progress("verifying")
             report = json.loads(report_path.read_bytes())
             images, pages = validate_report(report, before, candidate)
-            scrub_archive(candidate, cleaned)
+            scrub_archive(candidate, cleaned, crypt=crypt)
             verified = verify_output(cleaned, before)
             verify_version(verified, requested, resolved_version)
             original.unlink()

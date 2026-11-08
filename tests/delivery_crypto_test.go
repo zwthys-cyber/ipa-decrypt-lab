@@ -1,5 +1,7 @@
 package main
 import(
+ "archive/zip"
+ "strings"
  "bytes"
  "crypto/sha256"
  "io"
@@ -51,6 +53,7 @@ func TestVPSRuntimeOnlyDecrypts(t *testing.T){
  t.Setenv("GITHUB_ACTIONS","")
  t.Setenv("LAB_RUNTIME","vps")
  if run([]string{"keygen"})==nil{t.Fatal("VPS generated repository identity")}
+ if run([]string{"scrub","source","target"})==nil{t.Fatal("VPS accepted export scrubbing")}
  dir:=t.TempDir()
  input:=filepath.Join(dir,"input")
  encrypted:=filepath.Join(dir,"ciphertext")
@@ -82,4 +85,64 @@ func TestLargeCapacityRoundTrip(t *testing.T) {
  if !bytes.Equal(hash(input),hash(output)) {t.Fatal("large stream digest mismatch")}
  if e=os.Truncate(input,maxBytes+1); e!=nil {t.Fatal(e)}
  if e=transform(input,filepath.Join(dir,"forbidden.age"),false,key.Recipient().String()); e==nil {t.Fatal("accepted oversized plaintext")}
+}
+
+func scrubFixture(t *testing.T, path string, headers []zip.FileHeader) {
+ t.Helper()
+ f,e:=os.Create(path); if e!=nil {t.Fatal(e)}
+ w:=zip.NewWriter(f)
+ for _,h:=range headers {
+  member,e:=w.CreateHeader(&h); if e!=nil {t.Fatal(e)}
+  if _,e=member.Write(bytes.Repeat([]byte("synthetic public fixture"),4096));e!=nil{t.Fatal(e)}
+ }
+ if e=w.Close();e!=nil{t.Fatal(e)};if e=f.Close();e!=nil{t.Fatal(e)}
+}
+func TestRawScrubPreservesCompressedDataAndPermissions(t *testing.T) {
+ dir:=t.TempDir(); input:=filepath.Join(dir,"source.ipa"); output:=filepath.Join(dir,"clean.ipa")
+ main:=zip.FileHeader{Name:"Payload/Test.app/Test",Method:zip.Deflate,Comment:"public fixture"}; main.SetMode(0755)
+ names:=[]string{"iTunesMetadata.plist","Payload/Test.app/SC_Info/Test.sinf","loose.SUPF","Nested/license.supp"}
+ headers:=[]zip.FileHeader{main}
+ for _,name:=range names {headers=append(headers,zip.FileHeader{Name:name,Method:zip.Deflate})}
+ scrubFixture(t,input,headers)
+ t.Setenv("GITHUB_ACTIONS","true")
+ if e:=run([]string{"scrub",input,output});e!=nil{t.Fatal(e)}
+ before,e:=zip.OpenReader(input);if e!=nil{t.Fatal(e)};defer before.Close()
+ after,e:=zip.OpenReader(output);if e!=nil{t.Fatal(e)};defer after.Close()
+ if len(after.File)!=1 || after.File[0].Name!=main.Name {t.Fatal("retained account members")}
+ a,_:=before.File[0].OpenRaw();b,_:=after.File[0].OpenRaw();rawA,e:=io.ReadAll(a);if e!=nil{t.Fatal(e)};rawB,e:=io.ReadAll(b);if e!=nil{t.Fatal(e)}
+ if !bytes.Equal(rawA,rawB){t.Fatal("recompressed or changed retained bytes")}
+ if before.File[0].Mode()!=after.File[0].Mode() || before.File[0].CRC32!=after.File[0].CRC32 {t.Fatal("changed metadata or checksum")}
+ reader,e:=after.File[0].Open();if e!=nil{t.Fatal(e)};_,e=io.Copy(io.Discard,reader);reader.Close();if e!=nil{t.Fatal("output CRC failure")}
+ info,_:=os.Stat(output);if info.Mode().Perm()!=0600{t.Fatal("unsafe permissions")}
+ original,_:=os.ReadFile(output)
+ if e=run([]string{"scrub",input,output});e==nil{t.Fatal("overwrote existing output")}
+ got,_:=os.ReadFile(output);if !bytes.Equal(original,got){t.Fatal("modified existing output")}
+ files,_:=filepath.Glob(filepath.Join(dir,".delivery-scrub-*"));if len(files)!=0{t.Fatal("retained scratch")}
+}
+func TestRawScrubRejectsUnsafeArchivesAndOutputLinks(t *testing.T) {
+ cases:=[][]zip.FileHeader{
+  {{Name:"../escape",Method:zip.Store}},
+  {{Name:"/absolute",Method:zip.Store}},
+  {{Name:"Payload\\bad",Method:zip.Store}},
+  {{Name:"same",Method:zip.Store},{Name:"same",Method:zip.Store}},
+ }
+ link:=zip.FileHeader{Name:"link",Method:zip.Store};link.SetMode(os.ModeSymlink|0777);cases=append(cases,[]zip.FileHeader{link})
+ for i,headers:=range cases {t.Run(strings.Repeat("x",i+1),func(t *testing.T){
+  dir:=t.TempDir();input:=filepath.Join(dir,"source");output:=filepath.Join(dir,"output")
+  scrubFixture(t,input,headers)
+  if scrubIPA(input,output)==nil{t.Fatal("accepted unsafe archive")}
+  if _,e:=os.Stat(output);!os.IsNotExist(e){t.Fatal("published rejected output")}
+ })}
+ dir:=t.TempDir(); input:=filepath.Join(dir,"input"); output:=filepath.Join(dir,"output"); destination:=filepath.Join(dir,"existing")
+ scrubFixture(t,input,[]zip.FileHeader{{Name:"Payload/app",Method:zip.Store}})
+ os.WriteFile(destination,[]byte("untouched"),0600);os.Symlink(destination,output)
+ if scrubIPA(input,output)==nil{t.Fatal("accepted output symlink")}
+ got,_:=os.ReadFile(destination);if string(got)!="untouched"{t.Fatal("modified symlink target")}
+}
+func TestScrubWriterEnforcesArchiveBudget(t *testing.T) {
+ var output bytes.Buffer
+ writer:=&scrubWriter{output:&output,remaining:3}
+ if n,e:=writer.Write([]byte("ok"));n!=2||e!=nil{t.Fatal("valid write failed")}
+ if _,e:=writer.Write([]byte("no"));e==nil{t.Fatal("exceeded budget")}
+ if output.String()!="ok"{t.Fatal("wrote over budget")}
 }

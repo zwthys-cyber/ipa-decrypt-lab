@@ -3,7 +3,7 @@ import contextlib
 import io
 import os
 import urllib.error
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 import hashlib
 import json
 from pathlib import Path
@@ -12,7 +12,7 @@ import tempfile
 import unittest
 import zipfile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
-from private_export import audit_failure, AuditError, main, export, ExportError, account_member, scrub_archive, validate_report
+from private_export import verify_output, audit_failure, AuditError, main, export, ExportError, account_member, scrub_archive, validate_report
 
 class PrivateExportTests(unittest.TestCase):
     def test_metadata_failures_are_classified_without_login(self):
@@ -86,6 +86,35 @@ class PrivateExportTests(unittest.TestCase):
                 report["images"][0][field] = value
                 with self.assertRaises(ExportError, msg=field):
                     validate_report(report, before, output)
+
+    def test_fast_scrub_uses_verified_helper_without_private_environment(self):
+        with tempfile.TemporaryDirectory() as d:
+            source,target=Path(d)/"in.ipa",Path(d)/"out.ipa"
+            source.write_bytes(b"fixture")
+            def execute(*args,**kwargs):
+                target.write_bytes(b"clean fixture")
+                return Mock(returncode=0)
+            with patch.dict(os.environ,{"APPLE_PASSWORD":"private-password","FAIRPLAY_MODEL_B64":"private-model"}),patch("private_export.subprocess.run",side_effect=execute) as run:
+                scrub_archive(source,target,crypt="verified-crypt")
+            self.assertEqual(run.call_args.args[0],["verified-crypt","scrub",str(source),str(target)])
+            self.assertNotIn("APPLE_PASSWORD",run.call_args.kwargs["env"])
+            self.assertNotIn("FAIRPLAY_MODEL_B64",run.call_args.kwargs["env"])
+            target.unlink()
+            with patch("private_export.subprocess.run",return_value=Mock(returncode=2)):
+                with self.assertRaisesRegex(ExportError,"account_scrub_rejected"):
+                    scrub_archive(source,target,crypt="verified-crypt")
+            self.assertFalse(target.exists())
+
+    def test_output_crc_remains_required_after_raw_copy(self):
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/"bad.ipa"
+            with zipfile.ZipFile(path,"w",compression=zipfile.ZIP_STORED) as archive:
+                archive.writestr("Payload/app/data",b"unique-payload")
+            raw=path.read_bytes();path.write_bytes(raw.replace(b"unique-payload",b"broken-payload",1))
+            before={"bundle_id":"synthetic","binaries":[]}
+            with patch("private_export.audit",return_value=dict(before,encrypted_slice_count=0)):
+                with self.assertRaisesRegex(ExportError,"output_crc_failed"):
+                    verify_output(path,before)
 
     def test_remove_all_store_metadata_and_licenses(self):
         with tempfile.TemporaryDirectory() as d:
