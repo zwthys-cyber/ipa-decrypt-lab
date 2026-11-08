@@ -4,12 +4,18 @@ on:
     branches: [main]
     paths: ['tools/**', 'tests/**', '.github/workflows/native-runtime-build.yml']
   workflow_dispatch:
+    inputs:
+      runner:
+        description: Build all supported pools or renew one exact-platform runtime
+        type: choice
+        default: both
+        options: [both, macos-15-intel, macos-26-intel]
   schedule:
     - cron: '17 3 * * 1'
 permissions:
   contents: read
 concurrency:
-  group: native-runtime-build-native-amd
+  group: native-runtime-build-native-amd-${{ inputs.runner || 'both' }}
   cancel-in-progress: false
 jobs:
   build:
@@ -17,7 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [macos-26-intel, macos-15-intel]
+        runner: ${{ fromJSON(inputs.runner == 'macos-15-intel' && '["macos-15-intel"]' || inputs.runner == 'macos-26-intel' && '["macos-26-intel"]' || '["macos-26-intel","macos-15-intel"]') }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     env:
