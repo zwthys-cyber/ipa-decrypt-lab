@@ -1,8 +1,14 @@
 name: Build official Telegram large-file server
 on:
   workflow_dispatch:
+    inputs:
+      reuse_vps_run:
+        description: Optional successful main VPS producer with the same pinned public Bot API
+        type: string
+        default: ''
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: telegram-server-build
   cancel-in-progress: false
@@ -28,8 +34,61 @@ jobs:
         with:
           path: dist/telegram-bot-api
           key: telegram-bot-api-ubuntu24-x64-e3e9dd8e5b3d7ab-v1
+      - name: Recover identical pinned Bot API from a verified public CI bundle
+        id: recovery
+        if: steps.binary-cache.outputs.cache-hit != 'true' && inputs.reuse_vps_run != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REUSE_VPS_RUN: ${{ inputs.reuse_vps_run }}
+        run: |
+          python3 - <<'PYRECOVER'
+          import base64,hashlib,io,json,os,re,shutil,subprocess,tarfile,tempfile,zipfile
+          from pathlib import Path
+          repo=os.environ['GITHUB_REPOSITORY']
+          identifier=os.environ['REUSE_VPS_RUN']
+          assert re.fullmatch(r'[1-9][0-9]{0,19}',identifier)
+          def api(path):
+              return json.loads(subprocess.check_output(['gh','api','repos/'+repo+path],text=True))
+          run=api('/actions/runs/'+identifier)
+          assert run['status']=='completed' and run['conclusion']=='success'
+          assert run['path']=='.github/workflows/vps-release.yml' and run['head_branch']=='main'
+          assert run['event']=='workflow_dispatch'
+          workflow=api('/contents/.github/workflows/vps-release.yml?ref='+run['head_sha'])
+          source=base64.b64decode(workflow['content']).decode()
+          expected_key='telegram-bot-api-ubuntu24-x64-e3e9dd8e5b3d7ab-v1'
+          assert 'key: '+expected_key in source
+          artifacts=api('/actions/runs/'+identifier+'/artifacts')['artifacts']
+          found=[a for a in artifacts if a['name']=='vps-controller-'+run['head_sha'] and not a['expired']]
+          assert len(found)==1 and 0<found[0]['size_in_bytes']<=256*1024*1024
+          item=found[0]
+          raw=subprocess.check_output(['gh','api','repos/'+repo+'/actions/artifacts/'+str(item['id'])+'/zip'])
+          assert len(raw)<=256*1024*1024 and 'sha256:'+hashlib.sha256(raw).hexdigest()==item['digest']
+          with zipfile.ZipFile(io.BytesIO(raw)) as zipped:
+              entries=zipped.infolist()
+              assert len(entries)==2 and {e.filename for e in entries}=={'vps-controller.tar.gz','vps-controller.sha256'}
+              assert sum(e.file_size for e in entries)<=256*1024*1024
+              packed=zipped.read('vps-controller.tar.gz')
+              assert hashlib.sha256(packed).hexdigest()==zipped.read('vps-controller.sha256').decode().split()[0]
+          with tarfile.open(fileobj=io.BytesIO(packed),mode='r:gz') as archive:
+              members=archive.getmembers()
+              binaries=[m for m in members if m.name.removeprefix('./')=='bin/telegram-bot-api']
+              commits=[m for m in members if m.name.removeprefix('./')=='SOURCE_COMMIT']
+              assert len(binaries)==len(commits)==1
+              binary=binaries[0]
+              assert binary.isfile() and not binary.sparse and 0<binary.size<=128*1024*1024
+              assert commits[0].isfile() and commits[0].size<=128
+              assert archive.extractfile(commits[0]).read().decode().strip()==run['head_sha']
+              Path('dist').mkdir(exist_ok=True)
+              target=Path('dist/telegram-bot-api')
+              with archive.extractfile(binary) as src,target.open('xb') as dst:
+                  shutil.copyfileobj(src,dst,1024*1024)
+              target.chmod(0o755)
+          with open(os.environ['GITHUB_OUTPUT'],'a') as outputs:
+              outputs.write('restored=true\n')
+          print(json.dumps({'reused_public_artifact':item['id'],'upstream_commit':'e3e9dd8e5b3d7ab8537cd5a10dc31d5ffa8f82d1'}))
+          PYRECOVER
       - name: Compile official local Bot API
-        if: steps.binary-cache.outputs.cache-hit != 'true'
+        if: steps.binary-cache.outputs.cache-hit != 'true' && steps.recovery.outputs.restored != 'true'
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DTD_ENABLE_JNI=OFF
           cmake --build build --target telegram-bot-api --parallel 2

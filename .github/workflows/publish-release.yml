@@ -40,6 +40,20 @@ jobs:
           from telegram_queue import GitHub
           repo=os.environ["GITHUB_REPOSITORY"]
           sha=os.environ["GITHUB_SHA"]
+          # Check local Markdown targets in the same GitHub publication job.
+          from urllib.parse import unquote
+          documentation=list(Path('.').glob('*.md'))+list(Path('docs').rglob('*.md'))
+          for document in documentation:
+              text=document.read_text()
+              text=re.sub(r'```[\s\S]*?```','',text)
+              for link in re.findall(r'\]\(([^)]+)\)',text):
+                  target=link.strip().split()[0].strip('<>') if link.strip() else ''
+                  if not target or target.startswith(('#','https://','http://','mailto:')):
+                      continue
+                  target=unquote(target.split('#',1)[0])
+                  if target:
+                      assert (document.parent/target).is_file(), 'broken_document_link:'+str(document)+':'+target
+          print(json.dumps({'markdown_documents_checked':len(documentation)}))
           identifier=os.environ["VPS_RUN"]
           assert re.fullmatch(r"[1-9][0-9]{0,19}",identifier), "invalid_run_id"
           def api(path):

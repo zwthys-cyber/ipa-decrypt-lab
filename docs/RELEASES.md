@@ -43,7 +43,7 @@ macOS 可用 `shasum -a 256 文件名`，再与清单中对应条目比较。只
 所有构建与验证都在 GitHub-hosted Actions 执行。发布前固定 main 的源码提交：
 
 1. 运行 `native-runtime-build.yml`。默认检查 macOS 26/15 Intel；发布完整双平台成品时，所选成功运行必须同时提供两个平台的精确源码指纹产物。手动单平台恢复产物不能代替完整双平台发布。
-2. 在同一个最终源码提交上运行 `vps-release.yml`，保持 `deploy=false`；等待 Ubuntu、Debian 13、systemd 和包校验全部通过。
+2. 若官方 Bot API 缓存缺失，先运行 `telegram-server-build.yml` 构建或从已验证的同版本公共 CI 产物恢复缓存。随后在同一个最终源码提交上运行 `vps-release.yml`，保持 `deploy=false`；等待 Ubuntu、Debian 13、systemd 和包校验全部通过。
 3. 运行 `publish-release.yml`，填写 `vps_run` 和 `native_run`。前者必须来自当前发布提交的成功 build-only 运行，后者必须是成功的 main 分支原生运行包构建。
 4. 发布器独立校验生产工作流身份、平台、源码指纹、artifact ZIP 摘要、包内清单、源码内容和许可证；验证后才创建草稿、上传附件并公开预览版。
 

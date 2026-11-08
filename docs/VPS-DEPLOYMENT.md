@@ -82,3 +82,6 @@ cat /var/lib/ipazake/health.json
 公开发布新版 Linux 包与实际部署是两个动作：`vps-release.yml` 的 `deploy=false` 只构建验证，`publish-release.yml` 只验证并发布附件。此次成品更新不自动部署 VPS。要升级线上控制器，仍需单独运行经过验证的部署流程并检查服务健康，数据库和上一版配置继续保留。
 
 完整发布操作、`vps_run` / `native_run` 的来源要求及附件校验，见[成品包说明](RELEASES.md)。
+
+
+公共 Bot API 缓存缺失时，可运行 `telegram-server-build.yml` 重新构建固定版本。若仍有相同固定版本的已验证 VPS 公共产物，也可填写 `reuse_vps_run`：恢复步骤必须验证成功的 main 生产工作流、上游固定版本缓存键、artifact ZIP 摘要、包摘要和源码提交，只取出公共 Bot API 二进制并再次检查版本。它不恢复账号、模型、凭据或旧版项目源码。缓存恢复完成后，重新运行最终源码提交的 `vps-release.yml` 完整验证。
