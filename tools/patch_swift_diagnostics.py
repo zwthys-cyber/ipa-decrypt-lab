@@ -225,7 +225,8 @@ final class LabStoreAMDTests: XCTestCase {
     }
     func testValidatesProofWithoutLoggingValues() throws {
         XCTAssertEqual(try StoreAMD.validated(["X-Apple-AMD":"synthetic", "X-Apple-AMD-M":"machine", "Cookie":"ignored"]).count, 2)
-        for values: [String: Any] in [[:], ["X-Apple-AMD":"x"], ["X-Apple-AMD":"x\\r\\n", "X-Apple-AMD-M":"m"], ["X-Apple-AMD":"", "X-Apple-AMD-M":"m"], ["X-Apple-AMD":String(repeating:"x", count:8193), "X-Apple-AMD-M":"m"]] {
+        let invalid: [[String: Any]] = [[:], ["X-Apple-AMD":"x"], ["X-Apple-AMD":"x\\r\\n", "X-Apple-AMD-M":"m"], ["X-Apple-AMD":"", "X-Apple-AMD-M":"m"], ["X-Apple-AMD":String(repeating:"x", count:8193), "X-Apple-AMD-M":"m"]]
+        for values in invalid {
             XCTAssertThrowsError(try StoreAMD.validated(values))
         }
     }
