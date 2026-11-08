@@ -69,7 +69,13 @@ jobs:
           static id publicRoute(id cls,SEL sel,id request) {
            NSURL *url=[request URL];
            if([@[@"bag.itunes.apple.com",@"init.itunes.apple.com"] containsObject:url.host]&&[url.path isEqual:@"/bag.xml"]&&[[request HTTPMethod] isEqual:@"GET"]) {
+            NSMutableArray *fields=[NSMutableArray array];
+            for(NSString *field in @[@"Cookie",@"Authorization",@"X-Token",@"X-Dsid",@"iCloud-DSID",@"X-Apple-Store-Front",@"X-Apple-AMD",@"X-Apple-AMD-M",@"X-Apple-ActionSignature"])if([request valueForHTTPHeaderField:field])[fields addObject:field];
+            NSData *meta=[NSJSONSerialization dataWithJSONObject:@{@"schema":@"native-bag-request-fields-v1",@"present":fields,@"body_present":@([request HTTPBody]!=nil),@"body_stream_present":@([request HTTPBodyStream]!=nil)} options:0 error:NULL];
+            fprintf(stderr,"IPA_LAB_SP_DIAG:%s\n",[[NSString alloc]initWithData:meta encoding:NSUTF8StringEncoding].UTF8String);
             NSMutableURLRequest *copy=[request mutableCopy];
+            [copy setValue:nil forHTTPHeaderField:@"Cookie"];
+            [copy setValue:nil forHTTPHeaderField:@"Authorization"];
             copy.URL=[NSURL URLWithString:@"https://init.itunes.apple.com/bag.xml?ix=6"];
             [copy setValue:@"Configurator/2.21 (Macintosh; OS X 15.2; 24C5089c) AppleWebKit/0620.1.16.11.6" forHTTPHeaderField:@"User-Agent"];
             return copy;
