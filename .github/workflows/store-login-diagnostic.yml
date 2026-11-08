@@ -66,6 +66,22 @@ jobs:
           #import <dlfcn.h>
           static IMP original, originalHeaders;
           static id nativeBag;
+          static IMP originalBagRequest;
+          static id bagRequest(id task,SEL sel,id cookieNames,id storefront) {
+           id pending=((id(*)(id,SEL,id,id))originalBagRequest)(task,sel,cookieNames,storefront);
+           id request=pending;
+           SEL wait=NSSelectorFromString(@"resultWithError:");
+           BOOL promise=[pending respondsToSelector:wait];
+           if(promise)request=((id(*)(id,SEL,NSError **))objc_msgSend)(pending,wait,NULL);
+           if([request isKindOfClass:NSURLRequest.class]&&[[@[@"bag.itunes.apple.com",@"init.itunes.apple.com"] filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"SELF == %@",[request URL].host]] count]>0) {
+            NSMutableURLRequest *updated=[request mutableCopy];
+            updated.URL=[NSURL URLWithString:@"https://init.itunes.apple.com/bag.xml?ix=6"];
+            [updated setValue:@"Configurator/2.21 (Macintosh; OS X 15.2; 24C5089c) AppleWebKit/0620.1.16.11.6" forHTTPHeaderField:@"User-Agent"];
+            fprintf(stderr,"IPA_LAB_SP_DIAG:{\"schema\":\"store-bag-route-v1\",\"replaced\":true}\n");
+            return promise?((id(*)(id,SEL,id))objc_msgSend)(NSClassFromString(@"AMSPromise"),NSSelectorFromString(@"promiseWithResult:"),updated):updated;
+           }
+           return pending;
+          }
           static IMP originalURL,originalURLAccount,originalArray;
           static id publicValue(id bag,id key,id old) {
            if(bag!=nativeBag)return old;
@@ -170,9 +186,11 @@ jobs:
            Method url=class_getInstanceMethod(NSClassFromString(@"AMSBag"),NSSelectorFromString(@"URLForKey:"));
            Method urlAccount=class_getInstanceMethod(NSClassFromString(@"AMSBag"),NSSelectorFromString(@"URLForKey:account:"));
            Method array=class_getInstanceMethod(NSClassFromString(@"AMSBag"),NSSelectorFromString(@"arrayForKey:"));
-           if(url) originalURL=method_setImplementation(url,(IMP)fixedURL);
-           if(urlAccount) originalURLAccount=method_setImplementation(urlAccount,(IMP)fixedURLAccount);
-           if(array) originalArray=method_setImplementation(array,(IMP)fixedArray);
+           // Preserve native bag values and trustedDomains metadata.
+
+
+           Method bagRequestMethod=class_getInstanceMethod(NSClassFromString(@"AMSBagNetworkTask"),NSSelectorFromString(@"_createRequestWithCookieNames:storefront:"));
+           if(bagRequestMethod)originalBagRequest=method_setImplementation(bagRequestMethod,(IMP)bagRequest);
            if(method) original=method_setImplementation(method,(IMP)observe);
            Method headers=class_getClassMethod(cls,NSSelectorFromString(@"headersForRequest:account:type:bag:"));
            if(headers) originalHeaders=method_setImplementation(headers,(IMP)proofHeaders);
