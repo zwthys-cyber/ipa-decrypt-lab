@@ -189,6 +189,12 @@ jobs:
            // Preserve native bag values and trustedDomains metadata.
 
 
+           unsigned requestCount=0;Method *requestMethods=class_copyMethodList(NSClassFromString(@"AMSBagNetworkTask"),&requestCount);
+           NSMutableArray *requestNames=[NSMutableArray array];
+           for(unsigned i=0;i<requestCount;i++){NSString *name=NSStringFromSelector(method_getName(requestMethods[i]));if([name containsString:@"Request"]||[name containsString:@"URL"]) [requestNames addObject:@{@"name":name,@"encoding":@(method_getTypeEncoding(requestMethods[i]))}];}
+           free(requestMethods);
+           NSData *requestMeta=[NSJSONSerialization dataWithJSONObject:@{@"schema":@"store-bag-request-api-v1",@"methods":requestNames} options:0 error:NULL];
+           fprintf(stderr,"IPA_LAB_SP_DIAG:%s\n",[[NSString alloc]initWithData:requestMeta encoding:NSUTF8StringEncoding].UTF8String);
            Method bagRequestMethod=class_getInstanceMethod(NSClassFromString(@"AMSBagNetworkTask"),NSSelectorFromString(@"_createRequestWithCookieNames:storefront:"));
            if(bagRequestMethod)originalBagRequest=method_setImplementation(bagRequestMethod,(IMP)bagRequest);
            if(method) original=method_setImplementation(method,(IMP)observe);
