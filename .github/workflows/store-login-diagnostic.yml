@@ -157,6 +157,7 @@ jobs:
                   "legacy_auth": "/WebObjects/MZFinance.woa/wa/authenticate",
               }
               print(json.dumps({"schema":"login-detail-v1",
+                  "store_proof_error_codes":[int(v) for v in re.findall(r"StoreAMD (?:error |Code=)([1-4])\b", raw)][-2:],
                   "flags":[key for key, terms in categories.items() if any(term in lower for term in terms)],
                   "request_endpoints":[key for key, marker in endpoints.items() if marker in raw],
                   "response_statuses":[int(v) for v in re.findall(r"<<< ([1-5][0-9]{2})\b", raw)][-12:],
