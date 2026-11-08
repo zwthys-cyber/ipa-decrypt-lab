@@ -90,7 +90,15 @@ jobs:
             NSMutableArray *flags=[NSMutableArray array];
             NSString *message=[error.description lowercaseString];
             for(NSString *term in @[@"bag",@"url",@"missing",@"invalid",@"provision",@"account",@"permission",@"entitlement",@"unsupported",@"response",@"parse",@"network",@"certificate",@"amsbag",@"client",@"400",@"key",@"profile",@"timeout"]) if([message containsString:term]) [flags addObject:term];
-            [errors addObject:@{@"domain":[domains containsObject:error.domain]?error.domain:@"other",@"flags":flags,@"code":@(MAX(-999999,MIN(999999,error.code)))}];
+            NSString *endpoint=@"other";
+            id location=error.userInfo[@"AMSURL"];
+            NSURL *url=[location isKindOfClass:NSURL.class]?location:([location isKindOfClass:NSString.class]?[NSURL URLWithString:location]:nil);
+            if([@[@"init.itunes.apple.com",@"bag.itunes.apple.com"] containsObject:url.host]) endpoint=url.host;
+            NSString *bagKey=@"unknown";
+            NSRegularExpression *regex=[NSRegularExpression regularExpressionWithPattern:@"retrieve ([a-zA-Z0-9_-]{1,80})" options:0 error:NULL];
+            NSTextCheckingResult *match=[regex firstMatchInString:message options:0 range:NSMakeRange(0,message.length)];
+            if(match)bagKey=[message substringWithRange:[match rangeAtIndex:1]];
+            [errors addObject:@{@"domain":[domains containsObject:error.domain]?error.domain:@"other",@"endpoint":endpoint,@"bag_key":bagKey,@"flags":flags,@"code":@(MAX(-999999,MIN(999999,error.code)))}];
             error=error.userInfo[NSUnderlyingErrorKey];
            }
            NSString *kind=result?NSStringFromClass([result class]):@"nil";
@@ -106,6 +114,12 @@ jobs:
            Class cls=NSClassFromString(@"AMSAnisette");
            Method method=class_getClassMethod(cls,NSSelectorFromString(@"handleResponse:type:bag:account:"));
            SEL bagSelector=NSSelectorFromString(@"createBagForSubProfile");
+           unsigned count=0; Method *methods=class_copyMethodList(NSClassFromString(@"AMSBag"),&count);
+           NSMutableArray *names=[NSMutableArray array];
+           for(unsigned i=0;i<count;i++) { NSString *name=NSStringFromSelector(method_getName(methods[i])); if([name containsString:@"URL"]||[name containsString:@"Dictionary"]||[name containsString:@"Overlay"]||[name containsString:@"Value"]) [names addObject:name]; }
+           free(methods);
+           NSData *metadata=[NSJSONSerialization dataWithJSONObject:@{@"schema":@"store-bag-api-v1",@"selectors":names} options:0 error:NULL];
+           fprintf(stderr,"IPA_LAB_SP_DIAG:%s\n",[[NSString alloc]initWithData:metadata encoding:NSUTF8StringEncoding].UTF8String);
            if([cls respondsToSelector:bagSelector]) nativeBag=((id(*)(id,SEL))objc_msgSend)(cls,bagSelector);
            if(method) original=method_setImplementation(method,(IMP)observe);
            Method headers=class_getClassMethod(cls,NSSelectorFromString(@"headersForRequest:account:type:bag:"));
