@@ -121,6 +121,13 @@ jobs:
            NSData *metadata=[NSJSONSerialization dataWithJSONObject:@{@"schema":@"store-bag-api-v1",@"selectors":names} options:0 error:NULL];
            fprintf(stderr,"IPA_LAB_SP_DIAG:%s\n",[[NSString alloc]initWithData:metadata encoding:NSUTF8StringEncoding].UTF8String);
            if([cls respondsToSelector:bagSelector]) nativeBag=((id(*)(id,SEL))objc_msgSend)(cls,bagSelector);
+           // Values verified in Apple's Configurator bag.xml?ix=6, not copied from third-party services.
+           SEL defaults=NSSelectorFromString(@"setDefaultValue:forKey:");
+           if([nativeBag respondsToSelector:defaults]) {
+            ((void(*)(id,SEL,id,id))objc_msgSend)(nativeBag,defaults,@"https://auth.itunes.apple.com/auth/v1/otp/1.5/finish",@"amd-finish-provisioning");
+            ((void(*)(id,SEL,id,id))objc_msgSend)(nativeBag,defaults,@"https://auth.itunes.apple.com/auth/v1/otp/1.5/sync",@"amd-sync-machine");
+            ((void(*)(id,SEL,id,id))objc_msgSend)(nativeBag,defaults,@[@"auth.itunes.apple.com"],@"amd-domains");
+           }
            if(method) original=method_setImplementation(method,(IMP)observe);
            Method headers=class_getClassMethod(cls,NSSelectorFromString(@"headersForRequest:account:type:bag:"));
            if(headers) originalHeaders=method_setImplementation(headers,(IMP)proofHeaders);
