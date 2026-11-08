@@ -72,7 +72,7 @@ jobs:
            id value=nil;
            if([key isEqual:@"amd-finish-provisioning"])value=@"https://auth.itunes.apple.com/auth/v1/otp/1.5/finish";
            if([key isEqual:@"amd-sync-machine"])value=@"https://auth.itunes.apple.com/auth/v1/otp/1.5/sync";
-           if([key isEqual:@"amd-domains"])value=@[@"auth.itunes.apple.com"];
+           if([key isEqual:@"amd-domains"]||[key isEqual:@"trustedDomains"])value=@[@"auth.itunes.apple.com"];
            if(!value)return old;
            SEL selector=NSSelectorFromString(@"frozenBagValueWithKey:value:valueType:");
            Class cls=NSClassFromString(@"AMSBagValue");
