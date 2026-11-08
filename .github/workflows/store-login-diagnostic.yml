@@ -118,7 +118,11 @@ jobs:
             NSRegularExpression *regex=[NSRegularExpression regularExpressionWithPattern:@"retrieve ([a-zA-Z0-9_-]{1,80})" options:0 error:NULL];
             NSTextCheckingResult *match=[regex firstMatchInString:message options:0 range:NSMakeRange(0,message.length)];
             if(match)bagKey=[message substringWithRange:[match rangeAtIndex:1]];
-            [errors addObject:@{@"domain":[domains containsObject:error.domain]?error.domain:@"other",@"endpoint":endpoint,@"bag_key":bagKey,@"flags":flags,@"code":@(MAX(-999999,MIN(999999,error.code)))}];
+            NSString *coderKey=@"unknown";
+            NSRegularExpression *keyRegex=[NSRegularExpression regularExpressionWithPattern:@"key ['\"]([A-Za-z_.-]{1,64})['\"]" options:0 error:NULL];
+            NSTextCheckingResult *keyMatch=[keyRegex firstMatchInString:message options:0 range:NSMakeRange(0,message.length)];
+            if(keyMatch)coderKey=[message substringWithRange:[keyMatch rangeAtIndex:1]];
+            [errors addObject:@{@"domain":[domains containsObject:error.domain]?error.domain:@"other",@"endpoint":endpoint,@"bag_key":bagKey,@"coder_key":coderKey,@"flags":flags,@"code":@(MAX(-999999,MIN(999999,error.code)))}];
             error=error.userInfo[NSUnderlyingErrorKey];
            }
            NSString *kind=result?NSStringFromClass([result class]):@"nil";
