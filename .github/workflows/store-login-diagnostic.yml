@@ -70,15 +70,18 @@ jobs:
           static id publicValue(id bag,id key,id old) {
            if(bag!=nativeBag)return old;
            id value=nil;
-           if([key isEqual:@"amd-finish-provisioning"])value=[NSURL URLWithString:@"https://auth.itunes.apple.com/auth/v1/otp/1.5/finish"];
-           if([key isEqual:@"amd-sync-machine"])value=[NSURL URLWithString:@"https://auth.itunes.apple.com/auth/v1/otp/1.5/sync"];
+           if([key isEqual:@"amd-finish-provisioning"])value=@"https://auth.itunes.apple.com/auth/v1/otp/1.5/finish";
+           if([key isEqual:@"amd-sync-machine"])value=@"https://auth.itunes.apple.com/auth/v1/otp/1.5/sync";
            if([key isEqual:@"amd-domains"])value=@[@"auth.itunes.apple.com"];
            if(!value)return old;
            SEL selector=NSSelectorFromString(@"frozenBagValueWithKey:value:valueType:");
            Class cls=NSClassFromString(@"AMSBagValue");
            if(![cls respondsToSelector:selector]||![old respondsToSelector:NSSelectorFromString(@"valueType")])return old;
            unsigned long long type=((unsigned long long(*)(id,SEL))objc_msgSend)(old,NSSelectorFromString(@"valueType"));
-           return ((id(*)(id,SEL,id,id,unsigned long long))objc_msgSend)(cls,selector,key,value,type);
+           id frozen=((id(*)(id,SEL,id,id,unsigned long long))objc_msgSend)(cls,selector,key,value,type);
+           SEL get=NSSelectorFromString(@"transformBlocks"),set=NSSelectorFromString(@"setTransformBlocks:");
+           if([old respondsToSelector:get]&&[frozen respondsToSelector:set])((void(*)(id,SEL,id))objc_msgSend)(frozen,set,((id(*)(id,SEL))objc_msgSend)(old,get));
+           return frozen;
           }
           static id fixedURL(id bag,SEL sel,id key) {return publicValue(bag,key,((id(*)(id,SEL,id))originalURL)(bag,sel,key));}
           static id fixedURLAccount(id bag,SEL sel,id key,id account) {return publicValue(bag,key,((id(*)(id,SEL,id,id))originalURLAccount)(bag,sel,key,account));}
@@ -106,7 +109,7 @@ jobs:
            for(unsigned i=0;error&&i<5;i++) {
             NSMutableArray *flags=[NSMutableArray array];
             NSString *message=[error.description lowercaseString];
-            for(NSString *term in @[@"bag",@"url",@"missing",@"invalid",@"provision",@"account",@"permission",@"entitlement",@"unsupported",@"response",@"parse",@"network",@"certificate",@"amsbag",@"client",@"400",@"key",@"profile",@"timeout"]) if([message containsString:term]) [flags addObject:term];
+            for(NSString *term in @[@"bag",@"url",@"missing",@"invalid",@"provision",@"account",@"permission",@"entitlement",@"unsupported",@"response",@"parse",@"network",@"certificate",@"amsbag",@"client",@"400",@"key",@"profile",@"timeout",@"decode",@"coder",@"archive",@"class",@"transport",@"settinginfo",@"machine",@"secure",@"reply",@"data",@"object",@"guid",@"serialize",@"deserialize",@"format",@"plist"]) if([message containsString:term]) [flags addObject:term];
             NSString *endpoint=@"other";
             id location=error.userInfo[@"AMSURL"];
             NSURL *url=[location isKindOfClass:NSURL.class]?location:([location isKindOfClass:NSString.class]?[NSURL URLWithString:location]:nil);
