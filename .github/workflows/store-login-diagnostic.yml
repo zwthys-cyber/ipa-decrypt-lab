@@ -55,6 +55,156 @@ jobs:
             ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/CoreFP
             ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/CoreFP.icxs
           key: apple-public-assets-d9c0247-26A434-arm64-v1
+      - name: Build bounded native SP result observer
+        timeout-minutes: 2
+        run: |
+          ulimit -c 0
+          cat > "$RUNNER_TEMP/store-sp-observer.m" <<'OBJC'
+          #import <Foundation/Foundation.h>
+          #import <objc/runtime.h>
+          #import <objc/message.h>
+          #import <dlfcn.h>
+          static IMP original, originalHeaders;
+          static id nativeBag;
+          static IMP originalBagRequest;
+          static id bagRequest(id task,SEL sel,id queryItems) {
+           id pending=((id(*)(id,SEL,id))originalBagRequest)(task,sel,queryItems);
+           id request=pending;
+           SEL wait=NSSelectorFromString(@"resultWithError:");
+           BOOL promise=[pending respondsToSelector:wait];
+           if(promise)request=((id(*)(id,SEL,NSError **))objc_msgSend)(pending,wait,NULL);
+           if([request isKindOfClass:NSURLRequest.class]&&[[@[@"bag.itunes.apple.com",@"init.itunes.apple.com"] filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"SELF == %@",[request URL].host]] count]>0) {
+            NSData *route=[NSJSONSerialization dataWithJSONObject:@{@"schema":@"store-bag-original-route-v1",@"path":[request URL].path?:@"",@"method":[request HTTPMethod]?:@""} options:0 error:NULL];
+            fprintf(stderr,"IPA_LAB_SP_DIAG:%s\n",[[NSString alloc]initWithData:route encoding:NSUTF8StringEncoding].UTF8String);
+            NSMutableURLRequest *updated=[request mutableCopy];
+            updated.URL=[NSURL URLWithString:@"https://init.itunes.apple.com/bag.xml?ix=6"];
+            [updated setValue:@"Configurator/2.21 (Macintosh; OS X 15.2; 24C5089c) AppleWebKit/0620.1.16.11.6" forHTTPHeaderField:@"User-Agent"];
+            fprintf(stderr,"IPA_LAB_SP_DIAG:{\"schema\":\"store-bag-route-v1\",\"replaced\":true}\n");
+            return promise?((id(*)(id,SEL,id))objc_msgSend)(NSClassFromString(@"AMSPromise"),NSSelectorFromString(@"promiseWithResult:"),updated):updated;
+           }
+           return pending;
+          }
+          static IMP originalURL,originalURLAccount,originalArray;
+          static id publicValue(id bag,id key,id old) {
+           if(bag!=nativeBag)return old;
+           id value=nil;
+           if([key isEqual:@"amd-finish-provisioning"])value=@"https://auth.itunes.apple.com/auth/v1/otp/1.5/finish";
+           if([key isEqual:@"amd-sync-machine"])value=@"https://auth.itunes.apple.com/auth/v1/otp/1.5/sync";
+           if([key isEqual:@"amd-domains"]||[key isEqual:@"trustedDomains"])value=@[@"auth.itunes.apple.com"];
+           if(!value)return old;
+           SEL selector=NSSelectorFromString(@"frozenBagValueWithKey:value:valueType:");
+           Class cls=NSClassFromString(@"AMSBagValue");
+           if(![cls respondsToSelector:selector]||![old respondsToSelector:NSSelectorFromString(@"valueType")])return old;
+           unsigned count=0; Method *methods=class_copyMethodList([old class],&count);
+           NSMutableArray *selectors=[NSMutableArray array];
+           for(unsigned i=0;i<count;i++)[selectors addObject:NSStringFromSelector(method_getName(methods[i]))];
+           free(methods);
+           NSData *meta=[NSJSONSerialization dataWithJSONObject:@{@"schema":@"store-bag-value-api-v1",@"value_class":NSStringFromClass([old class]),@"selectors":selectors} options:0 error:NULL];
+           fprintf(stderr,"IPA_LAB_SP_DIAG:%s\n",[[NSString alloc]initWithData:meta encoding:NSUTF8StringEncoding].UTF8String);
+           unsigned long long type=((unsigned long long(*)(id,SEL))objc_msgSend)(old,NSSelectorFromString(@"valueType"));
+           id frozen=((id(*)(id,SEL,id,id,unsigned long long))objc_msgSend)(cls,selector,key,value,type);
+           SEL get=NSSelectorFromString(@"transformBlocks"),set=NSSelectorFromString(@"setTransformBlocks:");
+           if([old respondsToSelector:get]&&[frozen respondsToSelector:set])((void(*)(id,SEL,id))objc_msgSend)(frozen,set,((id(*)(id,SEL))objc_msgSend)(old,get));
+           return frozen;
+          }
+          static id fixedURL(id bag,SEL sel,id key) {return publicValue(bag,key,((id(*)(id,SEL,id))originalURL)(bag,sel,key));}
+          static id fixedURLAccount(id bag,SEL sel,id key,id account) {return publicValue(bag,key,((id(*)(id,SEL,id,id))originalURLAccount)(bag,sel,key,account));}
+          static id fixedArray(id bag,SEL sel,id key) {return publicValue(bag,key,((id(*)(id,SEL,id))originalArray)(bag,sel,key));}
+          static id proofHeaders(id cls,SEL sel,id request,id account,long long type,id bag) {
+           return ((id(*)(id,SEL,id,id,long long,id))originalHeaders)(cls,sel,request,account,type,type==2&&nativeBag?nativeBag:bag);
+          }
+          static id observe(id cls,SEL sel,id response,long long type,id bag,id account) {
+           id pending=((id(*)(id,SEL,id,long long,id,id))original)(cls,sel,response,type,type==2&&nativeBag?nativeBag:bag,account);
+           NSError *error=nil; id result=pending;
+           SEL wait=NSSelectorFromString(@"resultWithError:");
+           if ([pending respondsToSelector:wait]) result=((id(*)(id,SEL,NSError **))objc_msgSend)(pending,wait,&error);
+           BOOL actionRetry=NO;
+           if ([result isKindOfClass:NSClassFromString(@"AMSURLAction")]) {
+            error=((id(*)(id,SEL))objc_msgSend)(result,NSSelectorFromString(@"error"));
+            long long action=((long long(*)(id,SEL))objc_msgSend)(result,NSSelectorFromString(@"actionType"));
+            id expected=((id(*)(id,SEL))objc_msgSend)(NSClassFromString(@"AMSURLAction"),NSSelectorFromString(@"retryAction"));
+            actionRetry=!error&&action==((long long(*)(id,SEL))objc_msgSend)(expected,NSSelectorFromString(@"actionType"));
+           }
+           NSDictionary *headers=[response isKindOfClass:NSHTTPURLResponse.class]?[response allHeaderFields]:@{};
+           BOOL actionData=NO;
+           for(id key in headers) if([[key description] caseInsensitiveCompare:@"X-Apple-AMD-Data"]==NSOrderedSame) actionData=YES;
+           NSArray *domains=@[@"AMSErrorDomain",@"NSURLErrorDomain",@"NSCocoaErrorDomain",@"NSPOSIXErrorDomain",@"AKAnisetteError",@"com.apple.AppleMediaServices"];
+           NSMutableArray *errors=[NSMutableArray array];
+           for(unsigned i=0;error&&i<5;i++) {
+            NSMutableArray *flags=[NSMutableArray array];
+            NSString *message=[error.description lowercaseString];
+            for(NSString *term in @[@"bag",@"url",@"missing",@"invalid",@"provision",@"account",@"permission",@"entitlement",@"unsupported",@"response",@"parse",@"network",@"certificate",@"amsbag",@"client",@"400",@"key",@"profile",@"timeout",@"decode",@"coder",@"archive",@"class",@"transport",@"settinginfo",@"machine",@"secure",@"reply",@"data",@"object",@"guid",@"serialize",@"deserialize",@"format",@"plist"]) if([message containsString:term]) [flags addObject:term];
+            NSString *endpoint=@"other";
+            id location=error.userInfo[@"AMSURL"];
+            NSURL *url=[location isKindOfClass:NSURL.class]?location:([location isKindOfClass:NSString.class]?[NSURL URLWithString:location]:nil);
+            if([@[@"init.itunes.apple.com",@"bag.itunes.apple.com"] containsObject:url.host]) endpoint=url.host;
+            NSString *bagKey=@"unknown";
+            NSRegularExpression *regex=[NSRegularExpression regularExpressionWithPattern:@"retrieve ([a-zA-Z0-9_-]{1,80})" options:0 error:NULL];
+            NSTextCheckingResult *match=[regex firstMatchInString:message options:0 range:NSMakeRange(0,message.length)];
+            if(match)bagKey=[message substringWithRange:[match rangeAtIndex:1]];
+            NSString *coderKey=@"unknown";
+            NSRegularExpression *keyRegex=[NSRegularExpression regularExpressionWithPattern:@"key ['\"]([A-Za-z_.-]{1,64})['\"]" options:0 error:NULL];
+            NSTextCheckingResult *keyMatch=[keyRegex firstMatchInString:message options:0 range:NSMakeRange(0,message.length)];
+            if(keyMatch)coderKey=[message substringWithRange:[keyMatch rangeAtIndex:1]];
+            [errors addObject:@{@"domain":[domains containsObject:error.domain]?error.domain:@"other",@"endpoint":endpoint,@"bag_key":bagKey,@"coder_key":coderKey,@"flags":flags,@"code":@(MAX(-999999,MIN(999999,error.code)))}];
+            error=error.userInfo[NSUnderlyingErrorKey];
+           }
+           NSString *kind=result?NSStringFromClass([result class]):@"nil";
+           if(kind.length>80||[kind rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_"].invertedSet].location!=NSNotFound)kind=@"other";
+           NSDictionary *safe=@{@"bag_response":@([response isKindOfClass:NSHTTPURLResponse.class]&&[[response URL].host isEqualToString:@"init.itunes.apple.com"]),@"native_bag":@(nativeBag!=nil),@"retry_action":@(actionRetry),@"result_class":kind,@"schema":@"store-sp-result-v1",@"pending":@([pending respondsToSelector:wait]),@"result_present":@(result!=nil),@"result_number":@([result isKindOfClass:NSNumber.class]),@"result_bool":@([result isKindOfClass:NSNumber.class]&&[result boolValue]),@"action_data_present":@(actionData),@"status":@([response isKindOfClass:NSHTTPURLResponse.class]?[response statusCode]:0),@"type":@(type==2?2:0),@"errors":errors};
+           NSData *json=[NSJSONSerialization dataWithJSONObject:safe options:NSJSONWritingSortedKeys error:NULL];
+           fprintf(stderr,"IPA_LAB_SP_DIAG:%s\n",[[NSString alloc]initWithData:json encoding:NSUTF8StringEncoding].UTF8String);
+           if(type==2&&actionData&&actionRetry) return @YES;
+           return pending;
+          }
+          __attribute__((constructor)) static void install(void) { @autoreleasepool {
+           dlopen("/System/Library/PrivateFrameworks/AppleMediaServices.framework/AppleMediaServices",RTLD_NOW|RTLD_LOCAL);
+           Class cls=NSClassFromString(@"AMSAnisette");
+           Method method=class_getClassMethod(cls,NSSelectorFromString(@"handleResponse:type:bag:account:"));
+           SEL bagSelector=NSSelectorFromString(@"createBagForSubProfile");
+           unsigned count=0; Method *methods=class_copyMethodList(NSClassFromString(@"AMSBag"),&count);
+           NSMutableArray *names=[NSMutableArray array];
+           for(unsigned i=0;i<count;i++) { NSString *name=NSStringFromSelector(method_getName(methods[i])); if([name containsString:@"URL"]||[name containsString:@"Dictionary"]||[name containsString:@"Overlay"]||[name containsString:@"Value"]) [names addObject:name]; }
+           free(methods);
+           NSData *metadata=[NSJSONSerialization dataWithJSONObject:@{@"schema":@"store-bag-api-v1",@"selectors":names} options:0 error:NULL];
+           fprintf(stderr,"IPA_LAB_SP_DIAG:%s\n",[[NSString alloc]initWithData:metadata encoding:NSUTF8StringEncoding].UTF8String);
+           if([cls respondsToSelector:bagSelector]) nativeBag=((id(*)(id,SEL))objc_msgSend)(cls,bagSelector);
+           // Values verified in Apple's Configurator bag.xml?ix=6, not copied from third-party services.
+           SEL defaults=NSSelectorFromString(@"setDefaultValue:forKey:");
+           if([nativeBag respondsToSelector:defaults]) {
+            ((void(*)(id,SEL,id,id))objc_msgSend)(nativeBag,defaults,@"https://auth.itunes.apple.com/auth/v1/otp/1.5/finish",@"amd-finish-provisioning");
+            ((void(*)(id,SEL,id,id))objc_msgSend)(nativeBag,defaults,@"https://auth.itunes.apple.com/auth/v1/otp/1.5/sync",@"amd-sync-machine");
+            ((void(*)(id,SEL,id,id))objc_msgSend)(nativeBag,defaults,@[@"auth.itunes.apple.com"],@"amd-domains");
+           }
+           id dataSource=((id(*)(id,SEL))objc_msgSend)(nativeBag,NSSelectorFromString(@"dataSource"));
+           NSMutableArray *properties=[NSMutableArray array];
+           for(Class c=[dataSource class];c&&c!=NSObject.class;c=class_getSuperclass(c)) {
+            unsigned count=0; objc_property_t *props=class_copyPropertyList(c,&count);
+            for(unsigned i=0;i<count;i++)[properties addObject:@{@"name":@(property_getName(props[i])),@"attributes":@(property_getAttributes(props[i]))}];
+            free(props);
+           }
+           NSData *sourceMeta=[NSJSONSerialization dataWithJSONObject:@{@"schema":@"store-bag-source-api-v1",@"class":NSStringFromClass([dataSource class]),@"properties":properties} options:0 error:NULL];
+           fprintf(stderr,"IPA_LAB_SP_DIAG:%s\n",[[NSString alloc]initWithData:sourceMeta encoding:NSUTF8StringEncoding].UTF8String);
+           Method url=class_getInstanceMethod(NSClassFromString(@"AMSBag"),NSSelectorFromString(@"URLForKey:"));
+           Method urlAccount=class_getInstanceMethod(NSClassFromString(@"AMSBag"),NSSelectorFromString(@"URLForKey:account:"));
+           Method array=class_getInstanceMethod(NSClassFromString(@"AMSBag"),NSSelectorFromString(@"arrayForKey:"));
+           // Preserve native bag values and trustedDomains metadata.
+
+
+           unsigned requestCount=0;Method *requestMethods=class_copyMethodList(NSClassFromString(@"AMSBagNetworkTask"),&requestCount);
+           NSMutableArray *requestNames=[NSMutableArray array];
+           for(unsigned i=0;i<requestCount;i++){NSString *name=NSStringFromSelector(method_getName(requestMethods[i]));if([name containsString:@"Request"]||[name containsString:@"URL"]) [requestNames addObject:@{@"name":name,@"encoding":@(method_getTypeEncoding(requestMethods[i]))}];}
+           free(requestMethods);
+           NSData *requestMeta=[NSJSONSerialization dataWithJSONObject:@{@"schema":@"store-bag-request-api-v1",@"methods":requestNames} options:0 error:NULL];
+           fprintf(stderr,"IPA_LAB_SP_DIAG:%s\n",[[NSString alloc]initWithData:requestMeta encoding:NSUTF8StringEncoding].UTF8String);
+           Method bagRequestMethod=class_getInstanceMethod(NSClassFromString(@"AMSBagNetworkTask"),NSSelectorFromString(@"_createRequestWithQueryItems:"));
+           if(bagRequestMethod)originalBagRequest=method_setImplementation(bagRequestMethod,(IMP)bagRequest);
+           if(method) original=method_setImplementation(method,(IMP)observe);
+           Method headers=class_getClassMethod(cls,NSSelectorFromString(@"headersForRequest:account:type:bag:"));
+           if(headers) originalHeaders=method_setImplementation(headers,(IMP)proofHeaders);
+          } }
+          OBJC
+          clang -fobjc-arc -dynamiclib -framework Foundation "$RUNNER_TEMP/store-sp-observer.m" -o "$RUNNER_TEMP/store-sp-observer.dylib"
       - name: Bounded login with fixed diagnostic fields only
         env:
           LOGIN_EXPECTED_APPLE_ID: ${{ secrets.LOGIN_EXPECTED_APPLE_ID }}
@@ -62,6 +212,7 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_2FA_CODE: ${{ secrets.APPLE_2FA_CODE }}
           LAB_NATIVE_AUTH_ROUTE: ${{ inputs.auth_route == 'native' && '1' || '0' }}
+          DYLD_INSERT_LIBRARIES: ${{ runner.temp }}/store-sp-observer.dylib
           LAB_KBSYNC_HELPER: ${{ github.workspace }}/runtime/lab-kbsync
         run: |
           ulimit -c 0
@@ -122,7 +273,7 @@ jobs:
               print(json.dumps({"schema":"login-account-comparison-v1",
                                 "matches":candidate == os.environ["APPLE_ID"].strip().casefold()}), flush=True)
           binary = str(Path("runtime/ApplePackageTool").resolve())
-          env = {k: os.environ[k] for k in ("HOME", "PATH", "LANG", "LAB_KBSYNC_HELPER", "LAB_NATIVE_AUTH_ROUTE") if k in os.environ}
+          env = {k: os.environ[k] for k in ("HOME", "PATH", "LANG", "LAB_KBSYNC_HELPER", "LAB_NATIVE_AUTH_ROUTE", "DYLD_INSERT_LIBRARIES") if k in os.environ}
           env["APPLEPACKAGE_PASSWORD"] = os.environ["APPLE_PASSWORD"]
           args = ["login", os.environ["APPLE_ID"].strip(), "--verbose"]
           if os.environ.get("APPLE_2FA_CODE"):
