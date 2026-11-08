@@ -144,3 +144,18 @@ IPA 审计采用分块临时文件和只读映射，避免把大程序整体读�
 - 最新运行包：[42325368672](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42325368672)，两个 macOS 平台构建成功，14 项 Swift 测试通过，包含地址选择和不可信地址拒绝测试。
 
 **当前状态：重试与错误可见性已修复，真实账号登录尚未恢复，下载交付未完成。** 需要进一步区分认证服务响应、运行器访问条件和程序请求兼容性；不要无差别重复提交登录或把持续失败写成成功。
+
+
+## 2026-11-08 原生认证路由与 Store AMD 注册复核
+
+**真实登录仍未恢复；没有下载、解密或交付成功的新增证据。**
+
+- 旧版复现：[42428836142](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42428836142)，旧认证地址返回 204，随后返回 404 HTML，没有账号错误码。
+- 上游新线索：[ipatool #642](https://github.com/majd/ipatool/issues/642)。其个人机器上的登录成功不能证明未注册的 GitHub Intel 运行器可用。
+- 已修正 Configurator/2.21 标识、保留 bag 返回的原生路径和查询参数、限制凭据及证明的目标地址、校验 AMD 字段、处理当前 macOS 的 AMSPromise 异步结果。保留 SAP 对实际请求体的签名，不启用账号安全升级。
+- 原生 SP 挑战至多交给系统框架处理一次。失败明确停止，不清除加密标记、不重复启用或修改账号设置。
+- [运行包构建 42430873538](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42430873538)：macOS 26 Intel 和 macOS 15 Intel 均通过构建、Python/Go 检查、17 项所选 Swift 测试及独立运行包启动验证。
+- 无账号检查证明公开的 Store 证明接口返回异步对象，等待后得到的字典没有 AMD 字段；直接传入空 action data 没有完成注册。
+- [最新真实诊断 42431580087](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42431580087)：已发起原生 POST，程序进入只由 `X-Apple-AMD-Action: SP` 触发的分支，系统注册处理返回失败（固定标记 `store_device_provisioning_failed`），没有可用证明或账号会话。该响应在原有 parseResponse 日志之前处理，因此 HTTP trace 缺少 POST 状态，不能解读成没有收到响应或确定网络中断。
+
+后续需核实原生 Store SP 注册的 bag 配置、异步错误及响应对象约定，在相同 GitHub 运行器上取得有效的 AMD 证明，再分别验证登录、原应用下载、解密和私人交付。现有证据不能确定密码错误、账号受限或出口 IP 被封。源码与运行包已更新，机器人自动使用匹配运行包；没有重新部署 VPS 控制器，没有额外发送 Telegram 消息或 IPA。
