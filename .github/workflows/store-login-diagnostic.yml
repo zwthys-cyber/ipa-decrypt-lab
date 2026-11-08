@@ -80,8 +80,8 @@ jobs:
             error=error.userInfo[NSUnderlyingErrorKey];
            }
            NSString *kind=result?NSStringFromClass([result class]):@"nil";
- if(kind.length>80||[kind rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_"].invertedSet].location!=NSNotFound)kind=@"other";
- NSDictionary *safe=@{@"result_class":kind,@"schema":@"store-sp-result-v1",@"pending":@([pending respondsToSelector:wait]),@"result_present":@(result!=nil),@"result_number":@([result isKindOfClass:NSNumber.class]),@"result_bool":@([result isKindOfClass:NSNumber.class]&&[result boolValue]),@"action_data_present":@(actionData),@"status":@([response isKindOfClass:NSHTTPURLResponse.class]?[response statusCode]:0),@"type":@(type==2?2:0),@"errors":errors};
+           if(kind.length>80||[kind rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_"].invertedSet].location!=NSNotFound)kind=@"other";
+           NSDictionary *safe=@{@"result_class":kind,@"schema":@"store-sp-result-v1",@"pending":@([pending respondsToSelector:wait]),@"result_present":@(result!=nil),@"result_number":@([result isKindOfClass:NSNumber.class]),@"result_bool":@([result isKindOfClass:NSNumber.class]&&[result boolValue]),@"action_data_present":@(actionData),@"status":@([response isKindOfClass:NSHTTPURLResponse.class]?[response statusCode]:0),@"type":@(type==2?2:0),@"errors":errors};
            NSData *json=[NSJSONSerialization dataWithJSONObject:safe options:NSJSONWritingSortedKeys error:NULL];
            fprintf(stderr,"IPA_LAB_SP_DIAG:%s\n",[[NSString alloc]initWithData:json encoding:NSUTF8StringEncoding].UTF8String);
            return pending;
