@@ -17,7 +17,22 @@ static id createBagRequest(id task,SEL selector,id queryItems) {
     return updated;
 }
 
+__attribute__((constructor)) static void initializeStoreTransport(void) {
+    @autoreleasepool { [LabStoreBagTransport nativeBag]; }
+}
+
 @implementation LabStoreBagTransport
++ (id)nativeBag {
+    if(![self install])return nil;
+    static dispatch_once_t once;
+    static id bag=nil;
+    dispatch_once(&once, ^{
+        Class cls=NSClassFromString(@"AMSAnisette");
+        SEL selector=NSSelectorFromString(@"createBagForSubProfile");
+        if([cls respondsToSelector:selector])bag=[((id(*)(id,SEL))objc_msgSend)(cls,selector) retain];
+    });
+    return bag;
+}
 + (BOOL)install {
     static dispatch_once_t once;
     static BOOL installed=NO;

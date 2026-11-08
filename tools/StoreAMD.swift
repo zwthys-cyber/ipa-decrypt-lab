@@ -14,12 +14,8 @@ enum StoreAMD {
     }
 
     private static func bag() throws -> AnyObject {
-        guard transportReady, let cls = NSClassFromString("AMSAnisette"),
-              let method = class_getClassMethod(cls, NSSelectorFromString("createBagForSubProfile")) else { throw NSError(domain:"StoreAMD", code:2) }
-        typealias Create = @convention(c) (AnyObject, Selector) -> Unmanaged<AnyObject>?
-        let call = unsafeBitCast(method_getImplementation(method), to: Create.self)
-        guard let bag = call(cls as AnyObject, NSSelectorFromString("createBagForSubProfile"))?.takeUnretainedValue() else { throw NSError(domain:"StoreAMD", code:3) }
-        return bag
+        guard transportReady, let value = LabStoreBagTransport.nativeBag() else { throw NSError(domain:"StoreAMD",code:3) }
+        return value as AnyObject
     }
 
     static func resolved(_ value: AnyObject) -> AnyObject? {
