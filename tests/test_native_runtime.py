@@ -94,6 +94,10 @@ class RuntimeTests(unittest.TestCase):
     def test_fingerprint_ignores_bytecode_but_tracks_sources(self):
         (self.root / WORKFLOW).parent.mkdir(parents=True)
         (self.root / WORKFLOW).write_text("build")
+        action=self.root / ".github/actions/export-progress"
+        action.mkdir(parents=True)
+        (action/"index.js").write_text("synthetic wrapper")
+        (action/"action.yml").write_text("synthetic action")
         (self.root / "tools").mkdir()
         source=self.root / "tools/tool.py"
         source.write_text("one")
@@ -103,6 +107,9 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(fingerprint(self.root),first)
         source.write_text("two")
         self.assertNotEqual(fingerprint(self.root),first)
+        second=fingerprint(self.root)
+        (action/"index.js").write_text("changed wrapper")
+        self.assertNotEqual(fingerprint(self.root),second)
 
 if __name__ == "__main__":
     unittest.main()

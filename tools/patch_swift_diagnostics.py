@@ -231,3 +231,15 @@ Path(sys.argv[1],"Tests/ApplePackageTests/LabStoreAMDTransportTests.swift").writ
 # Link the same native request adapter that passed the real SP diagnostic.
 Path(sys.argv[1],"Sources/CApplePackage/LabStoreBagTransport.m").write_text(Path("tools/StoreBagTransport.m").read_text())
 Path(sys.argv[1],"Sources/CApplePackage/include/LabStoreBagTransport.h").write_text(Path("tools/StoreBagTransport.h").read_text())
+
+# Fixed integer counters are the only native download output sent to progress.
+source = download.read_text()
+anchor = '    private static func updateProgress(downloaded: Int64, total: Int64) {'
+assert source.count(anchor) == 1
+source = source.replace(anchor, anchor + r'''
+        if total > 0, downloaded >= 0, downloaded <= total, total <= 2_000_000_000 {
+            let marker = "\nIPA_LAB_DOWNLOAD_BYTES:\(downloaded):\(total)\n"
+            FileHandle.standardOutput.write(Data(marker.utf8))
+        }
+''')
+download.write_text(source)

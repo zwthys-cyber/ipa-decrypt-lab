@@ -91,7 +91,21 @@ class Controller:
 
     def card(self,rid,app=""):
         if rid not in self.cards:
-            self.cards[rid]=ProgressCard(self.bot,self.owner,rid,app)
+            created=None
+            restored=None
+            save=None
+            if self.journal is not None:
+                records=getattr(self.journal,"records",{})
+                if isinstance(records,dict): created=records.get(rid,{}).get("created")
+                loader=getattr(self.journal,"progress_load",None)
+                writer=getattr(self.journal,"progress_save",None)
+                if callable(loader):
+                    try: restored=loader(rid)
+                    except Exception: pass
+                if callable(writer): save=lambda state: writer(rid,state)
+            self.cards[rid]=ProgressCard(self.bot,self.owner,rid,app,started_at=created,restored=restored,save=save)
+        elif app:
+            self.cards[rid].app=app
         return self.cards[rid]
 
     def handle(self, update):
@@ -400,5 +414,18 @@ class Controller:
             if reported is not None:
                 stage=reported
             self.current["stage"]=stage
-            self.card(rid,self.current["app"]).update(stage)
+            details=getattr(self.github,"last_progress",{})
+            detail=details.get(rid,{}) if isinstance(details,dict) else {}
+            if isinstance(detail,dict) and detail.get("stage")==stage:
+                self.card(rid,self.current["app"]).update(stage,measurement_value=detail.get("measurement"),stage_started_at=detail.get("stage_started"),measurement_at=detail.get("updated_at"))
+            else:
+                self.card(rid,self.current["app"]).update(stage)
 
+
+    def refresh_progress(self):
+        # Snapshot the dict while the main thread may add a task. Never dispatch,
+        # change a journal record or send a document from this timer path.
+        active=self.current.get("rid") if isinstance(self.current,dict) else None
+        for rid,card in tuple(self.cards.copy().items()):
+            if card.pending_final or (card.finished is None and (rid==active or card.stage in ("retrieving","delivery_verifying","uploading"))):
+                card.pulse()

@@ -54,6 +54,9 @@ class GitHub:
         require(bool(token), "missing_github_token")
         self.token = token
         self.checks_readable = True
+        self.last_progress = {}
+        self.snapshot_cache = {}
+        self.snapshot_poll = {}
         self.opener = urllib.request.build_opener(NoRedirect())
 
     def call(self, path, payload=None, method="GET", limit=4*1024*1024):
@@ -179,9 +182,56 @@ class GitHub:
                 **({"id":result["workflow_run_id"]} if isinstance(result,dict)
                    and type(result.get("workflow_run_id")) is int else {})}
 
+    def progress_snapshot(self,run,rid):
+        from task_progress import parse_snapshot
+        request_id(rid)
+        identifier=run.get("id")
+        if (type(identifier) is not int or run.get("head_branch")!="main"
+                or run.get("event")!="workflow_dispatch" or run.get("path")!=".github/workflows/"+WORKFLOW
+                or not re.fullmatch(r"[a-f0-9]{40}",run.get("head_sha", ""))):
+            return None
+        now=time.monotonic()
+        cached=self.snapshot_cache.get(identifier)
+        if now-self.snapshot_poll.get(identifier,-float("inf"))<4:
+            return cached[1] if cached else None
+        self.snapshot_poll[identifier]=now
+        try:
+            data=self.call("/actions/runs/"+str(identifier)+"/artifacts?per_page=100")
+            candidates=[]
+            for item in data.get("artifacts",[]):
+                if not isinstance(item,dict): continue
+                match=re.fullmatch("progress-"+rid+r"-([0-9]{1,10})",item.get("name",""))
+                if (match and item.get("expired") is False and type(item.get("id")) is int
+                        and type(item.get("size_in_bytes")) is int and 0<item["size_in_bytes"]<=65536
+                        and isinstance(item.get("digest"),str) and re.fullmatch(r"sha256:[a-f0-9]{64}",item["digest"])):
+                    candidates.append((int(match.group(1)),item))
+            if not candidates: return cached[1] if cached else None
+            sequence,item=max(candidates,key=lambda value:value[0])
+            if cached and item["id"]==cached[0]: return cached[1]
+            with tempfile.TemporaryDirectory(prefix="ipa-progress-read-") as directory:
+                archive=Path(directory)/"progress.zip"
+                self.archive(item["id"],archive,max_bytes=65536)
+                require("sha256:"+sha256(archive)==item["digest"],"progress_archive_digest")
+                with zipfile.ZipFile(archive) as zipped:
+                    entries=zipped.infolist()
+                    require(len(entries)==1 and entries[0].filename=="progress.json" and not entries[0].is_dir()
+                            and entries[0].file_size<=2048,"invalid_progress_inventory")
+                    value=json.loads(zipped.read(entries[0]))
+            value=parse_snapshot(value,rid,identifier,run["head_sha"],sequence)
+            if value is None: return cached[1] if cached else None
+            self.snapshot_cache[identifier]=(item["id"],value)
+            return value
+        except (QueueError,ValueError,KeyError,TypeError,OSError,zipfile.BadZipFile):
+            # Live telemetry cannot retry an export or block delivery.
+            return cached[1] if cached else None
+
     def progress(self, run, rid):
         from task_progress import parse_stage
         request_id(rid)
+        snapshot=self.progress_snapshot(run,rid)
+        if snapshot is not None:
+            self.last_progress[rid]=snapshot
+            return snapshot["stage"]
         commit=run.get("head_sha","")
         require(re.fullmatch(r"[a-f0-9]{40}",commit), "invalid_progress_commit")
         data=self.read_checks("/commits/"+commit+"/check-runs?check_name=delivery-progress-"+rid+"&per_page=100") or {}
@@ -205,6 +255,9 @@ class GitHub:
                         and check.get("status")=="in_progress"):
                     return "preparing"
             if not self.checks_readable and job.get("status")=="in_progress":
+                for step in job.get("steps",[]):
+                    if step.get("status")=="in_progress" and step.get("name")=="Export only after complete plaintext verification":
+                        return "processing"
                 return "preparing"
         return None
 

@@ -146,7 +146,7 @@ def verify_output(path, before):
         require(archive.testzip() is None, "output_crc_failed")
     return after
 
-def export(binary, engine, crypt, target, request_id, recipient, output_dir, progress=None):
+def export(binary, engine, crypt, target, request_id, recipient, output_dir, progress=None, measurement=None):
     progress = progress or (lambda stage: None)
     require(os.environ.get("GITHUB_ACTIONS") == "true", "requires_github_actions")
     require(re.fullmatch(r"[a-f0-9]{32}", request_id) is not None, "invalid_request_id")
@@ -189,7 +189,11 @@ def export(binary, engine, crypt, target, request_id, recipient, output_dir, pro
             root.chmod(0o700)
             original, candidate, cleaned = root/"source.ipa", root/"candidate.ipa", root/"delivery.ipa"
             progress("resolving_version" if requested else "downloading")
-            result = run(binary, ["download", email, info["bundleId"], "--output", str(original)], env, timeout=DOWNLOAD_TIMEOUT)
+            if measurement is None:
+                result = run(binary, ["download", email, info["bundleId"], "--output", str(original)], env, timeout=DOWNLOAD_TIMEOUT)
+            else:
+                from progress_stream import run_download
+                result = run_download(binary, ["download", email, info["bundleId"], "--output", str(original)], env, DOWNLOAD_TIMEOUT, measurement)
             if requested and result.returncode != 0:
                 markers = re.findall(r"^IPA_LAB_VERSION_ERROR:([a-z_]+)$", result.stdout or "", re.M)
                 known = {"invalid_version","version_not_found","version_search_limit","version_lookup_unavailable"}
@@ -275,7 +279,7 @@ def main():
         recipient = json.loads(Path("config/delivery.json").read_text())["recipient"]
         result = export(str(Path(args.binary).resolve()), str(Path(args.engine).resolve()),
                         str(Path(args.crypt).resolve()), os.environ.get("DELIVERY_APP_ID", ""),
-                        os.environ.get("DELIVERY_REQUEST_ID", ""), recipient, output, advance)
+                        os.environ.get("DELIVERY_REQUEST_ID", ""), recipient, output, advance, measurement=progress.measure)
         progress.advance("artifact_ready")
         print(json.dumps(result), flush=True)
         return 0

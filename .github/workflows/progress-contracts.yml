@@ -1,6 +1,11 @@
 name: Sanitized progress channel verification
 on:
   workflow_dispatch:
+    inputs:
+      sample_request_id:
+        description: Optional fixed existing encrypted sample; omit for account-free progress checks
+        type: string
+        default: ''
 permissions:
   contents: read
   checks: write
@@ -15,7 +20,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Test progress boundaries without credentials
-        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+        run: |
+          python3 -m unittest discover -s tests -p 'test_*.py' -v
+          node --test tests/progress_worker.test.cjs
       - name: Verify synthetic stage write and readback
         env:
           GH_TOKEN: ${{ github.token }}
@@ -38,17 +45,32 @@ jobs:
           print(json.dumps({"schema":"ipa-progress-probe-v1","status":"check_readback_verified",
                             "stage_count":3,"synthetic":True}))
           PY
-      - name: Verify finalized encrypted sample readiness without sending a file
+      - name: Publish synthetic live snapshots without Apple or Telegram credentials
+        uses: ./.github/actions/export-progress
+        with:
+          probe: 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DELIVERY_REQUEST_ID: ffffffffffffffffffffffffffffffff
+      - name: Verify snapshot digests, identity binding and actual byte counters
         env:
           GH_TOKEN: ${{ github.token }}
           PYTHONPATH: tools
+        run: python3 tools/verify_progress_probe.py
+      - name: Verify finalized encrypted sample readiness without sending a file
+        if: inputs.sample_request_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: tools
+          SAMPLE_REQUEST_ID: ${{ inputs.sample_request_id }}
         run: |
           python3 - <<'PY'
           import json, os, tempfile
           from pathlib import Path
           from telegram_queue import GitHub, sha256
           api=GitHub(os.environ["GH_TOKEN"])
-          rid="00000000000000000000000000000028"
+          rid=os.environ["SAMPLE_REQUEST_ID"]
+          assert rid in {"00000000000000000000000000000028","66c65a9d90ad44d98dfc799e9edc73b4"}
           run=api.find(rid)
           if not run:
               raise SystemExit("sample_run_missing")
@@ -67,3 +89,10 @@ jobs:
                             "archive_digest_verified":True,"plaintext_accessed":False,
                             "telegram_file_sent":False}))
           PY
+      - name: Publish synthetic progress verification receipt
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: progress-probe-verification
+          path: progress-probe.json
+          retention-days: 1
+          if-no-files-found: error

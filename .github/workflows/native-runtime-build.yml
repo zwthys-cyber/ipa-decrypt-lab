@@ -74,6 +74,8 @@ jobs:
           go build -p 2 -trimpath -o ../../offline-engine ./cmd/unfairplay
       - name: Test Python orchestrator before native compilation
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Test progress wrapper privacy and counter contracts
+        run: node --test tests/progress_worker.test.cjs
       - name: Check Swift toolchain and correct ambiguous diagnostics
         run: |
           swift --version

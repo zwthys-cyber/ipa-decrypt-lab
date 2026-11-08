@@ -36,7 +36,8 @@ class ProgressTests(unittest.TestCase):
             clock.return_value=17
             card.update("queued")
             card.update("decrypting")
-            self.assertNotIn("%",bot.edit.call_args.args[2])
+            self.assertNotIn("100%",bot.edit.call_args.args[2])
+            self.assertIn("按步骤",bot.edit.call_args.args[2])
             card.update("done")
         bot.message.assert_called_once()
         self.assertEqual(bot.edit.call_args.args[:2],(123,7))

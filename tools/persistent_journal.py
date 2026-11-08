@@ -100,3 +100,22 @@ class PersistentJournal:
 
     def close(self):
         self.db.close()
+
+    def progress_load(self,rid):
+        request_id(rid)
+        row=self.db.execute("SELECT value FROM metadata WHERE scope=? AND name=?",(self.scope,"progress:"+rid)).fetchone()
+        if not row: return None
+        try:
+            value=json.loads(row[0])
+            return value if isinstance(value,dict) else None
+        except ValueError:
+            return None
+
+    def progress_save(self,rid,state):
+        request_id(rid)
+        require(isinstance(state,dict) and set(state)<= {"message_id","stage","stage_started","completed","finished"},"invalid_progress_state")
+        data=json.dumps(state,separators=(",",":"))
+        require(len(data)<=1024,"progress_state_too_large")
+        with self.db:
+            self.db.execute("""INSERT INTO metadata(scope,name,value) VALUES(?,?,?)
+                ON CONFLICT(scope,name) DO UPDATE SET value=excluded.value""",(self.scope,"progress:"+rid,data))

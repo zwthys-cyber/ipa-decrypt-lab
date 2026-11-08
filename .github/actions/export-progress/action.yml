@@ -1,0 +1,16 @@
+name: Export verified IPA with bounded public progress
+description: Run the private worker and publish only validated stage and byte-counter snapshots.
+inputs:
+  probe:
+    description: Account-free synthetic verification only
+    default: 'false'
+outputs:
+  authentication_failure:
+    description: Fixed authentication failure category
+  capacity_failure:
+    description: Fixed capacity failure category
+  version_failure:
+    description: Fixed historical-version failure category
+runs:
+  using: node24
+  main: index.js

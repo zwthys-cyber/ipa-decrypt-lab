@@ -94,3 +94,13 @@ Checks 不是 fine-grained PAT 的必填权限。遇到 Checks 权限拒绝时�
 - publish-release.yml takes explicit vps_run and native_run producer IDs. The VPS producer must be successful build-only at the release source commit. Native packages must come from a successful main producer matching the exact current fingerprint and both published platforms.
 - Release artifacts may contain only project runtimes, provenance, checksums, documentation and license notices; never attach application IPA/ciphertext, account/model material or service credentials. Publishing does not deploy/restart the VPS.
 - README, operational docs and historical prefaces point to docs/DOCUMENTATION.md and docs/PROJECT-STATUS.md. Dated research records retain their original scope; current recovery evidence supersedes historical login blockers and TG pauses.
+
+
+## Measured progress and complete elapsed time
+- Main adds explicitly labelled workflow-step completion percentages; these are not time estimates. Only acknowledged Telegram file delivery can mark overall completion 100%.
+- Download byte percentages must come from bounded native integer counters. Unknown-length stages and Telegram server uploads have no invented byte percentages or remaining-time predictions. Stale measured values must be labelled as last observed.
+- The worker may retain at most 80 tiny, validated request/run/source-bound numeric progress snapshots for one day. This Actions-readable feed does not require expanding the VPS token's Checks permissions. Extra/unstructured fields and private account material must be rejected before upload.
+- Progress uploads receive only the job runtime artifact credentials and fixed public metadata, never Apple/model/Telegram/delivery secrets. Feed failures cannot retry the export or send a document.
+- Keep timers active during blocking delivery, stop them on service shutdown, and persist card identity plus original task creation time in the owner-scoped private journal. Clock refreshes must not write recovery state or dispatch/transmit files.
+- progress-contracts.yml may publish and read the current run's account-free synthetic numeric snapshots. Existing fixed encrypted readiness samples are optional because short-lived artifacts expire; no private key or Telegram credentials may enter that probe.
+- Runtime fingerprints include the progress JavaScript action source/manifest so a changed wrapper requires a successful matching producer before private tasks use it.

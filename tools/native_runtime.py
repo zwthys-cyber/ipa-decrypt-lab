@@ -30,7 +30,7 @@ def digest(path):
 
 def fingerprint(root):
     root = Path(root)
-    paths = [root / WORKFLOW]
+    paths = [root / WORKFLOW, root / ".github/actions/export-progress/index.js", root / ".github/actions/export-progress/action.yml"]
     for directory in ("tools", "tests"):
         paths.extend(p for p in (root / directory).rglob("*")
                      if p.is_file() and "__pycache__" not in p.parts and p.suffix != ".pyc")

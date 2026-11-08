@@ -7,6 +7,7 @@ import shutil
 import signal
 import sqlite3
 import time
+import threading
 from telegram_api import APIError
 from telegram_queue import GitHub, QueueError, failure_kind
 from telegram_runtime import local_bot
@@ -93,6 +94,8 @@ def main():
     root.mkdir(parents=True,mode=0o700,exist_ok=True)
     lock=(root/"controller.lock").open("a")
     journal=None
+    pulse_stop=None
+    pulse_thread=None
     try:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         credentials=Path(os.environ["CREDENTIALS_DIRECTORY"])/"bot.json"
@@ -133,12 +136,19 @@ def main():
             show_menu(bot,owner)
             heartbeat(root/"health.json","ready",controller.current)
             event("persistent_service_ready")
+            pulse_stop=threading.Event()
+            def refresh_cards():
+                while not pulse_stop.wait(5):
+                    try: controller.refresh_progress()
+                    except Exception: pass
+            pulse_thread=threading.Thread(target=refresh_cards,name="ipa-progress-clock",daemon=True)
+            pulse_thread.start()
             last_backup=0
             while not stop:
                 if getattr(bot,"process",None) is not None and bot.process.poll() is not None:
                     raise APIError("local_bot_server_exited")
                 try:
-                    updates=bot.call("getUpdates",{"offset":journal.offset(),"limit":20,"timeout":15,
+                    updates=bot.call("getUpdates",{"offset":journal.offset(),"limit":20,"timeout":5 if controller.current else 15,
                         "allowed_updates":["message","callback_query"]},timeout=35)
                     if not isinstance(updates,list):
                         raise APIError("telegram_invalid_response")
@@ -176,6 +186,8 @@ def main():
         heartbeat(root/"health.json","failed")
         return 2
     finally:
+        if pulse_stop is not None: pulse_stop.set()
+        if pulse_thread is not None: pulse_thread.join(timeout=1)
         if journal is not None:
             journal.close()
         lock.close()

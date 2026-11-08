@@ -29,6 +29,8 @@ jobs:
           /usr/bin/python3 -m unittest discover -s tests -p 'test_*.py' -v
           sh -n deploy/install.sh
           systemd-analyze verify deploy/ipazake.service
+      - name: Test progress wrapper privacy and counter contracts
+        run: node --test tests/progress_worker.test.cjs
       - name: Verify real systemd credential mount without secrets
         run: |
           probe_config=$(mktemp)

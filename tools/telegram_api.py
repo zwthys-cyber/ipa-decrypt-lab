@@ -93,9 +93,9 @@ class Telegram:
             raise APIError("existing_webhook_requires_resolution")
         return True
 
-    def edit(self, chat, message, text):
+    def edit(self, chat, message, text, timeout=40):
         result=self.call("editMessageText", {"chat_id":chat,"message_id":message,"text":text,
-                          "link_preview_options":{"is_disabled":True}})
+                          "link_preview_options":{"is_disabled":True}},timeout=timeout)
         if not isinstance(result,dict) or result.get("message_id")!=message:
             raise APIError("telegram_edit_unconfirmed")
         return result

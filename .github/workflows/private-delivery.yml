@@ -111,9 +111,7 @@ jobs:
           DELIVERY_APP_ID: ${{ inputs.app_id }}
           DELIVERY_VERSION: ${{ inputs.version }}
           DELIVERY_REQUEST_ID: ${{ inputs.request_id }}
-        run: |
-          ulimit -c 0
-          python3 tools/private_export.py --binary runtime/ApplePackageTool --engine runtime/offline-engine --crypt runtime/delivery-crypt
+        uses: ./.github/actions/export-progress
       - name: IPA exceeds 2000 MB capacity
         if: failure() && steps.export.outputs.capacity_failure == 'size_limit'
         run: exit 1
