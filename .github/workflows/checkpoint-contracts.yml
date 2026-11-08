@@ -12,20 +12,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - name: Check private checkpoint and replay contracts
         run: |
           python3 -m unittest discover -s tests -p 'test_private_fairplay_state.py' -v
           python3 -m unittest discover -s tests -p 'test_model_bootstrap.py' -v
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: majd/ipatool
           ref: d9c0247daea564d3ec7d04a9b015d0a29af66b04
           path: native-source/ipatool
           persist-credentials: false
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: native-source/ipatool/go.mod
           cache: true

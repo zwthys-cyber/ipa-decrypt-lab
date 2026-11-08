@@ -2,7 +2,7 @@ name: Build verified native runtime
 on:
   push:
     branches: [main]
-    paths: ['tools/**', 'tests/**', '.github/workflows/native-runtime-build.yml']
+    paths: ['tools/**', 'tests/**', '.github/actions/export-progress/**', '.github/workflows/native-runtime-build.yml']
   workflow_dispatch:
     inputs:
       runner:
@@ -30,31 +30,31 @@ jobs:
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
       LAB_BUILD_JOBS: '4'
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - name: Identify tested source
         id: source
         run: echo "fingerprint=$(python3 tools/native_runtime.py fingerprint)" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: DrWhax/unfairplay
           ref: 26a099fcb2292eaacd9e0ce89793cdbc88e516d1
           path: native-source/unfairplay
           persist-credentials: false
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Lakr233/ApplePackage
           ref: 391bfe6ee6598d73e4f94b88b38b50bd6f6ec67b
           path: native-source/ApplePackage
           persist-credentials: false
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: majd/ipatool
           ref: d9c0247daea564d3ec7d04a9b015d0a29af66b04
           path: native-source/ipatool
           persist-credentials: false
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: native-source/ipatool/go.mod
           cache: true
@@ -83,7 +83,7 @@ jobs:
           python3 tools/patch_ent_download.py native-source/ApplePackage
       - name: Restore public-source Swift build cache
         id: swift-cache
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: native-source/ApplePackage/.build
           key: swift-macos${{ startsWith(matrix.runner, 'macos-26') && '26' || '15' }}-${{ runner.arch }}-xcode26.2-391bfe6-${{ hashFiles('tools/StoreAMD.swift', 'tools/StoreBagTransport.m', 'tools/StoreBagTransport.h', 'tools/patch_swift_diagnostics.py', 'tools/patch_ent_download.py', 'tools/LabEntDownload.swift', 'tests/LabEntDownloadTests.swift') }}
@@ -107,11 +107,11 @@ jobs:
         run: test -x native-source/ApplePackage/.build/debug/ApplePackageTool
       - name: Save public-source build cache before credentials are supplied
         if: steps.swift-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: native-source/ApplePackage/.build
           key: ${{ steps.swift-cache.outputs.cache-primary-key }}
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: FiloSottile/age
           ref: b74dce4cdbe35b5e5f66c06d9612b72f89028758
@@ -135,7 +135,7 @@ jobs:
           relocated-runtime/offline-engine --help
           otool -L relocated-runtime/ApplePackageTool
       - name: Publish tested credential-free runtime
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: runtime-${{ matrix.runner }}-${{ steps.source.outputs.fingerprint }}
           path: runtime-out/native-runtime.tar.gz

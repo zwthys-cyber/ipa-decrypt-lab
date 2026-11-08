@@ -16,6 +16,7 @@ test('artifact uploader inherits runtime authorization but no account or Telegra
  assert.equal(env.ACTIONS_RUNTIME_TOKEN,'runtime');
  assert.equal(env['INPUT_RETENTION-DAYS'],'1');
  assert.equal(env['INPUT_INCLUDE-HIDDEN-FILES'],'false');
+  assert.equal(env.INPUT_ARCHIVE,'true');
  const encoded=JSON.stringify(env);
  for(const value of ['private-apple','private-id','broad','private-key','private-model','private-bot'])assert.equal(encoded.includes(value),false);
  assert.ok(env.GITHUB_OUTPUT.startsWith('/tmp/progress/'));

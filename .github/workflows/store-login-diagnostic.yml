@@ -24,7 +24,7 @@ jobs:
     runs-on: ${{ inputs.runner == 'macos-15-intel' && 'macos-15-intel' || 'macos-26-intel' }}
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - name: Prepare verified precompiled runtime
@@ -34,7 +34,7 @@ jobs:
         run: python3 tools/native_runtime.py fetch --output runtime
       - name: Restore fixed Apple resource cache
         id: apple-assets
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
             ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/AppleMediaServices
@@ -47,7 +47,7 @@ jobs:
         run: runtime/lab-kbsync --prewarm
       - name: Save validated Apple resources before account access
         if: steps.apple-assets.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
             ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/AppleMediaServices

@@ -12,7 +12,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - name: Test private transport and authentication report contracts
@@ -26,7 +26,7 @@ jobs:
           clang -fobjc-arc -framework Foundation tools/NativeAnisetteAuth.m -o native-anisette-auth
           python3 tools/authkit_bridge.py
       - name: Fetch pinned independent provider
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: malmeloo/Anisette.py
           ref: a61cddfb2275187822ad0c3999af747b8c9a4f9a

@@ -3,7 +3,7 @@ const os = require('node:os');
 const path = require('node:path');
 const {spawn} = require('node:child_process');
 const STAGES = new Set(['auth_retry','resolving_version','metadata','authenticating','downloading','auditing','decrypting','verifying','encrypting','artifact_ready','failed']);
-const UPLOAD_REV = 'ea165f8d65b6e75b540449e92b4886f43607fa02';
+const UPLOAD_REV = 'cf430e030ddbb5b0abf93d22962f4752f3646cd9';
 
 function validateSnapshot(value, identity, now = Math.floor(Date.now()/1000)) {
   const keys = new Set(['schema','request_id','run_id','commit','stage','sequence','updated_at','stage_started','measurement']);
@@ -28,6 +28,7 @@ function uploaderEnvironment(env, folder, name) {
   result['INPUT_COMPRESSION-LEVEL']='0';
   result['INPUT_IF-NO-FILES-FOUND']='error';
   result.INPUT_OVERWRITE='false';
+  result.INPUT_ARCHIVE='true';
   result['INPUT_INCLUDE-HIDDEN-FILES']='false';
   for(const key of ['GITHUB_OUTPUT','GITHUB_ENV','GITHUB_STATE','GITHUB_STEP_SUMMARY']) result[key]=path.join(folder,key.toLowerCase());
   return result;

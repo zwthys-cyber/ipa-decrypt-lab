@@ -22,7 +22,7 @@ jobs:
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - name: Check offline model before account or download work
@@ -30,26 +30,26 @@ jobs:
         env:
           FAIRPLAY_MODEL_B64: ${{ secrets.FAIRPLAY_MODEL_B64 }}
         run: python3 tools/offline_verify.py --check-ready
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         if: inputs.decryption_backend == 'offline'
         with:
           repository: DrWhax/unfairplay
           ref: 26a099fcb2292eaacd9e0ce89793cdbc88e516d1
           path: native-source/unfairplay
           persist-credentials: false
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Lakr233/ApplePackage
           ref: 391bfe6ee6598d73e4f94b88b38b50bd6f6ec67b
           path: native-source/ApplePackage
           persist-credentials: false
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: majd/ipatool
           ref: d9c0247daea564d3ec7d04a9b015d0a29af66b04
           path: native-source/ipatool
           persist-credentials: false
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: native-source/ipatool/go.mod
           cache: true
@@ -77,7 +77,7 @@ jobs:
           python3 tools/patch_ent_download.py native-source/ApplePackage
       - name: Restore public-source Swift build cache
         id: swift-cache
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: native-source/ApplePackage/.build
           key: swift-macos15-arm64-xcode26.2-391bfe6-${{ hashFiles('tools/patch_swift_diagnostics.py', 'tools/patch_ent_download.py', 'tools/LabEntDownload.swift', 'tests/LabEntDownloadTests.swift') }}
@@ -97,7 +97,7 @@ jobs:
           ctest --test-dir build --output-on-failure
       - name: Save public-source build cache before credentials are supplied
         if: steps.swift-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: native-source/ApplePackage/.build
           key: ${{ steps.swift-cache.outputs.cache-primary-key }}
