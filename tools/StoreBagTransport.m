@@ -29,7 +29,7 @@ __attribute__((constructor)) static void initializeStoreTransport(void) {
     dispatch_once(&once, ^{
         Class cls=NSClassFromString(@"AMSAnisette");
         SEL selector=NSSelectorFromString(@"createBagForSubProfile");
-        if([cls respondsToSelector:selector])bag=[((id(*)(id,SEL))objc_msgSend)(cls,selector) retain];
+        if([cls respondsToSelector:selector])bag=((id(*)(id,SEL))objc_msgSend)(cls,selector);
     });
     return bag;
 }
