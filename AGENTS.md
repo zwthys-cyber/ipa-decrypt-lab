@@ -81,3 +81,9 @@ Checks 不是 fine-grained PAT 的必填权限。遇到 Checks 权限拒绝时�
 - Ordinary private-delivery.yml and version-catalog.yml load only exact-source, exact-platform packages from successful main-branch producer runs. They do not install Go, compile native code, restore the Swift build tree, or rerun suites. This supersedes the earlier per-task Go/Python test requirement; those tests remain required in the producer.
 - Runtime source changes require a successful new producer run before ordinary tasks can use that source. Missing/expired packages fail before Apple secrets; never silently use a stale package. Public runtime artifacts expire after 30 days; the weekly producer renews them. Account/IPA artifact retention remains one day.
 - Producer 41946086966 passed on macOS 26 Intel and macOS 15 Intel; fresh-runner verification 41947134774 passed on both. This proves package portability, not a new real export or installation/runtime test.
+
+
+## Exact-platform runtime recovery (2026-11-08)
+- The producer's default push/scheduled path still builds and tests both supported Intel pools. A manual dispatch may select one supported pool for bounded recovery; that run must pass the same full checks, provenance/fingerprint verification and relocation checks before its artifact is used.
+- A successful single-platform producer validates only that exact platform. Never use its artifact for another OS or claim the other pool passed. Consumers still require a successful main-branch producer, exact source fingerprint and exact platform.
+- Login/download recovery is verified by private export 42439908718 attempt 2 for X (333903271): 32 encrypted images, 86,704 pages, 271,261,630 plaintext bytes; only age ciphertext was retained for one day. This does not verify installation/runtime or a new Telegram send.

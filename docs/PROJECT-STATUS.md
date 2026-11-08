@@ -1,5 +1,24 @@
 # 项目进展
 
+
+## 2026-11-08 最新状态：真实下载与解密已恢复
+
+[正式完整导出 42439908718（第 2 次运行）](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2) 在默认 macOS 26 Intel 成功完成：
+
+- 应用 `333903271`（X）：账号登录、免费许可请求、原包下载、解密、完整性验证、账号数据清理和 age 加密导出均完成。
+- 32 个加密切片、86,704 页通过校验；清理后明文 IPA 为 271,261,630 字节，`plaintext_verified=true`、`runtime_verified=false`。
+- 只保留一天的加密交付文件和脱敏收据；明文未公开。本次没有额外向 Telegram 发送消息或文件，也没有验证重签名、安装及实际运行。
+- 该运行不加载临时观察器或 DYLD 适配器，使用已通过 CI 的正式运行包。第一次运行在产物发布前因 `validated_runtime_missing` 停止，未读取 Apple 凭据；第二次才执行完整导出。
+
+修复包括：保留 Apple 广告的原生认证路径，使用 Configurator 2.21；由本机 AppleMediaServices 生成 Store AMD 证明并处理单次 SP 挑战；识别 `AMSURLAction` 的真实重试动作；为固定认证/许可/下载接口添加源站绑定的证明。系统 bag 请求改用固定 Apple Configurator 公共配置，保留原始 NSURLProtocol 上下文与 `X-Apple-Store-Front` 商店区域字段，同时清除账号认证字段。删除区域字段会造成系统 bag 校验失败，不能把它当作账号令牌清理。
+
+[双平台正式运行包 42439002658](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439002658) 已成功：两个平台执行 440 项 Python 测试（各跳过 2 项）、21 项 Swift 测试、Go 检查和脱离构建目录的独立启动验证。新增回归覆盖原始请求上下文、区域元数据保留、Cookie/Authorization 清理、凭据和证明的固定目标地址，以及只有无错误的原生 retry 动作可重试登录。
+
+机器人现有控制器调用 main 分支工作流，后续任务自动获取匹配的运行包，本次无需重新部署 VPS。构建流程默认仍验证两个 Intel 平台；新增手动指定单个平台的完整构建入口，以便其他池排队或失去响应时恢复已验证平台。它不会让未验证平台复用其他平台产物或放宽检查。
+
+下文中“登录尚未恢复”“SP 注册阻塞”属于此前的历史排查状态，已由上述正式运行结果更新。
+
+
 更新于 2026-11-07。
 
 目前已跑通 GitHub 上的原始 IPA 下载、模型恢复与复用、完整解密校验，以及 Telegram 私聊交付。机器人目前在 Debian 13 VPS 上常驻运行，只供管理员使用；多用户和收费还没接入。
