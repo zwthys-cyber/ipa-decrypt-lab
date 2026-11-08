@@ -241,3 +241,55 @@ value = value.replace("https://auth.itunes.apple.com/login", "https://buy.itunes
 value = value.replace("https://p25-buy.itunes.apple.com/login", "https://p25-buy.itunes.apple.com/WebObjects/MZFinance.woa/wa/authenticate/")
 value = value.replace('"https://auth.itunes.apple.com/auth/v1/native/fast/?guid=example",', 'original,')
 signingTests.write_text(value)
+
+# On current macOS these private APIs return AMSPromise, not a dictionary.
+value = helper.read_text()
+value = value.replace('guard let values = call(cls as AnyObject, selector, request, nil, 2)?.takeUnretainedValue() as? [String: Any] else {',
+    'guard let pending = call(cls as AnyObject, selector, request, nil, 2)?.takeUnretainedValue(), let values = resolved(pending) as? [String: Any] else {')
+value = value.replace('            return try validated(values)', '            if values.isEmpty { return [] } // The first request may require an SP provisioning challenge.\n            return try validated(values)')
+anchor = '    static func validated('
+addition = '''    static func resolved(_ value: AnyObject) -> AnyObject? {
+        let selector = NSSelectorFromString("resultWithError:")
+        guard let method = class_getInstanceMethod(object_getClass(value), selector) else { return value }
+        typealias Wait = @convention(c) (AnyObject, Selector, UnsafeMutableRawPointer?) -> Unmanaged<AnyObject>?
+        let call = unsafeBitCast(method_getImplementation(method), to: Wait.self)
+        return call(value, selector, nil)?.takeUnretainedValue()
+    }
+
+    static func handle(_ response: HTTPURLResponse) throws -> Bool {
+        guard let url = response.url else { return false }
+        _ = try Authenticator.approvedEndpoint(url)
+        guard url.host == "auth.itunes.apple.com",
+              response.value(forHTTPHeaderField:"X-Apple-AMD-Action") == "SP" else { return false }
+        guard let cls = NSClassFromString("AMSAnisette"), let bagClass = NSClassFromString("AMSBag") else { return false }
+        let bagSelector = NSSelectorFromString("bagForProfile:profileVersion:")
+        guard let bagMethod = class_getClassMethod(bagClass, bagSelector) else { return false }
+        typealias Bag = @convention(c) (AnyObject, Selector, AnyObject, AnyObject) -> Unmanaged<AnyObject>?
+        let bagCall = unsafeBitCast(method_getImplementation(bagMethod), to: Bag.self)
+        guard let bag = bagCall(bagClass as AnyObject, bagSelector, "itunes" as NSString, "1" as NSString)?.takeUnretainedValue() else { return false }
+        let selector = NSSelectorFromString("handleResponse:type:bag:account:")
+        guard let method = class_getClassMethod(cls, selector) else { return false }
+        typealias Handle = @convention(c) (AnyObject, Selector, AnyObject, Int64, AnyObject, AnyObject?) -> Unmanaged<AnyObject>?
+        let call = unsafeBitCast(method_getImplementation(method), to: Handle.self)
+        guard let pending = call(cls as AnyObject, selector, response, 2, bag, nil)?.takeUnretainedValue(),
+              let result = resolved(pending) as? NSNumber else { return false }
+        return result.boolValue
+    }
+
+'''
+value = value.replace(anchor, addition + anchor)
+helper.write_text(value)
+value = p.read_text()
+value = value.replace('        var retried = false', '        var provisioned = false\n        var retried = false')
+anchor = '            let result = try parseResponse(response, email: email, password: password, code: code)'
+replacement = '''            if !provisioned, response.headers.first(name: "X-Apple-AMD-Action") == "SP" {
+                provisioned = true
+                let fields = Dictionary(response.headers.map { ($0.name, $0.value) }, uniquingKeysWith: { first, _ in first })
+                guard let native = HTTPURLResponse(url: endpoint, statusCode: Int(response.status.code), httpVersion: nil, headerFields: fields), try StoreAMD.handle(native) else {
+                    try ensureFailed("store_device_provisioning_failed")
+                }
+                continue
+            }
+''' + anchor
+assert value.count(anchor) == 1
+p.write_text(value.replace(anchor, replacement))
