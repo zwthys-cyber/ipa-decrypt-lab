@@ -55,6 +55,46 @@ jobs:
             ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/CoreFP
             ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/CoreFP.icxs
           key: apple-public-assets-d9c0247-26A434-arm64-v1
+      - name: Inspect native Store proof availability without account credentials
+        timeout-minutes: 2
+        run: |
+          ulimit -c 0
+          cat > "$RUNNER_TEMP/store-proof.m" <<'OBJC'
+          #import <Foundation/Foundation.h>
+          #import <objc/runtime.h>
+          #import <objc/message.h>
+          #import <dlfcn.h>
+          int main(void) { @autoreleasepool {
+           dlopen("/System/Library/PrivateFrameworks/AppleMediaServices.framework/AppleMediaServices", RTLD_NOW|RTLD_LOCAL);
+           Class anisette=NSClassFromString(@"AMSAnisette"), bagClass=NSClassFromString(@"AMSBag");
+           NSMutableDictionary *report=[NSMutableDictionary dictionary];
+           for (Class cls in @[anisette, bagClass]) {
+            unsigned int count=0; Method *methods=class_copyMethodList(object_getClass(cls), &count);
+            NSMutableArray *names=[NSMutableArray array];
+            for(unsigned int i=0;i<count;i++) {
+             NSString *name=NSStringFromSelector(method_getName(methods[i]));
+             if ([name containsString:@"rovision"]||[name containsString:@"headersFor"]||[name containsString:@"bagFor"]||[name containsString:@"handleResponse"]||[name containsString:@"bagSub"])
+              [names addObject:@{@"selector":name,@"encoding":@(method_getTypeEncoding(methods[i]))}];
+            }
+            free(methods); report[NSStringFromClass(cls)]=names;
+           }
+           SEL bagSel=NSSelectorFromString(@"bagForProfile:profileVersion:");
+           if ([bagClass respondsToSelector:bagSel]) {
+            id bag=((id(*)(id,SEL,id,id))objc_msgSend)(bagClass,bagSel,@"Configurator",@"1");
+            SEL headersSel=NSSelectorFromString(@"headersForRequest:account:type:bag:");
+            if ([anisette respondsToSelector:headersSel]) {
+             NSURLRequest *request=[NSURLRequest requestWithURL:[NSURL URLWithString:@"https://auth.itunes.apple.com/auth/v1/native"]];
+             id headers=((id(*)(id,SEL,id,id,long long,id))objc_msgSend)(anisette,headersSel,request,nil,2,bag);
+             report[@"proof_dictionary"]=@([headers isKindOfClass:NSDictionary.class]);
+             report[@"proof_pair"]=@([headers isKindOfClass:NSDictionary.class]&&[headers[@"X-Apple-AMD"] length]>0&&[headers[@"X-Apple-AMD-M"] length]>0);
+            }
+           }
+           NSData *json=[NSJSONSerialization dataWithJSONObject:report options:NSJSONWritingSortedKeys error:nil];
+           puts([[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding].UTF8String);
+          } return 0; }
+          OBJC
+          clang -fobjc-arc -framework Foundation "$RUNNER_TEMP/store-proof.m" -o "$RUNNER_TEMP/store-proof"
+          "$RUNNER_TEMP/store-proof" 2>/dev/null
       - name: Bounded login with fixed diagnostic fields only
         env:
           LOGIN_EXPECTED_APPLE_ID: ${{ secrets.LOGIN_EXPECTED_APPLE_ID }}
