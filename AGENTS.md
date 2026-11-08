@@ -87,3 +87,10 @@ Checks 不是 fine-grained PAT 的必填权限。遇到 Checks 权限拒绝时�
 - The producer's default push/scheduled path still builds and tests both supported Intel pools. A manual dispatch may select one supported pool for bounded recovery; that run must pass the same full checks, provenance/fingerprint verification and relocation checks before its artifact is used.
 - A successful single-platform producer validates only that exact platform. Never use its artifact for another OS or claim the other pool passed. Consumers still require a successful main-branch producer, exact source fingerprint and exact platform.
 - Login/download recovery is verified by private export 42439908718 attempt 2 for X (333903271): 32 encrypted images, 86,704 pages, 271,261,630 plaintext bytes; only age ciphertext was retained for one day. This does not verify installation/runtime or a new Telegram send.
+
+
+## Public release and documentation maintenance (2026-11-08)
+- Current public package version is v0.1.0-alpha.2. Replacing the old public release removes its downloadable attachments; preserve source tags and historical research unless the owner separately requests their deletion.
+- publish-release.yml takes explicit vps_run and native_run producer IDs. The VPS producer must be successful build-only at the release source commit. Native packages must come from a successful main producer matching the exact current fingerprint and both published platforms.
+- Release artifacts may contain only project runtimes, provenance, checksums, documentation and license notices; never attach application IPA/ciphertext, account/model material or service credentials. Publishing does not deploy/restart the VPS.
+- README, operational docs and historical prefaces point to docs/DOCUMENTATION.md and docs/PROJECT-STATUS.md. Dated research records retain their original scope; current recovery evidence supersedes historical login blockers and TG pauses.

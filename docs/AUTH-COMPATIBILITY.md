@@ -1,11 +1,29 @@
-# 可选认证兼容模式
+# 认证兼容与故障诊断
 
-对比两个固定版本的认证实现：AssppWeb 固定提交 485be0b884e5d88bbd5379179064999992273614 的 frontend/src/apple/authenticate.ts，与 ipatool 固定提交 d9c0247daea564d3ec7d04a9b015d0a29af66b04 的登录请求构造。
+当前版本为 [v0.1.0-alpha.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.2)。2026-11-08 的[正式 X 导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)已验证原生登录、下载及完整解密恢复；不要再把历史 204/403/SP 失败写成当前运行状态。
 
-plist-compat 仅修改 Content-Type 为 application/x-apple-plist，无验证码的 attempt 为4，有验证码为2。保持 Apple bag 选出的认证地址、签名器、TLS校验和凭据处理不变；不降级为无签名请求。上游默认模式保留。
+## 当前生产链路
 
-新增 Go 测试，验证实际请求的头部、密码/验证码拼接、attempt 和目标地址不变。认证通用 BadLogin 的诊断修正对两种模式均生效。
+客户端以固定提交的 ApplePackage 为基础，由仓库构建补丁接入本机 AppleMediaServices。使用 Configurator 2.21，保留 Apple 配置返回的原生认证路径和查询参数，不强制改写为 `/fast/`；仍对实际请求体生成 SAP 签名。
 
-这是在早期认证排查中做的对照实验，当时没有得到真实登录成功的结果。后续采用了 Swift 客户端，进展见 [项目状态](PROJECT-STATUS.md)。每次只执行所选模式，失败后不自动遍历其他模式或无限重试。
+新接口需要 Store AMD 证明 `X-Apple-AMD` / `X-Apple-AMD-M`，它们与 AuthKit 的 `X-Apple-I-MD` 系列不同。SP 挑战交给系统框架处理，识别 `AMSURLAction` 的无错误 retry 动作，至多注册并重试一次。许可和 ent/download 请求同样带新生成的证明，目标限制为固定 Apple 主机及路径。
 
-参考：https://github.com/Lakr233/AssppWeb/blob/485be0b884e5d88bbd5379179064999992273614/frontend/src/apple/authenticate.ts
+原生桥接 `tools/StoreBagTransport.m` 在进程启动时初始化并保留系统 bag，配置请求使用固定 Apple Configurator `bag.xml?ix=6`。必须复用原请求上下文并保留 `X-Apple-Store-Front` 区域信息；清理 Cookie、Authorization、账号令牌和证明字段时不能一并清除区域配置。完整配置仍由系统解析，保留 trustedDomains 与 TLS 检查，不手工伪造注册结果。
+
+## 诊断入口与判断
+
+GitHub Actions 的 `store-login-diagnostic.yml` 只执行有界登录及清理，默认 `auth_route=bag`、`runner=macos-26-intel`；备用为 `macos-15-intel`。它先取得与源码和平台精确匹配的成功构建包，再读取 Secrets。默认生产验证不加载临时 DYLD 适配器。
+
+| 现象 | 可确定的范围 |
+| --- | --- |
+| `validated_runtime_missing` | 运行包缺失、过期或源码指纹不匹配；先完成原生构建，不应重设账号 |
+| 空 204、HTML 403/404、301 无 Location | 认证协议或服务响应异常；不能单凭状态码判定密码错误或 IP 被封 |
+| SP 挑战 | 需要 Store 设备注册；不等于密码错误或已成功登录 |
+| generic BadLogin | 原因仍不明确，不据此断言账号开启双重认证 |
+| `plaintext_verified=true` | 已通过完整切片/页面校验；安装运行仍须另测 |
+
+账号和模型只放 GitHub Secrets；诊断只输出固定类别、状态和计数，不公开原始响应、证明、Cookie、密码或会话。不要自动同意可选安全升级或新增条款，也不要遍历接口无限重试。
+
+## 历史 plist-compat 实验
+
+早期比较过固定 AssppWeb 与 ipatool 请求模板，`plist-compat` 只调整 plist Content-Type 和 attempt 值；没有证明这项调整单独恢复登录。它是 `store-download.yml` 的受控 Go 客户端对照，不是当前生产修复。历史运行与版本范围见[下载调查](DOWNLOADER.md)、[Swift 初次对照](NATIVE-STORE.md)及[项目状态](PROJECT-STATUS.md)。

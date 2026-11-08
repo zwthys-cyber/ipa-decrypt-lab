@@ -1,6 +1,9 @@
 # 项目进展
 
 
+当前公开成品版本：[v0.1.0-alpha.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.2)。下载、构建与发布步骤见[成品包说明](RELEASES.md)；完整文档导航见[文档索引](DOCUMENTATION.md)。旧版公开 Release 不再作为下载入口，历史构建与失败记录仍按各自日期保留。
+
+
 ## 2026-11-08 最新状态：真实下载与解密已恢复
 
 [正式完整导出 42439908718（第 2 次运行）](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2) 在默认 macOS 26 Intel 成功完成：

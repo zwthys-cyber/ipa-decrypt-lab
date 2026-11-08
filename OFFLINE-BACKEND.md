@@ -1,8 +1,12 @@
 # Offline decryption backend
 
+
+> Current-state update — 2026-11-08: This is a chronological research archive. Current production uses saved-model reuse, restored native Store AMD/SP authentication, persistent Debian Telegram control, and verified encrypted export. The 2026-11-08 X export passed 32 encrypted images and 86,704 pages. Later operational policy supersedes historical pauses and blockers; installation/runtime and this run’s Telegram transmission remain unverified. Current packages: [v0.1.0-alpha.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.2). Evidence: [verified X export](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2). Operational documentation: [documentation index](docs/DOCUMENTATION.md).
+
+
 This document contains the detailed research history. For the current workflow and results, see [Project status and usage](docs/PROJECT-STATUS.md). The sections below retain the conclusions available at each stage; later sections may supersede earlier blockers.
 
-## Current verified status (2026-11-04)
+## Verified milestone (2026-11-04; historical scope)
 
 **Model recovery on GitHub-hosted macOS passed validation against the complete original IPA.** [Successful bootstrap 41846142942](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41846142942) verified 62 encrypted slices and 12,524 plaintext pages. The model and private native-state checkpoint were saved as GitHub Secrets at 14:22:53 UTC; neither plaintext nor a decrypted IPA artifact was published.
 
@@ -989,4 +993,4 @@ The real report has `state_source=github_secret_checkpoint`, `authorization_requ
 
 The replay also emitted a correctly bound encrypted model candidate, but the existing verified model Secret was not overwritten: the original saved model had already passed independent fresh-runner verification. No new state Secret was generated, no account-wide deauthorization was repeated, and no new computer authorization was requested. The latest directly observed account count remains 4 of 5 from the successful bootstrap.
 
-The current research phase is therefore complete for the tested account and App ID 6599842047: GitHub-only initial native state creation, model recovery, complete original IPA plaintext validation, private Secret persistence, direct model reuse on a fresh runner, and model re-derivation from saved native state all have real evidence. This does not constitute a universal-app guarantee, a retained downloadable IPA, an installation/runtime test, independently verified Apple CMS trust, real Linux-platform decryption, Telegram integration or a deployed paid service. The requested pause on TG integration remains in effect.
+The current research phase is therefore complete for the tested account and App ID 6599842047: GitHub-only initial native state creation, model recovery, complete original IPA plaintext validation, private Secret persistence, direct model reuse on a fresh runner, and model re-derivation from saved native state all have real evidence. This does not constitute a universal-app guarantee, a retained downloadable IPA, an installation/runtime test, independently verified Apple CMS trust, real Linux-platform decryption, Telegram integration or a deployed paid service. At that stage, TG integration was paused. It resumed later; current persistent-service policy and real delivery evidence are documented in docs/TELEGRAM.md and docs/PROJECT-STATUS.md.

@@ -23,3 +23,9 @@
 `tests/test_persistent_service.py` 验证持久化、权限、更新去重、备份和运行边界；`tests/test_controller_recovery.py` 使用真实临时 SQLite 验证恢复控制器、写入失败阻断副作用、取消失败与发送不确定时不重发。仅在 GitHub 上运行这些测试。
 
 部署与回滚见 [VPS 部署说明](VPS-DEPLOYMENT.md)。合成故障测试不代替真实 IPA 上传中断实测。
+
+## 新版与旧失败任务
+
+本规则适用于 v0.1.0-alpha.2。Apple 原生登录和设备注册已恢复，详细实测见[项目状态](PROJECT-STATUS.md)。升级运行包或发布 Release 不会清空私有 SQLite，也不会自动重放旧登录失败、已取消或发送结果不明的任务。管理员可以重新提交应用；只有确认发送结果且密文仍未过期时，才使用 `/get` 取回原任务。
+
+新 Release 的发布不代表 VPS 已重启或控制器已部署；升级和回滚仍遵守[VPS 部署说明](VPS-DEPLOYMENT.md)。

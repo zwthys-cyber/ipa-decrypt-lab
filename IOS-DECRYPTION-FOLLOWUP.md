@@ -1,5 +1,9 @@
 # iOS native decryption follow-up
 
+
+> Current-state update — 2026-11-08: This is the historical native-remap investigation, not the production decryption implementation. The current model-based path and restored native authentication passed the complete X export on 2026-11-08; this does not reverse the recorded EPERM results or prove installation/runtime. Current packages: [v0.1.0-alpha.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.2). Evidence: [verified X export](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2). Operational documentation: [documentation index](docs/DOCUMENTATION.md).
+
+
 These notes cover the native remap investigation. The model-based route was completed later; see [project status](docs/PROJECT-STATUS.md) for the current implementation.
 
 The previous real-package result counted 62 failed engine invocations, not necessarily 62 kernel calls. This follow-up records preflight failures separately from actual mremap_encrypted returns.

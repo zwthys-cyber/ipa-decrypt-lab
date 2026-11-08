@@ -6,7 +6,7 @@
 
 ## 下载
 
-第一版成品位于 [GitHub Releases](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases)。里面有 Linux amd64 服务器端，以及 macOS 26 / 15 Intel 运行包；用途、配置和校验方法见 [发布说明](docs/RELEASES.md)。
+当前成品版本为 [v0.1.0-alpha.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.2)。里面有 Linux amd64 服务器端，以及 macOS 26 / 15 Intel 运行包；用途、配置和校验方法见 [发布说明](docs/RELEASES.md)。
 
 这些包需要配合仓库工作流和自己的私有配置使用。Apple 账号、授权模型、Telegram 凭据和应用 IPA 都不随发布包提供。
 
@@ -34,11 +34,15 @@ My BVF 的最新一次 GitHub 导出实测约 59 秒，此前预编译版样本�
 
 ## 已经验证到哪一步
 
+2026-11-08 已恢复 Apple 新原生认证与 Store AMD 设备验证。X（App ID `333903271`）已通过正式运行包完成登录、下载、解密和完整性校验：32 个加密切片、86,704 页，清理后 IPA 为 271,261,630 字节。[完整验证记录](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)。本次记录不包含新的 Telegram 文件发送或安装运行测试。
+
 已在全新的 GitHub macOS 运行器上验证了模型恢复、模型复用、检查点重放和完整 IPA 校验，也完成过 92 MB 文件的 Telegram 私聊交付。历史版本下载、可点击列表和两个 Intel 平台的成品包也都有运行记录。
 
 解密成功的判断包含完整切片和页面校验，不能只看 `cryptid=0`。尚未把重签名、安装和实际运行纳入验证，所以结果里的 `runtime_verified` 仍为 `false`。
 
 ## 部署与配置
+
+完整文档入口见 [文档索引](docs/DOCUMENTATION.md)。登录流程、兼容限制和诊断入口见 [认证兼容说明](docs/AUTH-COMPATIBILITY.md)。
 
 - [VPS 部署](docs/VPS-DEPLOYMENT.md)：运行环境、Secrets、部署、备份和回滚。
 - [任务恢复](docs/SESSION-RECOVERY.md)：重启、取消和发送不确定时的处理。

@@ -6,11 +6,16 @@ on:
         description: Successful build-only vps-release run for this source commit
         type: string
         required: true
+      native_run:
+        description: Successful dual-platform native-runtime-build run matching this source fingerprint
+        type: string
+        required: true
+        default: '42439002658'
 permissions:
   contents: write
   actions: read
 concurrency:
-  group: public-release-v0.1.0-alpha.1
+  group: public-release-v0.1.0-alpha.2
   cancel-in-progress: false
 jobs:
   publish:
@@ -25,6 +30,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VPS_RUN: ${{ inputs.vps_run }}
+          NATIVE_RUN: ${{ inputs.native_run }}
         run: |
           python3 - <<'PY'
           import base64,hashlib,json,os,re,shutil,subprocess,sys,tarfile,tempfile,zipfile
@@ -46,12 +52,14 @@ jobs:
               return run
           vps=producer(identifier,"vps-release.yml")
           assert vps["head_sha"]==sha and vps["display_title"]=="VPS-controller-build", "vps_source_or_mode_mismatch"
-          native=producer(41946086966,"native-runtime-build.yml")
+          native_identifier=os.environ["NATIVE_RUN"]
+          assert re.fullmatch(r"[1-9][0-9]{0,19}",native_identifier), "invalid_native_run_id"
+          native=producer(native_identifier,"native-runtime-build.yml")
           stamp=fingerprint(".")
           out=Path("release-assets")
           out.mkdir()
           client=GitHub(os.environ["GH_TOKEN"])
-          info={"schema":"ipa-lab-release-v1","tag":"v0.1.0-alpha.1","source_commit":sha,"packages":[]}
+          info={"schema":"ipa-lab-release-v1","tag":"v0.1.0-alpha.2","source_commit":sha,"packages":[]}
           def digest(path):
               with path.open("rb") as stream:
                   return hashlib.file_digest(stream,"sha256").hexdigest()
@@ -131,6 +139,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v0.1.0-alpha.1 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "v0.1.0-alpha.1 — 首个预览版" --notes-file docs/releases/v0.1.0-alpha.1.md --draft --prerelease
-          gh release upload v0.1.0-alpha.1 release-assets/* --repo "$GITHUB_REPOSITORY"
-          gh release edit v0.1.0-alpha.1 --repo "$GITHUB_REPOSITORY" --draft=false --prerelease
+          gh release create v0.1.0-alpha.2 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "v0.1.0-alpha.2 — 登录与设备验证修复版" --notes-file docs/releases/v0.1.0-alpha.2.md --draft --prerelease
+          gh release upload v0.1.0-alpha.2 release-assets/* --repo "$GITHUB_REPOSITORY"
+          gh release edit v0.1.0-alpha.2 --repo "$GITHUB_REPOSITORY" --draft=false --prerelease

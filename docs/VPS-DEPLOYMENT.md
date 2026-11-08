@@ -6,7 +6,7 @@
 
 ## 获取成品
 
-[Releases](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases) 提供 Linux amd64 服务器包。它是命令行和 systemd 服务，不是桌面安装程序，也不带账号配置。
+[v0.1.0-alpha.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.2) 提供 Linux amd64 服务器包。它是命令行和 systemd 服务，不是桌面安装程序，也不带账号配置。
 
 需要重新构建时，运行 `vps-release.yml`，默认 `deploy=false`。工作流会完成 Python 回归、Go 加密测试、真实 systemd 凭据挂载检查和 Debian 13 容器兼容性验证，然后生成无凭据的发布包及 SHA-256。
 
@@ -74,3 +74,11 @@ cat /var/lib/ipazake/health.json
 在 [41899775076](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41899775076) 完成首次部署。简洁首页和选中后收起列表的部署记录为 [42145258538](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42145258538)，对应运行代码提交 `957783d42f0d605bb455384827c01e7a73037027`，服务健康检查通过。
 
 预编译运行包的升级只切换了 GitHub 上的下载和查询流程，没有重新部署 VPS。公开 Release 的构建记录与源码提交会写入 `BUILDINFO.json`；发布成功不代表线上服务已自动切换到该版本。
+
+## 本版升级与发布边界
+
+2026-11-08 登录兼容修复运行在 GitHub macOS 下载组件中，X 的下载和完整明文验证已恢复。它不需要把 Apple 凭据、模型或设备证明放到 VPS。当前控制器仍调用 main 分支工作流，自动使用精确匹配的新原生运行包。
+
+公开发布新版 Linux 包与实际部署是两个动作：`vps-release.yml` 的 `deploy=false` 只构建验证，`publish-release.yml` 只验证并发布附件。此次成品更新不自动部署 VPS。要升级线上控制器，仍需单独运行经过验证的部署流程并检查服务健康，数据库和上一版配置继续保留。
+
+完整发布操作、`vps_run` / `native_run` 的来源要求及附件校验，见[成品包说明](RELEASES.md)。

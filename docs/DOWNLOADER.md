@@ -1,34 +1,26 @@
-# 原始 IPA 下载模块
+# 原始 IPA 下载与当前生产入口
 
-本文记录早期 Go 下载器的实现与认证排查。当前使用的 Swift 下载、模型复用和 Telegram 交付流程见 [项目状态](PROJECT-STATUS.md)。
+当前下载组件随 [v0.1.0-alpha.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.2) 发布。正式入口是 Telegram 管理员私聊，以及 GitHub 的 `private-delivery.yml`；历史列表使用 `version-catalog.yml`。2026-11-08 [X 完整导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)已验证下载与解密恢复。
 
-使用 Python 编写编排层，App Store 私有协议使用 MIT 许可的 majd/ipatool，固定提交 d9c0247daea564d3ec7d04a9b015d0a29af66b04；不是自研 FairPlay 算法，也不调用第三方下载网站。
+## 处理流程
 
-原始依赖代码仅在 Actions 临时检出并从源码构建；保留其 LICENSE，不重新声明依赖版权。所有构建和试运行仅 GitHub-hosted。
+1. 检查美区官方元数据、免费价格与容量约束。
+2. 取得精确源码指纹和 macOS Intel 平台匹配的 CI 运行包。
+3. 通过原生 Apple 登录完成 Store AMD/SP 验证；保留商店区域和系统配置请求上下文。
+4. 请求免费许可，携带会话、完整 storefront、设备证明及账号绑定 kbsync，使用白名单 ent/download 接口获取原包。
+5. 核对 App ID、bundle、请求版本及包结构，再执行模型复用、全部加密切片/页面校验与账号元数据清理。
+6. 生成短期 age 密文和脱敏收据；常驻控制器在管理员私聊交付前再次复核。
 
-## 使用
+Python 编排位于 `tools/native_store.py` 和 `tools/private_export.py`；Swift 兼容代码位于 `tools/StoreAMD.swift`、`tools/LabEntDownload.swift` 及原生 bag 桥接。账号、模型和真实应用不进入公共源码、构建缓存或 Release。
 
-仓库 Settings → Secrets and variables → Actions：
-- APPLE_ID：已配置 App Store 的专用账号。
-- APPLE_PASSWORD：该账号密码。
-- APPLE_2FA_CODE：需要时配置短期验证码。
+## 配置与验证范围
 
-不要在公开聊天、workflow inputs、源码或日志填写这些值。Actions → Original App Store IPA → Run workflow，target 默认 6599842047。首次无验证码时若收到 requires_2fa，需要更新验证码 Secret 后再手动运行；暂不支持在运行中输入验证码，排队过久可能导致过期。
+Apple Secrets 使用 `APPLE_ID`、`APPLE_PASSWORD`，需要时配置短期 `APPLE_2FA_CODE`；模型使用已有 `FAIRPLAY_MODEL_B64`，不为重试重新注册或生成模型。机器人和交付凭据见[VPS 部署](VPS-DEPLOYMENT.md)。编译及测试只在 GitHub-hosted 运行器执行，VPS 只运行成品。
 
-仅支持 US storefront 的当前免费应用。执行下载前查询官方元数据并拒绝付费应用；登录返回0还必须通过 auth info。下载模块获取账号授权、调用苹果下载、由上游补充原始 SINF 授权文件，随后直接交给现有诊断器。包与候选文件不进入缓存或公开产物；不提供公开 IPA 下载链接。
+登录、下载、明文校验和安装运行分别判断。X 的验证通过 32 个加密切片、86,704 页，`runtime_verified=false`；本轮没有增加安装运行或 Telegram 文件发送证据。
 
-真实下载需要上述账号配置。仓库没有账号时，只能完成编译、CLI兼容性和模拟认证测试，不得宣称真实下载已验证。下载与解密分别判断，downloaded=true 仍不代表 decryption_proven=true。
+## 早期 Go 下载器与认证调查
 
-当时仅完成了诊断原型，还没有接入常驻服务。账号操作可能受地区、协议变化和验证码有效期影响。后续转向 Swift 客户端，完成了真实下载验证。
+`store-download.yml`（Original App Store IPA）保留为固定 ipatool 提交的受控研究入口，不是生产机器人采用的下载路径。旧 ARM 对照也不能推广成现有生产平台支持；当前生产仅允许 macOS 26 Intel 与 macOS 15 Intel。
 
-## 认证误判修正
-
-固定的上游提交会把 MZFinance.BadLogin.Configurator_message 映射成 ErrAuthCodeRequired；该通用响应本身不足以证明 Apple 明确要求双重认证。通过构建补丁修正了这个分支，Go 回归测试直接调用上游响应解析器。Python 层不再以帮助文本中出现 auth-code 和 required 来推断需要验证码。
-
-[修正后 Intel 验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41723998603)：回归测试、编译及无账号测试通过，真实登录返回 authentication_unresolved_generic_bad_login，未下载 IPA。该结果不等于密码一定错误，也不等于无需认证即可继续。
-
-已增加 ARM/Intel 运行器选项，用于一次受控兼容性对照，不用于无限重复登录。Go 缓存仅保存依赖和编译对象，不保存 Apple 账号、会话或 IPA。未实现长期登录会话的保存和复用。
-
-上方旧版说明中的 requires_2fa 不再用来解释该通用 BadLogin 响应。只有获得进一步可验证证据后，才可定位具体账号或协议问题。
-
-[ARM 对照验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41725046970)同样通过回归测试和构建，真实登录仍返回 authentication_unresolved_generic_bad_login。切换这两种 GitHub 托管运行器未解决问题；不能由此宣称已排除所有网络或协议因素。在这次 Go 客户端对照中，仍未取得原始 IPA。需要替代认证实现或可验证的合法会话来源，不能靠修改状态名、禁用认证检查或无限重试获得真实授权。
+早期 generic BadLogin、5002、空响应与 HTTP 拒绝没有证明密码错误、账号封禁或明确双重认证要求。Go 的 plist-compat 实验、首次 Swift 登录及 ent/download 历程，分别见[认证兼容](AUTH-COMPATIBILITY.md)、[原生对照](NATIVE-STORE.md)和[下载结果](../NATIVE-DOWNLOAD-RESULTS.md)。历史失败结论由[最新项目状态](PROJECT-STATUS.md)中的实测更新。

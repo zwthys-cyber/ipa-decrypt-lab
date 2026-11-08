@@ -1,6 +1,12 @@
 # Telegram 使用说明
 
-@ipazake_bot 是管理员私聊入口，服务器端在 Debian 13 VPS 常驻运行。第一版只处理美区免费应用，IPA 最大 2000 MB，暂时没有多用户和收费入口。
+@ipazake_bot 是管理员私聊入口，服务器端在 Debian 13 VPS 常驻运行。当前版本只处理美区免费应用，IPA 最大 2000 MB，暂时没有多用户和收费入口。
+
+## 当前版本与登录修复
+
+当前公开成品为 [v0.1.0-alpha.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.2)。Apple 新原生认证和 Store AMD/SP 注册已修复，正式运行包已通过 [X 下载与完整解密](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)。此前因登录失败结束的任务可重新发送应用链接或 App ID；不会自动重放旧失败任务。本次实测没有重复 Telegram 文件发送，历史发送回执见文末。
+
+日常任务仍使用 main 分支的精确源码指纹运行包，Release 是可下载的版本快照。缺包应先完成构建；新版发布不会自动重启常驻控制器。
 
 ## 首页与菜单
 
@@ -73,7 +79,7 @@
 
 [My BVF 最新回归](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41953586939)约 59 秒，包准备 7 秒、公共资源恢复及校验 8 秒。历史查询进一步复用同批连接和公开端点后，[QQ 首批 10 项](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41956106639)约 55 秒，[下一批](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41956309828)约 1 分 3 秒。下一批与前次耗时接近，并非每次都会明显提速。这里记录的是工作流作业耗时，排队和 Telegram 展示、文件传输另计。
 
-Actions 运行包保留 30 天，每周刷新。源码更新后需要先完成新构建；缺包时运行 `native-runtime-build.yml` 补齐，再提交任务。
+Actions 运行包保留 30 天，每周刷新。源码更新后需要先完成新构建；缺包时运行 `native-runtime-build.yml` 补齐，再提交任务。默认构建两个平台；手动可选择一个已支持平台进行完整恢复构建，但产物只能供该精确平台使用。
 
 ## 配置与恢复
 

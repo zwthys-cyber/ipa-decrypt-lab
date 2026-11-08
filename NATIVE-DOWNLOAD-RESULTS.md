@@ -1,5 +1,9 @@
 # Native download investigation — 2026-11-03
 
+
+> Current-state update — 2026-11-08: The “latest” result inside this dated investigation means latest at that historical stage. Current production acquisition and complete model-based decryption are verified by the 2026-11-08 X export, with 32 encrypted images and 86,704 validated pages. Current packages: [v0.1.0-alpha.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.2). Evidence: [verified X export](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2). Operational documentation: [documentation index](docs/DOCUMENTATION.md).
+
+
 This document records the original download investigation. The later model-based decryption path is documented in [project status](docs/PROJECT-STATUS.md).
 
 ## Latest verified result: original IPA acquisition works
