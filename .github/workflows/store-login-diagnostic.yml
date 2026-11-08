@@ -209,6 +209,14 @@ jobs:
                   "connection": ("connection", "socket", "httpclienterror"),
                   "signing": ("sap", "signature"),
                   "store_device_proof": ("storeamd", "amd-action"),
+                  "proof_provisioning_failed": ("store_device_provisioning_failed",),
+                  "remote_closed": ("remoteconnectionclosed", "connection reset", "connectionreset", "eof"),
+                  "http_parse": ("httpparsererror", "invalidstatus", "invalidheader", "invalidversion", "invalidconstant"),
+                  "timeout": ("timeout", "timed out"),
+                  "cancelled": ("cancelled", "canceled"),
+                  "unclean_tls": ("uncleanshutdown", "handshakefailed"),
+                  "invalid_request": ("invalidurl", "invalidrequest", "invalid field", "illegal", "malformed"),
+                  "unexpected_response": ("unexpected", "unsupported", "invalid response"),
               }
               endpoints = {
                   "bag": "init.itunes.apple.com/bag.xml",
@@ -224,6 +232,7 @@ jobs:
                   "error_codes":[int(v) for v in re.findall(r"\bCode\s*=\s*(-?[0-9]{1,6})(?![0-9])", raw)][-4:],
               }), flush=True)
               print(json.dumps({"schema":"login-http-trace-v1",
+                  "store_proof_headers_present":all(re.search(r"(?im)\b" + re.escape(name) + r":", raw) for name in ("X-Apple-AMD", "X-Apple-AMD-M")),
                   "native_route_requested":env.get("LAB_NATIVE_AUTH_ROUTE") == "1",
                   "native_route_supported":b"LAB_NATIVE_AUTH_ROUTE" in Path(binary).read_bytes(),
                   "requests":http_trace(raw)}), flush=True)
