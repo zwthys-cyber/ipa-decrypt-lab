@@ -9,11 +9,13 @@ final class LabStoreAMDTransportTests: XCTestCase {
         let input = NSMutableURLRequest(url: URL(string:"https://bag.itunes.apple.com/bag.xml?private=synthetic")!)
         input.httpMethod = "GET"
         URLProtocol.setProperty("synthetic-routing-context", forKey:"LabNativeContext", in:input)
+        input.setValue("143465-1,32", forHTTPHeaderField:"X-Apple-Store-Front")
         input.setValue("synthetic-cookie", forHTTPHeaderField:"Cookie")
         input.setValue("synthetic-token", forHTTPHeaderField:"Authorization")
         let output = StoreAMD.publicBagRequest(input)
         XCTAssertEqual(output.url?.absoluteString,"https://init.itunes.apple.com/bag.xml?ix=6")
         XCTAssertEqual(URLProtocol.property(forKey:"LabNativeContext", in:output as URLRequest) as? String,"synthetic-routing-context")
+        XCTAssertEqual(output.value(forHTTPHeaderField:"X-Apple-Store-Front"),"143465-1,32")
         XCTAssertNil(output.value(forHTTPHeaderField:"Cookie"))
         XCTAssertNil(output.value(forHTTPHeaderField:"Authorization"))
         XCTAssertEqual(input.value(forHTTPHeaderField:"Cookie"),"synthetic-cookie")

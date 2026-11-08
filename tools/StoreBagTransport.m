@@ -52,7 +52,7 @@ __attribute__((constructor)) static void initializeStoreTransport(void) {
     // Retain NSURLProtocol properties used by the native AMS session encoder.
     NSMutableURLRequest *updated=[request mutableCopy];
     updated.URL=[NSURL URLWithString:@"https://init.itunes.apple.com/bag.xml?ix=6"];
-    for(NSString *field in @[@"Cookie",@"Authorization",@"X-Token",@"X-Dsid",@"iCloud-DSID",@"X-Apple-Store-Front",@"X-Apple-AMD",@"X-Apple-AMD-M",@"X-Apple-ActionSignature"]) {
+    for(NSString *field in @[@"Cookie",@"Authorization",@"X-Token",@"X-Dsid",@"iCloud-DSID",@"X-Apple-AMD",@"X-Apple-AMD-M",@"X-Apple-ActionSignature"]) {
         [updated setValue:nil forHTTPHeaderField:field];
     }
     updated.HTTPBody=nil;
