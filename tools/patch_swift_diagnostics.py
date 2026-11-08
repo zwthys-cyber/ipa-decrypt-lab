@@ -293,3 +293,17 @@ replacement = '''            if !provisioned, response.headers.first(name: "X-Ap
 ''' + anchor
 assert value.count(anchor) == 1
 p.write_text(value.replace(anchor, replacement))
+
+value = helper.read_text()
+value = value.replace('NSSelectorFromString("_headersForRequest:account:type:")', 'NSSelectorFromString("headersForRequest:account:type:bag:")')
+value = value.replace('(AnyObject, Selector, AnyObject, AnyObject?, Int64) -> Unmanaged<AnyObject>?', '(AnyObject, Selector, AnyObject, AnyObject?, Int64, AnyObject) -> Unmanaged<AnyObject>?')
+anchor = '            let request = NSURLRequest(url: endpoint)'
+addition = '''            let bagSelector = NSSelectorFromString("bagForProfile:profileVersion:")
+            guard let bagClass = NSClassFromString("AMSBag"), let bagMethod = class_getClassMethod(bagClass, bagSelector) else { throw NSError(domain: "StoreAMD", code: 2) }
+            typealias Bag = @convention(c) (AnyObject, Selector, AnyObject, AnyObject) -> Unmanaged<AnyObject>?
+            let bagCall = unsafeBitCast(method_getImplementation(bagMethod), to: Bag.self)
+            guard let bag = bagCall(bagClass as AnyObject, bagSelector, "itunes" as NSString, "1" as NSString)?.takeUnretainedValue() else { throw NSError(domain: "StoreAMD", code: 3) }
+'''
+value = value.replace(anchor, addition + anchor)
+value = value.replace('call(cls as AnyObject, selector, request, nil, 2)', 'call(cls as AnyObject, selector, request, nil, 2, bag)')
+helper.write_text(value)
