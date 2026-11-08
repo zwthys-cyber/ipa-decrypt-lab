@@ -87,12 +87,15 @@ jobs:
            NSArray *domains=@[@"AMSErrorDomain",@"NSURLErrorDomain",@"NSCocoaErrorDomain",@"NSPOSIXErrorDomain",@"AKAnisetteError",@"com.apple.AppleMediaServices"];
            NSMutableArray *errors=[NSMutableArray array];
            for(unsigned i=0;error&&i<5;i++) {
-            [errors addObject:@{@"domain":[domains containsObject:error.domain]?error.domain:@"other",@"code":@(MAX(-999999,MIN(999999,error.code)))}];
+            NSMutableArray *flags=[NSMutableArray array];
+            NSString *message=[error.description lowercaseString];
+            for(NSString *term in @[@"bag",@"url",@"missing",@"invalid",@"provision",@"account",@"permission",@"entitlement",@"unsupported",@"response",@"parse",@"network",@"certificate",@"amsbag",@"client",@"400",@"key",@"profile",@"timeout"]) if([message containsString:term]) [flags addObject:term];
+            [errors addObject:@{@"domain":[domains containsObject:error.domain]?error.domain:@"other",@"flags":flags,@"code":@(MAX(-999999,MIN(999999,error.code)))}];
             error=error.userInfo[NSUnderlyingErrorKey];
            }
            NSString *kind=result?NSStringFromClass([result class]):@"nil";
            if(kind.length>80||[kind rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_"].invertedSet].location!=NSNotFound)kind=@"other";
-           NSDictionary *safe=@{@"native_bag":@(nativeBag!=nil),@"retry_action":@(actionRetry),@"result_class":kind,@"schema":@"store-sp-result-v1",@"pending":@([pending respondsToSelector:wait]),@"result_present":@(result!=nil),@"result_number":@([result isKindOfClass:NSNumber.class]),@"result_bool":@([result isKindOfClass:NSNumber.class]&&[result boolValue]),@"action_data_present":@(actionData),@"status":@([response isKindOfClass:NSHTTPURLResponse.class]?[response statusCode]:0),@"type":@(type==2?2:0),@"errors":errors};
+           NSDictionary *safe=@{@"bag_response":@([response isKindOfClass:NSHTTPURLResponse.class]&&[[response URL].host isEqualToString:@"init.itunes.apple.com"]),@"native_bag":@(nativeBag!=nil),@"retry_action":@(actionRetry),@"result_class":kind,@"schema":@"store-sp-result-v1",@"pending":@([pending respondsToSelector:wait]),@"result_present":@(result!=nil),@"result_number":@([result isKindOfClass:NSNumber.class]),@"result_bool":@([result isKindOfClass:NSNumber.class]&&[result boolValue]),@"action_data_present":@(actionData),@"status":@([response isKindOfClass:NSHTTPURLResponse.class]?[response statusCode]:0),@"type":@(type==2?2:0),@"errors":errors};
            NSData *json=[NSJSONSerialization dataWithJSONObject:safe options:NSJSONWritingSortedKeys error:NULL];
            fprintf(stderr,"IPA_LAB_SP_DIAG:%s\n",[[NSString alloc]initWithData:json encoding:NSUTF8StringEncoding].UTF8String);
            if(type==2&&actionData&&actionRetry) return @YES;
