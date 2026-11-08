@@ -55,6 +55,40 @@ jobs:
             ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/CoreFP
             ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/CoreFP.icxs
           key: apple-public-assets-d9c0247-26A434-arm64-v1
+      - name: Observe native SP result without changing routing or actions
+        timeout-minutes: 2
+        run: |
+          ulimit -c 0
+          cat > "$RUNNER_TEMP/store-sp-observer.m" <<'OBJC'
+          #import <Foundation/Foundation.h>
+          #import <objc/runtime.h>
+          #import <objc/message.h>
+          #import <dlfcn.h>
+          static IMP original;
+          static id observe(id cls,SEL sel,id response,long long type,id bag,id account) {
+           id result=((id(*)(id,SEL,id,long long,id,id))original)(cls,sel,response,type,bag,account);
+           NSError *error=nil;
+           if([result respondsToSelector:NSSelectorFromString(@"error")])error=((id(*)(id,SEL))objc_msgSend)(result,NSSelectorFromString(@"error"));
+           NSMutableArray *errors=[NSMutableArray array];
+           for(unsigned i=0;error&&i<5;i++) {
+            NSMutableArray *flags=[NSMutableArray array]; NSString *text=error.description.lowercaseString;
+            for(NSString *term in @[@"bag",@"provision",@"invalid",@"response",@"key",@"transport",@"settinginfo",@"data",@"400",@"403",@"500",@"decode",@"trusted",@"network"])if([text containsString:term])[flags addObject:term];
+            NSString *domain=[@[@"AMSErrorDomain",@"NSCocoaErrorDomain",@"NSURLErrorDomain",@"NSPOSIXErrorDomain"] containsObject:error.domain]?error.domain:@"other";
+            [errors addObject:@{@"domain":domain,@"code":@(MAX(-999999,MIN(999999,error.code))),@"flags":flags}];
+            error=error.userInfo[NSUnderlyingErrorKey];
+           }
+           NSDictionary *safe=@{@"schema":@"native-sp-observation-v1",@"type":@(type==2?2:0),@"status":@([response isKindOfClass:NSHTTPURLResponse.class]?[response statusCode]:0),@"errors":errors};
+           NSData *json=[NSJSONSerialization dataWithJSONObject:safe options:NSJSONWritingSortedKeys error:NULL];
+           fprintf(stderr,"IPA_LAB_SP_DIAG:%s\n",[[NSString alloc]initWithData:json encoding:NSUTF8StringEncoding].UTF8String);
+           return result;
+          }
+          __attribute__((constructor)) static void install(void){@autoreleasepool{
+           dlopen("/System/Library/PrivateFrameworks/AppleMediaServices.framework/AppleMediaServices",RTLD_NOW|RTLD_LOCAL);
+           Method method=class_getClassMethod(NSClassFromString(@"AMSAnisette"),NSSelectorFromString(@"handleResponse:type:bag:account:"));
+           if(method)original=method_setImplementation(method,(IMP)observe);
+          }}
+          OBJC
+          clang -fobjc-arc -dynamiclib -framework Foundation "$RUNNER_TEMP/store-sp-observer.m" -o "$RUNNER_TEMP/store-sp-observer.dylib"
       - name: Bounded login with fixed diagnostic fields only
         env:
           LOGIN_EXPECTED_APPLE_ID: ${{ secrets.LOGIN_EXPECTED_APPLE_ID }}
@@ -62,6 +96,7 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_2FA_CODE: ${{ secrets.APPLE_2FA_CODE }}
           LAB_NATIVE_AUTH_ROUTE: ${{ inputs.auth_route == 'native' && '1' || '0' }}
+          DYLD_INSERT_LIBRARIES: ${{ runner.temp }}/store-sp-observer.dylib
           LAB_KBSYNC_HELPER: ${{ github.workspace }}/runtime/lab-kbsync
         run: |
           ulimit -c 0
@@ -122,7 +157,7 @@ jobs:
               print(json.dumps({"schema":"login-account-comparison-v1",
                                 "matches":candidate == os.environ["APPLE_ID"].strip().casefold()}), flush=True)
           binary = str(Path("runtime/ApplePackageTool").resolve())
-          env = {k: os.environ[k] for k in ("HOME", "PATH", "LANG", "LAB_KBSYNC_HELPER", "LAB_NATIVE_AUTH_ROUTE") if k in os.environ}
+          env = {k: os.environ[k] for k in ("HOME", "PATH", "LANG", "LAB_KBSYNC_HELPER", "LAB_NATIVE_AUTH_ROUTE", "DYLD_INSERT_LIBRARIES") if k in os.environ}
           env["APPLEPACKAGE_PASSWORD"] = os.environ["APPLE_PASSWORD"]
           args = ["login", os.environ["APPLE_ID"].strip(), "--verbose"]
           if os.environ.get("APPLE_2FA_CODE"):
