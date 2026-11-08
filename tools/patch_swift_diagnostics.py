@@ -126,3 +126,108 @@ final class LabAuthRouteTests: XCTestCase {
     }
 }
 ''')
+
+
+# Native Store authentication changed in November 2026. Keep the advertised
+# native path and obtain fresh, origin-bound Store AMD proofs on macOS.
+config = Path(sys.argv[1])/"Sources/ApplePackage/Configuration/Configuration.swift"
+value = config.read_text()
+assert value.count("Configurator/2.17") == 1
+config.write_text(value.replace("Configurator/2.17", "Configurator/2.21"))
+bag = Path(sys.argv[1])/"Sources/ApplePackage/Commands/Bag.swift"
+value = bag.read_text()
+start = value.index('            var path = comps.path')
+end = value.index('        } else if comps.scheme', start)
+value = value[:start] + """            guard comps.scheme == "https", comps.user == nil, comps.password == nil,
+                  comps.port == nil || comps.port == 443, comps.fragment == nil,
+                  ["/auth/v1/native", "/auth/v1/native/", "/auth/v1/native/fast", "/auth/v1/native/fast/"].contains(comps.percentEncodedPath)
+            else { return nil }
+            // Preserve Apple's path and routing query exactly.
+""" + value[end:]
+bag.write_text(value)
+value = p.read_text()
+start = value.index('        guard url.scheme?.lowercased() == "https"')
+end = value.index('        return url', start)
+value = value[:start] + """        guard let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              comps.scheme == "https", let host = comps.host?.lowercased(),
+              comps.user == nil, comps.password == nil, comps.fragment == nil,
+              comps.port == nil || comps.port == 443
+        else { try ensureFailed("Authentication requires an Apple HTTPS endpoint.") }
+        let native = host == "auth.itunes.apple.com" &&
+            ["/auth/v1/native", "/auth/v1/native/", "/auth/v1/native/fast", "/auth/v1/native/fast/"].contains(comps.percentEncodedPath)
+        let legacyHost = host == "buy.itunes.apple.com" || host.range(of: "^p[0-9]+-buy[.]itunes[.]apple[.]com$", options: .regularExpression) != nil
+        let legacy = legacyHost && ["/WebObjects/MZFinance.woa/wa/authenticate", "/WebObjects/MZFinance.woa/wa/authenticate/"].contains(comps.percentEncodedPath)
+        guard native || legacy else { try ensureFailed("Unsupported authentication endpoint.") }
+""" + value[end:]
+anchor = '        let signature = try await sapSigner.sign(data)'
+assert value.count(anchor) == 1
+value = value.replace(anchor, '        headers += try StoreAMD.headers(for: endpoint)\n' + anchor)
+p.write_text(value)
+helper = Path(sys.argv[1])/"Sources/ApplePackage/Commands/StoreAMD.swift"
+helper.write_text('''import Foundation
+import ObjectiveC
+import Darwin
+
+// Private framework values remain in memory and never enter diagnostic output.
+enum StoreAMD {
+    static func headers(for endpoint: URL) throws -> [(String, String)] {
+        _ = try Authenticator.approvedEndpoint(endpoint)
+        guard endpoint.host?.lowercased() == "auth.itunes.apple.com" else { return [] }
+        return try autoreleasepool {
+            guard let handle = dlopen("/System/Library/PrivateFrameworks/AppleMediaServices.framework/AppleMediaServices", RTLD_NOW | RTLD_LOCAL) else {
+                throw NSError(domain: "StoreAMD", code: 1)
+            }
+            defer { dlclose(handle) }
+            let selector = NSSelectorFromString("_headersForRequest:account:type:")
+            guard let cls = NSClassFromString("AMSAnisette"),
+                  let method = class_getClassMethod(cls, selector) else {
+                throw NSError(domain: "StoreAMD", code: 2)
+            }
+            typealias Headers = @convention(c) (AnyObject, Selector, AnyObject, AnyObject?, Int64) -> Unmanaged<AnyObject>?
+            let call = unsafeBitCast(method_getImplementation(method), to: Headers.self)
+            let request = NSURLRequest(url: endpoint)
+            guard let values = call(cls as AnyObject, selector, request, nil, 2)?.takeUnretainedValue() as? [String: Any] else {
+                throw NSError(domain: "StoreAMD", code: 3)
+            }
+            return try validated(values)
+        }
+    }
+
+    static func validated(_ values: [String: Any]) throws -> [(String, String)] {
+        try ["X-Apple-AMD", "X-Apple-AMD-M"].map { key in
+            guard let value = values[key] as? String, !value.isEmpty,
+                  value.utf8.count <= 8192, !value.contains("\\r"), !value.contains("\\n") else {
+                throw NSError(domain: "StoreAMD", code: 4)
+            }
+            return (key, value)
+        }
+    }
+}
+''')
+proofTests = Path(sys.argv[1])/"Tests/ApplePackageTests/LabStoreAMDTests.swift"
+proofTests.write_text('''@testable import ApplePackage
+import Foundation
+import XCTest
+
+final class LabStoreAMDTests: XCTestCase {
+    func testPreservesNativePathAndQuery() throws {
+        for path in ["/auth/v1/native", "/auth/v1/native/", "/auth/v1/native/fast", "/auth/v1/native/fast/"] {
+            let raw = "https://auth.itunes.apple.com" + path + "?Pod=7"
+            XCTAssertEqual(Bag.normalizedAuthEndpoint(from: raw)?.absoluteString, raw)
+            XCTAssertEqual(try Authenticator.approvedEndpoint(URL(string: raw)!).absoluteString, raw)
+        }
+    }
+    func testRejectsUntrustedProofTargets() throws {
+        for raw in ["http://auth.itunes.apple.com/auth/v1/native", "https://auth.itunes.apple.com.evil.invalid/auth/v1/native", "https://auth.itunes.apple.com/auth/v1/native%2ffast", "https://user@auth.itunes.apple.com/auth/v1/native", "https://auth.itunes.apple.com:8443/auth/v1/native", "https://auth.itunes.apple.com/auth/v1/native#x", "https://apple.com/auth/v1/native"] {
+            XCTAssertThrowsError(try StoreAMD.headers(for: URL(string: raw)!))
+        }
+        XCTAssertTrue(try StoreAMD.headers(for: URL(string:"https://buy.itunes.apple.com/WebObjects/MZFinance.woa/wa/authenticate/")!).isEmpty)
+    }
+    func testValidatesProofWithoutLoggingValues() throws {
+        XCTAssertEqual(try StoreAMD.validated(["X-Apple-AMD":"synthetic", "X-Apple-AMD-M":"machine", "Cookie":"ignored"]).count, 2)
+        for values: [String: Any] in [[:], ["X-Apple-AMD":"x"], ["X-Apple-AMD":"x\\r\\n", "X-Apple-AMD-M":"m"], ["X-Apple-AMD":"", "X-Apple-AMD-M":"m"], ["X-Apple-AMD":String(repeating:"x", count:8193), "X-Apple-AMD-M":"m"]] {
+            XCTAssertThrowsError(try StoreAMD.validated(values))
+        }
+    }
+}
+''')
