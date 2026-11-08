@@ -77,6 +77,12 @@ jobs:
            SEL selector=NSSelectorFromString(@"frozenBagValueWithKey:value:valueType:");
            Class cls=NSClassFromString(@"AMSBagValue");
            if(![cls respondsToSelector:selector]||![old respondsToSelector:NSSelectorFromString(@"valueType")])return old;
+           unsigned count=0; Method *methods=class_copyMethodList([old class],&count);
+           NSMutableArray *selectors=[NSMutableArray array];
+           for(unsigned i=0;i<count;i++)[selectors addObject:NSStringFromSelector(method_getName(methods[i]))];
+           free(methods);
+           NSData *meta=[NSJSONSerialization dataWithJSONObject:@{@"schema":@"store-bag-value-api-v1",@"value_class":NSStringFromClass([old class]),@"selectors":selectors} options:0 error:NULL];
+           fprintf(stderr,"IPA_LAB_SP_DIAG:%s\n",[[NSString alloc]initWithData:meta encoding:NSUTF8StringEncoding].UTF8String);
            unsigned long long type=((unsigned long long(*)(id,SEL))objc_msgSend)(old,NSSelectorFromString(@"valueType"));
            id frozen=((id(*)(id,SEL,id,id,unsigned long long))objc_msgSend)(cls,selector,key,value,type);
            SEL get=NSSelectorFromString(@"transformBlocks"),set=NSSelectorFromString(@"setTransformBlocks:");
@@ -152,6 +158,15 @@ jobs:
             ((void(*)(id,SEL,id,id))objc_msgSend)(nativeBag,defaults,@"https://auth.itunes.apple.com/auth/v1/otp/1.5/sync",@"amd-sync-machine");
             ((void(*)(id,SEL,id,id))objc_msgSend)(nativeBag,defaults,@[@"auth.itunes.apple.com"],@"amd-domains");
            }
+           id dataSource=((id(*)(id,SEL))objc_msgSend)(nativeBag,NSSelectorFromString(@"dataSource"));
+           NSMutableArray *properties=[NSMutableArray array];
+           for(Class c=[dataSource class];c&&c!=NSObject.class;c=class_getSuperclass(c)) {
+            unsigned count=0; objc_property_t *props=class_copyPropertyList(c,&count);
+            for(unsigned i=0;i<count;i++)[properties addObject:@{@"name":@(property_getName(props[i])),@"attributes":@(property_getAttributes(props[i]))}];
+            free(props);
+           }
+           NSData *sourceMeta=[NSJSONSerialization dataWithJSONObject:@{@"schema":@"store-bag-source-api-v1",@"class":NSStringFromClass([dataSource class]),@"properties":properties} options:0 error:NULL];
+           fprintf(stderr,"IPA_LAB_SP_DIAG:%s\n",[[NSString alloc]initWithData:sourceMeta encoding:NSUTF8StringEncoding].UTF8String);
            Method url=class_getInstanceMethod(NSClassFromString(@"AMSBag"),NSSelectorFromString(@"URLForKey:"));
            Method urlAccount=class_getInstanceMethod(NSClassFromString(@"AMSBag"),NSSelectorFromString(@"URLForKey:account:"));
            Method array=class_getInstanceMethod(NSClassFromString(@"AMSBag"),NSSelectorFromString(@"arrayForKey:"));
