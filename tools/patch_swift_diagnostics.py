@@ -196,7 +196,7 @@ enum StoreAMD {
     static func validated(_ values: [String: Any]) throws -> [(String, String)] {
         try ["X-Apple-AMD", "X-Apple-AMD-M"].map { key in
             guard let value = values[key] as? String, !value.isEmpty,
-                  value.utf8.count <= 8192, !value.contains("\\r"), !value.contains("\\n") else {
+                  value.utf8.count <= 8192, !value.unicodeScalars.contains(where: { $0.value == 13 || $0.value == 10 }) else {
                 throw NSError(domain: "StoreAMD", code: 4)
             }
             return (key, value)
@@ -232,3 +232,12 @@ final class LabStoreAMDTests: XCTestCase {
     }
 }
 ''')
+
+# Signing fixtures must use supported legacy paths without invoking live device
+# proof APIs. The native normalization assertion now preserves the advertised URL.
+signingTests = Path(sys.argv[1])/"Tests/ApplePackageTests/SAPAuthenticationRequestTests.swift"
+value = signingTests.read_text()
+value = value.replace("https://auth.itunes.apple.com/login", "https://buy.itunes.apple.com/WebObjects/MZFinance.woa/wa/authenticate/")
+value = value.replace("https://p25-buy.itunes.apple.com/login", "https://p25-buy.itunes.apple.com/WebObjects/MZFinance.woa/wa/authenticate/")
+value = value.replace('"https://auth.itunes.apple.com/auth/v1/native/fast/?guid=example",', 'original,')
+signingTests.write_text(value)
