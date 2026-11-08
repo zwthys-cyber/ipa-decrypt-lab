@@ -66,6 +66,23 @@ jobs:
           #import <dlfcn.h>
           static IMP original, originalHeaders;
           static id nativeBag;
+          static IMP originalURL,originalURLAccount,originalArray;
+          static id publicValue(id bag,id key,id old) {
+           if(bag!=nativeBag)return old;
+           id value=nil;
+           if([key isEqual:@"amd-finish-provisioning"])value=[NSURL URLWithString:@"https://auth.itunes.apple.com/auth/v1/otp/1.5/finish"];
+           if([key isEqual:@"amd-sync-machine"])value=[NSURL URLWithString:@"https://auth.itunes.apple.com/auth/v1/otp/1.5/sync"];
+           if([key isEqual:@"amd-domains"])value=@[@"auth.itunes.apple.com"];
+           if(!value)return old;
+           SEL selector=NSSelectorFromString(@"frozenBagValueWithKey:value:valueType:");
+           Class cls=NSClassFromString(@"AMSBagValue");
+           if(![cls respondsToSelector:selector]||![old respondsToSelector:NSSelectorFromString(@"valueType")])return old;
+           unsigned long long type=((unsigned long long(*)(id,SEL))objc_msgSend)(old,NSSelectorFromString(@"valueType"));
+           return ((id(*)(id,SEL,id,id,unsigned long long))objc_msgSend)(cls,selector,key,value,type);
+          }
+          static id fixedURL(id bag,SEL sel,id key) {return publicValue(bag,key,((id(*)(id,SEL,id))originalURL)(bag,sel,key));}
+          static id fixedURLAccount(id bag,SEL sel,id key,id account) {return publicValue(bag,key,((id(*)(id,SEL,id,id))originalURLAccount)(bag,sel,key,account));}
+          static id fixedArray(id bag,SEL sel,id key) {return publicValue(bag,key,((id(*)(id,SEL,id))originalArray)(bag,sel,key));}
           static id proofHeaders(id cls,SEL sel,id request,id account,long long type,id bag) {
            return ((id(*)(id,SEL,id,id,long long,id))originalHeaders)(cls,sel,request,account,type,type==2&&nativeBag?nativeBag:bag);
           }
@@ -128,6 +145,12 @@ jobs:
             ((void(*)(id,SEL,id,id))objc_msgSend)(nativeBag,defaults,@"https://auth.itunes.apple.com/auth/v1/otp/1.5/sync",@"amd-sync-machine");
             ((void(*)(id,SEL,id,id))objc_msgSend)(nativeBag,defaults,@[@"auth.itunes.apple.com"],@"amd-domains");
            }
+           Method url=class_getInstanceMethod(NSClassFromString(@"AMSBag"),NSSelectorFromString(@"URLForKey:"));
+           Method urlAccount=class_getInstanceMethod(NSClassFromString(@"AMSBag"),NSSelectorFromString(@"URLForKey:account:"));
+           Method array=class_getInstanceMethod(NSClassFromString(@"AMSBag"),NSSelectorFromString(@"arrayForKey:"));
+           if(url) originalURL=method_setImplementation(url,(IMP)fixedURL);
+           if(urlAccount) originalURLAccount=method_setImplementation(urlAccount,(IMP)fixedURLAccount);
+           if(array) originalArray=method_setImplementation(array,(IMP)fixedArray);
            if(method) original=method_setImplementation(method,(IMP)observe);
            Method headers=class_getClassMethod(cls,NSSelectorFromString(@"headersForRequest:account:type:bag:"));
            if(headers) originalHeaders=method_setImplementation(headers,(IMP)proofHeaders);
