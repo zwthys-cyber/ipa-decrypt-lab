@@ -1,47 +1,16 @@
 import Foundation
+import CApplePackage
 import ObjectiveC
 import Darwin
 
 // Only Apple's public bag request is rerouted. The native parser retains the
 // complete trustedDomains policy. Account requests and proof values stay private.
 enum StoreAMD {
-    private static let frameworkLoaded = dlopen("/System/Library/PrivateFrameworks/AppleMediaServices.framework/AppleMediaServices", RTLD_NOW | RTLD_LOCAL) != nil
-    private static let transportReady: Bool = {
-        guard frameworkLoaded, let cls = NSClassFromString("AMSBagNetworkTask") else { return false }
-        let selector = NSSelectorFromString("_createRequestWithQueryItems:")
-        guard let method = class_getInstanceMethod(cls, selector), method_getNumberOfArguments(method) == 3 else { return false }
-        typealias Create = @convention(c) (AnyObject, Selector, AnyObject?) -> Unmanaged<AnyObject>?
-        let original = unsafeBitCast(method_getImplementation(method), to: Create.self)
-        let block: @convention(block) (AnyObject, AnyObject?) -> AnyObject? = { task, query in
-            guard let pending = original(task, selector, query)?.takeUnretainedValue() else { return nil }
-            guard let request = resolved(pending) as? NSURLRequest else { return pending }
-            let updated = publicBagRequest(request)
-            guard updated !== request else { return pending }
-            let wait = NSSelectorFromString("resultWithError:")
-            if class_getInstanceMethod(object_getClass(pending), wait) != nil,
-               let promise = NSClassFromString("AMSPromise"),
-               let factory = class_getClassMethod(promise, NSSelectorFromString("promiseWithResult:")) {
-                typealias Factory = @convention(c) (AnyObject, Selector, AnyObject) -> Unmanaged<AnyObject>?
-                let call = unsafeBitCast(method_getImplementation(factory), to: Factory.self)
-                return call(promise as AnyObject, NSSelectorFromString("promiseWithResult:"), updated)?.takeUnretainedValue()
-            }
-            return updated
-        }
-        method_setImplementation(method, imp_implementationWithBlock(block))
-        return true
-    }()
+    private static let transportReady = LabStoreBagTransport.install()
 
     static func publicBagRequest(_ request: NSURLRequest) -> NSURLRequest {
-        guard let url = request.url, let parts = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              parts.scheme == "https", ["bag.itunes.apple.com", "init.itunes.apple.com"].contains(parts.host ?? ""),
-              parts.percentEncodedPath == "/bag.xml", parts.user == nil, parts.password == nil,
-              parts.port == nil || parts.port == 443, parts.fragment == nil,
-              request.httpMethod == "GET" else { return request }
-        // A fresh public request carries no account Cookie/Authorization headers.
-        let updated = NSMutableURLRequest(url: URL(string:"https://init.itunes.apple.com/bag.xml?ix=6")!, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
-        updated.httpMethod = "GET"
-        updated.setValue(Configuration.userAgent, forHTTPHeaderField: "User-Agent")
-        return updated
+        let updated = LabStoreBagTransport.publicRequest(request as URLRequest)
+        return updated == request as URLRequest ? request : updated as NSURLRequest
     }
 
     private static func bag() throws -> AnyObject {
@@ -54,11 +23,11 @@ enum StoreAMD {
     }
 
     static func resolved(_ value: AnyObject) -> AnyObject? {
-        let selector = NSSelectorFromString("resultWithTimeout:error:")
+        let selector = NSSelectorFromString("resultWithError:")
         guard let method = class_getInstanceMethod(object_getClass(value), selector) else { return value }
-        typealias Wait = @convention(c) (AnyObject, Selector, Double, UnsafeMutableRawPointer?) -> Unmanaged<AnyObject>?
+        typealias Wait = @convention(c) (AnyObject, Selector, UnsafeMutableRawPointer?) -> Unmanaged<AnyObject>?
         let call = unsafeBitCast(method_getImplementation(method), to: Wait.self)
-        return call(value, selector, 20, nil)?.takeUnretainedValue()
+        return call(value, selector, nil)?.takeUnretainedValue()
     }
 
     static func headers(for endpoint: URL) throws -> [(String, String)] {

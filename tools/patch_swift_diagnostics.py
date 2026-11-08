@@ -227,3 +227,7 @@ assert value.count(anchor) == 1
 purchase.write_text(value.replace(anchor, '        headers += try StoreAMD.commerceHeaders(for: URL(string:urlString)!)\n' + anchor))
 
 Path(sys.argv[1],"Tests/ApplePackageTests/LabStoreAMDTransportTests.swift").write_text(Path("tests/StoreAMDTests.swift").read_text())
+
+# Link the same native request adapter that passed the real SP diagnostic.
+Path(sys.argv[1],"Sources/CApplePackage/LabStoreBagTransport.m").write_text(Path("tools/StoreBagTransport.m").read_text())
+Path(sys.argv[1],"Sources/CApplePackage/include/LabStoreBagTransport.h").write_text(Path("tools/StoreBagTransport.h").read_text())
