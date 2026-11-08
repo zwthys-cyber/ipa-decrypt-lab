@@ -225,3 +225,5 @@ value = purchase.read_text()
 anchor = '        APLogger.logRequest(method: "POST", url: urlString, headers: headers)'
 assert value.count(anchor) == 1
 purchase.write_text(value.replace(anchor, '        headers += try StoreAMD.commerceHeaders(for: URL(string:urlString)!)\n' + anchor))
+
+Path(sys.argv[1],"Tests/ApplePackageTests/LabStoreAMDTransportTests.swift").write_text(Path("tests/StoreAMDTests.swift").read_text())
