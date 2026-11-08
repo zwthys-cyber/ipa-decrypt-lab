@@ -246,7 +246,7 @@ class ProgressCard:
             if stage not in LABELS: stage="unknown"
             now=time.monotonic()
             if heartbeat and (self.message_id is None or (self.finished is not None and not self.pending_final)): return
-            if not force and stage==self.stage and now-self.last<5: return
+            throttled=not force and stage==self.stage and now-self.last<5
             group=ALIASES.get(stage,stage)
             old_group=ALIASES.get(self.stage,self.stage)
             if group in STEPS and old_group in STEPS and STEPS.index(group)<STEPS.index(old_group):
@@ -272,6 +272,9 @@ class ProgressCard:
             if stage=="done": self.completed=len(STEPS)
             if stage in TERMINAL and self.finished is None:
                 self.finished=max(0,self.offset+now-self.started)
+            # Accept new metrics even when the timer just edited the message.
+            # The next heartbeat renders these counters without losing updates.
+            if throttled: return
             text=self.render(stage)
             try:
                 if self.message_id is None:

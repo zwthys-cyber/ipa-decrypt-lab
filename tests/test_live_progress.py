@@ -79,6 +79,24 @@ class LiveProgressContracts(unittest.TestCase):
         card.update("preparing",force=True)
         self.assertEqual(card.stage,"decrypting")
 
+    def test_heartbeat_throttle_keeps_new_download_counters(self):
+        bot=Mock();bot.message.return_value={"message_id":7}
+        with patch('task_progress.time.monotonic',return_value=0) as clock:
+            card=ProgressCard(bot,123,RID)
+            card.update("downloading",measurement_value={"unit":"bytes","completed":10,"total":100})
+            clock.return_value=5
+            card.pulse()
+            clock.return_value=6
+            card.update("downloading",measurement_value={"unit":"bytes","completed":60,"total":100})
+            self.assertEqual(bot.edit.call_count,1)
+            self.assertEqual(card.counter["completed"],60)
+            clock.return_value=10
+            card.pulse()
+            self.assertIn("下载进度：60.0%",bot.edit.call_args.args[2])
+            clock.return_value=11
+            card.update("downloading",measurement_value={"unit":"bytes","completed":50,"total":100})
+            self.assertEqual(card.counter["completed"],60)
+
     def test_recovery_reuses_the_card_and_original_creation_time(self):
         with tempfile.TemporaryDirectory() as directory:
             filename=Path(directory)/'state.sqlite3'
