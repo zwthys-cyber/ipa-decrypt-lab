@@ -71,12 +71,12 @@ APPLE_AUTH_CLIENT_EXPORT int lab_tf_cookie_contract() {
 APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_cookie_inspect(const Path& root) {
     const auto meta=Json::parse(read_file(root/"store-auth-meta.json",128*1024));
     const auto raw=read_file(root/"store-auth-response.bin",16u<<20);
-    const auto response=HttpResponse{meta.at("status").get<int>(),raw,meta.at("response_headers").get<Headers>()};
+    const auto response=HttpResponse{meta.at("status").get<int>(),raw,meta.at("response_headers").get<std::vector<std::pair<std::string,std::string>>>()};
     const auto requestHeaders=meta.at("request_headers").get<Headers>();
     const auto url=meta.at("url").get<std::string>();
     const auto result=decode_store(raw);
     require(response.status==200 && result.value("status",Json())==0 &&
-        scalar(result.at("dsPersonId"))==header({200,{},requestHeaders},"x-dsid") &&
+        requestHeaders.contains("X-DSID") && scalar(result.at("dsPersonId"))==requestHeaders.at("X-DSID") &&
         result.at("passwordToken").is_string(),"Captured Store response binding failed");
     Json cookies=Json::array();
     cookies_update(cookies,url,response,1794252273);
