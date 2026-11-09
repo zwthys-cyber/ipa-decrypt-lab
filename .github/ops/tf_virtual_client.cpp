@@ -5,6 +5,8 @@
 #include <fstream>
 #include <iostream>
 #include <regex>
+#include <ctime>
+namespace apple_auth { APPLE_AUTH_CLIENT_EXPORT Transport lab_tf_curl_transport(); }
 #include <sys/stat.h>
 using namespace apple_auth;
 using Json=nlohmann::json;
@@ -95,19 +97,42 @@ int main(int argc,char **argv) {
         {"http_status",0},{"sdk_error_code",0},{"apple_error_code",0},{"failure_category","none"}};
     try {
         if(argc==2 && std::string(argv[1])=="--self-test")return self_test();
-        require(argc==3 && std::string(argv[1])=="--authenticate");
+        require(argc==3 && (std::string(argv[1])=="--authenticate" || std::string(argv[1])=="--prepare-lookup" || std::string(argv[1])=="--lookup"));
         const char *actions=std::getenv("GITHUB_ACTIONS");
         require(actions && std::string(actions)=="true");
         const std::filesystem::path root=argv[2];
         const auto profile=read_profile(root);
         const auto hw=hardware(profile);
-        std::string email,password;
-        require(bool(std::getline(std::cin,email)) && bool(std::getline(std::cin,password)) &&
-                !email.empty() && !password.empty() && email.size()<320 && password.size()<2048);
         ClientOptions options;options.device_platform=DevicePlatform::mac;
         Client client(root/"sdk",options);
         report["stage"]="grandslam_provisioning";
         client.provision();
+        const std::string command=argv[1];
+        if(command=="--prepare-lookup" || command=="--lookup") {
+            auto headers=client.headers();
+            const auto seconds=std::time(nullptr);
+            std::tm utc{};gmtime_r(&seconds,&utc);
+            char timestamp[32]{};
+            require(std::strftime(timestamp,sizeof(timestamp),"%Y-%m-%dT%H:%M:%SZ",&utc)>0);
+            headers["X-Apple-I-Client-Time"]=timestamp;
+            headers["Content-Type"]="text/x-xml-plist";headers["Accept"]="*/*";
+            if(!headers.contains("User-Agent"))headers["User-Agent"]="iCloud/7.4";
+            if(command=="--prepare-lookup") {
+                std::ofstream file(root/"lookup-headers.json",std::ios::binary);
+                file<<Json(headers).dump();file.close();require(bool(file));
+                report["stage"]="gsa_lookup";report["status"]="lookup_prepared";
+            } else {
+                report["stage"]="gsa_lookup";
+                auto transport=lab_tf_curl_transport();
+                const auto response=transport({"https://gsa.apple.com/grandslam/GsService2/lookup","GET",headers,{}});
+                report["http_status"]=response.status;report["status"]="lookup_response_received";
+            }
+            std::cout<<report.dump()<<'\n';
+            return 0;
+        }
+        std::string email,password;
+        require(bool(std::getline(std::cin,email)) && bool(std::getline(std::cin,password)) &&
+                !email.empty() && !password.empty() && email.size()<320 && password.size()<2048);
         report["stage"]="grandslam_login";report["account_login_attempted"]=true;
         const auto account=client.login(email,password,[]() -> std::string {
             throw VerificationNeeded{};

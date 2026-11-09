@@ -13,12 +13,12 @@ KEYS={"schema","stage","status","virtual_identity","account_login_attempted","gs
       "mac_store_authenticated","tf_authenticated","catalog_received","verification_requested",
       "http_status","sdk_error_code","apple_error_code","failure_category"}
 STAGES={"initialization","grandslam_provisioning","grandslam_login","mac_store_login",
-        "testflight_session","testflight_catalog"}
+        "testflight_session","testflight_catalog","gsa_lookup"}
 def validate(value):
     if type(value) is not dict or set(value)!=KEYS:raise ValueError()
     if value["schema"]!="testflight-virtual-auth-v1" or value["stage"] not in STAGES:
         raise ValueError()
-    if value["status"] not in {"failed","verification_required","catalog_verified"}:raise ValueError()
+    if value["status"] not in {"failed","verification_required","catalog_verified","lookup_prepared","lookup_response_received"}:raise ValueError()
     for key in ("virtual_identity","account_login_attempted","gsa_authenticated","mac_store_authenticated",
                 "tf_authenticated","catalog_received","verification_requested"):
         if type(value[key]) is not bool:raise ValueError()
@@ -29,6 +29,7 @@ def validate(value):
                                   "tf_authenticated","catalog_received")]
     if any(flags[i] and not flags[i-1] for i in range(1,len(flags))):raise ValueError()
     if value["status"]=="catalog_verified" and not all(flags):raise ValueError()
+    if value["status"].startswith("lookup_") and any(flags):raise ValueError()
     if value["status"]=="verification_required" and not value["verification_requested"]:raise ValueError()
     if type(value["apple_error_code"]) is not int or not -99999999<=value["apple_error_code"]<=99999999:raise ValueError()
     if value["failure_category"] not in {"none","unclassified_exception","nonstandard_exception",
@@ -64,7 +65,7 @@ def main():
     try:
         if env.get("GITHUB_ACTIONS")!="true":raise ValueError()
         email=env.get("APPLE_CN_ID","");password=env.get("APPLE_CN_PASSWORD","")
-        if not email or not password or any(c in email+password for c in "\r\n"):raise ValueError()
+        if not env.get("TF_VIRTUAL_LOOKUP_ONLY") and (not email or not password or any(c in email+password for c in "\r\n")):raise ValueError()
         recipient=json.loads(Path("config/delivery.json").read_text())["recipient"]
         if recipient!="age1cp0tv9wcxjqpvcmwt6eh6yqxqg25a2msnelc3mxlj9xqcu6fz4cqekfq5d":raise ValueError()
         binary=str(Path("tf-sdk-build/tf_virtual_client").resolve())
@@ -81,8 +82,14 @@ def main():
                 (root/"profile.json").write_text(json.dumps(profile))
                 receipt["identity_reused"]=False
             try:
-                result=subprocess.run([binary,"--authenticate",str(root)],input=(email+"\n"+password+"\n").encode(),
-                    stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=240,env=child)
+                if env.get("TF_VIRTUAL_LOOKUP_ONLY")=="1":
+                    from tf_virtual_lookup import controls
+                    receipt["lookup_controls"]=controls(binary,root,env)
+                    result=subprocess.run([binary,"--lookup",str(root)],input=b"",stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,timeout=110,env=child)
+                else:
+                    result=subprocess.run([binary,"--authenticate",str(root)],input=(email+"\n"+password+"\n").encode(),
+                        stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=240,env=child)
                 if len(result.stdout)>4096:raise ValueError()
                 value=validate(json.loads(result.stdout))
                 receipt["result"]=value
@@ -103,5 +110,5 @@ def main():
     receipt.update(run_id=env.get("GITHUB_RUN_ID"),source_commit=env.get("GITHUB_SHA"))
     Path("tf-virtual-receipt.json").write_text(json.dumps(receipt,sort_keys=True))
     print(json.dumps(receipt,sort_keys=True),flush=True)
-    return 0 if receipt["status"]=="catalog_verified" else 2
+    return 0 if receipt["status"] in {"catalog_verified","lookup_response_received"} else 2
 if __name__=="__main__":raise SystemExit(main())
