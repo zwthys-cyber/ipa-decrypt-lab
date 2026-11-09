@@ -1,0 +1,20 @@
+import json
+from pathlib import Path
+import subprocess
+import sys
+import unittest
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from cn_delivery_diagnostic import summarize
+
+class CNDeliveryDiagnosticTests(unittest.TestCase):
+    def test_only_closed_categories_and_numeric_codes_escape(self):
+        result=subprocess.CompletedProcess([],1,"IPA_LAB_STAGE:acquire_free_license\nIPA_LAB_FAILURE:9610\nPRIVATE_ACCOUNT\nIPA_LAB_STAGE:PRIVATE_PATH\nIPA_LAB_HTTP:200\n","failureType: 9610 PRIVATE_PASSWORD")
+        report=summarize(result)
+        self.assertEqual(report["diagnostic"],{"stage":"acquire_free_license","exit_code":1,"apple_failure_code":9610,"http_statuses":[200]})
+        self.assertFalse(report["download_succeeded"])
+        self.assertNotIn("PRIVATE",json.dumps(report))
+
+    def test_success_remains_download_only_evidence(self):
+        report=summarize(subprocess.CompletedProcess([],0,"IPA_LAB_STAGE:publish_file\n",""))
+        self.assertTrue(report["download_succeeded"])
+        self.assertNotIn("plaintext_verified",report)
