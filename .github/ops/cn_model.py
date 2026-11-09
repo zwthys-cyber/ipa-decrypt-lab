@@ -145,6 +145,7 @@ def trial(runtime,env,mode,report):
                 code,_,_=private([str(runtime/'native-machine-enrollment'),'--prepare-probe',str(prepared_path)],child,data=fixed,timeout=45)
                 require(code==0 and prepared_path.is_file() and prepared_path.stat().st_size<=65536,'cn_native_preflight_failed')
                 prepared=clean(json.loads(prepared_path.read_text()));report['native_preflight']=prepared
+                report['checkpoint_preflight']=checkpoint_preflight(guid)
                 before=collect();gate(count,profile,prepared,before)
                 native_report=root/'enrollment.json';native_input=json.dumps(payload(value,account,guid)).encode()
                 report['authorization_outcome_uncertain']=True
@@ -187,7 +188,7 @@ def trial(runtime,env,mode,report):
     finally:
         if folder.exists() and not folder.is_symlink():shutil.rmtree(folder)
 
-def checkpoint_preflight():
+def checkpoint_preflight(expected_guid=None):
     with tempfile.TemporaryDirectory(prefix=CHECKPOINT_PREFIX) as directory:
         root=Path(directory);root.chmod(0o700);path=root/'state.json'
         argv=['/usr/bin/sudo','-n','--','/usr/bin/env','-i','PATH=/usr/bin:/bin','GITHUB_ACTIONS=true',
@@ -203,6 +204,9 @@ def checkpoint_preflight():
         require(path.is_file() and not path.is_symlink() and path.stat().st_mode&0o077==0 and path.stat().st_uid==os.getuid(),'cn_checkpoint_preflight_permissions')
         hardware,files=checkpoint.validate(path.read_bytes())
         require(files=={'fpsd_sidb':b'CN_CHECKPOINT_SYNTHETIC_NOT_ACCOUNT_STATE'},'cn_checkpoint_preflight_fixture')
+        if expected_guid is not None:
+            require(hardware.hex().upper()==expected_guid,'cn_checkpoint_native_identity_mismatch')
+            receipt['native_identity_matched']=True
         return receipt
 
 def public_preflight(runtime):
@@ -217,7 +221,7 @@ def public_preflight(runtime):
         require(code==0 and path.is_file() and path.stat().st_size<=65536,'cn_native_preflight_failed')
         prepared=clean(json.loads(path.read_text()))
     require(prepared.get('status')=='commerce_request_prepared' and prepared.get('authorization_request_attempted') is False,'cn_native_preflight_failed')
-    saved=checkpoint_preflight()
+    saved=checkpoint_preflight(raw.decode())
     return dict(base(),status='cn_native_preflight_ready',native_preflight=prepared,checkpoint_preflight=saved)
 
 def main():
