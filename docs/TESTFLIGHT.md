@@ -137,3 +137,16 @@
 随后仍发生未分类处理错误，没有建立 Store 会话。“Mac Store authentication rejected”固定类别没有匹配，所以不能断言具体服务器拒绝信息或解析原因。下一步应先补充受限的响应格式/字段结构及明确解析错误类别，再开展新的账号控制；不公开原始正文或错误文字，不放宽签名、plist和会话校验，不继续盲目重复登录。
 
 本轮解决了调度阻塞与跨运行重新编译耗尽令牌的问题，实际证明可在剩余221秒时恢复保存令牌；还未完成 Store/TF 会话、邀请接受、测试包获取与解密回传。目前没有验证码等待请求。最新独立状态仍只保留一天的 age 密文，原账号 Secrets、模型、授权计数和部署未改动。
+
+
+## 2026-11-09：修复 Store 布尔类型并取得真实 TF 会话
+
+真实响应诊断确认 Store 返回可解析 XML/plist、整数 status=0，账号和令牌字段存在；故障定位为本地 Cookie 校验。无账号的原生合成测试复现：SDK 将 CFBooleanGetValue 返回的 Boolean 字节直接转为 JSON 整数。固定源码摘要后显式转为 C++ bool，保留真假值，同时继续拒绝整数冒充布尔和外域 Cookie。原生20项检查通过。类型定义可核对 [Apple CFNumber.h](https://github.com/apple-oss-distributions/CF/blob/main/CFNumber.h) 和 [CFBase.h](https://github.com/apple-oss-distributions/CF/blob/main/CFBase.h)。
+
+[离线检查42686722193](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42686722193) 只解密已绑定快照，确认账号匹配、10个保留 Cookie 的类型/域名/路径等约束均正确，没有调用 Apple 登录。原始响应和后续 TF 响应仅在 runner 私有目录及既有收件人的 age 密文中，公开报告只含固定类别/布尔/受限数字。旧快照缺少可选异常文本时明确记录缺失，不伪造错误；回放保留 Cookie 原到期时间。
+
+Store 会话重建通过后，最初 TF 创建返回401；新鲜登录也验证了 Store 成功而 TF401，不能只归因于 Cookie 过期。后续显式统一虚拟 Mac 模型/名称，并让 TF 客户端标识与已认证 Mac Store 上下文一致。源码核对确认：初始认证请求体本来就来自 Mac 机型头，SDK的 iPhone 默认值出现在后续上下文，不能把先前401归因于“请求体发送了 iPhone”。
+
+[实际成功42688988859](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42688988859) 在源码 `a3bea18007b49f806ac26b9d24b3b7c3f3a4cd18` 命中精确公共缓存并通过36+4项 Python、2项 Node、20项 CTest。此前 Store429 要求的16秒等待已过；恢复时 PET 绑定有效且剩208秒，无密码重登或验证码。本次完成真实 Store 登录、TF会话创建和账号目录查询，HTTP200。多个条件共同改变，暂不单独归因于某一项修复。
+
+新的恢复器固定成功运行、源码、ZIP和密文摘要，并额外要求 TF与目录证明；保留原独立虚拟身份。下一控制仅查询 `yoNuHexZ` 邀请，不挂载账号密码，不接受邀请；新增原生测试限定 GET、空请求体、固定 Apple 地址及既有会话签名。邀请接受、实际 beta、内容解密及文件回传仍未证明，原 Secrets、FairPlay授权数和 VPS部署保持不变。
