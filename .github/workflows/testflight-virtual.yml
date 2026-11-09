@@ -34,6 +34,12 @@ jobs:
           ref: 98c862f7bebc8283a9b87f1578e703f0765dc81d
           path: native-source/apple-auth
           persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: DrWhax/unfairplay
+          ref: 26a099fcb2292eaacd9e0ce89793cdbc88e516d1
+          path: native-source/unfairplay
+          persist-credentials: false
       - name: Install public build and encryption dependencies
         run: brew install cmake ninja pkgconf mbedtls@3 curl nlohmann-json libzip age
       - name: Test privacy and state guards without account inputs

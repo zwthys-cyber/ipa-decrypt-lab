@@ -33,6 +33,27 @@ def classify(note):
         if text in note:return category
     return "other"
 
+def error_source(note,source=Path("native-source/unfairplay")):
+    import re
+    matches=[]
+    for folder in ("internal/fairplay","cmd/unfairplay"):
+        for path in sorted((source/folder).glob("*.go")):
+            if path.name.endswith("_test.go"):continue
+            for number,line in enumerate(path.read_text().splitlines(),1):
+                found=re.search(r'(?:fmt.Errorf|errors.New)\("((?:[^"\\]|\\.)*)"',line)
+                if not found:continue
+                try:template=json.loads('"'+found[1]+'"')
+                except Exception:continue
+                pieces=re.split(r'%[-+ #0-9.]*[a-zA-Z]',template)
+                weight=sum(len(piece) for piece in pieces)
+                if weight<16:continue
+                pattern=".*?".join(re.escape(piece) for piece in pieces)
+                if re.search(pattern,note,re.S):
+                    matches.append((weight,str(path.relative_to(source)),number))
+    if not matches:return {"matched":False}
+    weight,path,line=max(matches)
+    return {"matched":True,"public_source":path,"line":line}
+
 def main():
     env=dict(os.environ);os.umask(0o077)
     receipt={"schema":"tf-beta-model-diagnostic-v1","status":"inspection_failed","apple_requests":0,
@@ -60,6 +81,7 @@ def main():
                 (state/"tf-model-verification.json").write_bytes(verified.stdout);(state/"tf-model-verification.json").chmod(0o600)
                 (state/"tf-model-verification-error.txt").write_bytes(verified.stderr);(state/"tf-model-verification-error.txt").chmod(0o600)
                 receipt["verification_exit_success"]=verified.returncode==0
+                receipt["verification_error_source"]=error_source(verified.stderr.decode("utf-8","replace")) if verified.returncode else {"matched":False}
                 receipt["verification_failure"]=classify(verified.stderr.decode("utf-8","replace")) if verified.returncode else "none"
                 if verified.returncode==0:
                     from offline_verify import sanitized_report
