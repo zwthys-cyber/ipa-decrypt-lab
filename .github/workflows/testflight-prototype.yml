@@ -49,8 +49,9 @@ jobs:
         run: brew install cmake ninja pkgconf mbedtls@3 curl nlohmann-json libzip
       - name: Build the pinned TestFlight transport SDK without accounts
         run: |
+          cat .github/ops/tf_sdk_compat.cmake >> native-source/apple-auth/CMakeLists.txt
           tf_prefix="$(brew --prefix mbedtls@3);$(brew --prefix curl);$(brew --prefix nlohmann-json);$(brew --prefix libzip)"
-          cmake -S native-source/apple-auth -B tf-sdk-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS=-Wno-nullability-extension -DCMAKE_PREFIX_PATH="$tf_prefix" -DAPPLE_AUTH_WITH_TESTFLIGHT=ON -DAPPLE_AUTH_BUILD_EXAMPLES=ON -DBUILD_TESTING=ON
+          cmake -S native-source/apple-auth -B tf-sdk-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$tf_prefix" -DAPPLE_AUTH_WITH_TESTFLIGHT=ON -DAPPLE_AUTH_BUILD_EXAMPLES=ON -DBUILD_TESTING=ON
           cmake --build tf-sdk-build --parallel 4
       - name: Verify public crypto and transport contracts
         run: ctest --test-dir tf-sdk-build --output-on-failure --timeout 180
