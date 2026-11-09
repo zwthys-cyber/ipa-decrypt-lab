@@ -47,6 +47,13 @@ class ChinaAuthenticationContracts(unittest.TestCase):
             def fail(*args,**kwargs):calls.append(1);return subprocess.CompletedProcess([],2,text,'PRIVATE_ACCOUNT')
             result=module.probe('binary',self.env,execute=fail)
             self.assertEqual(result['status'],expected);self.assertEqual(len(calls),1);self.assertFalse(result['authenticated'])
+    def test_otp_rejection_diagnostic_never_echoes_raw_output(self):
+        result=subprocess.CompletedProcess([],2,'PRIVATE_ACCOUNT','invalid or expired 2FA code (failureType: 5005) PRIVATE_PASSWORD')
+        value=module.probe('binary',self.env,execute=lambda *args,**kwargs:result)
+        self.assertEqual(value['status'],'native_verification_rejected')
+        self.assertEqual(value['diagnostic']['apple_failure_codes'],[5005])
+        for secret in ('PRIVATE_ACCOUNT','PRIVATE_PASSWORD','123456'):self.assertNotIn(secret,json.dumps(value))
+
     def test_existing_private_cache_is_not_deleted(self):
         folder=Path(self.directory.name)/'.ipatool'/module.hashlib.md5(self.env['APPLE_CN_ID'].encode()).hexdigest()
         folder.mkdir(parents=True);(folder/'account.json').write_text('prior-private-account')

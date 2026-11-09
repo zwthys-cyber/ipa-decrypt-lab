@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'tools'))
-from native_store import classify, run
+from native_store import classify, run, authentication_diagnostics
 
 class ChinaAuthError(ValueError):pass
 
@@ -28,6 +28,18 @@ def settings(env):
     if code and not re.fullmatch(r'[0-9]{6}',code):raise ChinaAuthError('china_verification_code_invalid')
     return email,password,guid.upper(),code
 
+def failure_diagnostic(result):
+    text=((result.stdout or '')+'\n'+(result.stderr or '')).lower()
+    codes=[int(value) for value in re.findall(r'failuretype:\s*(-?[0-9]{1,5})(?![0-9])',text)]
+    reason='unclassified'
+    if 5005 in codes or 'invalid or expired 2fa code' in text:reason='verification_rejected_or_expired'
+    elif 'apple_auth_ambiguous_bad_login' in text:reason='ambiguous_bad_login'
+    elif 'verification code' in text:reason='verification_unresolved'
+    elif 'missing accountinfo' in text:reason='account_response_incomplete'
+    elif 'store_device_provisioning_failed' in text:reason='native_device_provisioning_failed'
+    elif 'unexpected argument' in text or 'unknown option' in text:reason='client_argument_rejected'
+    return dict(authentication_diagnostics(result),apple_failure_codes=codes[-4:],reason=reason)
+
 def probe(binary,env,execute=None):
     email,password,guid,code=settings(env)
     home=Path(env['HOME'])
@@ -43,7 +55,10 @@ def probe(binary,env,execute=None):
         except subprocess.TimeoutExpired:return {'schema':'ipa-cn-auth-v1','status':'authentication_timeout','authenticated':False}
         state=classify(result)
         if state!='authenticated':
-            return {'schema':'ipa-cn-auth-v1','status':state,'authenticated':False,'verification_code_supplied':bool(code)}
+            diagnostic=failure_diagnostic(result)
+            if diagnostic['reason']=='verification_rejected_or_expired':state='native_verification_rejected'
+            return {'schema':'ipa-cn-auth-v1','status':state,'authenticated':False,
+                    'verification_code_supplied':bool(code),'diagnostic':diagnostic}
         path=folder/'account.json'
         if path.is_symlink() or not path.is_file() or path.stat().st_size>1024*1024 or path.stat().st_mode&0o077:
             raise ChinaAuthError('private_account_cache_invalid')
