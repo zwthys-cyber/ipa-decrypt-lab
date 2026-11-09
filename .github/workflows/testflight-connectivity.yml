@@ -1,0 +1,42 @@
+name: Credential-free TestFlight transport controls
+run-name: TF-public-connectivity
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/testflight-connectivity.yml'
+      - '.github/ops/tf_connectivity.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: testflight-public-connectivity
+  cancel-in-progress: false
+jobs:
+  probe:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-26-intel
+    timeout-minutes: 4
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: apple-auth/apple-auth
+          ref: 98c862f7bebc8283a9b87f1578e703f0765dc81d
+          path: native-source/apple-auth
+          persist-credentials: false
+      - name: Install the SDK curl backend without private inputs
+        run: brew install curl
+      - name: Compare fixed public endpoints with TLS verification retained
+        run: python3 .github/ops/tf_connectivity.py
+      - name: Retain only numeric and closed-category observations
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: tf-public-connectivity-${{ github.run_id }}
+          path: tf-connectivity.json
+          retention-days: 1
+          if-no-files-found: error
