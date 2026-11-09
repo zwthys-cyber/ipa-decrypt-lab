@@ -17,3 +17,5 @@ add_test(NAME tf_virtual_cookie_contract COMMAND tf_virtual_client --cookie-self
 add_test(NAME tf_virtual_invitation_get_contract COMMAND tf_virtual_client --invite-self-test)
 
 add_test(NAME tf_virtual_invitation_post_contract COMMAND tf_virtual_client --invite-post-self-test)
+
+add_test(NAME tf_virtual_plain_transport_contract COMMAND tf_virtual_client --plain-transport-self-test)

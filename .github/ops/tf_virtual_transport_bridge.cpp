@@ -269,8 +269,8 @@ APPLE_AUTH_CLIENT_EXPORT void lab_tf_invitation_bind(const std::filesystem::path
 namespace apple_auth {
 APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_beta_download(const std::filesystem::path& root,const std::filesystem::path& output) {
     using netdetail::Json;
-    Json report={{"schema","tf-beta-download-v1"},{"status","failed"},{"stage","target_binding"},
-        {"downloaded",false},{"transport_removed",false},{"decryption_proven",false},
+    Json report={{"schema","tf-beta-download-v2"},{"status","failed"},{"stage","target_binding"},
+        {"downloaded",false},{"transport_removed",false},{"transport_mode","unknown"},{"decryption_proven",false},
         {"archive_members",0},{"encrypted_images",0},{"clear_images",0},{"downloaded_bytes",0},
         {"output_bytes",0},{"http_status",0},{"failure_category","none"}};
     auto base=lab_tf_curl_transport();
@@ -297,7 +297,10 @@ APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_beta_download(const std::filesystem:
         report["archive_members"]=result.archive.members;report["encrypted_images"]=result.archive.encrypted_images;
         report["clear_images"]=result.archive.clear_images;report["downloaded_bytes"]=result.downloaded_bytes;
         report["output_bytes"]=std::filesystem::file_size(output/"beta.ipa");
-        report["downloaded"]=true;report["transport_removed"]=true;
+        const auto metadata=Json::parse(netdetail::read_file(root/"tf-install-metadata.json",16*1024*1024));
+        const bool plain=metadata.at("dpInfo").is_null();
+        report["downloaded"]=true;report["transport_removed"]=!plain;
+        report["transport_mode"]=plain?"plain_zip":"encrypted";
         report["stage"]="archive_received";report["status"]="beta_downloaded";
     } catch(const std::exception& error) {
         const std::string text=error.what();
@@ -307,5 +310,33 @@ APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_beta_download(const std::filesystem:
         report["failure_category"]=report["http_status"]==429 ? "rate_limited" : "download_or_metadata_failed";
     } catch(...) {report["failure_category"]="nonstandard_exception";}
     return report.dump();
+}
+}
+
+namespace apple_auth {
+APPLE_AUTH_CLIENT_EXPORT int lab_tf_plain_transport_contract() {
+    using netdetail::Json;
+    const auto root=std::filesystem::temp_directory_path()/("tf-public-transport-"+netdetail::hex(netdetail::random_bytes(8)));
+    try {
+        std::filesystem::create_directory(root);
+        std::filesystem::permissions(root,std::filesystem::perms::owner_all);
+        const auto source=root/"synthetic.zip",output=root/"must-not-exist.zip";
+        const Bytes hardware(20,0x61);
+        netdetail::write_private(source,Bytes{'P','K',3,4,'S','Y','N','T','H','E','T','I','C'});
+        netdetail::require(tfdetail::transport_archive(source,output,hardware,Json{{"dpInfo",nullptr}})==source &&
+            !std::filesystem::exists(output),"Plain transport branch failed");
+        for(const auto& info:std::vector<Json>{Json::object(),Json{{"dpInfo",""}},Json{{"dpInfo",0}},
+                Json{{"dpInfo",false}},Json{{"dpInfo","AAAA"}}}) {
+            bool rejected=false;
+            try{(void)tfdetail::transport_archive(source,output,hardware,info);}catch(const std::exception&){rejected=true;}
+            netdetail::require(rejected && !std::filesystem::exists(output),"Invalid transport metadata accepted");
+        }
+        std::filesystem::remove(source);
+        netdetail::write_private(source,netdetail::bytes("SYNTHETIC_NOT_ZIP"));
+        bool rejected=false;
+        try{(void)tfdetail::transport_archive(source,output,hardware,Json{{"dpInfo",nullptr}});}catch(const std::exception&){rejected=true;}
+        netdetail::require(rejected,"Non-ZIP plain transport accepted");
+        std::filesystem::remove_all(root);return 0;
+    }catch(...){std::error_code ec;std::filesystem::remove_all(root,ec);return 2;}
 }
 }

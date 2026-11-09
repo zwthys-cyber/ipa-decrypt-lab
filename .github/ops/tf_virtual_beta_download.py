@@ -12,20 +12,22 @@ from tf_virtual import public_env
 from tf_virtual_invite_accept import seal,target
 
 MAX=2*1024*1024*1024
-KEYS={"schema","status","stage","downloaded","transport_removed","decryption_proven","archive_members",
+KEYS={"schema","status","stage","downloaded","transport_removed","transport_mode","decryption_proven","archive_members",
       "encrypted_images","clear_images","downloaded_bytes","output_bytes","http_status","failure_category"}
 def validate(value):
     if type(value) is not dict or set(value)!=KEYS:raise ValueError()
-    if value["schema"]!="tf-beta-download-v1" or value["status"] not in {"failed","beta_downloaded"}:raise ValueError()
+    if value["schema"]!="tf-beta-download-v2" or value["status"] not in {"failed","beta_downloaded"}:raise ValueError()
     if value["stage"] not in {"target_binding","download_and_transport","archive_received"}:raise ValueError()
     for key in ("downloaded","transport_removed","decryption_proven"):
         if type(value[key]) is not bool:raise ValueError()
     if value["decryption_proven"]:raise ValueError()
+    if value["transport_mode"] not in {"unknown","plain_zip","encrypted"}:raise ValueError()
+    if value["transport_removed"] and value["transport_mode"]!="encrypted":raise ValueError()
     bounds={"archive_members":1000000,"encrypted_images":100000,"clear_images":100000,
         "downloaded_bytes":MAX,"output_bytes":MAX,"http_status":599}
     if any(type(value[key]) is not int or not 0<=value[key]<=limit for key,limit in bounds.items()):raise ValueError()
     if value["failure_category"] not in {"none","rate_limited","download_or_metadata_failed","nonstandard_exception"}:raise ValueError()
-    if value["status"]=="beta_downloaded" and not (value["downloaded"] and value["transport_removed"] and value["archive_members"]>0 and value["output_bytes"]>0):raise ValueError()
+    if value["status"]=="beta_downloaded" and not (value["downloaded"] and (value["transport_mode"]=="plain_zip" or value["transport_mode"]=="encrypted" and value["transport_removed"]) and value["archive_members"]>0 and value["output_bytes"]>0):raise ValueError()
     return value
 
 def digest(path):
