@@ -82,6 +82,34 @@ APPLE_AUTH_CLIENT_EXPORT int lab_tf_cookie_contract() {
         std::fprintf(stderr,"TF_COOKIE_PUBLIC_FIXTURE_ERROR:%s\\n",error.what());return 2;
     }catch(...){return 2;}
 }
+
+APPLE_AUTH_CLIENT_EXPORT StoreSession lab_tf_replay_store(const Path& root) {
+    const auto meta=Json::parse(read_file(root/"store-auth-meta.json",128*1024));
+    const auto response=HttpResponse{meta.at("status").get<int>(),
+        read_file(root/"store-auth-response.bin",16u<<20),
+        meta.at("response_headers").get<std::vector<std::pair<std::string,std::string>>>()};
+    const auto requestHeaders=meta.at("request_headers").get<Headers>();
+    const auto result=decode_store(response.body);
+    const auto gsa=parse_plist(read_file(root/"account.plist",1024*1024));
+    require(response.status==200 && result.value("status",Json())==0 && result.contains("passwordToken") &&
+        requestHeaders.contains("X-DSID") && scalar(result.at("dsPersonId"))==requestHeaders.at("X-DSID") &&
+        scalar(gsa.at("DsPrsId"))==requestHeaders.at("X-DSID"),"Captured Store response binding failed");
+    Json cookies=Json::array();
+    // Preserve the original capture time; never extend Max-Age at replay time.
+    cookies_update(cookies,meta.at("url").get<std::string>(),response,1794252273);
+    const auto identity=Json::parse(read_file(root/"sdk"/"store"/"identity.json",1024*1024));
+    auto storefront=header(response,"x-set-apple-store-front");
+    if(storefront.empty())storefront=header(response,"x-apple-store-front");
+    require(!storefront.empty(),"Captured Store storefront missing");
+    require(requestHeaders.contains("User-Agent") && requestHeaders.contains("X-Apple-AMD-M"),
+        "Captured Store machine binding missing");
+    safe_header(requestHeaders.at("X-Apple-AMD-M"));
+    return StoreSession::from_plist(encode_plist(Json{{"kind","apple-auth-store"},{"version",1},
+        {"protocol","macos-accounts"},{"guid",identity.at("guid")},
+        {"user_agent",requestHeaders.at("User-Agent")},{"machine_id",requestHeaders.at("X-Apple-AMD-M")},
+        {"storefront",storefront},{"cookies",cookies},{"account",result}}));
+}
+
 APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_cookie_inspect(const Path& root) {
     const auto meta=Json::parse(read_file(root/"store-auth-meta.json",128*1024));
     const auto raw=read_file(root/"store-auth-response.bin",16u<<20);

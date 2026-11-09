@@ -6,7 +6,8 @@
 #include <iostream>
 #include <regex>
 #include <ctime>
-namespace apple_auth { APPLE_AUTH_CLIENT_EXPORT Transport lab_tf_curl_transport(); APPLE_AUTH_CLIENT_EXPORT int lab_tf_cookie_contract(); APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_cookie_inspect(const std::filesystem::path&); APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_store_shape(const HttpResponse&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_pet_contract(); APPLE_AUTH_CLIENT_EXPORT AccountSession lab_tf_refresh_pet(Client&,const AccountSession&,const Transport&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_auth_contract(); APPLE_AUTH_CLIENT_EXPORT bool lab_tf_account_session_valid(const AccountSession&,std::int64_t); APPLE_AUTH_CLIENT_EXPORT std::int64_t lab_tf_retry_after(const HttpResponse&,std::int64_t); }
+#include <optional>
+namespace apple_auth { APPLE_AUTH_CLIENT_EXPORT Transport lab_tf_curl_transport(); APPLE_AUTH_CLIENT_EXPORT StoreSession lab_tf_replay_store(const std::filesystem::path&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_cookie_contract(); APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_cookie_inspect(const std::filesystem::path&); APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_store_shape(const HttpResponse&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_pet_contract(); APPLE_AUTH_CLIENT_EXPORT AccountSession lab_tf_refresh_pet(Client&,const AccountSession&,const Transport&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_auth_contract(); APPLE_AUTH_CLIENT_EXPORT bool lab_tf_account_session_valid(const AccountSession&,std::int64_t); APPLE_AUTH_CLIENT_EXPORT std::int64_t lab_tf_retry_after(const HttpResponse&,std::int64_t); }
 #include <sys/stat.h>
 using namespace apple_auth;
 using Json=nlohmann::json;
@@ -68,6 +69,8 @@ void classify(const std::exception& error,Json& report) {
         report["apple_error_code"]=std::stoi(match[1]);
     std::string category="unclassified_exception";
     for(const auto& item:std::vector<std::pair<std::string,std::string>>{
+        {"Store session has no unexpired root Apple cookies","store_root_cookies_missing"},
+        {"Captured Store","store_capture_invalid"},
         {"Invalid saved Store cookie","store_cookie_invalid"},
         {"Invalid Store cookies","store_cookie_invalid"},
         {"Incomplete Store session","store_session_incomplete"},
@@ -170,7 +173,7 @@ int main(int argc,char **argv) {
             (void)read_profile(argv[2]);
             std::cout<<lab_tf_cookie_inspect(argv[2])<<std::endl;return 0;
         }
-        require(argc==3 && (std::string(argv[1])=="--authenticate" || std::string(argv[1])=="--prepare-lookup" || std::string(argv[1])=="--lookup" || std::string(argv[1])=="--resume-store" || std::string(argv[1])=="--store-preflight" || std::string(argv[1])=="--refresh-pet-store"));
+        require(argc==3 && (std::string(argv[1])=="--authenticate" || std::string(argv[1])=="--prepare-lookup" || std::string(argv[1])=="--lookup" || std::string(argv[1])=="--resume-store" || std::string(argv[1])=="--store-preflight" || std::string(argv[1])=="--refresh-pet-store" || std::string(argv[1])=="--replay-testflight"));
         const char *actions=std::getenv("GITHUB_ACTIONS");
         require(actions && std::string(actions)=="true");
         const std::filesystem::path root=argv[2];
@@ -202,7 +205,7 @@ int main(int argc,char **argv) {
         };
         Client client(root/"sdk",options);
         const std::string command=argv[1];
-        if(command!="--resume-store" && command!="--store-preflight" && command!="--refresh-pet-store") {
+        if(command!="--resume-store" && command!="--store-preflight" && command!="--refresh-pet-store" && command!="--replay-testflight") {
             report["stage"]="grandslam_provisioning";
             client.provision();
         }
@@ -242,6 +245,12 @@ int main(int argc,char **argv) {
             client.provision_store();
             report["store_profile_ready"]=true;
         }
+        std::optional<StoreSession> chosenStore;
+        if(command=="--replay-testflight") {
+            report["stage"]="mac_store_replay";
+            chosenStore.emplace(lab_tf_replay_store(root));
+            report["gsa_authenticated"]=true;report["gsa_session_reused"]=true;
+        } else {
         std::string email,password;
         require(bool(std::getline(std::cin,email)) && !email.empty() && email.size()<320);
         AccountSession account;
@@ -279,7 +288,9 @@ int main(int argc,char **argv) {
         client.set_session_data(account.plist);
         }
         report["stage"]="mac_store_login";
-        const auto store=client.login_store_with_pet(email,account);
+        chosenStore.emplace(client.login_store_with_pet(email,account));
+        }
+        const auto& store=*chosenStore;
         report["mac_store_authenticated"]=true;report["store_profile_ready"]=true;
         store.save(root/"mac-store.plist");
         client.set_session_data(store.plist(),SessionKind::store);
@@ -304,6 +315,7 @@ int main(int argc,char **argv) {
         save_failure(failureRoot,error);
         classify(error,report);
     } catch(const std::exception& error) {
+        save_failure(failureRoot,error);
         classify(error,report);
     } catch(...) { report["failure_category"]="nonstandard_exception"; }
     std::cout<<report.dump()<<'\n';

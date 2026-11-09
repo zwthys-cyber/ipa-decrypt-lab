@@ -13,7 +13,7 @@ KEYS={"schema","stage","status","virtual_identity","account_login_attempted","gs
       "mac_store_authenticated","tf_authenticated","catalog_received","verification_requested",
       "http_status","sdk_error_code","apple_error_code","failure_category","last_request_stage","gsa_session_reused","retry_after_known","retry_after_seconds","store_profile_ready"}
 STAGES={"initialization","grandslam_provisioning","grandslam_login","mac_store_login",
-        "testflight_session","testflight_catalog","gsa_lookup","store_provisioning","gsa_token_refresh"}
+        "testflight_session","testflight_catalog","gsa_lookup","store_provisioning","gsa_token_refresh","mac_store_replay"}
 def validate(value):
     if type(value) is not dict or set(value)!=KEYS:raise ValueError()
     if value["schema"]!="testflight-virtual-auth-v1" or value["stage"] not in STAGES:
@@ -38,7 +38,7 @@ def validate(value):
     if value["failure_category"] not in {"none","unclassified_exception","nonstandard_exception",
         "apple_authentication_rejected","account_session_rejected","account_token_missing",
         "response_schema_invalid","transport_timeout","transport_error","http_response_error",
-        "verification_required","verification_response_unconfirmed","verification_repeated","server_proof_invalid","rate_limited","saved_session_invalid","mac_store_authentication_rejected","mac_store_header_missing","mac_pet_expired","store_dsid_invalid","store_signing_failed","store_response_plist_invalid","store_response_empty","store_response_plist_unsupported","store_cookie_invalid","store_session_incomplete","store_account_id_invalid","store_header_invalid","store_session_format_invalid","store_session_encoding_invalid"}:raise ValueError()
+        "verification_required","verification_response_unconfirmed","verification_repeated","server_proof_invalid","rate_limited","saved_session_invalid","mac_store_authentication_rejected","mac_store_header_missing","mac_pet_expired","store_dsid_invalid","store_signing_failed","store_response_plist_invalid","store_response_empty","store_response_plist_unsupported","store_cookie_invalid","store_session_incomplete","store_account_id_invalid","store_header_invalid","store_session_format_invalid","store_session_encoding_invalid","store_root_cookies_missing","store_capture_invalid"}:raise ValueError()
     if value["last_request_stage"] not in {"none","other_apple","gsa_lookup","gsa_service","gsa_apptokens","gsa_srp_init","gsa_srp_complete","mid_start","mid_finish","store_authentication","store_sap_setup"}:raise ValueError()
     if type(value["retry_after_seconds"]) is not int or not 0<=value["retry_after_seconds"]<=9223372036854775807:raise ValueError()
     return value
@@ -71,7 +71,7 @@ def main():
     try:
         if env.get("GITHUB_ACTIONS")!="true":raise ValueError()
         email=env.get("APPLE_CN_ID","");password=env.get("APPLE_CN_PASSWORD","")
-        if not env.get("TF_VIRTUAL_LOOKUP_ONLY") and not env.get("TF_VIRTUAL_STORE_PREFLIGHT"):
+        if not env.get("TF_VIRTUAL_LOOKUP_ONLY") and not env.get("TF_VIRTUAL_STORE_PREFLIGHT") and not env.get("TF_VIRTUAL_REPLAY_STORE"):
             if not email or any(c in email for c in "\r\n"):raise ValueError()
             if not env.get("TF_VIRTUAL_RESUME_STORE") and not env.get("TF_VIRTUAL_REFRESH_PET_STORE") and (not password or any(c in password for c in "\r\n")):raise ValueError()
         recipient=json.loads(Path("config/delivery.json").read_text())["recipient"]
@@ -90,7 +90,10 @@ def main():
                 (root/"profile.json").write_text(json.dumps(profile))
                 receipt["identity_reused"]=False
             try:
-                if env.get("TF_VIRTUAL_REFRESH_PET_STORE")=="1":
+                if env.get("TF_VIRTUAL_REPLAY_STORE")=="1":
+                    result=subprocess.run([binary,"--replay-testflight",str(root)],input=b"",
+                        stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=240,env=child)
+                elif env.get("TF_VIRTUAL_REFRESH_PET_STORE")=="1":
                     from tf_virtual_resume import wait_until
                     wait_until(env)
                     result=subprocess.run([binary,"--refresh-pet-store",str(root)],input=(email+"\n").encode(),
