@@ -77,3 +77,9 @@
 `tf_virtual_live.py` 复用现有维护中继的运行/源码/nonce/五分钟有效期协议。只有 SDK 的实际验证码回调才能发布等待请求；同一进程保持 stdin 等待，最多接收一次验证码。新的中继密文仅能投递到该请求对应的临时 `tf-virtual-code-<run>-<nonce>` 分支 `relay.json`，内容为 age 密文和非秘密绑定信息；runner 解密并校验后才写入原进程。原始验证码不得进入源码、工作流输入、公共 artifact 或日志，使用后清理中继文件。
 
 截至这些证据，尚未取得 GSA 账号令牌、Mac Store/TestFlight 会话；没有接受 yoNuHexZ 邀请、下载 beta、证明 TF 内容解密或交付文件。原 DE/CN Secrets、FairPlay 模型、授权计数与 VPS 成品部署未改动。独立状态密文 artifact 保留一天；缺失/过期时必须显式失败，不能暗中新建身份冒充恢复。
+
+### 本轮最终受限重试
+
+[42657854276](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42657854276) 在相同源码 `39999fb59146e6a1954a89db264676a05a340037`、相同恢复身份下完成两次受限运行，公共检查均通过；实际认证均为 `last_request_stage=gsa_srp_complete`、`transport_timeout`、HTTP 状态 0、未取得 Apple 错误码。没有产生可提交验证码的等待请求，没有中继文件投递，没有使用聊天验证码。先前一次实际进入验证要求的证据仍然有效，但不能推广成稳定登录成功。
+
+目前没有活跃验证码会话，GSA/Mac Store/TF 会话仍未取得。后续若继续，先区分 SRP 完成请求的协议兼容与服务响应问题；不要继续凭旧验证码或普通重试宣称修复。只有新的真实等待请求建立后才能要求新验证码。
