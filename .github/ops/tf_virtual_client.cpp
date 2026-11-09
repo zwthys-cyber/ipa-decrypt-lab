@@ -157,8 +157,17 @@ int main(int argc,char **argv) {
         require(bool(std::getline(std::cin,email)) && bool(std::getline(std::cin,password)) &&
                 !email.empty() && !password.empty() && email.size()<320 && password.size()<2048);
         report["stage"]="grandslam_login";
-        const auto account=client.login(email,password,[]() -> std::string {
-            throw VerificationNeeded{};
+        bool verificationUsed=false;
+        const auto account=client.login(email,password,[&]() -> std::string {
+            report["verification_requested"]=true;
+            const char *live=std::getenv("TF_VIRTUAL_LIVE_OTP");
+            if(!live || std::string(live)!="1" || verificationUsed)throw VerificationNeeded{};
+            verificationUsed=true;
+            std::cerr<<"TF_VIRTUAL_OTP:waiting"<<std::endl;
+            std::string code;
+            if(!std::getline(std::cin,code) || !std::regex_match(code,std::regex("[0-9]{6}")))
+                throw VerificationNeeded{};
+            return code;
         });
         report["gsa_authenticated"]=true;
         account.save(root/"account.plist");

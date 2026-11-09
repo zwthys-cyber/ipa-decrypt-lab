@@ -40,7 +40,7 @@ async function main() {
   }
   const timer=setInterval(()=>{publish().catch(()=>{if(worker)worker.kill('SIGTERM')})},1000);
   try {
-    const commands={auth:'exec python3 .github/ops/cn_live_auth.py --binary cn-runtime/ApplePackageTool --crypt cn-runtime/delivery-crypt --sealer cn-runtime/cn-session-seal',
+    const commands={tf_virtual_auth:'exec python3 .github/ops/tf_virtual.py',auth:'exec python3 .github/ops/cn_live_auth.py --binary cn-runtime/ApplePackageTool --crypt cn-runtime/delivery-crypt --sealer cn-runtime/cn-session-seal',
       model_trial:'exec python3 .github/ops/cn_model.py --runtime cn-runtime --mode trial',
       model_replay:'exec python3 .github/ops/cn_model.py --runtime cn-runtime --mode replay',
       arm_model_trial:'exec python3 .github/ops/cn_arm_model.py --mode trial',

@@ -88,6 +88,9 @@ def main():
                     receipt["lookup_controls"]=controls(binary,root,env)
                     result=subprocess.run([binary,"--lookup",str(root)],input=b"",stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,timeout=110,env=child)
+                elif env.get("TF_VIRTUAL_LIVE_OTP")=="1":
+                    from tf_virtual_live import live
+                    result=live(binary,root,env,email,password)
                 else:
                     result=subprocess.run([binary,"--authenticate",str(root)],input=(email+"\n"+password+"\n").encode(),
                         stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=240,env=child)
