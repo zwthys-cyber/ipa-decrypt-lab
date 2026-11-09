@@ -20,6 +20,19 @@ def closed(value):
         error_count=min(1024,len(value.get("errors",[]))))
     return result
 
+def classify(note):
+    for text,category in (
+        ("encrypted source fails CodeDirectory","encrypted_source_signature_mismatch"),
+        ("plaintext page hash mismatch","plaintext_hash_mismatch"),
+        ("mutation escaped FairPlay range","mutation_scope_failed"),
+        ("pre-encryption table is invalid or truncated","pre_encryption_table_invalid"),
+        ("refusing to replace","output_policy_rejected"),
+        ("permission denied","file_permission_rejected"),
+        ("unsupported encrypted Mach-O","unsupported_macho"),
+        ("CodeDirectory","signature_structure_rejected")):
+        if text in note:return category
+    return "other"
+
 def main():
     env=dict(os.environ);os.umask(0o077)
     receipt={"schema":"tf-beta-model-diagnostic-v1","status":"inspection_failed","apple_requests":0,
@@ -41,6 +54,18 @@ def main():
                 (state/"tf-model-diagnostic.json").write_bytes(result.stdout);(state/"tf-model-diagnostic.json").chmod(0o600)
                 (state/"tf-model-diagnostic-error.txt").write_bytes(result.stderr);(state/"tf-model-diagnostic-error.txt").chmod(0o600)
                 receipt["checks"]=closed(json.loads(result.stdout))
+                verified=subprocess.run([str(Path("cn-runtime/offline-engine").resolve()),"verify","--input",str(package),
+                    "--model",str(model)],capture_output=True,timeout=180,env=public_env(env))
+                if len(verified.stdout)>1024**2 or len(verified.stderr)>32768:raise ValueError()
+                (state/"tf-model-verification.json").write_bytes(verified.stdout);(state/"tf-model-verification.json").chmod(0o600)
+                (state/"tf-model-verification-error.txt").write_bytes(verified.stderr);(state/"tf-model-verification-error.txt").chmod(0o600)
+                receipt["verification_exit_success"]=verified.returncode==0
+                receipt["verification_failure"]=classify(verified.stderr.decode("utf-8","replace")) if verified.returncode else "none"
+                if verified.returncode==0:
+                    from offline_verify import sanitized_report
+                    from ipa_audit import audit
+                    receipt["verification"]=sanitized_report(json.loads(verified.stdout),audit(package)["encrypted_slice_count"])
+                    receipt["decryption_proven"]=receipt["verification"]["decryption_proven"]
                 receipt["stage"]="offline_doctor";receipt["status"]="inspection_complete"
             finally:seal(state,env,receipt)
     except Exception:pass

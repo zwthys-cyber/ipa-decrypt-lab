@@ -13,3 +13,9 @@ class ModelDiagnosticPrivacy(unittest.TestCase):
         with self.assertRaises(ValueError):closed({"schema":"other","checks":{}})
         result=closed({"schema":"unfairplay-doctor-v1","checks":{"selector_match":1}})
         self.assertNotIn("selector_match",result)
+
+    def test_native_errors_are_closed_categories(self):
+        from tf_virtual_beta_model_diagnose import classify
+        self.assertEqual(classify("PRIVATE: encrypted source fails CodeDirectory"),"encrypted_source_signature_mismatch")
+        self.assertEqual(classify("PRIVATE: plaintext page hash mismatch (0/1)"),"plaintext_hash_mismatch")
+        self.assertEqual(classify("PRIVATE_UNKNOWN_ERROR"),"other")
