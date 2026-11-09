@@ -188,14 +188,17 @@ int main(int argc,char **argv) {
             if(report["stage"]=="grandslam_login" && (stage=="gsa_srp_init" || stage=="gsa_srp_complete" || stage=="gsa_service"))
                 report["account_login_attempted"]=true;
             const auto response=base(request);report["http_status"]=response.status;
-            if(stage=="store_authentication") {
-                std::cerr<<"TF_STORE:"<<lab_tf_store_shape(response)<<std::endl;
+            const bool tfAuth=report["stage"]=="testflight_session";
+            if(stage=="store_authentication" || tfAuth) {
+                std::cerr<<(tfAuth ? "TF_AUTH:" : "TF_STORE:")<<lab_tf_store_shape(response)<<std::endl;
                 if(response.body.size()<=(16u<<20)) {
-                    std::ofstream bodyFile(root/"store-auth-response.bin",std::ios::binary);
+                    const std::string prefix=tfAuth ? "tf-auth" : "store-auth";
+                    std::ofstream bodyFile(root/(prefix+"-response.bin"),std::ios::binary);
                     bodyFile.write(reinterpret_cast<const char*>(response.body.data()),response.body.size());
-                    std::ofstream metaFile(root/"store-auth-meta.json",std::ios::binary);
+                    std::ofstream metaFile(root/(prefix+"-meta.json"),std::ios::binary);
                     metaFile<<Json{{"status",response.status},{"url",request.url},
-                        {"request_headers",request.headers},{"response_headers",response.headers}}.dump();
+                        {"request_headers",request.headers},{"response_headers",response.headers},
+                        {"received_at",std::int64_t(std::time(nullptr))}}.dump();
                 }
             }
             const auto retry=lab_tf_retry_after(response,std::time(nullptr));
@@ -295,7 +298,8 @@ int main(int argc,char **argv) {
         store.save(root/"mac-store.plist");
         client.set_session_data(store.plist(),SessionKind::store);
         const auto model=client.mac_device().model;
-        Headers headers={{"User-Agent","IPADecryptLab-TestFlight/0.2 (independent virtual Mac)"},
+        const auto storeHeaders=store.headers("https://itunes.apple.com/");
+        Headers headers={{"User-Agent",storeHeaders.at("User-Agent")},
             {"X-Apple-Device-Model",model},{"X-Apple-TA-Device",model},
             {"X-Apple-TestFlight-iOS","0"},{"X-Apple-Rosetta-Available","0"}};
         report["stage"]="testflight_session";

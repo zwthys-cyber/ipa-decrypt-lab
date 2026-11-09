@@ -96,7 +96,8 @@ APPLE_AUTH_CLIENT_EXPORT StoreSession lab_tf_replay_store(const Path& root) {
         scalar(gsa.at("DsPrsId"))==requestHeaders.at("X-DSID"),"Captured Store response binding failed");
     Json cookies=Json::array();
     // Preserve the original capture time; never extend Max-Age at replay time.
-    cookies_update(cookies,meta.at("url").get<std::string>(),response,1794252273);
+    cookies_update(cookies,meta.at("url").get<std::string>(),response,
+        meta.value("received_at",std::int64_t(1794252269)));
     const auto identity=Json::parse(read_file(root/"sdk"/"store"/"identity.json",1024*1024));
     auto storefront=header(response,"x-set-apple-store-front");
     if(storefront.empty())storefront=header(response,"x-apple-store-front");
@@ -121,7 +122,7 @@ APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_cookie_inspect(const Path& root) {
         requestHeaders.contains("X-DSID") && scalar(result.at("dsPersonId"))==requestHeaders.at("X-DSID") &&
         result.at("passwordToken").is_string(),"Captured Store response binding failed");
     Json cookies=Json::array();
-    cookies_update(cookies,url,response,1794252273);
+    cookies_update(cookies,url,response,meta.value("received_at",std::int64_t(1794252269)));
     const auto after=parse_plist(encode_plist(cookies));
     const auto failure=str(read_file(root/"failure.txt",32768));
     return Json{{"schema","tf-cookie-inspection-v1"},{"before",lab_cookie_flags(cookies)},

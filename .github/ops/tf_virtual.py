@@ -117,11 +117,12 @@ def main():
                 else:
                     result=subprocess.run([binary,"--authenticate",str(root)],input=(email+"\n"+password+"\n").encode(),
                         stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=240,env=child)
-                from tf_virtual_transport_diagnostics import observations, verification_observations, session_observations, store_observations
+                from tf_virtual_transport_diagnostics import observations, verification_observations, session_observations, store_observations, tf_auth_observations
                 receipt["transport_observations"]=observations(result.stderr or b"")
                 receipt["verification_observations"]=verification_observations(result.stderr or b"")
                 receipt["session_observations"]=session_observations(result.stderr or b"")
                 receipt["store_observations"]=store_observations(result.stderr or b"")
+                receipt["tf_auth_observations"]=tf_auth_observations(result.stderr or b"")
                 if len(result.stdout)>4096:raise ValueError()
                 value=validate(json.loads(result.stdout))
                 receipt["result"]=value

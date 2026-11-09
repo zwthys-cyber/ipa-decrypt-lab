@@ -76,3 +76,6 @@ def store_observations(raw):
         result.append(value)
         if len(result)==4:break
     return result
+
+def tf_auth_observations(raw):
+    return store_observations(b"\n".join(b"TF_STORE:"+line[8:] for line in raw.splitlines() if line.startswith(b"TF_AUTH:") and len(line)<=2048))
