@@ -114,3 +114,9 @@ alpha.4 增加 `multi_user.py` 服务模块，现有六项凭据保持不变。�
 `.github/ops` 中的诊断器先在 GitHub-hosted runner 运行合成测试，再通过固定主机密钥的 SSH 只读查询已验证服务源码、健康状态、授权及私有任务/进度记录；VPS 不运行测试套件或编译。输出限定为角色、额度、状态和布尔值，不回显用户、聊天、任务、消息 ID 或凭据。检查不调用 Telegram、不改变授权、不部署/重启服务。当前诊断器固定检查已部署的 b92dc157 源码，运行源码变动后需重新审查该限定。
 
 [42544535030](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42544535030) 已确认一个真实普通用户的 delivered、独立作用域和最终进度 done。检查结束清理远端/runner 私有临时文件，并删除临时诊断 Secret。该操作工具不进入运行包或原生运行源码指纹，不需要为只读检查重发 Release。
+
+## 中国区链接路由（alpha.5）
+
+控制器包新增 `account_profile.py`，按 `/cn/` 链接选择固定中国区工作流，数字 ID 与其他地区链接仍使用原外区工作流。普通国区任务只在 GitHub macOS 26 Intel 使用独立 CN 运行包。上线前需要新的双平台默认运行包和匹配 CN 运行包均成功，避免缺包影响任务。
+
+VPS 的六项凭据及私有 SQLite 原样保留；不要向服务器复制 Apple 账号、会话、GUID、检查点或模型。CN Secrets 只配置在 GitHub，见 [中国区说明](CHINA-ACCOUNT.md)。既有白名单、全局配额和单轮询进程约束继续适用。

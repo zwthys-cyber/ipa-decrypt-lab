@@ -1,10 +1,21 @@
 # 项目进展
 
+## 2026-11-09 按链接选择中国区或原外区账号
+
+用户要求按 App Store 链接识别地区。main 已实现 `/cn/` 自动选择独立中国区最新版工作流，其他地区链接和纯数字 App ID 保留原外区账号；中国区历史请求明确停止，不跨账号回退。编号、固定工作流、进度与回执绑定账号，SQLite 重启恢复、取消、取文件及白名单配额保持隔离。普通国区任务不恢复模型、不申请电脑授权、不接收验证码；会话失效转管理员维护。
+
+[链接与隔离回归 42564779892](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42564779892) 通过 480 项主 Python（1 跳过）、68 项隔离 Python 与 5 项 Node 检查；[主分支复核 42564839403](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42564839403) 也通过。[双 Intel 运行包 42564839454](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42564839454) 已成功，包含本轮公共导出流程复用及账号回执绑定。国区独立客户端、真实导出和 VPS 上线分别验证，后续完成记录单列，不把合成检查当作真实 Telegram 收发。
+
+保存模型的独立新运行器复用 [42563127722](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42563127722) 与保存状态重放 [42563352128](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42563352128) 均对另一款国区应用 1530340312 完成 6 切片、164 页验证，状态/GUID 正确，授权数保持 3，无验证码或新增授权。原模型的 LocalSend 31 切片、11,744 页证明继续有效；旧 Intel 配置仍保存在专用备份。
+
+alpha.5 文档和发布流程包含链接分区，安装/运行、中国区历史和收费仍待实现。原德国区账号 Secrets、模型和安全设置未修改。实际导出、部署与公开发布以完成记录为准。见 [中国区操作说明](CHINA-ACCOUNT.md)。
+
+
 ## 2026-11-09 中国区独立模型已恢复
 
 用户批准的一次额外 ARM 初始化 [42562058217](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42562058217) 成功，授权数量 2 → 3。中国区 LocalSend 的 31 个加密切片、11,744 页同时通过模型恢复和独立完整明文校验；配套模型/状态/GUID/会话已核验并保存为 CN 专用 Secrets。临时批准和验证码 Secret 已删除，旧 Intel 档案继续保存在 GitHub 专用加密备份中，德国区和 alpha.4 默认服务未变。
 
-当前继续验证保存模型在新运行器和另一款中国区样本上的复用，正式地区路由/历史版本尚未接入；没有额外发 Telegram 文件或验证安装运行。此前同日阻塞与准备章节保留为历史阶段，最新结果见 [中国区说明](CHINA-ACCOUNT.md)。
+该阶段后已完成保存模型跨运行器复用和保存状态重放，链接路由的后续进展见本页开头；中国区历史版本仍不支持；没有额外发 Telegram 文件或验证安装运行。此前同日阻塞与准备章节保留为历史阶段，最新结果见 [中国区说明](CHINA-ACCOUNT.md)。
 
 ## 2026-11-09 中国区地区绑定修正与 ARM 对照
 

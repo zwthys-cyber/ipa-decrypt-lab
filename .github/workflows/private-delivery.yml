@@ -44,7 +44,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-          ref: b92dc1575123e1b7eab2283b62d355539fc71e4d
       - name: Check App Store eligibility before loading runtime
         id: eligibility
         if: inputs.mode == 'export'

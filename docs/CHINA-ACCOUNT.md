@@ -1,96 +1,62 @@
-# 中国区账号的独立接入
+# 中国区账号与链接识别
 
-**中国区独立模型已恢复，LocalSend 的 31 个加密切片、11,744 页完整明文校验通过；正在验证保存后的跨运行器复用，正式机器人地区路由仍待接入。** 原德国区账号、默认线路和安全设置保持原样，当前正式服务仍为 alpha.4。
+中国区独立模型已恢复并在新的 Intel 运行器复用成功。机器人按 App Store 链接选择账号：中国区链接使用独立中国区账号，其余地区链接和数字 App ID 使用原外区账号。中国区先支持免费应用最新版，IPA 上限 2000 MB；外区历史版本功能保留。
 
-## 最新结果：获准的一次 ARM 初始化已恢复模型
+## 链接规则
 
-用户明确批准一次额外电脑授权后，[真实初始化 42562058217](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42562058217) 使用修正后的中国区上下文，在 ARM 运行器完成同一会话的实时验证码验证。授权数量 **2 → 3**，没有继续新增授权或执行撤销。[验证码中继 42562413900](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42562413900) 及一次性批准 Secret 均已清理。
+| 输入 | 账号与行为 |
+| --- | --- |
+| `https://apps.apple.com/cn/app/名称/id1530340312` | 中国区最新版 |
+| `https://apps.apple.com/us/app/名称/id333903271` | 原外区账号 |
+| `https://apps.apple.com/de/app/名称/id333903271` | 原外区账号 |
+| 纯数字 App ID 或没有地区的 Apple 链接 | 保持原外区默认 |
+| 国区链接用于 `/versions` 或 `/version` | 提示中国区暂只支持最新版，不提交外区历史任务 |
 
-中国区 LocalSend `1661733229` 的独立模型恢复成功；setup 和独立 verify 均通过 **31 个加密切片、11,744 页**的完整明文校验。模型、检查点、配套新 GUID 与会话经可信来源、附件 SHA-256、固定目的地和仓库公钥核验后，分别保存到专用 CN Secrets。旧 Intel 检查点及会话继续保存在 `CN_RECOVERY_BACKUP_B64`，没有改动德国区材料，没有保留或发送应用明文，也没有进行安装/运行验证。
+识别的是链接里的地区，并不推断应用只在哪个国家上架。同一个 App ID 可以同时在多个地区上架；没有链接地区时不猜测账号。外区仍沿用原美区公开元数据预检，并非任意国家账号选择。只接受受信任的 HTTPS App Store 链接，不跟随第三方短链接或跨区失败回退。
 
-这次同时改变了原生初始化平台和明确的地区上下文，不能把成功单独归因于某一项。此前旧检查点在 Intel/ARM 上的失败记录仍按阶段保留。本次回执中旧 `license_profile` 的 GUID 比较发生在新授权之前，对照的是保留的 Intel 状态；它不代表新 ARM 状态匹配失败。保存后的新状态/GUID 和模型需由独立运行器继续核验。
+任务编号绑定账号：中国区使用 `cn_` 加 32 位随机摘要，旧外区编号保持兼容。地区随任务保存在私有 SQLite 中，重启恢复、取消、进度、取回与回执校验均按同一账号工作。进度卡显示下载地区。白名单、用户隔离、串行准入和每日额度仍统一计算。
 
-`china-saved-model-check.yml` 默认无账号 `preflight`；`verify` 只读取保存的 CN 模型、状态及会话，在新的 Intel 运行器校验状态/GUID绑定，刷新一次会话并下载固定中国区免费样本，执行完整明文验证。此流程不恢复模型、不申请电脑授权、不发送 Telegram 文件。跨运行器、跨应用复用和正式机器人路由只有取得各自实际证据后才视为完成。
+## 保存模型、状态与会话
 
-## 历史阶段：检查点已保存，模型恢复仍未通过
+普通国区任务通过固定 `china-private-delivery.yml` 在 GitHub macOS 26 Intel 上运行，只读取专用 CN Secrets：
 
-真实初始化 [42554044136](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42554044136) 在硬件绑定和 sudo 保存契约通过后，完成一次授权请求，数量由 **1 → 2**，并保存独立的 `FAIRPLAY_CN_STATE_B64`、配套 `APPLE_CN_GUID` 和受保护会话。服务器发出了 keybag，原生单向导入调用已返回，根权限观察到非空 SIDB；单向调用没有完成回执，不能写成导入或模型已验证。
+- `APPLE_CN_ID`、`APPLE_CN_GUID`、`APPLE_CN_SESSION_B64`。
+- `FAIRPLAY_CN_MODEL_B64`、`FAIRPLAY_CN_STATE_B64`。
 
-保存状态后仅做重放，没有再发起授权或撤销。样本 `1530340312` 的重放 [42554719973](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42554719973) 和中国区 LocalSend `1661733229` 的重放 [42555805040](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42555805040) 均通过 Cookie 刷新、原包下载、许可证结构及检查点设备绑定，均在 `sinf_class_rejected` 停止。原历史样本 `6599842047` 当前不在中国区上架，其对照在公开元数据检查时停止，没有借用其他地区账号。
+任务核对保存检查点与 GUID，恢复私有会话缓存，执行一次非交互 Cookie 刷新后下载。它不挂载德国区材料或密码 Secret，不预填验证码，不初始化新模型、不申请新电脑授权。下载后复用国区模型，经过完整切片/页面、账号元数据清理、ZIP CRC 和应用身份验证，再加密为短期交付产物。公开附件只有 age 密文与脱敏回执，Apple 材料不进入 VPS。
 
-[离线诊断 42556247417](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42556247417) 进一步验证：SIDB 容器认证通过，许可证对应的唯一用户/密钥记录可匹配；由该记录和现有算法恢复的密钥未通过许可证首块检查（`first_block_rejected`），所以没有继续认定完整许可证、模型或明文有效。这个结果把阻塞缩小到密钥恢复与许可证校验环节，尚不能证明是具体平台、账号或某个算法步骤造成的。不得靠换记录、换密钥、忽略校验或清除加密标记制造成功。
+Cookie 可能过期。需要验证码时普通任务明确停止，提示管理员维护中国区会话；不向下载用户索要账号验证码，不切换德国区账号。管理员维护仍使用专用认证与实时中继工作流，不保证永久免验证码。
 
-该任务在接触账号之前通过 **51 项 Python、2 项 Node** 检查，以及诊断器的全套 Go 测试、`go vet` 和全套竞争检测。诊断只输出固定阶段、布尔值和结构计数，不输出账号标识、选择器、硬件、密钥、私有路径或原始状态。诊断不生成模型；私有输入和原包在退出时清理。任务没有使用验证码，授权数量仍为 **2**。
+`CN_RECOVERY_BACKUP_B64` 保留先前 Intel 检查点、GUID 和会话。新的 ARM 配置已晋升为主配置，旧备份与当前主配置不相等是预期结果；不得运行旧配置的相等核验后误判主配置，也不得覆盖旧备份。用户批准的一次额外电脑授权已经用完，最后观测数量为 **3/5**，没有授权第四台或全账号撤销。
 
-刷新后的中国区会话经任务/源码、附件 SHA-256、固定目的地及仓库公钥核验后独立保存。`FAIRPLAY_CN_MODEL_B64` **尚未生成**。绿色任务状态只表示检查点或刷新会话已保存，不表示解密成功。当前 alpha.4 德国区服务、原账号凭据、模型及 VPS 均未改动，也没有新发 Telegram 文件。
+## 最新真实证据
 
-已有中国区检查点时继续使用 `replay`，不重复初始化。实时验证码只在一个实际存活且可信的等待会话中接收，当前没有等待窗口，无需提前发送验证码。中国区完整解密、历史版本和正式机器人路由仍待解决。
-
-## 最新对照：地区上下文与 ARM 重放
-
-[地区构造对照 42560593505](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42560593505) 在 ARM 和 Intel 两种运行器上均观察到原生授权请求默认使用美区 storefront。显式提供中国区上下文后，正文、真实设备标识和签名头保持一致。中国区流程现已补齐保存会话中的 storefront，并在提交前拒绝外国地区或带控制字符的上下文；德国区代码不变。初版对照工具的入口包装编译冲突已修复。这是无真实账号的请求构造证据，不能据此断言旧检查点失败原因已被证明。
-
-[ARM 完整准备 42559393924](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42559393924) 通过 466 项主测试、58 项隔离 Python 测试、4 项 Node、29 项 Swift、Go 测试/静态检查/竞争检测、密封工具、原生/检查点、重定位和公共资源检查。随后 [ARM 重放 42560812625](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42560812625) 正常刷新会话并下载中国区 LocalSend，未使用验证码，授权数仍为 2；同一检查点在 ARM 上仍然 `first_block_rejected`，没有恢复模型或明文。更换重放平台本身没有解决问题。
-
-`CN_RECOVERY_BACKUP_B64` 保存仅供 GitHub 使用的原中国区检查点、配套 GUID 和受保护会话；备份经仓库公钥密封，再由独立运行器读回核对。准备/核验均不登录 Apple、不授权电脑。`cn-profile-backup.yml` 默认 `verify`，`prepare` 只生成密文候选，须核验可信任务和附件摘要后存入固定 Secret。只刷新会话时可同步备份；以后若保存不同的新检查点，应保留原备份。
-
-独立 ARM 流程已经准备好，默认仍为无账号 `preflight`，`replay` 复用现有状态。新 `trial` 会额外占用一台电脑授权，必须先获得用户对已有检查点禁止再次初始化规则的明确例外，再提供短时、源码/随机标识绑定的批准。流程检查真实 ARM 运行平台、主分支、首次运行、完整备份和实时授权数量；同一批准标识出现第二个任务即拒绝，包括失败或取消过的任务。批准标识与验证码会话标识分别绑定，不能互换。
-
-**本段描述批准之前的准备阶段；后续用户已批准并完成一次 ARM 初始化，最新结果见本页开头。** 如获准，仅进行一次有界对照，最后观察到的数量预计 2 → 3（上限 5），仍可能需要实时验证码，且不保证能解决模型恢复。没有授权全账号撤销，没有修改德国区或上线中国区路由。
-
-## 凭据与实时验证码
-
-仓库 [Actions Secrets](https://github.com/zwthys-cyber/ipa-decrypt-lab/settings/secrets/actions) 中的 `APPLE_CN_ID`、`APPLE_CN_PASSWORD`、独立稳定的 `APPLE_CN_GUID` 和 `APPLE_CN_SESSION_B64` 只用于中国区账号，不覆盖原账号 Secrets。最后一项保存受保护的账号会话。
-
-验证码不提前填入登录任务。先启动 `china-account-auth.yml` 的 `authenticate` 模式；原生客户端发起登录后，保持同一个 Authenticator 实例及进程等待，最长五分钟。看到经验证的等待请求后，才获取新验证码，临时存入 `APPLE_CN_2FA_CODE`，并通过 `china-otp-relay.yml` 提交。公开输入只有任务编号和随机请求标识，不能填验证码、账号或密码。验证码以绑定任务、源码和有效期的 age 密文传回等待中的进程，经标准输入提交一次；中继完成后删除临时验证码 Secret。超时、被拒绝或会话中断后停止，不自动反复登录。
-
-初始登录成功则无需验证码。明确的验证要求或歧义 BadLogin 可以进入一次人工尝试，但歧义 BadLogin 本身不能证明二次认证状态或密码错误。原账号拒绝安全升级的约束继续有效。
-
-## 会话保护与复用
-
-真实返回必须属于新账号且 storefront 为中国区 `143465`，不修改地区标签或回退旧账号。现有账号邮箱只供首次登录监督程序比较身份不同，不传给客户端。原始认证输出不进入日志或附件。
-
-成功会话只在 GitHub runner 内处理，使用仓库 Secrets 公钥封装为 `APPLE_CN_SESSION_B64` 的密文候选附件。核实可信任务成功、国家、源码、运行包和附件来源后，才将该密文写入对应 Secret。会话明文、令牌和验证码不公开，VPS 不接收 Apple 会话。退出时清理中国区本地缓存。
-
-在新的 GitHub 运行器上直接使用旧令牌下载，曾在免费许可阶段遇到原生 Store 设备证明失败。独立的 `resume-cn` 命令携带保存的 Cookie 做一次正常认证刷新，获得当前运行环境的设备证明后，再下载免费样本。此路径已在一次新的运行器上成功，不需要本次再次输入验证码；它仍然发起认证请求，不能描述为完全不登录或永久免验证码。会话过期、密码或安全状态变化后仍可能需要重新验证。
-
-## 工作流与验证边界
-
-- `china-account-auth.yml` 默认 `test`；`authenticate` 做一次独立实时登录，不下载应用或恢复模型。
-- `cn-auth-runtime.yml` 在 GitHub-hosted macOS 26 Intel 构建、测试和重定位独立客户端及 GitHub 公钥封装工具。默认德国区运行包和登录命令不变。
-- `china-download-check.yml` 默认 `preflight`；只检查固定小型免费中国区样本。`download` 尝试原令牌，`resume-download` 先做一次 Cookie 刷新，再下载并校验样本包身份。只保留数字回执及仓库公钥封装的刷新会话，不上传应用，也不发送 Telegram 文件。
-- `china-session-check.yml` 的 `query` 做一次只读授权数量查询；`native-query` 使用原生设备证明。未观测到数量时不进行模型初始化或占用电脑授权名额。HTTP 500 不等于密码错误或整个会话失效。
-
-所有编译、测试和验证都在 GitHub-hosted Actions 执行。原账号密码、模型和状态不挂载到这些中国区任务。没有账号撤销、账号安全升级、VPS 部署或默认线路切换。
-
-## 已验证证据
-
-| 阶段 | 证据 | 结果 |
+| 阶段 | GitHub 运行 | 结果 |
 | --- | --- | --- |
-| 实时验证码中继 | [42547699795](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42547699795) | 密文中继成功，临时验证码 Secret 已删除 |
-| 真实登录 | [42547602116](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42547602116) | 同一原生会话完成认证，地区为中国区，会话已独立保存 |
-| Cookie 刷新运行包 | [42548393225](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42548393225) | 26 项 Swift、Go 封装工具及重定位验证通过 |
-| 无账号合成检查 | [42548395352](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42548395352) | 28 项 Python、2 项 Node 通过；后续 pod 校验增加到 29 项 Python |
-| 新运行器原包下载 | [42548840372](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42548840372) | App ID `1530340312`，中国区，2,500,837 字节；正常 Cookie 刷新，未再次使用验证码，更新会话已封装保存；样本已清理 |
-| 授权数量检查 | [42549102362](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42549102362) | 匹配认证服务节点、Cookie 和客户端标识后仍返回 HTTP 500；没有占用或撤销电脑授权 |
+| 获准的一次 ARM 初始化 | [42562058217](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42562058217) | 中国区 LocalSend 1661733229，31 个加密切片、11,744 页，模型恢复和独立完整明文校验均通过；授权数 2 → 3 |
+| 同一会话实时验证码 | [42562413900](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42562413900) | 密文中继成功，临时验证码与一次性批准 Secrets 已删除 |
+| 新 Intel 运行器复用保存模型 | [42563127722](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42563127722) | 另一款国区样本 1530340312，6 个切片、164 页完整验证，检查点/GUID 匹配，不恢复模型、不新增授权、无验证码 |
+| 保存状态独立重放 | [42563352128](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42563352128) | 同一小样本 6 个切片、164 页完整验证，状态绑定正确，数量仍为 3；最新会话已核验保存 |
+| 链接、账号与恢复契约 | [42564779892](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42564779892) | 480 项主 Python、68 项隔离 Python、5 项 Node；覆盖国区链接、外区兼容、拒绝历史跨区、SQLite 恢复、用户隔离及公开进度的凭据隔离 |
 
-## 授权数量兼容修复与模型工具
+这些证据没有验证安装、重签名或应用实际运行。模型证明和机器人导出/部署是不同阶段；后者以 [项目状态](PROJECT-STATUS.md) 的正式导出、部署记录为准，没有额外向 Telegram 用户发送测试文件。
 
-摘要接口返回 HTTP 500 的兼容因素已通过对照定位：[42550766669](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42550766669) 保持同一保存会话和只读查询，仅改用历史兼容的 Configurator/2.17 客户端标识，返回 HTTP 200，授权电脑数为 **0**。登录和普通下载继续使用当前已验证的 2.21 标识，只将账号摘要查询切回兼容标识。固定查询验证 [42551097522](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42551097522) 也通过。此前的 500 不能据此归因于密码、验证码、账号限制或接口全面故障。
+## 实时验证码维护
 
-模型基础工具 [42551095068](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42551095068) 已通过构建、29 项 Swift 检查、独立 CN 模型/状态/GUID 密封工具检查、原生 I/O/响应契约及无账号的真实请求构造预检。合成和私密会话边界检查 [42551823926](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42551823926) 通过 41 项 Python 与 2 项 Node 检查。随后生产任务 [42551821651](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42551821651) 已验证带实时模型登录支持的匹配运行包。
+凭据入口是 [GitHub Actions Secrets](https://github.com/zwthys-cyber/ipa-decrypt-lab/settings/secrets/actions)。不要把验证码填进工作流公开输入。
 
-`china-model-bootstrap.yml` 默认为 `preflight`。`trial` 先验证固定免费原包、完整输入结构、可用授权数量、原生设备标识和请求绑定，才允许发起一次中国区模型初始化。原生绑定使用该初始化运行器真实设备标识；如需调整中国区 GUID，先只在当前运行器内使用，只有受保护状态/模型阶段通过并核实密文候选后才保存，不改德国区标识。模型任务如被要求二次验证，会保留同一 Authenticator 并使用现有实时密文中继，不提前填写过期验证码。
+先启动 `china-account-auth.yml` 的 `authenticate`，保持同一个原生 Authenticator 进程等待。只有可信的活动任务发出绑定运行、源码、随机标识和有效期的等待请求后，才获取新验证码。临时写入 `APPLE_CN_2FA_CODE`，由 `china-otp-relay.yml` 密文中继，并在中继后删除。超时或会话终止后停止，不能把旧验证码送进新的冷登录。原德国区账号拒绝安全升级的设置保持原样。
 
-模型产物目的地严格固定为 `FAIRPLAY_CN_MODEL_B64` 和 `FAIRPLAY_CN_STATE_B64`；新模型仍需对中国区原包做完整明文验证。初始化后先保护可重放状态，再做恢复，避免恢复失败后再次占用名额。存在中国区检查点时拒绝重复初始化，改用显式 `replay`，该模式不提交授权请求。仅保存检查点的任务会明确报告“模型恢复待完成”，不能写成解密已成功。原账号密码、模型和状态不挂载到中国区任务。
+成功返回的会话必须匹配国区账号、稳定 GUID 和 storefront `143465`。原始客户端输出、邮箱、令牌、验证码、密钥和状态不进入日志或公开附件。候选材料只用仓库 Secrets 公钥密封；核实可信任务、源码、ZIP 摘要、文件清单、固定目的地和当前公钥后才写入对应 CN Secret。
 
-**上述预检准备阶段已结束；检查点保存和最新许可证校验结果见本页“当前状态”。** 实际模型恢复、完整解密校验、历史版本和正式机器人路由仍待完成。不得未经兼容性验证将德国区模型用于新账号；成功下载原包不能证明解密、安装或实际运行。
+## 历史故障与操作边界
 
+- [42552374488](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42552374488)：首次授权 0 → 1，检查点因临时目录前缀不匹配而未保存。运行器已结束，不能声称可恢复；这一个名额仍占用。前缀和实际 sudo 保存契约已修复。
+- [42554044136](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42554044136)：第二次授权 1 → 2，旧 Intel 检查点已保存，但两个样本均未通过 SINF 类密钥验证。这个配置保留在旧备份中。
+- [42556247417](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42556247417)：诊断确认数据库认证和唯一记录匹配通过，许可证首块失败。未尝试其他密钥/记录或忽略校验。
+- [42560593505](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42560593505)：发现 ARM/Intel 默认地区上下文为美区；显式国区上下文保持正文、设备标识和签名头正确。
+- [42560812625](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42560812625)：旧配置在 ARM 重放仍失败，数量保持 2，无新增授权。不能把迁移 CPU 本身说成解决方案。
+- 随后用户明确批准一次额外 ARM 初始化，恢复成功。初始化平台与地区上下文同时改变，不能断言某一项单独解释成功。旧回执中与旧 Intel 状态的 GUID 比较不代表新 ARM 配置绑定失败；新状态在保存与独立复用时均已核验。
+- 授权数量摘要的 HTTP 500 通过只读查询使用 Configurator/2.17 解决；登录和下载继续使用已验证的 2.21 标识。这不意味着密码错误或整个账号失效。
 
-## 首次原生初始化与检查点保存修复
-
-真实任务 [42552374488](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42552374488) 通过同一会话实时验证码完成原生设备绑定，下载并检查中国区原包；授权请求返回 200、keybag 已返回且原生导入调用完成，授权数量从 0 变为 1。随后检查点保存失败，模型尚未生成，任务未交付任何应用。临时验证码 Secret 已删除，没有写入模型、状态或新的会话/GUID候选。
-
-已确认直接原因是新流程的临时目录前缀与现有私有检查点工具的目的地规则不匹配，保存被安全校验拒绝。运行器已经结束，这次状态没有保存，不能冒充存在可重放检查点，也不能把服务端授权成功等同于模型成功。原有这一个授权占用仍保留，没有全账号撤销。
-
-修复将目录改为原工具接受的私有前缀，并加入实际 sudo 保存、读取、权限及硬件解析契约；仅替换合成状态读取器，生产捕获函数及目的地规则不放宽。[42552915716](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42552915716) 的无账号预检通过 45 项 Python、2 项 Node 及完整原生/检查点契约。后续每次真实任务在任何授权请求前也必须通过此检查，并核对检查点硬件与原生设备标识一致。
+已有可用模型和状态后使用保存模型或显式重放，不重复初始化。所有构建、测试与私有验证只在 GitHub-hosted Actions 上进行；VPS 只运行已验证的控制器成品。

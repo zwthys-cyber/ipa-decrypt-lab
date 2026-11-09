@@ -1,6 +1,6 @@
 # 成品包下载
 
-当前版本为 **v0.1.0-alpha.4**，下载入口是 [GitHub Releases](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.4)。alpha.4 加入管理员白名单和用户隔离，保留 alpha.3 的进度卡、完整计时、Node.js 24 Actions 和导出加速。alpha.2/alpha.3 保留为历史版本。旧版 `v0.1.0-alpha.1` 的公开 Release 和附件由本次发布替换，源码标签及历史发布说明保留。
+当前版本为 **v0.1.0-alpha.5**，下载入口是 [GitHub Releases](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。alpha.5 增加 App Store 链接地区识别与独立中国区最新版下载，保留白名单、用户隔离、进度卡、完整计时和导出加速。alpha.2/alpha.3 保留为历史版本。旧版 `v0.1.0-alpha.1` 的公开 Release 和附件由本次发布替换，源码标签及历史发布说明保留。
 
 ## 选哪个包
 
@@ -62,3 +62,9 @@ alpha.3 将此前 main 的进度与提速改动打包为可下载的预览附件
 ## alpha.4 发布范围
 
 alpha.4 增加管理员白名单、每用户私有任务/文件/列表/额度作用域、服务总额度和串行准入。仅凭任务编号不能取回其他用户的文件。撤权、取消及发送不确定时的恢复保持保守，不自动重复文件发送。详见[白名单使用说明](MULTI-USER.md)和[alpha.4 说明](releases/v0.1.0-alpha.4.md)。
+
+## alpha.5 发布范围
+
+`/cn/` 链接使用独立中国区账号；其他地区链接和数字 ID 仍使用原外区账号。任务和收据绑定账号，进度卡显示地区，中国区先支持免费最新版，外区历史版本保留。国区登录需要维护时明确停止，不跨账号回退，不在普通下载中使用验证码或新增电脑授权。
+
+公开附件仍为一个 Linux 控制器和两个默认 Intel 运行包。中国区使用 `cn-auth-runtime.yml` 独立构建、校验并按源码指纹加载的 CN 原生客户端，不把默认包当作 CN 客户端。恢复 CN 模型或配置会话不是发布包功能；账号、模型、状态和所有私钥仍不随包提供。详见 [alpha.5 说明](releases/v0.1.0-alpha.5.md)。

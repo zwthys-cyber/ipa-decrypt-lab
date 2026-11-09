@@ -1,15 +1,15 @@
 # 原始 IPA 下载与当前生产入口
 
-当前下载组件随 [v0.1.0-alpha.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.2) 发布。正式入口是 Telegram 管理员私聊，以及 GitHub 的 `private-delivery.yml`；历史列表使用 `version-catalog.yml`。2026-11-08 [X 完整导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)已验证下载与解密恢复。
+当前下载组件随 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5) 发布。正式入口是 Telegram 管理员与白名单私聊，以及 GitHub 的 `private-delivery.yml`（外区）和 `china-private-delivery.yml`（中国区）；历史列表使用 `version-catalog.yml`。2026-11-08 [X 完整导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)已验证下载与解密恢复。
 
 ## 处理流程
 
-1. 检查美区官方元数据、免费价格与容量约束。
+1. 依据链接选择账号；国区检查中国区元数据及 CNY 免费价格，外区保留原美区预检，并核对容量。
 2. 取得精确源码指纹和 macOS Intel 平台匹配的 CI 运行包。
 3. 通过原生 Apple 登录完成 Store AMD/SP 验证；保留商店区域和系统配置请求上下文。
 4. 请求免费许可，携带会话、完整 storefront、设备证明及账号绑定 kbsync，使用白名单 ent/download 接口获取原包。
 5. 核对 App ID、bundle、请求版本及包结构，再执行模型复用、全部加密切片/页面校验与账号元数据清理。
-6. 生成短期 age 密文和脱敏收据；常驻控制器在管理员私聊交付前再次复核。
+6. 生成短期 age 密文和脱敏收据；常驻控制器在对应授权用户私聊交付前再次复核。
 
 Python 编排位于 `tools/native_store.py` 和 `tools/private_export.py`；Swift 兼容代码位于 `tools/StoreAMD.swift`、`tools/LabEntDownload.swift` 及原生 bag 桥接。账号、模型和真实应用不进入公共源码、构建缓存或 Release。
 
@@ -28,4 +28,4 @@ Apple Secrets 使用 `APPLE_ID`、`APPLE_PASSWORD`，需要时配置短期 `APPL
 
 ## 中国区账号的独立接入状态（2026-11-09）
 
-中国区账号已通过实时验证码登录，并在新 GitHub 运行器上通过 Cookie 刷新下载免费原包；没有再次使用验证码。中国区独立模型、解密、历史版本与机器人地区路由仍未完成，当前正式任务保持原线路。原德国区账号、模型和安全设置未改动。详见 [中国区接入说明](CHINA-ACCOUNT.md)。
+中国区独立模型、跨运行器复用与保存状态重放均通过完整明文验证。`tools/cn_private_export.py` 使用专用会话、GUID、检查点和模型，以非交互 Cookie 刷新取得当前设备证明，再复用公共导出校验/清理/加密流程。`/cn/` 链接自动选择该固定工作流，中国区先支持最新版，其他链接仍使用原账号。普通国区任务不挂载外区凭据，不收验证码，不进行模型恢复或电脑授权；会话失效由管理员走独立维护流程。原德国区凭据、模型和安全设置保持原样。详见 [中国区接入说明](CHINA-ACCOUNT.md)。
