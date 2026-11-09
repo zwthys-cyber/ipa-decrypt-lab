@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       run_control:
-        description: Prewarm Store signing and try one saved-root PET refresh without password
+        description: Prewarm Mac Store signing, then run one explicit live authentication
         type: boolean
         default: false
 permissions:
@@ -58,18 +58,19 @@ jobs:
           cmake -S native-source/apple-auth -B tf-sdk-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$tf_prefix" -DAPPLE_AUTH_WITH_TESTFLIGHT=ON -DAPPLE_AUTH_BUILD_EXAMPLES=ON
           cmake --build tf-sdk-build --parallel 4
           ctest --test-dir tf-sdk-build --output-on-failure --no-tests=error --timeout 180
-      - name: Prewarm the explicit Mac Store signing client without account credentials
+      - name: Authenticate once after Mac Store signing is prepared
         if: ${{ inputs.run_control || (github.event_name == 'push' && contains(github.event.head_commit.message, '[tf-virtual-control-once]')) }}
         env:
           TF_VIRTUAL_RESTORE_RUN: '42662277216'
-          TF_VIRTUAL_STORE_PREFLIGHT: '1'
+          TF_VIRTUAL_LIVE_OTP: '1'
+          CN_LIVE_TASK: tf_virtual_auth
+          APPLE_CN_ID: ${{ secrets.APPLE_CN_ID }}
+          APPLE_CN_PASSWORD: ${{ secrets.APPLE_CN_PASSWORD }}
           TF_VIRTUAL_NOT_BEFORE: '1794245200'
           DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
           GH_TOKEN: ${{ github.token }}
           TF_CURL_FRESH_GSA: '1'
-        run: |
-          ulimit -c 0
-          python3 .github/ops/tf_virtual.py
+        uses: ./.github/actions/cn-auth
       - name: Retain only encrypted state and a closed receipt
         if: ${{ always() && hashFiles('tf-virtual-receipt.json') != '' && (inputs.run_control || (github.event_name == 'push' && contains(github.event.head_commit.message, '[tf-virtual-control-once]'))) }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
@@ -81,4 +82,4 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-# Fixed PET grant only; no password fallback, no OTP action, no enrollment.
+# Explicit dedicated live maintenance after signing prewarm; one bound code, no enrollment.

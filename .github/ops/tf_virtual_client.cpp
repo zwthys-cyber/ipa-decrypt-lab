@@ -177,6 +177,11 @@ int main(int argc,char **argv) {
             std::cout<<report.dump()<<'\n';
             return 0;
         }
+        if(command=="--authenticate") {
+            report["stage"]="store_provisioning";
+            client.provision_store();
+            report["store_profile_ready"]=true;
+        }
         std::string email,password;
         require(bool(std::getline(std::cin,email)) && !email.empty() && email.size()<320);
         AccountSession account;
@@ -223,7 +228,7 @@ int main(int argc,char **argv) {
             {"X-Apple-Device-Model",model},{"X-Apple-TA-Device",model},
             {"X-Apple-TestFlight-iOS","0"},{"X-Apple-Rosetta-Available","0"}};
         report["stage"]="testflight_session";
-        auto tf=TestFlightClient::from_store_session(store,hw,headers);
+        auto tf=TestFlightClient::from_store_session(store,hw,headers,options.transport);
         report["tf_authenticated"]=true;
         tf.save(root/"tf-session.json");
         report["stage"]="testflight_catalog";

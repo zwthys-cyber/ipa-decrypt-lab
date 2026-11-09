@@ -95,3 +95,18 @@
 之后 Mac Store 阶段返回 HTTP 429，尚未取得 Mac Store 或 TF 会话。包含 GSA 令牌的独立状态已 age 加密，artifact 为 tf-virtual-sealed-42662277216-attempt-1，ZIP/密文摘要在恢复器中固定。原虚拟身份 origin 仍是 42650873653 / 19244adbe73f71156a91a5c1cb20965925928054，不把新的状态载体误作新设备。
 
 下一控制使用已验证 GSA 会话，先检查 PET 绑定和有效期，再在本地 600 秒冷却策略后恢复 Mac Store 步骤；该等待值是未记录到 Retry-After 时的本地保守策略，不是已观测的 Apple 指令。恢复工作流不挂载 Apple 密码、不重新执行 GSA 密码登录，过期即停止。后续响应会记录受限的 Retry-After 数值以遵守服务端等待要求。没有 TF 邀请接受、下载、内容解密或文件交付证据。
+
+
+## 2026-11-09：短期 PET 到期与会话恢复控制
+
+[保存会话恢复 42665103395](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42665103395) 在本地有效期检查处停止，没有向 Apple 发送请求。[离线会话检查与设备预配 42667404119](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42667404119) 通过 33 项 Python、2 项 Node、18 项 CTest；确认账号/PET 绑定匹配、到期字段是整数，但 PET 已过期。按取得令牌与到期时间推算，其有效期约五分钟，不能跨越先前十分钟的冷却等待。
+
+会话中仍有应用令牌交换所需的根密钥、挑战和 IDMS 令牌。Store 设备预配直接命中已存 ADI 状态，无网络请求；这尚未证明 Store SAP 签名准备或账号登录成功。
+
+源码 `84d707a7f39cc866517bdb9f5575ded06d68c2cb` 增加独立控制：先在同一 Client 进程完成 Store SAP 签名准备，再以保存的根会话仅请求固定 PET，并立即尝试 Store 登录。新增合成控制检查请求范围/HMAC、AES-GCM 解密以及篡改标签拒绝；这些测试不证明 Apple 允许本次根会话刷新 PET。工作流不挂载账号密码或验证码；拒绝即停止，不自动退回密码登录。原账号 Secrets、模型、授权计数和 VPS 部署保持原样，真实 TF 邀请、取包与解密仍未验证。
+
+[固定 PET 刷新 42670588627](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42670588627) 通过 33 项 Python、2 项 Node、19 项 CTest，实际应用令牌请求返回 HTTP 200、Apple 错误码 -22413。未取得新 PET，没有执行密码或验证码登录；不能仅凭此判定是不支持该 scope 还是根会话失效。
+
+进一步源码检查发现 SDK 的通用 provision_store 默认选用 android_music，而 PET 登录显式使用 macos_accounts。修正源码固定校验 client.cpp，并为 Mac 选择后者，确保准备与登录共享实例。此前命中的缓存设备状态不能作为 Mac SAP 签名成功证据；后续先运行不挂载账号数据的签名控制。
+
+[明确 Mac 路由的签名控制 42670934355](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42670934355) 通过 33 项 Python、2 项 Node、19 项 CTest；实际完成 Mac SAP 签名准备，最终 HTTP 200，没有账号登录。SAP 会话只保存在内存，不能把密文设备快照当作签名会话持久化。下一次显式独立维护会在同一 Client 内先完成签名准备，再执行密码/SRP 和真实验证码维护，并立即使用新 PET 登录 Store。仅在发布有效的真实等待请求后要求新验证码，不重用聊天旧码。
