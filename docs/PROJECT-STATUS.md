@@ -275,3 +275,12 @@ IPA 审计采用分块临时文件和只读映射，避免把大程序整体读�
 - 授权数量摘要接口经默认入口、认证节点和刷新会话检查仍返回 HTTP 500。原生证明客户端 [42549339540](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42549339540) 通过 29 项 Swift、Go 工具和重定位检查；实际原生查询 [42549763524](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42549763524) 在 Cookie 刷新后仍收到 HTTP 500。当前停在模型初始化所需的授权数量前置检查；没有初始化中国区模型、占用或撤销电脑授权，也没有加载德国区模型。
 
 德国区账号、alpha.4 服务、默认线路、现有模型和安全设置保持原样。操作及证据边界见 [CHINA-ACCOUNT.md](CHINA-ACCOUNT.md)。
+
+
+## 2026-11-09 中国区授权数量兼容问题已定位
+
+- [客户端标识对照 42550766669](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42550766669)：同一保存会话的账号摘要查询改用 Configurator/2.17 后返回 200，实际授权电脑数为 0；2.21 登录和下载路径保持原样。修复后的固定查询 [42551097522](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42551097522) 通过，取代上一阶段“接口 500 阻塞”的当前结论。
+- 模型基础工具 [42551095068](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42551095068) 通过独立构建、原生构造预检、29 项 Swift、Go 密封及重定位检查。中国区模型与状态 Secret 使用独立目的地，未挂载或替换德国区材料。
+- 中国区模型任务已增加可用数量、原包结构和设备绑定检查，以及初始化后的受保护检查点和显式重放路径。带实时验证码等待的模型客户端仍需完成匹配运行包验证后再运行真实任务；当前没有新的模型初始化或撤销证据。
+
+中国区模型、解密和正式机器人路由尚未完成。最新操作边界见 [CHINA-ACCOUNT.md](CHINA-ACCOUNT.md)。

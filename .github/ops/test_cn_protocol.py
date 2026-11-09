@@ -11,7 +11,7 @@ import sys
 import tempfile
 import time
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock,patch
 import zipfile
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 import cn_protocol as p
@@ -31,6 +31,18 @@ class LiveProtocolContracts(unittest.TestCase):
         api.call.assert_not_called()
         api.call.return_value={'path':p.AUTH,'head_branch':'main','event':'workflow_dispatch','display_title':'China-account-authenticate','status':'completed','head_sha':'a'*40}
         with self.assertRaises(Exception):p.waiting_request(api,'12','b'*32,'a'*40)
+    def test_only_active_trusted_model_trials_receive_live_code(self):
+        waiting=self.waiting()
+        for title in ('CN-model-trial','CN-model-replay','CN-model-preflight','untrusted'):
+            api=Mock()
+            run={'path':'.github/workflows/china-model-bootstrap.yml','head_branch':'main','event':'workflow_dispatch','display_title':title,'status':'in_progress','head_sha':'a'*40}
+            api.call.side_effect=[run,{'artifacts':[{'name':'cn-auth-request-12-'+'b'*32}]}]
+            with patch.object(p,'artifact_bytes',return_value=json.dumps(waiting).encode()):
+                if title in ('CN-model-trial','CN-model-replay'):
+                    self.assertEqual(p.waiting_request(api,'12','b'*32,'a'*40),waiting)
+                else:
+                    with self.assertRaises(Exception):p.waiting_request(api,'12','b'*32,'a'*40)
+                    self.assertEqual(api.call.call_count,1)
     def test_artifact_digest_and_inventory_must_match(self):
         api=Mock();out=io.BytesIO()
         with zipfile.ZipFile(out,'w') as z:z.writestr('request.json',json.dumps(self.waiting()))
