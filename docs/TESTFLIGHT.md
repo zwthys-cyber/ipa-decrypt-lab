@@ -110,3 +110,10 @@
 进一步源码检查发现 SDK 的通用 provision_store 默认选用 android_music，而 PET 登录显式使用 macos_accounts。修正源码固定校验 client.cpp，并为 Mac 选择后者，确保准备与登录共享实例。此前命中的缓存设备状态不能作为 Mac SAP 签名成功证据；后续先运行不挂载账号数据的签名控制。
 
 [明确 Mac 路由的签名控制 42670934355](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42670934355) 通过 33 项 Python、2 项 Node、19 项 CTest；实际完成 Mac SAP 签名准备，最终 HTTP 200，没有账号登录。SAP 会话只保存在内存，不能把密文设备快照当作签名会话持久化。下一次显式独立维护会在同一 Client 内先完成签名准备，再执行密码/SRP 和真实验证码维护，并立即使用新 PET 登录 Store。仅在发布有效的真实等待请求后要求新验证码，不重用聊天旧码。
+
+
+## 2026-11-09：当前调度阻塞
+
+源码 `637da0b6683f0f3e2115d7fafaaf821cc54f659b` 已把显式完整认证调整为同一 Client 内先准备 Mac SAP、后执行密码/SRP，并把诊断 transport 传入 TF 客户端。这一新的完整顺序尚未实际运行验证，不能拿此前签名控制的成功替代完整认证证据。
+
+[42672190788](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42672190788) 与确认无执行后的一次有界重试 [42672595272](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42672595272) 均没有生成 job/runner，注释明确为 GitHub `Internal server error`。第二次源码为 `610e5ccc95ee1b07dbc0cbd1a26e6c7d75f29df1`。未执行私有步骤、密码认证或验证码投递；当前没有有效验证码等待请求，聊天旧码不会使用。调度恢复后继续显式独立维护，不根据服务器内部错误连续盲目提交重试。TF 会话、邀请接受、beta 获取、内容解密及交付仍未验证，原 Secrets、FairPlay 计数和 VPS 未改动。
