@@ -1,0 +1,76 @@
+name: Independent China account model bootstrap
+run-name: CN-model-${{ inputs.mode }}
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Public preflight, one bounded CN enrollment/recovery, or saved-CN-state replay
+        type: choice
+        default: preflight
+        options: [preflight, trial, replay]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: china-account-onboarding
+  cancel-in-progress: false
+jobs:
+  bootstrap:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-26-intel
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify model quota, account isolation and syntax before any secrets
+        run: |
+          python3 -m compileall -q .github/ops
+          python3 -m unittest discover -s .github/ops -p 'test_*.py' -v
+          node --test .github/ops/cn_action.test.cjs
+      - name: Check fixed free CN sample before any account access
+        run: python3 .github/ops/cn_download_probe.py --metadata
+      - name: Fetch verified public CN client and independent model support
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/ops/cn_runtime.py fetch cn-runtime --model-support
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/AppleMediaServices
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/commerce
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/CoreFP
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/CoreFP.icxs
+          key: apple-public-assets-d9c0247-26A434-arm64-v1
+      - name: Validate public helper resources and state observer
+        run: |
+          cn-runtime/lab-kbsync --prewarm
+          python3 tools/fairplay_state_observer.py
+      - name: Run one bounded CN model trial or authenticated saved-state replay
+        if: inputs.mode != 'preflight'
+        env:
+          APPLE_CN_ID: ${{ secrets.APPLE_CN_ID }}
+          APPLE_CN_GUID: ${{ secrets.APPLE_CN_GUID }}
+          APPLE_CN_SESSION_B64: ${{ secrets.APPLE_CN_SESSION_B64 }}
+          CN_MODEL_STATE_PRESENT: ${{ secrets.FAIRPLAY_CN_STATE_B64 != '' }}
+          FAIRPLAY_CN_STATE_B64: ${{ inputs.mode == 'replay' && secrets.FAIRPLAY_CN_STATE_B64 || '' }}
+          CN_BOOTSTRAP_MODE: ${{ inputs.mode }}
+          LAB_KBSYNC_HELPER: ${{ github.workspace }}/cn-runtime/lab-kbsync
+        run: |
+          ulimit -c 0
+          python3 .github/ops/cn_model.py --runtime cn-runtime --mode "$CN_BOOTSTRAP_MODE"
+      - name: Publish only sanitized receipt and repository-public-key sealed CN candidates
+        if: always() && inputs.mode != 'preflight'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: cn-model-result-${{ github.run_id }}
+          path: |
+            cn-model-receipt.json
+            cn-model-secret-relay.json
+            cn-state-secret-relay.json
+            cn-guid-secret-relay.json
+            cn-session-secret-relay.json
+          retention-days: 1
+          if-no-files-found: ignore
