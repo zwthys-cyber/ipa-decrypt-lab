@@ -7,6 +7,7 @@ import unittest
 from contextlib import redirect_stdout
 from cn_session import CNSessionError,decode,query
 from store_account_summary import make_request,BODY
+import store_account_summary as summary
 
 class CNSavedSessionContracts(unittest.TestCase):
     def setUp(self):
@@ -36,6 +37,19 @@ class CNSavedSessionContracts(unittest.TestCase):
             def reject(_):self.fail('invalid session reached network')
             with self.assertRaises(CNSessionError):query(dict(self.settings,APPLE_CN_SESSION_B64=encoded),reject)
         with self.assertRaises(CNSessionError):decode(dict(self.env(),GITHUB_ACTIONS='false'))
+    def test_pod_is_apple_only_and_global_endpoint_is_restored(self):
+        original=summary.ENDPOINT;changed=copy.deepcopy(self.value);changed['account']['pod']='71'
+        def fetch(session):
+            self.assertEqual(summary.ENDPOINT,'https://p71-buy.itunes.apple.com/account/v1/summary/graphql')
+            request=make_request(summary.ENDPOINT,session)
+            self.assertEqual(request.host,'p71-buy.itunes.apple.com')
+            return {'status':'http_refused','http_status':500}
+        result=query(self.env(changed),fetch)
+        self.assertTrue(result['pod_route_used']);self.assertEqual(summary.ENDPOINT,original)
+        for pod in ('71.evil.invalid','71:443','71/..','0001',True):
+            changed['account']['pod']=pod
+            with self.assertRaises(CNSessionError):query(self.env(changed),lambda _:self.fail('unsafe pod reached network'))
+        self.assertEqual(summary.ENDPOINT,original)
     def test_refused_saved_token_does_not_trigger_login_or_expose_response(self):
         result=query(self.env(),lambda _:{'status':'PRIVATE_SERVER_MESSAGE','http_status':403,'password':'PRIVATE_PASSWORD'})
         self.assertFalse(result['session_reused']);self.assertFalse(result['login_attempted'])

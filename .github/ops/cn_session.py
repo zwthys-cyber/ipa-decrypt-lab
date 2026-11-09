@@ -8,6 +8,7 @@ import sys
 import time
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'tools'))
 from store_account_summary import validate_session,fetch_summary
+import store_account_summary as summary
 
 UA='Configurator/2.21 (Macintosh; OS X 15.2; 24C5089c) AppleWebKit/0620.1.16.11.6'
 
@@ -43,13 +44,19 @@ def decode(env,now=None):
     return value,session
 
 def query(env,fetch=None):
-    _,session=decode(env)
-    result=(fetch or fetch_summary)(session)
+    value,session=decode(env)
+    pod=value['account'].get('pod')
+    require(pod is None or isinstance(pod,str) and re.fullmatch(r'[1-9][0-9]{0,2}',pod) is not None)
+    previous=summary.ENDPOINT
+    try:
+        if pod:summary.ENDPOINT='https://p'+pod+'-buy.itunes.apple.com/account/v1/summary/graphql'
+        result=(fetch or fetch_summary)(session)
+    finally:summary.ENDPOINT=previous
     success=(result.get('status')=='computer_count_observed' and result.get('computer_count_observed') is True
              and result.get('store_session_authenticated') is True and result.get('http_status')==200
              and type(result.get('authorized_computers')) is int and 0<=result['authorized_computers']<=5)
     report={'schema':'cn-session-reuse-v1','status':'session_reused' if success else 'saved_session_query_failed',
-            'session_reused':success,'country_bound':'cn','login_attempted':False,'verification_code_used':False,
+            'session_reused':success,'country_bound':'cn','pod_route_used':bool(pod),'login_attempted':False,'verification_code_used':False,
             'machine_authorization_attempted':False,'deauthorization_attempted':False,'downloaded':False}
     statuses={'computer_count_observed','apple_request_refused','graphql_errors','http_refused','computer_count_not_returned','response_not_structured','response_shape_unexpected','unexpected_unauthenticated_count','redirect_blocked','response_oversized','transport_failed','query_failed'}
     report['query_status']=result.get('status') if result.get('status') in statuses else 'unknown'
