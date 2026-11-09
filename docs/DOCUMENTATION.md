@@ -1,6 +1,6 @@
 # 项目文档索引
 
-本文档于 2026-11-09 更新，当前成品版本为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。Apple 新原生认证与 Store AMD/SP 设备注册已恢复，正式 X 导出通过 32 个加密切片、86,704 页完整验证。安装运行和本轮新的 Telegram 文件发送不在这次验证范围内。
+本文档于 2026-11-09 更新，当前成品版本为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。Apple 新原生认证与 Store AMD/SP 设备注册已恢复，正式 X 导出通过 32 个加密切片、86,704 页完整验证。安装运行仍未验证。TF 已另有实际解密与私人回传证明，并已接入主人自动任务；本轮未重复发送旧文件，详见 TF 记录。
 
 ## 使用、部署与发布
 
@@ -17,7 +17,7 @@
 | [VPS 部署](VPS-DEPLOYMENT.md) | 私有配置、安装、健康检查和回滚 |
 | [任务恢复](SESSION-RECOVERY.md) | SQLite、取消、未知发送结果和备份 |
 | [中国区账号接入](CHINA-ACCOUNT.md) | 实时验证码、独立模型/备份、保存模型复用、链接路由、会话维护及验证边界 |
-| [TestFlight 检查](TESTFLIGHT.md) | 公开邀请、独立测试会话、TF 构建与当前未验证范围 |
+| [TestFlight 自动处理](TESTFLIGHT.md) | 主人入口、持久会话、独立队列、真实导出/回传证据与限制 |
 | [认证兼容](AUTH-COMPATIBILITY.md) | 当前原生登录、SP 挑战、bag 与设备证明 |
 | [下载模块](DOWNLOADER.md) | 当前工作流、组件及早期 Go 研究入口 |
 | [代理约束](../AGENTS.md) | 编译位置、凭据保护、平台及验证边界 |

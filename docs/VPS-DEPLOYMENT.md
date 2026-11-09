@@ -122,3 +122,14 @@ alpha.4 增加 `multi_user.py` 服务模块，现有六项凭据保持不变。�
 VPS 的六项凭据及私有 SQLite 原样保留；不要向服务器复制 Apple 账号、会话、GUID、检查点或模型。CN Secrets 只配置在 GitHub，见 [中国区说明](CHINA-ACCOUNT.md)。既有白名单、全局配额和单轮询进程约束继续适用。
 
 [alpha.5 部署 42566050391](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42566050391) 已完成安装和实际 ready 健康检查，运行源码 `48ad5b75eb61a6cc5f01ffb539f06a33055adc9a`。构建/部署在 GitHub 完成 Ubuntu/Debian 13 各 480 项 Python、Node/Go/systemd 与包检查；服务器只安装运行成品，原 SQLite、白名单和六项凭据保留。
+
+## TestFlight 状态与部署门禁（2026-11-09）
+
+TF 接入已部署到现有控制器，修正版为 [42710092658](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42710092658)。发布流程先在 GitHub 验证当前源码的两种 Intel 基础运行包、CN 变体、TF 原生组件及真实无发送导出证明，再经既有固定 SSH 安装已测试成品。VPS 不编译、不运行测试，也不做 FairPlay 内容解密。
+
+- `/var/lib/ipazake/testflight/session.age`：原独立虚拟 Mac 身份与 TF 上下文的持久密文。VPS 状态助手不解封此文件；GitHub worker 才临时解封。
+- `/var/lib/ipazake/testflight/acceptance.sqlite`：首次需要接受新邀请时创建的持久意图；含原邀请码的历史接受保护。不得删除或清空来重试未知 POST。
+- `/opt/ipazake/testflight-state.py`：CI 测试过的密文/意图助手，只允许固定的状态、保存、声明及结果记录操作，不登录或调用 Apple。
+- 原有 `state.sqlite3`、白名单、私有发送记录及 `tf-private-return.sqlite` 均保留；最后一个文件保护此前已确认的单次回传，不能重置重发。
+
+会话持久保存不等于延长 Apple 的服务端有效期。拒绝访问时任务明确停止；不会依赖旧的一天期研究 artifact 重新生成身份。新会话维护需保持原身份和未知意图保护，不隐式更换账号。TF 普通任务只挂载已保存会话的解封钥匙、既有 CN 模型和所需传输凭据；原 CN/外区账号 Secrets、模型与授权数量不变。

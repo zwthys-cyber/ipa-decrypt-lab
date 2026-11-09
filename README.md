@@ -1,6 +1,6 @@
 # IPA Decrypt Lab
 
-这个项目将 App Store 应用的下载、历史版本选择、解密校验和 Telegram 交付串成完整流程。机器人在 Debian VPS 上常驻运行，下载和解密交给 GitHub-hosted macOS。
+这个项目将 App Store 和 TestFlight 应用的下载、解密校验和 Telegram 交付串成完整流程；外区 App Store 另支持历史版本选择。机器人在 Debian VPS 上常驻运行，下载和解密交给 GitHub-hosted macOS。
 
 目前开放管理员和白名单用户私聊，可按链接处理中国区或原外区账号的免费应用，IPA 最大 **2000 MB**。每人任务、文件、进度和额度独立；收费和应用安装后的兼容性仍在待办里。
 
@@ -8,18 +8,19 @@
 
 部分国区专属应用仍有许可兼容问题：抖音在 GitHub 境外出口下收到地区不可用相关提示，尚未修复，需大陆出口对照。样本成功不代表所有国区应用都能下载。见 [当前限制与证据](docs/CHINA-ACCOUNT.md)。
 
-TestFlight 公开邀请目前尚未接入自动取包和解密；公开页面可访问不等于取得 IPA。具体检查见 [TestFlight 当前边界](docs/TESTFLIGHT.md)。
+机器人主人可直接发送 TestFlight 公开邀请链接，后台检查测试资格、必要时接受一次邀请、获取可用测试构建，完整解密验证后私聊回传。它使用独立持久会话和任务队列，不回退 App Store 正式版。证据与限制见 [TestFlight 自动处理](docs/TESTFLIGHT.md)。
 
 ## 下载
 
 当前成品版本为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。里面有 Linux amd64 服务器端，以及 macOS 26 / 15 Intel 运行包；用途、配置和校验方法见 [发布说明](docs/RELEASES.md)。
 
-这些包需要配合仓库工作流和自己的私有配置使用。Apple 账号、授权模型、Telegram 凭据和应用 IPA 都不随发布包提供。
+这些包需要配合仓库工作流和自己的私有配置使用。当前公开 alpha.5 附件尚不包含本轮 TF 自动化；现有机器人的部署已更新到主分支验证版本。Apple 账号、授权模型、Telegram 凭据和应用 IPA 都不随发布包提供。
 
 ## 现在能做什么
 
 - 发送 App Store 链接或 App ID，默认下载最新版；`/cn/` 自动使用中国区，其他地区或纯数字使用原外区账号。
-- 进度卡显示下载地区；任务恢复、取消和取文件始终绑定原账号。
+- 主人发送 TestFlight 邀请链接，自动处理可用的 iOS 测试构建；额外协议、失效会话或模型不兼容时明确停止。
+- 进度卡显示下载路线；任务恢复、取消和取文件始终绑定原账号。
 - 外区用 `/versions` 先查看最近一批历史版本，按需加载更早版本并直接点选。
 - 外区用 `/version` 指定版本号或 Apple 历史版本 ID。
 - 已部署的进度卡在同一张 Telegram 消息中显示步骤进度条、真实下载字节比例、全程与阶段耗时；约 5 秒更新计时，重启后继续累计。

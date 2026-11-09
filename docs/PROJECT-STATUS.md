@@ -1,5 +1,17 @@
 # 项目进展
 
+## TestFlight 自动任务已接入生产（2026-11-09）
+
+主人私聊中的 TF 邀请链接现进入独立 `tf_` 队列，后台恢复持久会话、检查并在必要时接受一次邀请、下载可用 iOS 测试构建，完整明文验证后交给原有私聊交付链路。其他白名单用户仍仅使用 App Store 路线；两条既有地区账号与历史版本行为保留。
+
+[修正版部署 42710092658](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42710092658) 通过 Ubuntu/Debian 13 各492项 Python（各1跳过）、Node/Go、真实 systemd 凭据挂载及运行包门禁，并确认服务健康。此前首版部署漏导入了 `app_from_run`，新增自动交付集成测试发现并修复；不要把首版健康检查当成自动交付已验证。修正版生产控制器源码为 `f6ace388a5a25aa75df3781455fade18c6553851`。
+
+[最终通用 worker 验证 42712411043](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42712411043) 在源码 `c60aff3648cecf0b315a112c102f9e92ca25db84` 通过15项 TF 专项与4项 Node 检查后，实际恢复会话、确认资格、下载并完成1个镜像/148页的明文证明。没有新接受邀请、电脑授权或重复发文件。自动接收器的合成集成检查覆盖正确主人投递、错误邀请/账号拒绝，以及仍加密输出的拦截；本轮没有伪造 Telegram 用户新消息来再发一次旧文件。
+
+[会话持久化 42703942768](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42703942768) 沿用原独立虚拟 Mac 身份，VPS 只保存会话/SDK身份的私有 age 密文，Apple 明文只在 GitHub 任务中解封，原有模型仍在 GitHub。普通任务只加载验证过的成品，不重新编译或密码重登。异常、额外协议、限流、取消及未知接受结果都不会触发自动重复接受。
+
+之前的真实私人回传仍是 [42701908536](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42701908536)：主人私聊确认403,501字节。新部署与后台验证不代表另一次真实 Telegram 用户发链到文件确认的现场记录，也不代表安装运行、全部 TF 应用兼容或到期限制处理已验证。详见 [TF 记录](TESTFLIGHT.md)。
+
 ## 当前限制：国区专属应用的地区许可响应
 
 2026-11-09 的真实国区任务 [42566676227](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42566676227) 对抖音 `1142110895` 完成国区元数据检查、匹配运行包加载、保存模型/检查点验证和 Cookie 登录刷新，但在申请免费许可证时失败；没有下载或解密到应用。用户确认同一国区账号在 App Store 可以正常下载该应用。
