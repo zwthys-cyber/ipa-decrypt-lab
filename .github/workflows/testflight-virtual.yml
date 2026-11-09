@@ -58,6 +58,7 @@ jobs:
           python3 .github/ops/tf_virtual_transport_patch.py native-source/apple-auth/src/client/transport.cpp
           python3 .github/ops/tf_virtual_auth_patch.py native-source/apple-auth/src/client/authentication.cpp
           python3 .github/ops/tf_virtual_pet_patch.py native-source/apple-auth/src/client/authentication.cpp native-source/apple-auth/src/client/store.cpp native-source/apple-auth/src/client/client.cpp native-source/apple-auth/src/client/apple_plist.cpp
+          python3 .github/ops/tf_virtual_invitation_patch.py native-source/apple-auth/src/testflight/internal.hpp native-source/apple-auth/src/testflight/protocol.cpp
           cp .github/ops/tf_virtual_pet_contract.cpp native-source/apple-auth/lab_tf_pet_contract.cpp
           cp .github/ops/tf_sdk_contract.cpp native-source/apple-auth/tf_sdk_contract.cpp
           cp .github/ops/tf_virtual_client.cpp native-source/apple-auth/tf_virtual_client.cpp
@@ -77,14 +78,11 @@ jobs:
         with:
           path: tf-sdk-build
           key: ${{ steps.native-cache.outputs.cache-primary-key }}
-      - name: Resume fresh PET after observed cooldown, then check matching-agent TestFlight
+      - name: Read only the fixed public invitation using the verified TF session
         if: ${{ inputs.run_control || (github.event_name == 'push' && contains(github.event.head_commit.message, '[tf-virtual-control-once]')) }}
         env:
-          TF_VIRTUAL_RESTORE_RUN: '42688443638'
-          TF_VIRTUAL_RESUME_STORE: '1'
-          TF_VIRTUAL_NOT_BEFORE: '1794254459'
-          APPLE_CN_ID: ${{ secrets.APPLE_CN_ID }}
-          TF_CURL_FRESH_GSA: '1'
+          TF_VIRTUAL_RESTORE_RUN: '42688988859'
+          TF_VIRTUAL_INVITE_GET: '1'
           DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
           GH_TOKEN: ${{ github.token }}
         run: python3 .github/ops/tf_virtual.py

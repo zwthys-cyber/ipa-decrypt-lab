@@ -1,3 +1,4 @@
+#include "testflight/internal.hpp"
 #include "client/client_internal.hpp"
 #include <algorithm>
 #include <cctype>
@@ -154,5 +155,40 @@ APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_store_shape(const HttpResponse& resp
             text.find("Unsupported plist")!=std::string::npos ? "unsupported_plist" : "other";
     } catch(...) {out["parse_failure"]="other";}
     return out.dump();
+}
+}
+
+namespace apple_auth {
+APPLE_AUTH_CLIENT_EXPORT void lab_tf_invitation_get(const std::filesystem::path& root,const Transport& transport) {
+    using netdetail::Json;
+    const auto session=Json::parse(netdetail::read_file(root/"tf-session.json",1024*1024));
+    const auto profile=Json::parse(netdetail::read_file(root/"profile.json",4096));
+    const auto account=netdetail::parse_plist(netdetail::read_file(root/"account.plist",1024*1024));
+    const auto& id=account.at("DsPrsId");
+    netdetail::require(session.at("udid")==profile.at("hardware20") &&
+        session.at("dsid")== (id.is_string() ? id.get<std::string>() : id.dump()),"Saved TestFlight binding mismatch");
+    tfdetail::Engine engine(session,transport);
+    const auto info=engine.invitation_info();
+    netdetail::write_private(root/"invitation.json",netdetail::bytes(info.dump(2)));
+}
+APPLE_AUTH_CLIENT_EXPORT int lab_tf_invitation_contract() {
+    using netdetail::Json;
+    try {
+        unsigned calls=0;
+        Json context={{"accountId","PUBLIC_FIXTURE"},{"sessionId","SYNTHETIC"},{"dsid","12345"},
+            {"udid",std::string(40,'a')},{"deviceModel","Mac14,7"},
+            {"headers",{{"X-Apple-AMD-M","SYNTHETIC"},{"X-Apple-Store-Front","143441-1,29"}}}};
+        Transport fixture=[&calls](const HttpRequest& request)->HttpResponse {
+            ++calls;
+            netdetail::require(request.method=="GET" && request.body.empty() &&
+                request.url=="https://testflight.apple.com/v3/accounts/PUBLIC_FIXTURE/ru/yoNuHexZ" &&
+                request.headers.at("X-Session-Id")=="SYNTHETIC" && !request.headers.at("X-Session-Digest").empty(),
+                "Fixed invitation GET contract failed");
+            return {200,netdetail::bytes("{\"data\":{\"fixture\":true}}"),{}};
+        };
+        tfdetail::Engine engine(context,fixture);
+        const auto result=engine.invitation_info();
+        return calls==1 && result.at("fixture")==true ? 0 : 2;
+    }catch(...){return 2;}
 }
 }

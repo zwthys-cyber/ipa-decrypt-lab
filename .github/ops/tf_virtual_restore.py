@@ -13,12 +13,12 @@ import zipfile
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/"tools"))
 from telegram_queue import GitHub
 
-RUN=42688443638
+RUN=42688988859
 ORIGIN_RUN=42650873653
 ORIGIN_SOURCE="19244adbe73f71156a91a5c1cb20965925928054"
-SOURCE="26dde3cb2fdae4b358f5aa1a7aa1cdbc588de04d"
-ARCHIVE_DIGEST="sha256:9a2066df697217cb5f0e3ca50bd9720df7163bf60ce50abb88c02e9a0480e459"
-CIPHER_DIGEST="16257e19c15796519641c0d4af23fde913f065232ab1998afed27d7deecc9740"
+SOURCE="a3bea18007b49f806ac26b9d24b3b7c3f3a4cd18"
+ARCHIVE_DIGEST="sha256:960018a236b5b8cf8f6823898117bbbaf0cf3b982b3339bbe9fa19c6837f6177"
+CIPHER_DIGEST="879a35b27e7f923818fbf10aabd56c2e2f3c8e8c7005ce5483fe92d389861c92"
 
 def require(value):
     if not value:raise ValueError("tf_virtual_restore_invalid")
@@ -34,7 +34,7 @@ def unpack_private(raw,root):
             require(not path.is_absolute() and all(part not in ("",".","..") for part in path.parts))
             require(member.name==str(path) and member.isfile() and not member.mode&0o077)
             require(member.name not in files and 0<=member.size<=16*1024*1024)
-            require(member.name in {"profile.json","account.plist","mac-store.plist","tf-session.json","catalog.json","failure.txt","store-auth-response.bin","store-auth-meta.json","tf-auth-response.bin","tf-auth-meta.json"}
+            require(member.name in {"profile.json","account.plist","mac-store.plist","tf-session.json","catalog.json","failure.txt","store-auth-response.bin","store-auth-meta.json","tf-auth-response.bin","tf-auth-meta.json","invitation.json"}
                     or len(path.parts)>=2 and path.parts[0]=="sdk"
                     and all(re.fullmatch(r"[A-Za-z0-9_.-]{1,128}",part) is not None for part in path.parts[1:]))
             total+=member.size;require(total<=32*1024*1024)
@@ -59,7 +59,7 @@ def restore(root,env):
     api=GitHub(env["GH_TOKEN"])
     run=api.call("/actions/runs/"+str(RUN))
     require(run.get("head_sha")==SOURCE and run.get("head_branch")=="main" and run.get("status")=="completed"
-            and run.get("conclusion")=="failure" and run.get("run_attempt")==1
+            and run.get("conclusion")=="success" and run.get("run_attempt")==1
             and run.get("path")==".github/workflows/testflight-virtual.yml")
     items=api.call("/actions/runs/"+str(RUN)+"/artifacts?per_page=100")["artifacts"]
     found=[item for item in items if item.get("name")=="tf-virtual-sealed-"+str(RUN)+"-attempt-1" and not item.get("expired")]
@@ -77,11 +77,13 @@ def restore(root,env):
             receipt=json.loads(zipped.read("tf-virtual-receipt.json"))
         require(hashlib.sha256(cipher).hexdigest()==CIPHER_DIGEST and receipt.get("source_commit")==SOURCE
                 and receipt.get("run_id")==str(RUN) and receipt.get("sealed_state_sha256")==CIPHER_DIGEST
-                and receipt.get("result",{}).get("gsa_authenticated") is True)
+                and receipt.get("result",{}).get("gsa_authenticated") is True
+                and receipt.get("result",{}).get("tf_authenticated") is True
+                and receipt.get("result",{}).get("catalog_received") is True)
         identity=work/"identity.txt"
         identity.write_text(env["DELIVERY_AGE_IDENTITY"]);identity.chmod(0o600)
         child={k:env[k] for k in ("HOME","PATH","LANG") if k in env}
         result=subprocess.run(["age","-d","-i",str(identity)],input=cipher,capture_output=True,timeout=30,env=child)
         require(result.returncode==0)
         unpack_private(result.stdout,root)
-        require((root/"account.plist").is_file())
+        require((root/"account.plist").is_file() and (root/"tf-session.json").is_file())
