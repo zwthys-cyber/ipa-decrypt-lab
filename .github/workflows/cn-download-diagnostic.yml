@@ -27,6 +27,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: Observe only the public runner egress country before private inputs
+        run: |
+          python3 - <<'PY'
+          import json,re,urllib.request
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,*args,**kwargs):return None
+          country="unknown"
+          try:
+              opener=urllib.request.build_opener(NoRedirect())
+              with opener.open("https://ipinfo.io/country",timeout=10) as response:
+                  value=response.read(16).decode().strip()
+              if re.fullmatch("[A-Z]{2}",value):country=value
+          except Exception:pass
+          print(json.dumps({"schema":"cn-runner-egress-v1","country":country,"ip_published":False}))
+          PY
       - name: Test closed diagnostics before account access
         run: |
           python3 -m unittest discover -s .github/ops -p 'test_cn_delivery_diagnostic.py'

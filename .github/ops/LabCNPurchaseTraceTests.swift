@@ -13,6 +13,13 @@ final class LabCNPurchaseTraceTests:XCTestCase {
         XCTAssertTrue(lines.contains("IPA_CN_PURCHASE_MESSAGE_KINDS:license,storefront"))
         XCTAssertFalse(lines.joined().contains("PRIVATE"))
     }
+    func testDialogClassificationAndEmptyFailureDoNotExposeText() {
+        let lines=LabCNPurchaseTrace.lines(["failureType":"","customerMessage":"","dialog":["title":"This app is not available in your country or region PRIVATE_ACCOUNT","message":"IP address outside your network location PRIVATE_TOKEN"]])
+        XCTAssertTrue(lines.contains("IPA_CN_PURCHASE_FAILURE_EMPTY:true"))
+        XCTAssertTrue(lines.contains("IPA_CN_PURCHASE_MESSAGE_EMPTY:true"))
+        XCTAssertTrue(lines.contains("IPA_CN_PURCHASE_MESSAGE_KINDS:storefront,network_location,unavailable"))
+        XCTAssertFalse(lines.joined().contains("PRIVATE"))
+    }
     func testMalformedAndUnboundedCodesAreNotPublished() {
         let invalid:[Any]=["PRIVATE",true,99999999,"4\nSECRET",["token":"PRIVATE"]]
         for value in invalid {

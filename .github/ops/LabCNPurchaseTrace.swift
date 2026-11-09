@@ -13,10 +13,21 @@ enum LabCNPurchaseTrace {
                 lines.append("IPA_CN_PURCHASE_"+label+":"+String(code))
             }
         }
-        let message=(value["customerMessage"] as? String ?? "").lowercased()
+        func text(_ node:Any?,depth:Int=0) -> [String] {
+            guard depth<=3 else { return [] }
+            if let value=node as? String { return value.utf8.count<=8192 ? [value] : [] }
+            if let value=node as? [String:Any] {
+                return ["customerMessage","message","title","explanation","description","text","reason","dialog","buttons","buttonString","buttonLabel"].flatMap { text(value[$0],depth:depth+1) }
+            }
+            if let value=node as? [Any],value.count<=20 { return value.flatMap { text($0,depth:depth+1) } }
+            return []
+        }
+        let message=text(value).joined(separator:" ").lowercased()
         let categories:[(String,[String])]=[
             ("license",["license","licence","entitle","not purchased","授权","授權","许可","許可","购买","購買"]),
-            ("storefront",["storefront","country or region","country/region","in this store","地区","地區","国家","國家"]),
+            ("storefront",["storefront","country","region","in this store","地区","地區","国家","國家","standort","nicht verfügbar"]),
+            ("network_location",["ip address","network location","outside your","所在网络","网络环境","網路環境","境外","海外","当前网络"]),
+            ("unavailable",["not available","unavailable","cannot be downloaded","cannot be purchased","不可用","无法下载","無法下載","无法获取","未提供","暂不提供","不支持"]),
             ("terms",["terms","条款","條款","协议","協議"]),
             ("account_setup",["not yet been used","review your account","billing","payment information","尚未","付款","帐户信息","账户信息"]),
             ("authentication",["sign in","login","password","authentication","认证","驗證","密码","密碼","登录","登入"]),
@@ -27,6 +38,8 @@ enum LabCNPurchaseTrace {
         let matched=categories.filter { $0.1.contains(where: { message.contains($0) }) }.map { $0.0 }
         lines.append("IPA_CN_PURCHASE_MESSAGE_KINDS:"+matched.joined(separator:","))
         lines.append("IPA_CN_PURCHASE_HAS_FAILURE_TYPE:"+String(value["failureType"] != nil))
+        lines.append("IPA_CN_PURCHASE_FAILURE_EMPTY:"+String((value["failureType"] as? String)?.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty == true))
+        lines.append("IPA_CN_PURCHASE_MESSAGE_EMPTY:"+String((value["customerMessage"] as? String)?.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty == true))
         lines.append("IPA_CN_PURCHASE_MESSAGE:"+String(value["customerMessage"] is String))
         lines.append("IPA_CN_PURCHASE_ACTION:"+String(value["action"] is [String:Any]))
         lines.append("IPA_CN_PURCHASE_SUCCESS_TYPE:"+String((value["jingleDocType"] as? String)=="purchaseSuccess"))

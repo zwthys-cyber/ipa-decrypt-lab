@@ -26,14 +26,14 @@ def summarize(result):
         match=re.fullmatch(r"IPA_CN_PURCHASE_(PHASE|ROOT):(prepare_request|send_request|parse_response|dictionary|not_dictionary)",line)
         if match:trace[match[1].lower()]=match[2]
     entitlement={}
-    kinds={"license","storefront","terms","account_setup","authentication","age","restriction","temporary"}
+    kinds={"license","storefront","terms","account_setup","authentication","age","restriction","temporary","network_location","unavailable"}
     for line in raw.splitlines():
         match=re.fullmatch(r"IPA_CN_(PURCHASE|ENTITLEMENT)_MESSAGE_KINDS:([a-z_,]*)",line)
         if match:
             values=match[2].split(",") if match[2] else []
             if set(values)<=kinds:
                 (trace if match[1]=="PURCHASE" else entitlement)["message_categories"]=values
-        match=re.fullmatch(r"IPA_CN_(PURCHASE|ENTITLEMENT)_(HAS_FAILURE_TYPE|MESSAGE|ACTION|SUCCESS_TYPE|APP_MATCH|VERSION_MATCH|BUNDLE_MATCH|DIALOG):(true|false)",line)
+        match=re.fullmatch(r"IPA_CN_(PURCHASE|ENTITLEMENT)_(HAS_FAILURE_TYPE|FAILURE_EMPTY|MESSAGE_EMPTY|MESSAGE|ACTION|SUCCESS_TYPE|APP_MATCH|VERSION_MATCH|BUNDLE_MATCH|DIALOG):(true|false)",line)
         if match:(trace if match[1]=="PURCHASE" else entitlement)[match[2].lower()]=match[3]=="true"
         match=re.fullmatch(r"IPA_CN_ENTITLEMENT_(HTTP|FAILURE|STATUS|ITEMS):(-?[0-9]{1,7})",line)
         if match and -999999<=int(match[2])<=999999:entitlement[match[1].lower()]=int(match[2])
