@@ -98,3 +98,9 @@ main 新增流程步骤比例、真实下载字节计数和完整耗时。VPS �
 ## 后端导出提速（2026-11-08）
 
 [运行包 42445031389](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42445031389) 加入仅限 GitHub 的 raw ZIP 成员复制清理，替代导出阶段的 Python 全包重复压缩；[实际 X 导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42445425200) 通过全部检查。它不改变 VPS 的解密、恢复或 Telegram 发送协议，无需为此重启当前服务。旧 VPS 的 delivery-crypt 继续使用 decrypt 命令，新 scrub 命令在 VPS 模式下被拒绝。源码指纹校验仍生效，不能混用不匹配的包。
+
+## 白名单版本升级
+
+alpha.4 增加 `multi_user.py` 服务模块，现有六项凭据保持不变。管理员仍由 `TELEGRAM_OWNER_ID` 固定；白名单保存在现有私有 SQLite 中，默认没有其他用户。不要把用户 ID 列表加入仓库、发布附件或公开日志。
+
+服务只启动一个轮询进程，使用全局更新游标和全局下载/查询准入；每用户任务、列表和进度独立。旧管理员作用域保持兼容，备份整库即可同时保留 ACL 和所有恢复记录。先完成 GitHub 上的 Ubuntu/Debian 13、双平台运行包与发布验证，再安装已验证成品。部署不会自动给任何额外用户授权。命令和配额见[白名单说明](MULTI-USER.md)。

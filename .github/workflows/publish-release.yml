@@ -10,7 +10,7 @@ on:
         description: Successful dual-platform native-runtime-build run matching this source fingerprint
         type: string
         required: true
-        default: '42445031389'
+        default: '42542616831'
 permissions:
   contents: write
   actions: read

@@ -2,11 +2,11 @@
 
 这个项目将 App Store 应用的下载、历史版本选择、解密校验和 Telegram 交付串成完整流程。机器人在 Debian VPS 上常驻运行，下载和解密交给 GitHub-hosted macOS。
 
-目前仅开放管理员私聊，可处理美区免费应用，IPA 最大 **2000 MB**。收费、多用户和应用安装后的兼容性，还在待办里。
+目前开放管理员和白名单用户私聊，可处理美区免费应用，IPA 最大 **2000 MB**。每人任务、文件、进度和额度独立；收费和应用安装后的兼容性仍在待办里。
 
 ## 下载
 
-当前成品版本为 [v0.1.0-alpha.3](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.3)。里面有 Linux amd64 服务器端，以及 macOS 26 / 15 Intel 运行包；用途、配置和校验方法见 [发布说明](docs/RELEASES.md)。
+当前成品版本为 [v0.1.0-alpha.4](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.4)。里面有 Linux amd64 服务器端，以及 macOS 26 / 15 Intel 运行包；用途、配置和校验方法见 [发布说明](docs/RELEASES.md)。
 
 这些包需要配合仓库工作流和自己的私有配置使用。Apple 账号、授权模型、Telegram 凭据和应用 IPA 都不随发布包提供。
 
@@ -18,6 +18,8 @@
 - 已部署的进度卡在同一张 Telegram 消息中显示步骤进度条、真实下载字节比例、全程与阶段耗时；约 5 秒更新计时，重启后继续累计。
 - 收到带应用图标的 `名称_版本.ipa` 文件。
 - 服务重启后继续跟踪任务；发送结果不明时保留记录，避免重复发文件。
+
+管理员用 `/allow 用户ID [每日额度]` 授权、`/deny 用户ID` 移除、`/users` 查看白名单。新用户默认每天 3 次，全服务总额度仍默认每天 20 次。详见[白名单说明](docs/MULTI-USER.md)。
 
 完整指令见 [Telegram 使用说明](docs/TELEGRAM.md)。
 

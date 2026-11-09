@@ -1,6 +1,6 @@
 # 项目文档索引
 
-本文档于 2026-11-08 全面复核，当前成品版本为 [v0.1.0-alpha.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.2)。Apple 新原生认证与 Store AMD/SP 设备注册已恢复，正式 X 导出通过 32 个加密切片、86,704 页完整验证。安装运行和本轮新的 Telegram 文件发送不在这次验证范围内。
+本文档于 2026-11-09 更新，当前成品版本为 [v0.1.0-alpha.4](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.4)。Apple 新原生认证与 Store AMD/SP 设备注册已恢复，正式 X 导出通过 32 个加密切片、86,704 页完整验证。安装运行和本轮新的 Telegram 文件发送不在这次验证范围内。
 
 ## 使用、部署与发布
 
@@ -9,7 +9,10 @@
 | [README](../README.md) | 项目能力、运行架构与已验证范围 |
 | [项目状态](PROJECT-STATUS.md) | 当前事实、运行证据、边界与待办 |
 | [成品包与发布](RELEASES.md) | 平台选择、附件、摘要、来源与发布工作流 |
-| [新版发布说明](releases/v0.1.0-alpha.2.md) | 本次兼容修复和发布范围 |
+| [新版发布说明](releases/v0.1.0-alpha.4.md) | 白名单、隔离、配额与发布范围 |
+| [多用户白名单](MULTI-USER.md) | 管理员授权、用户隔离与限制 |
+| [进度与加速版](releases/v0.1.0-alpha.3.md) | alpha.3 的进度与提速快照 |
+| [登录修复版](releases/v0.1.0-alpha.2.md) | alpha.2 的兼容修复快照 |
 | [Telegram](TELEGRAM.md) | 指令、历史版本、配额、进度与交付 |
 | [VPS 部署](VPS-DEPLOYMENT.md) | 私有配置、安装、健康检查和回滚 |
 | [任务恢复](SESSION-RECOVERY.md) | SQLite、取消、未知发送结果和备份 |

@@ -1,6 +1,6 @@
 # 成品包下载
 
-当前版本为 **v0.1.0-alpha.3**，下载入口是 [GitHub Releases](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.3)。alpha.3 包含进度卡、真实下载计数、完整计时、Node.js 24 Actions 和导出加速。alpha.2 保留为历史版本。旧版 `v0.1.0-alpha.1` 的公开 Release 和附件由本次发布替换，源码标签及历史发布说明保留。
+当前版本为 **v0.1.0-alpha.4**，下载入口是 [GitHub Releases](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.4)。alpha.4 加入管理员白名单和用户隔离，保留 alpha.3 的进度卡、完整计时、Node.js 24 Actions 和导出加速。alpha.2/alpha.3 保留为历史版本。旧版 `v0.1.0-alpha.1` 的公开 Release 和附件由本次发布替换，源码标签及历史发布说明保留。
 
 ## 选哪个包
 
@@ -30,7 +30,7 @@ macOS 可用 `shasum -a 256 文件名`，再与清单中对应条目比较。只
 
 ## 版本说明
 
-这是管理员自用流程的更新预览版，包含 Apple 新原生登录、Store AMD/SP 注册、公共 bag 上下文与商店区域字段保留、认证/许可/下载接口的设备证明兼容修复。最新版下载、指定旧版、历史列表、图标和文件命名已经接入；收费、多用户、重签名安装和实际运行兼容性还没有完成。
+这是管理员控制白名单的更新预览版，包含 Apple 新原生登录、Store AMD/SP 注册、公共 bag 上下文与商店区域字段保留、认证/许可/下载接口的设备证明兼容修复。最新版下载、指定旧版、历史列表、图标和文件命名已经接入；多用户已通过管理员白名单接入；收费、重签名安装和实际运行兼容性尚未完成。
 
 发布附件来自 GitHub 上通过验证的构建。服务器端在 Ubuntu 与 Debian 13 环境验证，macOS 包分别在对应 Intel 平台验证；具体运行编号写在 `BUILDINFO.json`。
 
@@ -47,7 +47,7 @@ macOS 可用 `shasum -a 256 文件名`，再与清单中对应条目比较。只
 3. 运行 `publish-release.yml`，填写 `vps_run` 和 `native_run`。前者必须来自当前发布提交的成功 build-only 运行，后者必须是成功的 main 分支原生运行包构建。
 4. 发布器独立校验生产工作流身份、平台、源码指纹、artifact ZIP 摘要、包内清单、源码内容和许可证；验证后才创建草稿、上传附件并公开预览版。
 
-本版原生构建证据为 [42439002658](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439002658)。X 的[真实下载及完整解密验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)通过 32 个加密切片和 86,704 页。它不等于安装运行验证，也不是发布应用 IPA；Release 只提供项目运行组件。
+本版原生构建证据为 [42542616831](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42542616831)，最新来源以附件 BUILDINFO.json 为准。历史原生登录修复构建为 [42439002658](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439002658)。X 的[真实下载及完整解密验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)通过 32 个加密切片和 86,704 页。它不等于安装运行验证，也不是发布应用 IPA；Release 只提供项目运行组件。
 
 ## main 的后续进度升级与构建依赖
 
@@ -57,4 +57,8 @@ macOS 可用 `shasum -a 256 文件名`，再与清单中对应条目比较。只
 
 ## alpha.3 发布范围
 
-本版将此前 main 的进度与提速改动打包为正式可下载的预览附件。仍是管理员私聊版，多用户白名单正在下一阶段实现；不包含收费功能或安装运行验证。版本说明见 [alpha.3](releases/v0.1.0-alpha.3.md)。
+alpha.3 将此前 main 的进度与提速改动打包为可下载的预览附件，仅管理员私聊；多用户在后续 alpha.4 接入。alpha.3 不包含收费功能或安装运行验证。版本说明见 [alpha.3](releases/v0.1.0-alpha.3.md)。
+
+## alpha.4 发布范围
+
+alpha.4 增加管理员白名单、每用户私有任务/文件/列表/额度作用域、服务总额度和串行准入。仅凭任务编号不能取回其他用户的文件。撤权、取消及发送不确定时的恢复保持保守，不自动重复文件发送。详见[白名单使用说明](MULTI-USER.md)和[alpha.4 说明](releases/v0.1.0-alpha.4.md)。
