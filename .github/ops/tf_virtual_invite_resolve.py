@@ -46,7 +46,8 @@ def main():
                     "object_count":min(20000,len(nodes)),
                     "fields_present":sorted(set().union(*(set(item)&fields for item in nodes)) if nodes else set())}
                 found=predicates(catalog,bundle,identifier);receipt["binding_predicates"]=found
-                receipt["invitation_accepted"]=found["specific_id_combined"]>0 or found["generic_id_combined"]>0
+                code,details=native("--invite-bind",root,env);receipt["details_result"]=details
+                receipt["invitation_accepted"]=code==0 and details["status"]=="invitation_binding_verified"
                 receipt["status"]="membership_verified" if receipt["invitation_accepted"] else "membership_not_verified"
             finally:seal(root,env,receipt)
     except Exception:pass

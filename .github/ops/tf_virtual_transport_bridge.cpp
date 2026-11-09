@@ -246,3 +246,21 @@ APPLE_AUTH_CLIENT_EXPORT int lab_tf_invitation_post_contract() {
     }catch(...){return 2;}
 }
 }
+
+namespace apple_auth {
+APPLE_AUTH_CLIENT_EXPORT void lab_tf_invitation_bind(const std::filesystem::path& root,const Transport& transport) {
+    using netdetail::Json;
+    const auto info=Json::parse(netdetail::read_file(root/"invitation.json",1024*1024));
+    const auto accepted=Json::parse(netdetail::read_file(root/"accept-response.json",1024*1024));
+    const auto& app=info.at("app");
+    const auto scalar=[](const Json& item) {
+        netdetail::require(item.is_string() || item.is_number_integer(),"Invalid app binding");
+        return item.is_string()?item.get<std::string>():item.dump();
+    };
+    netdetail::require(app.at("name")=="A.I." && accepted.at("bundleId")==app.at("bundleId") &&
+        scalar(accepted.at("appAdamId"))==scalar(app.at("appAdamId")),"Accept response target mismatch");
+    tfdetail::Engine engine(lab_bound_tf_context(root),transport);
+    const auto found=engine.invitation_app_binding(app.at("bundleId").get<std::string>());
+    netdetail::require(found==scalar(app.at("appAdamId")),"Catalog detail target mismatch");
+}
+}

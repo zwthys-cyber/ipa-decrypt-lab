@@ -7,7 +7,7 @@
 #include <regex>
 #include <ctime>
 #include <optional>
-namespace apple_auth { APPLE_AUTH_CLIENT_EXPORT Transport lab_tf_curl_transport(); APPLE_AUTH_CLIENT_EXPORT void lab_tf_invitation_refresh(const std::filesystem::path&,const Transport&); APPLE_AUTH_CLIENT_EXPORT void lab_tf_invitation_accept(const std::filesystem::path&,const Transport&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_invitation_post_contract(); APPLE_AUTH_CLIENT_EXPORT void lab_tf_invitation_get(const std::filesystem::path&,const Transport&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_invitation_contract(); APPLE_AUTH_CLIENT_EXPORT StoreSession lab_tf_replay_store(const std::filesystem::path&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_cookie_contract(); APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_cookie_inspect(const std::filesystem::path&); APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_store_shape(const HttpResponse&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_pet_contract(); APPLE_AUTH_CLIENT_EXPORT AccountSession lab_tf_refresh_pet(Client&,const AccountSession&,const Transport&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_auth_contract(); APPLE_AUTH_CLIENT_EXPORT bool lab_tf_account_session_valid(const AccountSession&,std::int64_t); APPLE_AUTH_CLIENT_EXPORT std::int64_t lab_tf_retry_after(const HttpResponse&,std::int64_t); }
+namespace apple_auth { APPLE_AUTH_CLIENT_EXPORT Transport lab_tf_curl_transport(); APPLE_AUTH_CLIENT_EXPORT void lab_tf_invitation_bind(const std::filesystem::path&,const Transport&); APPLE_AUTH_CLIENT_EXPORT void lab_tf_invitation_refresh(const std::filesystem::path&,const Transport&); APPLE_AUTH_CLIENT_EXPORT void lab_tf_invitation_accept(const std::filesystem::path&,const Transport&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_invitation_post_contract(); APPLE_AUTH_CLIENT_EXPORT void lab_tf_invitation_get(const std::filesystem::path&,const Transport&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_invitation_contract(); APPLE_AUTH_CLIENT_EXPORT StoreSession lab_tf_replay_store(const std::filesystem::path&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_cookie_contract(); APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_cookie_inspect(const std::filesystem::path&); APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_store_shape(const HttpResponse&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_pet_contract(); APPLE_AUTH_CLIENT_EXPORT AccountSession lab_tf_refresh_pet(Client&,const AccountSession&,const Transport&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_auth_contract(); APPLE_AUTH_CLIENT_EXPORT bool lab_tf_account_session_valid(const AccountSession&,std::int64_t); APPLE_AUTH_CLIENT_EXPORT std::int64_t lab_tf_retry_after(const HttpResponse&,std::int64_t); }
 #include <sys/stat.h>
 using namespace apple_auth;
 using Json=nlohmann::json;
@@ -175,7 +175,7 @@ int main(int argc,char **argv) {
             (void)read_profile(argv[2]);
             std::cout<<lab_tf_cookie_inspect(argv[2])<<std::endl;return 0;
         }
-        require(argc==3 && (std::string(argv[1])=="--authenticate" || std::string(argv[1])=="--prepare-lookup" || std::string(argv[1])=="--lookup" || std::string(argv[1])=="--resume-store" || std::string(argv[1])=="--store-preflight" || std::string(argv[1])=="--refresh-pet-store" || std::string(argv[1])=="--replay-testflight" || std::string(argv[1])=="--invite-get" || std::string(argv[1])=="--invite-refresh" || std::string(argv[1])=="--invite-accept"));
+        require(argc==3 && (std::string(argv[1])=="--authenticate" || std::string(argv[1])=="--prepare-lookup" || std::string(argv[1])=="--lookup" || std::string(argv[1])=="--resume-store" || std::string(argv[1])=="--store-preflight" || std::string(argv[1])=="--refresh-pet-store" || std::string(argv[1])=="--replay-testflight" || std::string(argv[1])=="--invite-get" || std::string(argv[1])=="--invite-refresh" || std::string(argv[1])=="--invite-accept" || std::string(argv[1])=="--invite-bind"));
         const char *actions=std::getenv("GITHUB_ACTIONS");
         require(actions && std::string(actions)=="true");
         const std::filesystem::path root=argv[2];
@@ -210,7 +210,7 @@ int main(int argc,char **argv) {
         };
         Client client(root/"sdk",options);
         const std::string command=argv[1];
-        if(command!="--resume-store" && command!="--store-preflight" && command!="--refresh-pet-store" && command!="--replay-testflight" && command!="--invite-get" && command!="--invite-refresh" && command!="--invite-accept") {
+        if(command!="--resume-store" && command!="--store-preflight" && command!="--refresh-pet-store" && command!="--replay-testflight" && command!="--invite-get" && command!="--invite-refresh" && command!="--invite-accept" && command!="--invite-bind") {
             report["stage"]="grandslam_provisioning";
             client.provision();
         }
@@ -245,15 +245,16 @@ int main(int argc,char **argv) {
             std::cout<<report.dump()<<'\n';
             return 0;
         }
-        if(command=="--invite-get" || command=="--invite-refresh" || command=="--invite-accept") {
-            report["stage"]=command=="--invite-accept" ? "testflight_invitation_accept" : "testflight_invitation";
-            if(command=="--invite-accept")lab_tf_invitation_accept(root,options.transport);
+        if(command=="--invite-get" || command=="--invite-refresh" || command=="--invite-accept" || command=="--invite-bind") {
+            report["stage"]=command=="--invite-accept" ? "testflight_invitation_accept" : command=="--invite-bind" ? "testflight_invitation_binding" : "testflight_invitation";
+            if(command=="--invite-bind")lab_tf_invitation_bind(root,options.transport);
+            else if(command=="--invite-accept")lab_tf_invitation_accept(root,options.transport);
             else if(command=="--invite-refresh")lab_tf_invitation_refresh(root,options.transport);
             else lab_tf_invitation_get(root,options.transport);
             report["gsa_authenticated"]=true;report["gsa_session_reused"]=true;
             report["mac_store_authenticated"]=true;report["store_profile_ready"]=true;
-            report["tf_authenticated"]=true;report["status"]=command=="--invite-accept" ? "acceptance_response_received" : "invitation_inspected";
-            report["catalog_received"]=command=="--invite-refresh";
+            report["tf_authenticated"]=true;report["status"]=command=="--invite-accept" ? "acceptance_response_received" : command=="--invite-bind" ? "invitation_binding_verified" : "invitation_inspected";
+            report["catalog_received"]=command=="--invite-refresh" || command=="--invite-bind";
             std::cout<<report.dump()<<std::endl;return 0;
         }
         if(command=="--authenticate") {
