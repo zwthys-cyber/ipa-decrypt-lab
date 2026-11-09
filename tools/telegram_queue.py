@@ -451,7 +451,7 @@ class GitHub:
             require(bot.base == "http://127.0.0.1:8081", "large_file_server_required")
             # Local server reads private local file; no multipart buffering and no public link.
             require(output.stat().st_size <= MAX_FILE, "telegram_file_exceeds_2000mb")
-            named_output = root/app_filename(info, receipt["app_id"])
+            named_output = root/(app_filename(info, receipt["app_id"], testflight=True) if profile_for_request(rid)=="tf" else app_filename(info, receipt["app_id"]))
             if named_output != output:
                 require(not named_output.exists(), "delivery_name_collision")
                 output.rename(named_output)

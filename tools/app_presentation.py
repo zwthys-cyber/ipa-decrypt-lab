@@ -19,10 +19,10 @@ def component(value, fallback, budget=120):
     value = value.encode("utf-8")[:budget].decode("utf-8", "ignore").strip(" .")
     return value or fallback
 
-def filename(info, app_id):
+def filename(info, app_id, *, testflight=False):
     name = component(info.get("display_name"), app_id)
     version = component(info.get("version"), "unknown", 48)
-    return name + "_" + version + ".ipa"
+    return name + ("_Beta_" if testflight else "_") + version + ".ipa"
 
 def jpeg(raw):
     from PIL import Image
