@@ -33,6 +33,11 @@ jobs:
         run: |
           python3 -m unittest discover -s .github/ops -p 'test_tf_native.py'
           python3 -m unittest discover -s .github/ops -p 'test_tf_cn_context.py'
+      - name: Inspect native identity providers without account inputs
+        run: |
+          ulimit -c 0
+          clang -fobjc-arc -fblocks -framework Foundation .github/ops/tf_native_discovery.m -o tf-native-discovery
+          python3 .github/ops/tf_native_discovery.py
       - name: Compile the genuine Mac profile reader
         run: |
           mkdir -p tf-native-source
