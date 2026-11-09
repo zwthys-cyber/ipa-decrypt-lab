@@ -9,7 +9,8 @@ final class LabCNPurchaseTraceTests:XCTestCase {
         XCTAssertFalse(lines.joined().contains("PRIVATE"))
     }
     func testMalformedAndUnboundedCodesAreNotPublished() {
-        for value:Any in ["PRIVATE",true,99999999,"4\nSECRET",["token":"PRIVATE"]] {
+        let invalid:[Any]=["PRIVATE",true,99999999,"4\nSECRET",["token":"PRIVATE"]]
+        for value in invalid {
             let lines=LabCNPurchaseTrace.lines(["failureType":value])
             XCTAssertFalse(lines.contains(where:{$0.hasPrefix("IPA_CN_PURCHASE_FAILURE:")}))
         }
