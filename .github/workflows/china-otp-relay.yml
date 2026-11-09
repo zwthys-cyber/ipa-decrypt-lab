@@ -1,0 +1,53 @@
+name: Relay encrypted verification to waiting CN session
+run-name: CN-code-relay-${{ inputs.auth_run }}-${{ inputs.request_nonce }}
+on:
+  workflow_dispatch:
+    inputs:
+      auth_run:
+        description: Existing waiting authentication run ID, never a user ID or code
+        type: string
+        required: true
+      request_nonce:
+        description: Non-secret nonce from the waiting session artifact
+        type: string
+        required: true
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: cn-code-relay-${{ inputs.auth_run }}
+  cancel-in-progress: false
+jobs:
+  relay:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify protocol contracts without private credentials
+        run: python3 -m unittest discover -s .github/ops -p 'test_*.py' -v
+      - name: Load verified public encryption helper before code access
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/ops/fetch_cn_relay_crypto.py
+      - name: Bind and encrypt the one-time code without logging it
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CN_AUTH_RUN: ${{ inputs.auth_run }}
+          CN_AUTH_NONCE: ${{ inputs.request_nonce }}
+          APPLE_CN_2FA_CODE: ${{ secrets.APPLE_CN_2FA_CODE }}
+        run: |
+          ulimit -c 0
+          python3 .github/ops/cn_relay.py cn-relay-crypto/delivery-crypt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: cn-code-${{ inputs.auth_run }}-${{ inputs.request_nonce }}
+          path: cn-code-out/code.age
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+      - name: Remove temporary ciphertext
+        if: always()
+        run: rm -rf -- cn-code-out
