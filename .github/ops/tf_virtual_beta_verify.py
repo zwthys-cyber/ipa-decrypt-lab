@@ -73,6 +73,11 @@ def main():
             try:
                 _,bundle,identifier=target(state)
                 original=restore_package(root,env,receipt);archive_binding(original,bundle);receipt["input_verified"]=True
+                from tf_virtual_zip_directories import canonicalize
+                normalized=root/"canonical.ipa"
+                receipt["archive_normalization"]=canonicalize(original,normalized)
+                archive_binding(normalized,bundle)
+                original=normalized
                 need(env.get("FAIRPLAY_CN_MODEL_B64"))
                 os.environ["FAIRPLAY_MODEL_B64"]=env["FAIRPLAY_CN_MODEL_B64"]
                 receipt["model_reused"]=True
