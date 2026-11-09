@@ -42,7 +42,8 @@ async function main() {
   try {
     const commands={auth:'exec python3 .github/ops/cn_live_auth.py --binary cn-runtime/ApplePackageTool --crypt cn-runtime/delivery-crypt --sealer cn-runtime/cn-session-seal',
       model_trial:'exec python3 .github/ops/cn_model.py --runtime cn-runtime --mode trial',
-      model_replay:'exec python3 .github/ops/cn_model.py --runtime cn-runtime --mode replay'};
+      model_replay:'exec python3 .github/ops/cn_model.py --runtime cn-runtime --mode replay',
+      relay_probe:'exec python3 .github/ops/cn_live_relay_probe.py --crypt cn-relay-crypto/delivery-crypt'};
     const role=env.CN_LIVE_TASK||'auth';if(!Object.hasOwn(commands,role))throw Error();
     worker=spawn('bash',['-e','-c','ulimit -c 0\n'+commands[role]],{
       env:{...env,CN_HANDSHAKE_FILE:input,PYTHONUNBUFFERED:'1'},stdio:['ignore','inherit','inherit']});

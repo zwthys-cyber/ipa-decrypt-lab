@@ -1,0 +1,42 @@
+name: Synthetic CN live relay probe
+run-name: CN-relay-synthetic-probe
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: china-account-onboarding
+  cancel-in-progress: false
+jobs:
+  probe:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Test all late-relay and model boundaries without credentials
+        run: |
+          python3 -m compileall -q .github/ops
+          python3 -m unittest discover -s .github/ops -p 'test_*.py' -v
+          node --test .github/ops/cn_action.test.cjs
+      - name: Fetch verified public relay crypto
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/ops/fetch_cn_relay_crypto.py
+      - name: Wait in one synthetic child for a real encrypted late relay
+        uses: ./.github/actions/cn-auth
+        env:
+          CN_LIVE_TASK: relay_probe
+          GH_TOKEN: ${{ github.token }}
+          DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
+      - name: Publish only the synthetic probe receipt
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: cn-relay-probe-${{ github.run_id }}
+          path: cn-relay-probe-receipt.json
+          retention-days: 1
+          if-no-files-found: ignore

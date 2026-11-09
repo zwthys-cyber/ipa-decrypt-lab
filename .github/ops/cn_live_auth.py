@@ -15,6 +15,7 @@ import time
 from china_auth import settings,ChinaAuthError,failure_diagnostic
 from cn_protocol import GitHub,poll_code,require
 from cn_session import decode as decode_saved_session
+from telegram_queue import QueueError
 
 MARKER=b'IPA_CN_AUTH:verification_pending'
 
@@ -40,6 +41,7 @@ def live(binary,crypt,env,relay=None,command=None,window=300,poll_interval=3,pre
     process=subprocess.Popen(args,env=child_env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     selector=selectors.DefaultSelector();selector.register(process.stdout,selectors.EVENT_READ,'stdout');selector.register(process.stderr,selectors.EVENT_READ,'stderr')
     capture={'stdout':bytearray(),'stderr':bytearray()};partial=bytearray();waiting=None;submitted=False;next_poll=0
+    transient_reads=0
     deadline=time.monotonic()+180
     try:
         while selector.get_map():
@@ -62,9 +64,16 @@ def live(binary,crypt,env,relay=None,command=None,window=300,poll_interval=3,pre
                 if len(partial)>8192:partial.clear()
             if waiting and not submitted and time.monotonic()>=next_poll:
                 next_poll=time.monotonic()+poll_interval
-                if relay is None:
-                    api=GitHub(env['GH_TOKEN']);code=poll_code(api,waiting,crypt,env['DELIVERY_AGE_IDENTITY'])
-                else:code=relay(waiting)
+                try:
+                    if relay is None:
+                        api=GitHub(env['GH_TOKEN']);code=poll_code(api,waiting,crypt,env['DELIVERY_AGE_IDENTITY'])
+                    else:code=relay(waiting)
+                    transient_reads=0
+                except QueueError as error:
+                    if str(error) not in {'github_transport_unknown','github_request_rejected'} or transient_reads>=6:raise
+                    transient_reads+=1;next_poll=time.monotonic()+min(2**transient_reads,10)
+                    print(json.dumps({'schema':'ipa-cn-auth-live-v1','stage':'waiting_for_live_code','relay_read_retry':transient_reads}),flush=True)
+                    code=None
                 if code is not None:
                     require(isinstance(code,str) and re.fullmatch(r'[0-9]{6}',code),'invalid_live_code')
                     process.stdin.write(code.encode()+b'\n');process.stdin.flush();process.stdin.close();submitted=True

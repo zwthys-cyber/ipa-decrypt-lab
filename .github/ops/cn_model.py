@@ -14,6 +14,7 @@ import tempfile
 import time
 from cn_session import decode,query,UA
 from cn_live_auth import seal_session,live
+from telegram_queue import failure_kind
 from china_auth import failure_diagnostic
 from cn_download_probe import TARGET,LIMIT
 from machine_enrollment import clean,COMMERCE_READY,stop_private_group
@@ -123,17 +124,20 @@ def trial(runtime,env,mode,report):
     try:
         fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
         with os.fdopen(fd,'w') as stream:json.dump(value['account'],stream)
+        report['stage']='authenticating'
         authenticated,current=live(binary,str(runtime/'delivery-crypt'),env,prepared_session=True,native_guid=guid)
         if authenticated.get('authenticated') is not True:
             report.update(status='cn_cookie_refresh_rejected',diagnostic=authenticated.get('diagnostic',{}));return
         report['verification_code_used']=authenticated.get('verification_submitted') is True
         account=account_at(path,value)
         report['cookie_refresh_authenticated']=True
+        report['stage']='count_query'
         count=query(bound_env(env,current));report['count_query']=count
         require(count.get('session_reused') is True,'cn_computer_count_unavailable')
         report['account_count_before']=count['authorized_computers']
         with tempfile.TemporaryDirectory(prefix=CHECKPOINT_PREFIX) as directory:
             root=Path(directory);root.chmod(0o700);ipa=root/'original.ipa'
+            report['stage']='download'
             code,out,err=private([binary,'download',value['email'],info['bundle_id'],'--guid',guid,'--output',str(ipa)],child,timeout=300)
             require(code==0 and ipa.is_file() and not ipa.is_symlink() and 0<ipa.stat().st_size<=LIMIT,'cn_original_download_failed')
             report['downloaded']=True;report['ipa_bytes']=ipa.stat().st_size
@@ -148,6 +152,7 @@ def trial(runtime,env,mode,report):
                 report['checkpoint_preflight']=checkpoint_preflight(guid)
                 before=collect();gate(count,profile,prepared,before)
                 native_report=root/'enrollment.json';native_input=json.dumps(payload(value,account,guid)).encode()
+                report['stage']='authorizing'
                 report['authorization_outcome_uncertain']=True
                 code,_,_=private([str(runtime/'native-machine-enrollment'),str(native_report)],child,data=native_input,timeout=80)
                 require(code==0 and native_report.is_file() and native_report.stat().st_size<=65536,'cn_authorization_outcome_unknown_do_not_retry')
@@ -158,11 +163,13 @@ def trial(runtime,env,mode,report):
                 if after.get('session_reused') is True:report['account_count_after']=after['authorized_computers']
                 report['enrollment']=result
                 require(state_ready(result),'cn_enrollment_state_unavailable_do_not_repeat')
+                report['stage']='checkpoint_capture'
                 saved=checkpoint_file(root);seal_file(sealer,saved,'state',env);report['checkpoint_saved']=True
                 guid_file=root/'guid.txt';guid_file.write_text(guid);guid_file.chmod(0o600);seal_file(sealer,guid_file,'guid',env)
                 current['account']=account_at(path,value);seal_session(str(runtime/'cn-session-seal'),current,env)
                 report['session_secret_prepared']=True;report['guid_secret_prepared']=True
             else:report['existing_checkpoint_validated']=True
+            report['stage']='model_recovery'
             models=root/'models'
             if mode=='trial':models.mkdir(mode=0o700)
             model_env={'PATH':'/usr/bin:/bin','GITHUB_ACTIONS':'true'}
@@ -234,7 +241,10 @@ def main():
         else:trial(Path(args.runtime).resolve(),dict(os.environ),args.mode,report)
     except CNModelError as error:report['status']=str(error)
     except subprocess.TimeoutExpired:report['status']='cn_model_timeout_do_not_repeat'
-    except Exception:report['status']='cn_model_trial_stopped_do_not_repeat'
+    except Exception as error:
+        report['status']='cn_model_trial_stopped_do_not_repeat';report['failure_kind']=failure_kind(error)
+        known={'github_transport_unknown','github_request_rejected','github_permission_denied','cn_code_expired','cn_request_expired','cn_code_decryption_failed','cn_artifact_digest','cn_artifact_inventory','prepared_cn_cache_binding','prepared_cn_cache_invalid','cn_session_binding','verification_window_expired','authentication_timeout'}
+        if str(error) in known:report['error_code']=str(error)
     report.update(run_id=os.environ.get('GITHUB_RUN_ID'),source_commit=os.environ.get('GITHUB_SHA'))
     Path('cn-model-receipt.json').write_text(json.dumps(report));print(json.dumps(report),flush=True)
     # A preserved authenticated checkpoint is a completed stage, never a claim of recovered model.

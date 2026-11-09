@@ -16,6 +16,7 @@ import zipfile
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 import cn_protocol as p
 from cn_live_auth import live
+from telegram_queue import QueueError
 class LiveProtocolContracts(unittest.TestCase):
     def waiting(self):return {'schema':'cn-live-request-v1','auth_run':'12','commit':'a'*40,'nonce':'b'*32,'expires':int(time.time())+100}
     def payload(self,w):return dict(schema='cn-live-code-v1',auth_run=w['auth_run'],commit=w['commit'],nonce=w['nonce'],issued_at=int(time.time()),code='123456')
@@ -60,6 +61,27 @@ class LiveProtocolContracts(unittest.TestCase):
             return Mock(returncode=0)
         self.assertEqual(p.decrypt_code('crypt',b'synthetic ciphertext',w,'PRIVATE_IDENTITY',execute=decrypt),'123456')
         self.assertTrue(all(not x.exists() for x in paths))
+    def test_transient_github_read_keeps_the_same_waiting_child_alive(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);email='cn@example.invalid'
+            env={'GITHUB_ACTIONS':'true','HOME':directory,'PATH':os.environ['PATH'],'APPLE_CN_ID':email,'APPLE_CN_PASSWORD':'PRIVATE_PASSWORD',
+                'LEGACY_APPLE_ID':'legacy@example.invalid','APPLE_CN_GUID':'02123456789A','GITHUB_RUN_ID':'12','GITHUB_SHA':'a'*40,'CN_HANDSHAKE_FILE':str(root/'request.json')}
+            program="""import os,json,hashlib;from pathlib import Path
+print('IPA_CN_AUTH:verification_pending',flush=True)
+assert input()=='123456'
+p=Path(os.environ['HOME'])/'.ipatool'/hashlib.md5(b'cn@example.invalid').hexdigest();p.mkdir(parents=True)
+f=p/'account.json';f.write_text(json.dumps({'email':'cn@example.invalid','store':'143465','passwordToken':'PRIVATE_TOKEN','directoryServicesIdentifier':'123'}));f.chmod(0o600)
+"""
+            calls=[]
+            def relay(waiting):
+                calls.append(waiting['nonce'])
+                if len(calls)==1:raise QueueError('github_transport_unknown')
+                return '123456'
+            capture=io.StringIO()
+            with contextlib.redirect_stdout(capture):
+                result,_=live('/tool','/crypt',env,command=[sys.executable,'-c',program],relay=relay,window=5,poll_interval=.01)
+            self.assertTrue(result['authenticated']);self.assertEqual(len(calls),2);self.assertEqual(calls[0],calls[1])
+            self.assertIn('relay_read_retry',capture.getvalue());self.assertNotIn('PRIVATE',capture.getvalue())
     def test_same_child_waits_then_receives_code_without_leaking_output(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);handshake=root/'request.json';email='cn@example.invalid'
