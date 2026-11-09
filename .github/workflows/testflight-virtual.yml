@@ -57,7 +57,7 @@ jobs:
         run: |
           python3 .github/ops/tf_virtual_transport_patch.py native-source/apple-auth/src/client/transport.cpp
           python3 .github/ops/tf_virtual_auth_patch.py native-source/apple-auth/src/client/authentication.cpp
-          python3 .github/ops/tf_virtual_pet_patch.py native-source/apple-auth/src/client/authentication.cpp native-source/apple-auth/src/client/store.cpp native-source/apple-auth/src/client/client.cpp
+          python3 .github/ops/tf_virtual_pet_patch.py native-source/apple-auth/src/client/authentication.cpp native-source/apple-auth/src/client/store.cpp native-source/apple-auth/src/client/client.cpp native-source/apple-auth/src/client/apple_plist.cpp
           cp .github/ops/tf_virtual_pet_contract.cpp native-source/apple-auth/lab_tf_pet_contract.cpp
           cp .github/ops/tf_sdk_contract.cpp native-source/apple-auth/tf_sdk_contract.cpp
           cp .github/ops/tf_virtual_client.cpp native-source/apple-auth/tf_virtual_client.cpp

@@ -52,6 +52,11 @@ Json lab_cookie_flags(const Json& cookies) {
 }
 APPLE_AUTH_CLIENT_EXPORT int lab_tf_cookie_contract() {
     try {
+        const auto primitives=parse_plist(encode_plist(Json{{"false",false},{"true",true},{"zero",0},{"one",1}}));
+        require(primitives.at("false").is_boolean() && primitives.at("false")==false &&
+            primitives.at("true").is_boolean() && primitives.at("true")==true &&
+            primitives.at("zero").is_number_integer() && primitives.at("one").is_number_integer(),
+            "Plist primitive types changed");
         const Json cookies=Json::array({Json{{"name","fixture"},{"value","SYNTHETIC"},{"domain","apple.com"},
             {"path","/"},{"expires",std::int64_t(1800000000)},{"host_only",false}}});
         const auto after=parse_plist(encode_plist(cookies));
@@ -68,6 +73,10 @@ APPLE_AUTH_CLIENT_EXPORT int lab_tf_cookie_contract() {
         bool rejected=false;
         try{(void)StoreSession::from_plist(encode_plist(bad));}catch(const std::exception&){rejected=true;}
         require(rejected,"Cookie foreign-domain guard missing");
+        bad=state;bad["cookies"][0]["host_only"]=0;
+        rejected=false;
+        try{(void)StoreSession::from_plist(encode_plist(bad));}catch(const std::exception&){rejected=true;}
+        require(rejected,"Integer cookie flag must remain rejected");
         return 0;
     }catch(const std::exception& error) {
         std::fprintf(stderr,"TF_COOKIE_PUBLIC_FIXTURE_ERROR:%s\\n",error.what());return 2;
@@ -103,9 +112,19 @@ def patch_client(raw):
     source=raw.decode()
     if source.count(old)!=1:raise ValueError("tf_client_anchor_invalid")
     return source.replace(old,new)
+def patch_plist(raw):
+    if hashlib.sha1(b"blob "+str(len(raw)).encode()+b"\0"+raw).hexdigest()!="2888d7b50cc01de25d05a3db18df6761ddcf3e93":
+        raise ValueError("tf_plist_source_mismatch")
+    old="return CFBooleanGetValue(static_cast<CFBooleanRef>(value));"
+    new="return bool(CFBooleanGetValue(static_cast<CFBooleanRef>(value)));"
+    source=raw.decode()
+    if source.count(old)!=1:raise ValueError("tf_plist_anchor_invalid")
+    return source.replace(old,new)
 if __name__=="__main__":
     auth=Path(sys.argv[1]);store=Path(sys.argv[2])
     auth.write_text(patch_auth(auth.read_text()))
     store.write_text(patch_store(store.read_bytes()))
 
     client=Path(sys.argv[3]);client.write_text(patch_client(client.read_bytes()))
+
+    plist=Path(sys.argv[4]);plist.write_text(patch_plist(plist.read_bytes()))
