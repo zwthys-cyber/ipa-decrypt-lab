@@ -22,6 +22,8 @@ from model_bootstrap import candidate_app,input_profile,state_ready,setup_summar
 from offline_verify import verify
 import private_fairplay_state as checkpoint
 
+CHECKPOINT_PREFIX='ipa-lab-model-bootstrap-cn-'
+
 class CNModelError(ValueError):pass
 
 def require(value,label):
@@ -105,6 +107,7 @@ def trial(runtime,env,mode,report):
     require(mode in ('trial','replay'),'cn_model_mode_invalid')
     require(mode=='replay' or env.get('CN_MODEL_STATE_PRESENT')!='true','cn_saved_state_requires_replay')
     if mode=='replay':checkpoint.validate(checkpoint.decode_bytes(env.get('FAIRPLAY_CN_STATE_B64',''),checkpoint.LIMIT))
+    report['checkpoint_preflight']=checkpoint_preflight()
     value,_=decode(env);info=json.loads(Path('cn-sample-metadata.json').read_text())
     require(info.get('app_id')==TARGET,'cn_sample_binding')
     binary=str(runtime/'ApplePackageTool');engine=str(runtime/'offline-engine');sealer=str(runtime/'cn-model-seal')
@@ -129,7 +132,7 @@ def trial(runtime,env,mode,report):
         count=query(bound_env(env,current));report['count_query']=count
         require(count.get('session_reused') is True,'cn_computer_count_unavailable')
         report['account_count_before']=count['authorized_computers']
-        with tempfile.TemporaryDirectory(prefix='cn-model-private-') as directory:
+        with tempfile.TemporaryDirectory(prefix=CHECKPOINT_PREFIX) as directory:
             root=Path(directory);root.chmod(0o700);ipa=root/'original.ipa'
             code,out,err=private([binary,'download',value['email'],info['bundle_id'],'--guid',guid,'--output',str(ipa)],child,timeout=300)
             require(code==0 and ipa.is_file() and not ipa.is_symlink() and 0<ipa.stat().st_size<=LIMIT,'cn_original_download_failed')
@@ -184,6 +187,24 @@ def trial(runtime,env,mode,report):
     finally:
         if folder.exists() and not folder.is_symlink():shutil.rmtree(folder)
 
+def checkpoint_preflight():
+    with tempfile.TemporaryDirectory(prefix=CHECKPOINT_PREFIX) as directory:
+        root=Path(directory);root.chmod(0o700);path=root/'state.json'
+        argv=['/usr/bin/sudo','-n','--','/usr/bin/env','-i','PATH=/usr/bin:/bin','GITHUB_ACTIONS=true',
+            str(Path(sys.executable).resolve()),str(Path(__file__).with_name('cn_checkpoint_contract.py').resolve()),
+            '--output',str(path),'--uid',str(os.getuid()),'--gid',str(os.getgid())]
+        code,out,_=private(argv,{'PATH':'/usr/bin:/bin','GITHUB_ACTIONS':'true'},timeout=25)
+        records=[]
+        for line in out.splitlines():
+            try:records.append(json.loads(line))
+            except Exception:pass
+        receipt=next((x for x in records if x.get('schema')=='cn-checkpoint-contract-v1'),{})
+        require(code==0 and receipt.get('status')=='contract_passed' and receipt.get('hardware_observed') is True,'cn_checkpoint_preflight_failed')
+        require(path.is_file() and not path.is_symlink() and path.stat().st_mode&0o077==0 and path.stat().st_uid==os.getuid(),'cn_checkpoint_preflight_permissions')
+        hardware,files=checkpoint.validate(path.read_bytes())
+        require(files=={'fpsd_sidb':b'CN_CHECKPOINT_SYNTHETIC_NOT_ACCOUNT_STATE'},'cn_checkpoint_preflight_fixture')
+        return receipt
+
 def public_preflight(runtime):
     require(os.environ.get('GITHUB_ACTIONS')=='true','requires_github_actions')
     require(not any(os.environ.get(k) for k in ('APPLE_CN_ID','APPLE_CN_PASSWORD','APPLE_CN_SESSION_B64','APPLE_ID','APPLE_PASSWORD')),'preflight_received_credentials')
@@ -196,7 +217,8 @@ def public_preflight(runtime):
         require(code==0 and path.is_file() and path.stat().st_size<=65536,'cn_native_preflight_failed')
         prepared=clean(json.loads(path.read_text()))
     require(prepared.get('status')=='commerce_request_prepared' and prepared.get('authorization_request_attempted') is False,'cn_native_preflight_failed')
-    return dict(base(),status='cn_native_preflight_ready',native_preflight=prepared)
+    saved=checkpoint_preflight()
+    return dict(base(),status='cn_native_preflight_ready',native_preflight=prepared,checkpoint_preflight=saved)
 
 def main():
     os.umask(0o077);parser=argparse.ArgumentParser();parser.add_argument('--runtime',required=True);parser.add_argument('--mode',choices=('preflight','trial','replay'),required=True);args=parser.parse_args()
