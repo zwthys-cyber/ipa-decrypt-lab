@@ -168,3 +168,12 @@ Store 会话重建通过后，最初 TF 创建返回401；新鲜登录也验证�
 [首次取包42696261040](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42696261040) 通过22项原生检查，并重新验证目标绑定。安装接口返回HTTP200，但SDK因安装元数据缺少非空 url/dpInfo 而中止，尚未下载IPA。[离线诊断42697014857](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42697014857) 在零Apple请求下确认了这个固定错误类别。HTTP200不能作为已取包证明。
 
 后续受限诊断将固定安装端点的原始响应仅保存到runner私有目录和既有收件人的age密文中；公开部分只给出允许字段的类型与计数，不输出下载地址、密钥或账户数据。保留原下载字段校验。TF实际IPA、完整内容解密、私有文件回传和生产自动路由仍未完成。
+
+
+## 2026-11-09：真实 beta 取包成功
+
+安装响应实际有非空下载地址和 SINF，`dpInfo` 明确为 null。兼容分支只对这个明确值接收原始ZIP，并保留目标绑定、归档规范化、SINF与CRC检查；加密传输路径不变，无效密钥不会降级绕过。
+
+[取包42698306052](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42698306052) 通过50+4项Python、2项Node、23项CTest后，下载并验证了真实A.I.测试包：764,970字节、30个成员、1个加密Mach-O。仅保留给既有收件人的密文和受限回执，一天后过期。尚未证明内容解密或文件回传。
+
+[离线模型验证42699070274](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42699070274) 将使用摘要固定的这个包、来源验证的既有CN运行时及已保存模型，不登录Apple或新增电脑授权。兼容性必须由原有完整明文哈希验证证明；在结果出来前不能称为解密成功。
