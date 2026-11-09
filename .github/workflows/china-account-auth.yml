@@ -25,6 +25,7 @@ jobs:
           persist-credentials: false
       - name: Test isolated credentials, region binding and sanitized failures without secrets
         run: |
+          python3 -m compileall -q .github/ops
           python3 -m unittest discover -s .github/ops -p 'test_*.py' -v
           node --test .github/ops/cn_action.test.cjs
   authenticate:

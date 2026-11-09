@@ -8,7 +8,7 @@ final class LabCNSummaryTests: XCTestCase {
             let data = try JSONSerialization.data(withJSONObject: ["data": ["authorizations": ["authorizedComputers": count]]])
             XCTAssertEqual(try LabCNSummary.count(data), count)
         }
-        for count: Any in [true, -1, 6, "2", 2.5, NSNull()] {
+        for count in [true, -1, 6, "2", 2.5, NSNull()] as [Any] {
             let data = try JSONSerialization.data(withJSONObject: ["data": ["authorizations": ["authorizedComputers": count]]])
             XCTAssertThrowsError(try LabCNSummary.count(data))
         }

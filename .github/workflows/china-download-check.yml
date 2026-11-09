@@ -27,6 +27,7 @@ jobs:
           persist-credentials: false
       - name: Test CN isolation and download cleanup without secrets
         run: |
+          python3 -m compileall -q .github/ops
           python3 -m unittest discover -s .github/ops -p 'test_*.py' -v
           node --test .github/ops/cn_action.test.cjs
       - name: Check small free CN sample before account secrets

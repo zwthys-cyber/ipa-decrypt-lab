@@ -25,6 +25,7 @@ jobs:
           persist-credentials: false
       - name: Verify account binding and read-only behavior without secrets
         run: |
+          python3 -m compileall -q .github/ops
           python3 -m unittest discover -s .github/ops -p 'test_*.py' -v
           node --test .github/ops/cn_action.test.cjs
       - name: Query saved CN session without login, password or verification code
