@@ -16,6 +16,18 @@
 
 已有中国区检查点时继续使用 `replay`，不重复初始化。实时验证码只在一个实际存活且可信的等待会话中接收，当前没有等待窗口，无需提前发送验证码。中国区完整解密、历史版本和正式机器人路由仍待解决。
 
+## 最新对照：地区上下文与 ARM 重放
+
+[地区构造对照 42560593505](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42560593505) 在 ARM 和 Intel 两种运行器上均观察到原生授权请求默认使用美区 storefront。显式提供中国区上下文后，正文、真实设备标识和签名头保持一致。中国区流程现已补齐保存会话中的 storefront，并在提交前拒绝外国地区或带控制字符的上下文；德国区代码不变。初版对照工具的入口包装编译冲突已修复。这是无真实账号的请求构造证据，不能据此断言旧检查点失败原因已被证明。
+
+[ARM 完整准备 42559393924](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42559393924) 通过 466 项主测试、58 项隔离 Python 测试、4 项 Node、29 项 Swift、Go 测试/静态检查/竞争检测、密封工具、原生/检查点、重定位和公共资源检查。随后 [ARM 重放 42560812625](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42560812625) 正常刷新会话并下载中国区 LocalSend，未使用验证码，授权数仍为 2；同一检查点在 ARM 上仍然 `first_block_rejected`，没有恢复模型或明文。更换重放平台本身没有解决问题。
+
+`CN_RECOVERY_BACKUP_B64` 保存仅供 GitHub 使用的原中国区检查点、配套 GUID 和受保护会话；备份经仓库公钥密封，再由独立运行器读回核对。准备/核验均不登录 Apple、不授权电脑。`cn-profile-backup.yml` 默认 `verify`，`prepare` 只生成密文候选，须核验可信任务和附件摘要后存入固定 Secret。只刷新会话时可同步备份；以后若保存不同的新检查点，应保留原备份。
+
+独立 ARM 流程已经准备好，默认仍为无账号 `preflight`，`replay` 复用现有状态。新 `trial` 会额外占用一台电脑授权，必须先获得用户对已有检查点禁止再次初始化规则的明确例外，再提供短时、源码/随机标识绑定的批准。流程检查真实 ARM 运行平台、主分支、首次运行、完整备份和实时授权数量；同一批准标识出现第二个任务即拒绝，包括失败或取消过的任务。批准标识与验证码会话标识分别绑定，不能互换。
+
+**尚未获准或执行新的 ARM 初始化。** 如获准，仅进行一次有界对照，最后观察到的数量预计 2 → 3（上限 5），仍可能需要实时验证码，且不保证能解决模型恢复。没有授权全账号撤销，没有修改德国区或上线中国区路由。
+
 ## 凭据与实时验证码
 
 仓库 [Actions Secrets](https://github.com/zwthys-cyber/ipa-decrypt-lab/settings/secrets/actions) 中的 `APPLE_CN_ID`、`APPLE_CN_PASSWORD`、独立稳定的 `APPLE_CN_GUID` 和 `APPLE_CN_SESSION_B64` 只用于中国区账号，不覆盖原账号 Secrets。最后一项保存受保护的账号会话。

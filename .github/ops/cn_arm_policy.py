@@ -6,6 +6,7 @@ import platform
 import re
 import time
 from cn_session import decode
+from telegram_queue import GitHub
 import private_fairplay_state as checkpoint
 
 REPOSITORY='zwthys-cyber/ipa-decrypt-lab'
@@ -45,3 +46,20 @@ def allow_reference(env,now=None):
         and type(approval.get('expires')) is int and now<approval['expires']<=now+1800)
     require(env.get('CN_MODEL_STATE_PRESENT')=='true')
     validate_backup(env)
+    reference_run(env)
+
+def reference_run(env):
+    run_id=env.get('GITHUB_RUN_ID','');nonce=env.get('CN_REFERENCE_NONCE','')
+    require(re.fullmatch('[1-9][0-9]{0,19}',run_id) is not None and re.fullmatch('[a-f0-9]{32}',nonce) is not None)
+    title='CN-arm-model-trial-'+nonce
+    client=GitHub(env.get('GH_TOKEN',''))
+    current=client.call('/actions/runs/'+run_id)
+    require(current.get('id')==int(run_id) and current.get('path')==WORKFLOW and current.get('head_branch')=='main'
+        and current.get('event')=='workflow_dispatch' and current.get('status')=='in_progress'
+        and current.get('head_sha')==env.get('GITHUB_SHA') and current.get('display_title')==title
+        and current.get('run_attempt')==1)
+    runs=client.call('/actions/workflows/cn-arm-model-bootstrap.yml/runs?event=workflow_dispatch&per_page=100').get('workflow_runs')
+    require(type(runs) is list and len(runs)<100 and any(x.get('id')==int(run_id) for x in runs))
+    # Failed/cancelled duplicate intents also consume this nonce. A queued run
+    # must never authorize another machine after an unknown earlier outcome.
+    require(not any(x.get('id')!=int(run_id) and x.get('display_title')==title for x in runs))

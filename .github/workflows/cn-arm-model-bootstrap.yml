@@ -1,5 +1,5 @@
 name: Isolated ARM CN model reference
-run-name: CN-arm-model-${{ inputs.mode }}
+run-name: CN-arm-model-${{ inputs.mode }}${{ inputs.mode == 'trial' && format('-{0}', inputs.reference_nonce) || '' }}
 on:
   workflow_dispatch:
     inputs:
