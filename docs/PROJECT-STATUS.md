@@ -272,6 +272,6 @@ IPA 审计采用分块临时文件和只读映射，避免把大程序整体读�
 - 新运行器 [42548840372](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42548840372) 携带 Cookie 正常刷新认证，未再次输入验证码，下载到 App ID `1530340312` 的 2,500,837 字节中国区原包并验证包身份。原包已清理，未解密、未发 Telegram 文件；刷新后的会话已独立保存。
 - 独立客户端生产任务 [42548393225](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42548393225) 通过 26 项 Swift、Go 封装工具及运行包重定位检查。合成隔离检查增加到 29 项 Python 与 2 项 Node；这些检查不替代实际下载和解密证据。
 - 原令牌跨运行器下载曾在设备证明环节失败，新增 Cookie 刷新路径解决了这个样本的下载。不能承诺永久免验证码。
-- 授权数量摘要接口经默认入口、认证节点和刷新会话检查仍返回 HTTP 500。带原生设备证明的只读查询正在构建验证；尚未初始化中国区模型、占用或撤销电脑授权，也没有加载德国区模型。
+- 授权数量摘要接口经默认入口、认证节点和刷新会话检查仍返回 HTTP 500。原生证明客户端 [42549339540](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42549339540) 通过 29 项 Swift、Go 工具和重定位检查；实际原生查询 [42549763524](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42549763524) 在 Cookie 刷新后仍收到 HTTP 500。当前停在模型初始化所需的授权数量前置检查；没有初始化中国区模型、占用或撤销电脑授权，也没有加载德国区模型。
 
 德国区账号、alpha.4 服务、默认线路、现有模型和安全设置保持原样。操作及证据边界见 [CHINA-ACCOUNT.md](CHINA-ACCOUNT.md)。
