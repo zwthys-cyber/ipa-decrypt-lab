@@ -14,6 +14,16 @@ def summarize(result):
     for domain in ("StoreAMD","LabKBSyncFailed","LabEntEndpointMissing","LabEntResponse","LabPurchaseUnconfirmed","NSURLErrorDomain"):
         found=re.findall(re.escape(domain)+r"(?: error |, Code=| code: )(-?[0-9]{1,5})(?![0-9])",raw)
         if found:domains[domain]=int(found[-1])
+    trace={}
+    for line in raw.splitlines():
+        match=re.fullmatch(r"IPA_CN_PURCHASE_(HTTP|FAILURE|STATUS):(-?[0-9]{1,7})",line)
+        if match:
+            code=int(match[2])
+            if -999999<=code<=999999:trace[match[1].lower()]=code
+        match=re.fullmatch(r"IPA_CN_PURCHASE_(MESSAGE|ACTION|SUCCESS_TYPE):(true|false)",line)
+        if match:trace[match[1].lower()]=match[2]=="true"
+        match=re.fullmatch(r"IPA_CN_PURCHASE_(PHASE|ROOT):(prepare_request|send_request|parse_response|dictionary|not_dictionary)",line)
+        if match:trace[match[1].lower()]=match[2]
     text=raw.lower()
     patterns={
         "invalid_purchase_response":"invalid purchase response",
@@ -37,7 +47,7 @@ def summarize(result):
             "download_succeeded":result.returncode==0,
             "classification":classify_download(result),
             "diagnostic":safe_failure(result),"native_error_codes":domains,"transport":authentication_diagnostics(result),
-            "error_categories":matches,"stdout_bytes":len((result.stdout or "").encode()),"stderr_bytes":len((result.stderr or "").encode())}
+            "purchase_trace":trace,"error_categories":matches,"stdout_bytes":len((result.stdout or "").encode()),"stderr_bytes":len((result.stderr or "").encode())}
 
 def main():
     original=worker.run_download

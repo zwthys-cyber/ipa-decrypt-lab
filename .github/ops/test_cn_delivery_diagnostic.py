@@ -32,3 +32,9 @@ class HTTPFailurePrivacyTests(unittest.TestCase):
         self.assertEqual(report["transport"]["http_statuses"],[302])
         self.assertEqual(report["error_categories"],["request_failed"])
         self.assertNotIn("PRIVATE",json.dumps(report))
+
+class NativeTracePrivacyTests(unittest.TestCase):
+    def test_native_fixed_response_trace(self):
+        report=summarize(subprocess.CompletedProcess([],1,"IPA_CN_PURCHASE_HTTP:200\nIPA_CN_PURCHASE_FAILURE:-5000\nIPA_CN_PURCHASE_MESSAGE:true\nIPA_CN_PURCHASE_PHASE:parse_response\nIPA_CN_PURCHASE_ROOT:dictionary\nIPA_CN_PURCHASE_PRIVATE:SECRET\n","PRIVATE_EMAIL"))
+        self.assertEqual(report["purchase_trace"],{"http":200,"failure":-5000,"message":True,"phase":"parse_response","root":"dictionary"})
+        self.assertNotIn("PRIVATE",json.dumps(report))
