@@ -1,0 +1,5 @@
+name: Live CN authentication session
+description: Keep the native session alive and publish only its public verification nonce
+runs:
+  using: node24
+  main: index.js

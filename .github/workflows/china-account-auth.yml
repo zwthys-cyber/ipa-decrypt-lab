@@ -24,12 +24,14 @@ jobs:
         with:
           persist-credentials: false
       - name: Test isolated credentials, region binding and sanitized failures without secrets
-        run: python3 -m unittest discover -s .github/ops -p 'test_*.py' -v
+        run: |
+          python3 -m unittest discover -s .github/ops -p 'test_*.py' -v
+          node --test .github/ops/cn_action.test.cjs
   authenticate:
     if: inputs.mode == 'authenticate' && github.ref == 'refs/heads/main'
     needs: contracts
     runs-on: macos-26-intel
-    timeout-minutes: 10
+    timeout-minutes: 12
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
     steps:
@@ -39,7 +41,7 @@ jobs:
       - name: Load exact-source verified runtime without account credentials
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 tools/native_runtime.py fetch --output runtime
+        run: python3 .github/ops/cn_runtime.py fetch cn-runtime
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
@@ -49,14 +51,23 @@ jobs:
             ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/CoreFP.icxs
           key: apple-public-assets-d9c0247-26A434-arm64-v1
       - name: Verify fixed public resources without account access
-        run: runtime/lab-kbsync --prewarm
-      - name: Authenticate CN account once without touching the legacy account
+        run: cn-runtime/lab-kbsync --prewarm
+      - name: Keep CN native session waiting for a live encrypted verification code
         env:
           APPLE_CN_ID: ${{ secrets.APPLE_CN_ID }}
           APPLE_CN_PASSWORD: ${{ secrets.APPLE_CN_PASSWORD }}
-          APPLE_CN_2FA_CODE: ${{ secrets.APPLE_CN_2FA_CODE }}
           APPLE_CN_GUID: ${{ secrets.APPLE_CN_GUID }}
           LEGACY_APPLE_ID: ${{ secrets.APPLE_ID }}
-        run: |
-          ulimit -c 0
-          python3 .github/ops/china_auth.py runtime/ApplePackageTool
+          DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
+          GH_TOKEN: ${{ github.token }}
+        uses: ./.github/actions/cn-auth
+      - name: Publish only sanitized receipt and GitHub-recipient-sealed session
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: cn-auth-result-${{ github.run_id }}
+          path: |
+            cn-auth-receipt.json
+            cn-session-secret-relay.json
+          retention-days: 1
+          if-no-files-found: ignore
