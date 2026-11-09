@@ -254,5 +254,5 @@ def main():
     report.update(run_id=os.environ.get('GITHUB_RUN_ID'),source_commit=os.environ.get('GITHUB_SHA'))
     Path('cn-model-receipt.json').write_text(json.dumps(report));print(json.dumps(report),flush=True)
     # A preserved authenticated checkpoint is a completed stage, never a claim of recovered model.
-    return 0 if report.get('existing_checkpoint_validated') is True and report.get('session_secret_prepared') is True or report.get('status')=='cn_native_preflight_ready' or report.get('model_secret_prepared') is True or report.get('checkpoint_saved') is True and report.get('session_secret_prepared') is True and report.get('guid_secret_prepared') is True else 2
+    return 0 if report.get('status')=='cn_replay_session_saved_recovery_pending' and report.get('existing_checkpoint_validated') is True and report.get('session_secret_prepared') is True or report.get('status')=='cn_native_preflight_ready' or report.get('model_secret_prepared') is True or report.get('checkpoint_saved') is True and report.get('session_secret_prepared') is True and report.get('guid_secret_prepared') is True else 2
 if __name__=='__main__':raise SystemExit(main())

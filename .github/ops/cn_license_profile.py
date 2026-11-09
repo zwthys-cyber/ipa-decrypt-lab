@@ -2,6 +2,8 @@
 import base64
 from pathlib import Path
 import struct
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'tools'))
 import private_fairplay_state as checkpoint
 
 class LicenseProfileError(ValueError):pass
