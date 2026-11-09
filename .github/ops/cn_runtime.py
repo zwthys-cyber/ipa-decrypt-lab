@@ -17,7 +17,7 @@ from telegram_queue import GitHub
 WORKFLOW='.github/workflows/cn-auth-runtime.yml'
 def fingerprint(root=Path('.')):
     root=Path(root);h=hashlib.sha256(bytes.fromhex(base_fingerprint(root)))
-    for name in [WORKFLOW,'.github/ops/ChinaLogin.swift','.github/ops/LabCNLoginFlow.swift','.github/ops/LabCNLoginFlowTests.swift','.github/ops/patch_cn_login.py','.github/ops/cn_session_seal.go','.github/ops/cn_session_seal_test.go','.github/ops/LabCNSummary.swift','.github/ops/LabCNSummaryTests.swift']:
+    for name in [WORKFLOW,'.github/ops/ChinaLogin.swift','.github/ops/LabCNLoginFlow.swift','.github/ops/LabCNLoginFlowTests.swift','.github/ops/patch_cn_login.py','.github/ops/cn_session_seal.go','.github/ops/cn_session_seal_test.go','.github/ops/LabCNSummary.swift','.github/ops/LabCNSummaryTests.swift','.github/ops/cn_model_seal.go','.github/ops/cn_model_seal_test.go']:
         h.update(name.encode()+b'\0');h.update(bytes.fromhex(digest(root/name)))
     return h.hexdigest()
 
@@ -43,7 +43,7 @@ def pack(root=Path('.')):
     unpack(target,root/'relocated-cn-runtime',manifest['fingerprint'],'macos-26-intel',manifest['commit'],manifest['run_id'])
     print(json.dumps({'schema':'cn-auth-runtime-build-v1','fingerprint':manifest['fingerprint'],'files':len(files)}))
 
-def fetch(destination):
+def fetch(destination,model_support=False):
     if host_pool()!='macos-26-intel':raise ValueError('CN runtime platform')
     client=GitHub(os.environ['GH_TOKEN']);stamp=fingerprint();name='cn-auth-runtime-macos-26-intel-'+stamp
     items=client.call('/actions/artifacts?per_page=20&name='+name).get('artifacts',[])
@@ -79,10 +79,27 @@ def fetch(destination):
                 if len(entries)!=1 or entries[0].filename!='cn-session-seal' or not 0<entries[0].file_size<=32*1024*1024:raise ValueError('CN sealer inventory')
                 with zipped.open(entries[0]) as src,(Path(destination)/'cn-session-seal').open('xb') as dst:shutil.copyfileobj(src,dst,1024*1024)
                 (Path(destination)/'cn-session-seal').chmod(0o755)
+        if model_support:
+            support_name='cn-model-support-macos-26-intel-'+stamp
+            candidates=client.call('/actions/runs/'+str(run['id'])+'/artifacts?per_page=100').get('artifacts',[])
+            candidates=[x for x in candidates if x.get('name')==support_name and x.get('expired') is False]
+            if len(candidates)!=1:raise ValueError('CN model support missing')
+            support=candidates[0]
+            if not re.fullmatch('sha256:[a-f0-9]{64}',support.get('digest','')) or not 0<support.get('size_in_bytes',0)<=64*1024*1024:raise ValueError('CN model support bounds')
+            with tempfile.TemporaryDirectory() as directory:
+                path=Path(directory)/'support.zip';client.archive(support['id'],path,max_bytes=64*1024*1024)
+                if 'sha256:'+digest(path)!=support['digest']:raise ValueError('CN model support digest')
+                with zipfile.ZipFile(path) as zipped:
+                    entries=zipped.infolist();expected={'native-machine-enrollment','libNativeImportIO.dylib','native-device-identity','cn-model-seal'}
+                    if len(entries)!=4 or {x.filename for x in entries}!=expected or any(not 0<x.file_size<=32*1024*1024 or x.flag_bits&1 for x in entries):raise ValueError('CN model support inventory')
+                    for entry in entries:
+                        target=Path(destination)/entry.filename
+                        with zipped.open(entry) as src,target.open('xb') as dst:shutil.copyfileobj(src,dst,1024*1024)
+                        target.chmod(0o755)
         print(json.dumps({'schema':'cn-auth-runtime-fetch-v1','producer':run['id'],'fingerprint':stamp}));return
     raise ValueError('validated_CN_runtime_missing')
 
 if __name__=='__main__':
     if sys.argv[1]=='pack':pack()
     elif sys.argv[1]=='fingerprint':print(fingerprint())
-    else:fetch(Path(sys.argv[2]))
+    else:fetch(Path(sys.argv[2]),model_support='--model-support' in sys.argv[3:])

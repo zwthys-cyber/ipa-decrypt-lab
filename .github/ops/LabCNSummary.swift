@@ -3,6 +3,7 @@ import CoreFoundation
 import Foundation
 
 public enum LabCNSummary {
+    static let userAgent = "Configurator/2.17 (Macintosh; OS X 15.2; 24C5089c) AppleWebKit/0620.1.16.11.6"
     static let path = "/account/v1/summary/graphql"
     static let body = Data(#"{"query":"query requestAccountSummary { authorizations { authorizedComputers } }"}"#.utf8)
     static func endpoint(pod: String?) throws -> URL {
@@ -35,7 +36,7 @@ public enum LabCNSummary {
         guard account.store == "143465" else { throw NSError(domain: "CNSummaryInput", code: 2) }
         let url = try endpoint(pod: account.pod)
         var headers = [("Content-Type", "application/json; charset=UTF-8"), ("Accept", "application/json"),
-            ("Accept-Encoding", "identity"), ("User-Agent", Configuration.userAgent),
+            ("Accept-Encoding", "identity"), ("User-Agent", userAgent),
             ("X-Dsid", account.directoryServicesIdentifier), ("iCloud-DSID", account.directoryServicesIdentifier),
             ("X-Token", account.passwordToken), ("X-Apple-Store-Front", account.labStoreFront ?? "143465-1")]
         headers += account.cookie.buildCookieHeader(url)

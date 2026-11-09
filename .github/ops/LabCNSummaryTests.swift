@@ -24,6 +24,7 @@ final class LabCNSummaryTests: XCTestCase {
         }
     }
     func testBodyIsOnlyTheReadOnlyCountQuery() throws {
+        XCTAssertTrue(LabCNSummary.userAgent.hasPrefix("Configurator/2.17 "))
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: LabCNSummary.body) as? [String: String])
         XCTAssertEqual(json, ["query": "query requestAccountSummary { authorizations { authorizedComputers } }"])
     }

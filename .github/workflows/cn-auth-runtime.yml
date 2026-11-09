@@ -70,6 +70,22 @@ jobs:
           cd native-source/age
           go test -p 2 -timeout 120s ./cmd/lab-cn-session-seal
           go build -p 2 -trimpath -o ../../cn-session-seal ./cmd/lab-cn-session-seal
+          mkdir -p cmd/lab-cn-model-seal
+          cp ../../.github/ops/cn_model_seal.go cmd/lab-cn-model-seal/main.go
+          cp ../../.github/ops/cn_model_seal_test.go cmd/lab-cn-model-seal/main_test.go
+          go test -p 2 -timeout 120s ./cmd/lab-cn-model-seal
+          go build -p 2 -trimpath -o ../../cn-model-seal ./cmd/lab-cn-model-seal
+      - name: Build and verify native model prerequisites without any account
+        run: |
+          clang -dynamiclib -Wall -Wextra tools/NativeImportIO.c -install_name @rpath/libNativeImportIO.dylib -o libNativeImportIO.dylib
+          clang -fobjc-arc -DLAB_IMPORT_IO -framework Foundation tools/NativeMachineEnrollment.m -L. -lNativeImportIO -Wl,-rpath,@executable_path -o native-machine-enrollment
+          native_machine_path="$PWD/native-machine-enrollment"
+          "$native_machine_path" --io-contract
+          "$native_machine_path" --response-contract
+          swiftc native-source/ApplePackage/Sources/ApplePackage/Configuration/DeviceIdentifier.swift tools/NativeDeviceIdentity.swift -o native-device-identity
+          python3 tools/commerce_enrollment_preflight.py
+          mkdir cn-model-support
+          cp native-machine-enrollment libNativeImportIO.dylib native-device-identity cn-model-seal cn-model-support/
       - name: Identify CN source fingerprint
         id: source
         run: echo "fingerprint=$(python3 .github/ops/cn_runtime.py fingerprint)" >> "$GITHUB_OUTPUT"
@@ -92,6 +108,13 @@ jobs:
         with:
           name: cn-session-sealer-macos-26-intel-${{ steps.source.outputs.fingerprint }}
           path: cn-session-seal
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: cn-model-support-macos-26-intel-${{ steps.source.outputs.fingerprint }}
+          path: cn-model-support/*
           retention-days: 7
           compression-level: 0
           if-no-files-found: error

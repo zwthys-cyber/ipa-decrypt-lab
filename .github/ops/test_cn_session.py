@@ -21,6 +21,7 @@ class CNSavedSessionContracts(unittest.TestCase):
         def fetch(session):
             request=make_request('https://buy.itunes.apple.com/account/v1/summary/graphql',session)
             self.assertEqual(request.data,BODY);self.assertEqual(request.get_header('X-token'),'PRIVATE_TOKEN')
+            self.assertTrue(request.get_header('User-agent').startswith('Configurator/2.17 '))
             self.assertNotIn('PRIVATE_PASSWORD',str(request.headers));self.assertEqual(session['guid'],'001122AABBCC')
             return {'status':'computer_count_observed','computer_count_observed':True,'store_session_authenticated':True,'http_status':200,'authorized_computers':2}
         capture=io.StringIO()

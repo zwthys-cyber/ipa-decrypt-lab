@@ -50,18 +50,18 @@ def query(env,fetch=None):
     previous=summary.ENDPOINT
     try:
         if pod:summary.ENDPOINT='https://p'+pod+'-buy.itunes.apple.com/account/v1/summary/graphql'
-        result=(fetch or fetch_summary)(session)
+        result=(fetch or fetch_summary)(dict(session,user_agent=summary.UA))
     finally:summary.ENDPOINT=previous
     success=(result.get('status')=='computer_count_observed' and result.get('computer_count_observed') is True
              and result.get('store_session_authenticated') is True and result.get('http_status')==200
              and type(result.get('authorized_computers')) is int and 0<=result['authorized_computers']<=5)
     report={'schema':'cn-session-reuse-v1','status':'session_reused' if success else 'saved_session_query_failed',
-            'session_reused':success,'country_bound':'cn','pod_route_used':bool(pod),'login_attempted':False,'verification_code_used':False,
+            'session_reused':success,'country_bound':'cn','query_client':'legacy_account_summary','pod_route_used':bool(pod),'login_attempted':False,'verification_code_used':False,
             'machine_authorization_attempted':False,'deauthorization_attempted':False,'downloaded':False}
     statuses={'computer_count_observed','apple_request_refused','graphql_errors','http_refused','computer_count_not_returned','response_not_structured','response_shape_unexpected','unexpected_unauthenticated_count','redirect_blocked','response_oversized','transport_failed','query_failed'}
     report['query_status']=result.get('status') if result.get('status') in statuses else 'unknown'
     for key in ('session_cookie_header_present','login_user_agent_preserved','graphql_errors_present','error_mentions_authentication','error_mentions_unknown_field'):
-        if type(result.get(key)) is bool:report[key]=result[key]
+        if type(result.get(key)) is bool:report['query_user_agent_preserved' if key=='login_user_agent_preserved' else key]=result[key]
     for key in ('apple_failure_code','graphql_error_count'):
         if type(result.get(key)) is int and -999999<=result[key]<=999999:report[key]=result[key]
     if success:report['authorized_computers']=result['authorized_computers']
