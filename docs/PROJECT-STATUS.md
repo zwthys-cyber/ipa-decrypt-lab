@@ -1,10 +1,16 @@
 # 项目进展
 
+## 文档全量复核与 alpha.5 附件更新（2026-11-09）
+
+[发布42720498732](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42720498732) 已更新 alpha.5 的3个项目成品包和8个附件。服务器 build-only 来源为42720309329/源码 `6fa96e8b4ec7500fad84638dde333c4174c04b30`，两个 Intel 包复用源码指纹完全匹配的42714903141。原发布标签保留，新附件来源由 BUILDINFO.json 与包内 SOURCE_COMMIT 明确记录。25份 Markdown 的内部文件链接和包内清单/源码/摘要检查通过；公开来源清单、校验和及7个被校验附件的 GitHub 摘要已读回核对。
+
+README 最新验证日期已同步到11月9日；历史研究页的当前版本入口、多用户 TF 权限、下载/认证独立路线、VPS密文例外和恢复状态清单均已复核。此次只重新发布项目组件，未部署/重启服务、调用 Apple 或发送IPA。线上仍为下述 d53f7def 部署，详情见 [发布说明](RELEASES.md)。
+
 ## TestFlight 自动任务已接入生产（2026-11-09）
 
 主人私聊中的 TF 邀请链接现进入独立 `tf_` 队列，后台恢复持久会话、检查并在必要时接受一次邀请、下载可用 iOS 测试构建，完整明文验证后交给原有私聊交付链路。其他白名单用户仍仅使用 App Store 路线；两条既有地区账号与历史版本行为保留。
 
-[修正版部署 42710092658](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42710092658) 通过 Ubuntu/Debian 13 各492项 Python（各1跳过）、Node/Go、真实 systemd 凭据挂载及运行包门禁，并确认服务健康。此前首版部署漏导入了 `app_from_run`，新增自动交付集成测试发现并修复；不要把首版健康检查当成自动交付已验证。修正版生产控制器源码为 `f6ace388a5a25aa75df3781455fade18c6553851`。
+[修正版部署 42710092658](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42710092658) 通过 Ubuntu/Debian 13 各492项 Python（各1跳过）、Node/Go、真实 systemd 凭据挂载及运行包门禁，并确认服务健康。此前首版部署漏导入了 `app_from_run`，新增自动交付集成测试发现并修复；不要把首版健康检查当成自动交付已验证。该阶段修正版控制器源码为 `f6ace388a5a25aa75df3781455fade18c6553851`；后续 Beta 命名部署来源见下文。
 
 [最终通用 worker 验证 42712411043](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42712411043) 在源码 `c60aff3648cecf0b315a112c102f9e92ca25db84` 通过15项 TF 专项与4项 Node 检查后，实际恢复会话、确认资格、下载并完成1个镜像/148页的明文证明。没有新接受邀请、电脑授权或重复发文件。自动接收器的合成集成检查覆盖正确主人投递、错误邀请/账号拒绝，以及仍加密输出的拦截；本轮没有伪造 Telegram 用户新消息来再发一次旧文件。
 

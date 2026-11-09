@@ -47,7 +47,7 @@ macOS 可用 `shasum -a 256 文件名`，再与清单中对应条目比较。只
 3. 运行 `publish-release.yml`，填写 `vps_run` 和 `native_run`。前者必须来自当前发布提交的成功 build-only 运行，后者必须是成功的 main 分支原生运行包构建。
 4. 发布器独立校验生产工作流身份、平台、源码指纹、artifact ZIP 摘要、包内清单、源码内容和许可证；验证后才创建草稿、上传附件并公开预览版；本次按用户要求刷新已有 alpha.5 时，保留原源码标签，校验通过后替换同名附件及发布说明。附件 `BUILDINFO.json` 和包内 `SOURCE_COMMIT` 是新包来源，不能用旧标签代替。
 
-本版原生构建证据为 [42542616831](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42542616831)，最新来源以附件 BUILDINFO.json 为准。历史原生登录修复构建为 [42439002658](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439002658)。X 的[真实下载及完整解密验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)通过 32 个加密切片和 86,704 页。它不等于安装运行验证，也不是发布应用 IPA；Release 只提供项目运行组件。
+本次重打包已由 [发布42720498732](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42720498732) 完成：服务器成品来自 [build-only42720309329](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42720309329)，源码 `6fa96e8b4ec7500fad84638dde333c4174c04b30`；两个 Intel 包来自 [42714903141](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42714903141)，源码指纹与当前工具一致。25份 Markdown 内部文件链接、3个包清单及摘要均已通过校验，8个公开附件已更新。新包来源以附件 BUILDINFO.json 为准，原标签保留。历史原生登录修复构建为 [42439002658](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439002658)。X 的[真实下载及完整解密验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)通过 32 个加密切片和 86,704 页。它不等于安装运行验证，也不是发布应用 IPA；Release 只提供项目运行组件。
 
 ## main 的后续进度升级与构建依赖
 
