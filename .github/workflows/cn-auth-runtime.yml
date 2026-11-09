@@ -37,7 +37,7 @@ jobs:
         id: swift
         with:
           path: native-source/ApplePackage/.build
-          key: cn-live-auth-macos26-x64-xcode26.2-${{ hashFiles('.github/ops/ChinaLogin.swift', '.github/ops/LabCNLoginFlow.swift', '.github/ops/LabCNLoginFlowTests.swift', '.github/ops/patch_cn_login.py', 'tools/patch_swift_diagnostics.py', 'tools/patch_ent_download.py', 'tools/StoreAMD.swift', 'tools/StoreBagTransport.m') }}
+          key: cn-live-auth-macos26-x64-xcode26.2-${{ hashFiles('.github/ops/ChinaLogin.swift', '.github/ops/LabCNSummary.swift', '.github/ops/LabCNSummaryTests.swift', '.github/ops/LabCNLoginFlow.swift', '.github/ops/LabCNLoginFlowTests.swift', '.github/ops/patch_cn_login.py', 'tools/patch_swift_diagnostics.py', 'tools/patch_ent_download.py', 'tools/StoreAMD.swift', 'tools/StoreBagTransport.m') }}
           restore-keys: |
             cn-live-auth-macos26-x64-xcode26.2-
             swift-macos26-X64-xcode26.2-391bfe6-
@@ -45,7 +45,7 @@ jobs:
         working-directory: native-source/ApplePackage
         run: |
           swift build -j 4 --build-tests
-          swift test --skip-build --filter 'SAPAuthenticationRequestTests|LabEntDownloadTests|LabAuthRouteTests|LabStoreAMD|LabCNLoginFlowTests'
+          swift test --skip-build --filter 'SAPAuthenticationRequestTests|LabEntDownloadTests|LabAuthRouteTests|LabStoreAMD|LabCNLoginFlowTests|LabCNSummaryTests'
           swift build -j 4 --product ApplePackageTool
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         if: steps.swift.outputs.cache-hit != 'true'
@@ -80,6 +80,7 @@ jobs:
           relocated-cn-runtime/ApplePackageTool --help
           relocated-cn-runtime/ApplePackageTool login-cn --help
           relocated-cn-runtime/ApplePackageTool resume-cn --help
+          relocated-cn-runtime/ApplePackageTool summary-cn --help
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: cn-auth-runtime-macos-26-intel-${{ steps.source.outputs.fingerprint }}

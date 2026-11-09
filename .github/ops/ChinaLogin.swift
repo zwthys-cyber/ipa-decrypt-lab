@@ -48,3 +48,18 @@ struct ChinaResume: AsyncParsableCommand, Sendable {
         print("IPA_CN_RESUME:authenticated")
     }
 }
+
+struct ChinaSummary: AsyncParsableCommand, Sendable {
+    static let configuration = CommandConfiguration(commandName: "summary-cn", abstract: "Read the CN authorized-computer count with native Store proofs")
+    @OptionGroup var globalOptions: GlobalOptions
+    @Argument var email: String
+    func run() async throws {
+        globalOptions.apply()
+        let address = email
+        let count = try await Configuration.withAccount(email: address) { account in
+            guard account.email.lowercased() == address.lowercased() else { throw ValidationError("CN session binding failed") }
+            return try await LabCNSummary.query(account: account)
+        }
+        print("IPA_CN_SUMMARY:COUNT:" + String(count))
+    }
+}

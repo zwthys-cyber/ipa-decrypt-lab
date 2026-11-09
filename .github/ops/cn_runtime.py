@@ -17,7 +17,7 @@ from telegram_queue import GitHub
 WORKFLOW='.github/workflows/cn-auth-runtime.yml'
 def fingerprint(root=Path('.')):
     root=Path(root);h=hashlib.sha256(bytes.fromhex(base_fingerprint(root)))
-    for name in [WORKFLOW,'.github/ops/ChinaLogin.swift','.github/ops/LabCNLoginFlow.swift','.github/ops/LabCNLoginFlowTests.swift','.github/ops/patch_cn_login.py','.github/ops/cn_session_seal.go','.github/ops/cn_session_seal_test.go']:
+    for name in [WORKFLOW,'.github/ops/ChinaLogin.swift','.github/ops/LabCNLoginFlow.swift','.github/ops/LabCNLoginFlowTests.swift','.github/ops/patch_cn_login.py','.github/ops/cn_session_seal.go','.github/ops/cn_session_seal_test.go','.github/ops/LabCNSummary.swift','.github/ops/LabCNSummaryTests.swift']:
         h.update(name.encode()+b'\0');h.update(bytes.fromhex(digest(root/name)))
     return h.hexdigest()
 
