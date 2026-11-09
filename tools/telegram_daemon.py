@@ -14,6 +14,7 @@ from telegram_runtime import local_bot
 from telegram_controller import Controller, owner_id, event
 from telegram_menu import configure, HOME_TEXT, show_menu
 from persistent_journal import PersistentJournal
+from multi_user import MultiUserService
 from capacity import MIN_FREE_BYTES
 
 KEYS={"TELEGRAM_BOT_TOKEN","TELEGRAM_OWNER_ID","TELEGRAM_API_ID",
@@ -94,6 +95,7 @@ def main():
     root.mkdir(parents=True,mode=0o700,exist_ok=True)
     lock=(root/"controller.lock").open("a")
     journal=None
+    controller=None
     pulse_stop=None
     pulse_thread=None
     try:
@@ -127,8 +129,8 @@ def main():
         base=Path(__file__).resolve().parents[1]
         heartbeat(root/"health.json","starting")
         with local_bot(base/"bin/telegram-bot-api",state_directory=root/"telegram") as bot:
-            controller=ServerController(bot,github,owner,str(base/"bin/delivery-crypt"),
-                os.environ["TELEGRAM_BOT_TOKEN"],journal=journal,submission_limit=cap)
+            controller=MultiUserService(bot,github,owner,str(base/"bin/delivery-crypt"),
+                os.environ["TELEGRAM_BOT_TOKEN"],journal,cap,ServerController)
             # Accept queued owner messages from at most the last day; SQLite prevents replay.
             controller.started=time.time()-86400
             event(**configure(bot,owner))
@@ -188,6 +190,7 @@ def main():
     finally:
         if pulse_stop is not None: pulse_stop.set()
         if pulse_thread is not None: pulse_thread.join(timeout=1)
+        if isinstance(controller,MultiUserService): controller.close()
         if journal is not None:
             journal.close()
         lock.close()

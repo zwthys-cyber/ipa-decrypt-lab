@@ -15,7 +15,7 @@ permissions:
   contents: write
   actions: read
 concurrency:
-  group: public-release-v0.1.0-alpha.3
+  group: public-release-v0.1.0-alpha.4
   cancel-in-progress: false
 jobs:
   publish:
@@ -73,7 +73,7 @@ jobs:
           out=Path("release-assets")
           out.mkdir()
           client=GitHub(os.environ["GH_TOKEN"])
-          info={"schema":"ipa-lab-release-v1","tag":"v0.1.0-alpha.3","source_commit":sha,"packages":[]}
+          info={"schema":"ipa-lab-release-v1","tag":"v0.1.0-alpha.4","source_commit":sha,"packages":[]}
           def digest(path):
               with path.open("rb") as stream:
                   return hashlib.file_digest(stream,"sha256").hexdigest()
@@ -111,7 +111,7 @@ jobs:
               artifact=download(vps,"vps-controller-"+sha,folder)
               packed=folder/"vps-controller.tar.gz"
               assert digest(packed)==(folder/"vps-controller.sha256").read_text().split()[0]
-              modules="version_catalog app_presentation version_request app_preflight capacity telegram_daemon persistent_journal telegram_controller telegram_runtime telegram_api telegram_menu telegram_queue task_progress delivery_scheduler ipa_audit".split()
+              modules="version_catalog app_presentation version_request app_preflight capacity telegram_daemon multi_user persistent_journal telegram_controller telegram_runtime telegram_api telegram_menu telegram_queue task_progress delivery_scheduler ipa_audit".split()
               sourcefiles={"tools/"+m+".py" for m in modules}|{"deploy/ipazake.service","deploy/install.sh","deploy/prune_releases.py"}
               expected_files=sourcefiles|{"SOURCE_COMMIT","bin/telegram-bot-api","bin/delivery-crypt"}
               seen=set()
@@ -153,6 +153,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v0.1.0-alpha.3 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "v0.1.0-alpha.3 — 进度与导出加速版" --notes-file docs/releases/v0.1.0-alpha.3.md --draft --prerelease
-          gh release upload v0.1.0-alpha.3 release-assets/* --repo "$GITHUB_REPOSITORY"
-          gh release edit v0.1.0-alpha.3 --repo "$GITHUB_REPOSITORY" --draft=false --prerelease
+          gh release create v0.1.0-alpha.4 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "v0.1.0-alpha.4 — 多用户白名单版" --notes-file docs/releases/v0.1.0-alpha.4.md --draft --prerelease
+          gh release upload v0.1.0-alpha.4 release-assets/* --repo "$GITHUB_REPOSITORY"
+          gh release edit v0.1.0-alpha.4 --repo "$GITHUB_REPOSITORY" --draft=false --prerelease

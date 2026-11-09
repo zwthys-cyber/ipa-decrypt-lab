@@ -31,7 +31,7 @@ def show_menu(bot,owner,page="home",message_id=None):
               "/get 任务编号 取回已完成文件\n"
               "/id 查看自己的数字 ID\n\n"
               "仅支持美区免费应用，文件最大 2000 MB。\n"
-              "当前仅管理员私聊可用。")
+              "仅已获授权用户私聊可用。")
         buttons=[[{"text":"‹ 返回","callback_data":"menu:home"}]]
     payload={"chat_id":owner,"text":text,"reply_markup":{"inline_keyboard":buttons},
              "link_preview_options":{"is_disabled":True}}

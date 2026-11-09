@@ -42,7 +42,8 @@ def event(status, **fields):
     print(json.dumps({"schema":"telegram-session-v1","status":status,**fields}),flush=True)
 
 class Controller:
-    def __init__(self, bot, github, owner, crypt, token, journal=None, submission_limit=3):
+    def __init__(self, bot, github, owner, crypt, token, journal=None, submission_limit=3, *, admission=None, authorization=None, strict_ownership=False):
+        self.admission,self.authorization,self.strict_ownership=admission,authorization,strict_ownership
         self.submission_limit = submission_limit
         self.journal = journal
         self.bot,self.github,self.owner,self.crypt,self.token = bot,github,owner,crypt,token
@@ -170,6 +171,9 @@ class Controller:
                 self.say("当前没有可取消的任务。")
                 return
             rid = self.current["rid"]
+            if self.strict_ownership and (self.journal is None or rid not in self.journal.records):
+                self.say("找不到属于你的任务。")
+                return
             self.record(rid,"cancelled")
             self.current = None
             self.github.cancel(rid)
@@ -212,6 +216,8 @@ class Controller:
         if self.journal is not None and rid in self.journal.records:
             self.say("这个请求已记录，请用 /status 或 /get 查询。")
             return
+        if callable(self.admission) and not self.admission("export"):
+            return
         self.say("正在检查美区上架情况、价格和容量…")
         try:
             if version:
@@ -242,6 +248,15 @@ class Controller:
             event("dispatch_outcome_unknown",request_id=rid)
 
     def deliver(self,rid):
+        if callable(self.authorization) and not self.authorization():
+            self.say("授权已失效，请联系管理员。")
+            return False
+        if self.strict_ownership and (self.journal is None or rid not in self.journal.records):
+            self.say("找不到属于你的任务。")
+            return False
+        if self.strict_ownership and self.current is not None:
+            self.say("任务仍在处理中，请用 /status 查询，完成后再取回。")
+            return False
         card=self.card(rid)
         stage="retrieving"
         upload_started=False
@@ -283,6 +298,9 @@ class Controller:
         return False
 
     def resume(self,rid,app=""):
+        if self.strict_ownership and (self.journal is None or rid not in self.journal.records):
+            self.say("找不到属于你的任务。")
+            return
         run=self.github.find(rid)
         if self.journal is not None:
             prior=self.journal.records.get(rid,{})

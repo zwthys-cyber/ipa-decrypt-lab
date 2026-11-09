@@ -163,6 +163,9 @@ class VersionBrowser:
         if len(queries)>=20 or (queries and now-queries[-1]<interval):
             self.c.say("版本查询较频繁，请稍后再试。缓存列表可直接翻页。")
             return
+        admission=getattr(self.c,"admission",None)
+        if callable(admission) and not admission("catalog"):
+            return
         self.c.github.preflight_app(app,historical=True)
         rid=self.query_id(app,update_id,before or "first")
         view=self.state.get("view")
