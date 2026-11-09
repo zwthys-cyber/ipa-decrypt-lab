@@ -7,7 +7,7 @@ from cn_arm_policy import snapshot,validate_backup,allow_reference,CNReferenceEr
 import test_cn_session
 class CNARMReferenceBoundary(unittest.TestCase):
     def setUp(self):
-        fixture=test_cn_session.CNSavedSessionContracts();fixture.setUp();self.env=dict(fixture.env)
+        fixture=test_cn_session.CNSavedSessionContracts();fixture.setUp();self.env=fixture.env()
         checkpoint={'schema':'ipa-lab-private-fairplay-state-v1','hardware':base64.b64encode(bytes.fromhex(fixture.value['guid'])).decode(),'files':{'fpsd_sidb':base64.b64encode(b'SYNTHETIC_STATE').decode()}}
         self.env['FAIRPLAY_CN_STATE_B64']=base64.b64encode(json.dumps(checkpoint).encode()).decode()
         self.env.update(GITHUB_ACTIONS='true',GITHUB_REPOSITORY='zwthys-cyber/ipa-decrypt-lab',GITHUB_WORKFLOW_REF='zwthys-cyber/ipa-decrypt-lab/.github/workflows/cn-arm-model-bootstrap.yml@refs/heads/main',GITHUB_REF='refs/heads/main',GITHUB_EVENT_NAME='workflow_dispatch',GITHUB_RUN_ATTEMPT='1',CN_REFERENCE_ACK='true',CN_REFERENCE_NONCE='b'*32,GITHUB_SHA='a'*40,CN_MODEL_STATE_PRESENT='true')
