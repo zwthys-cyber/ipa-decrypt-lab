@@ -1,0 +1,68 @@
+name: Verify CN saved-session download
+run-name: CN-download-${{ inputs.mode }}
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Validate a small free CN sample, or download it privately using the saved session
+        type: choice
+        default: preflight
+        options: [preflight, download]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: china-account-onboarding
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-26-intel
+    timeout-minutes: 12
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Test CN isolation and download cleanup without secrets
+        run: |
+          python3 -m unittest discover -s .github/ops -p 'test_*.py' -v
+          node --test .github/ops/cn_action.test.cjs
+      - name: Check small free CN sample before account secrets
+        run: python3 .github/ops/cn_download_probe.py --metadata
+      - name: Fetch verified public CN runtime before account secrets
+        if: inputs.mode == 'download'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/ops/cn_runtime.py fetch cn-runtime
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        if: inputs.mode == 'download'
+        with:
+          path: |
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/AppleMediaServices
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/commerce
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/CoreFP
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/CoreFP.icxs
+          key: apple-public-assets-d9c0247-26A434-arm64-v1
+      - name: Verify public helper resources
+        if: inputs.mode == 'download'
+        run: cn-runtime/lab-kbsync --prewarm
+      - name: Download one original without login or machine enrollment
+        if: inputs.mode == 'download'
+        env:
+          APPLE_CN_ID: ${{ secrets.APPLE_CN_ID }}
+          APPLE_CN_GUID: ${{ secrets.APPLE_CN_GUID }}
+          APPLE_CN_SESSION_B64: ${{ secrets.APPLE_CN_SESSION_B64 }}
+          LAB_KBSYNC_HELPER: ${{ github.workspace }}/cn-runtime/lab-kbsync
+        run: |
+          ulimit -c 0
+          python3 .github/ops/cn_download_probe.py --binary cn-runtime/ApplePackageTool
+      - name: Publish only a sanitized receipt
+        if: always() && inputs.mode == 'download'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: cn-download-receipt-${{ github.run_id }}
+          path: cn-download-receipt.json
+          retention-days: 1
+          if-no-files-found: ignore
