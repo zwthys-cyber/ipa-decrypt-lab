@@ -160,6 +160,7 @@ def trial(runtime,env,mode,report,reference_enrollment=False):
                 prepared=clean(json.loads(prepared_path.read_text()));report['native_preflight']=prepared
                 report['checkpoint_preflight']=checkpoint_preflight(guid)
                 before=collect();gate(count,profile,prepared,before)
+                if reference_enrollment:allow_reference(env)
                 native_report=root/'enrollment.json';native_input=json.dumps(payload(value,account,guid)).encode()
                 report['stage']='authorizing'
                 report['authorization_outcome_uncertain']=True

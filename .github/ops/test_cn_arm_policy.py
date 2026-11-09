@@ -30,3 +30,12 @@ class CNARMReferenceBoundary(unittest.TestCase):
         value=validate_backup(self.env);self.assertEqual(value['schema'],'cn-arm-prior-profile-v1')
         env=dict(self.env);backup=copy.deepcopy(value);backup['state_b64']=base64.b64encode(b'PRIVATE_OTHER_STATE').decode();env['CN_RECOVERY_BACKUP_B64']=base64.b64encode(json.dumps(backup).encode()).decode()
         with self.assertRaises(Exception):validate_backup(env)
+
+class CNStandardTrialStaysClosed(unittest.TestCase):
+    def test_saved_checkpoint_or_missing_reference_approval_never_reaches_authentication(self):
+        from pathlib import Path
+        from cn_model import trial,base
+        with patch('cn_model.decode') as decode,patch('cn_model.live') as live:
+            for reference in (False,True):
+                with self.assertRaises(Exception):trial(Path('/public'),{'CN_MODEL_STATE_PRESENT':'true'},'trial',base(),reference_enrollment=reference)
+            decode.assert_not_called();live.assert_not_called()

@@ -7,9 +7,15 @@ from pathlib import Path
 import signal
 import tempfile
 from cn_model import base,trial,private,public_preflight
-from cn_arm_policy import snapshot,allow_reference
+from cn_arm_policy import snapshot,allow_reference,validate_backup
+from telegram_queue import failure_kind
 
 def backup(runtime,env):
+    if env.get('CN_BACKUP_VERIFY_REQUIRED')=='true' or env.get('CN_RECOVERY_BACKUP_B64'):
+        validate_backup(env)
+        return {'schema':'cn-arm-backup-receipt-v1','status':'cn_prior_profile_backup_verified',
+            'checkpoint_validated':True,'session_guid_bound':True,'backup_roundtrip_verified':True,
+            'authorization_request_attempted':False,'deauthorization_attempted':False,'login_attempted':False,'model_recovered':False}
     value=snapshot(env)
     with tempfile.TemporaryDirectory(prefix='cn-prior-profile-private-') as directory:
         root=Path(directory);root.chmod(0o700);path=root/'backup.json'
@@ -37,12 +43,12 @@ def main():
         else:
             if a.mode=='trial':allow_reference(env)
             trial(runtime,env,a.mode,report,reference_enrollment=a.mode=='trial')
-    except Exception:
-        report.update(status='cn_arm_operation_stopped',private_details_published=False)
+    except Exception as error:
+        report.update(status='cn_arm_operation_stopped',private_details_published=False,failure_kind=failure_kind(error))
     report.update(run_id=env.get('GITHUB_RUN_ID'),source_commit=env.get('GITHUB_SHA'))
     name='cn-arm-backup-receipt.json' if a.mode=='backup' else 'cn-model-receipt.json'
     Path(name).write_text(json.dumps(report));print(json.dumps(report),flush=True)
-    ready=report.get('status') in ('cn_arm_public_preflight_ready','cn_prior_profile_backup_prepared')
+    ready=report.get('status') in ('cn_arm_public_preflight_ready','cn_prior_profile_backup_prepared','cn_prior_profile_backup_verified')
     saved=report.get('checkpoint_saved') is True and report.get('session_secret_prepared') is True and report.get('guid_secret_prepared') is True
     replay=report.get('status')=='cn_replay_session_saved_recovery_pending' and report.get('existing_checkpoint_validated') is True and report.get('session_secret_prepared') is True
     return 0 if ready or saved or replay or report.get('model_secret_prepared') is True else 2
