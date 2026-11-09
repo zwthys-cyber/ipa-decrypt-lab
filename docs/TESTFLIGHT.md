@@ -49,3 +49,15 @@
 格式修复后的真实报告为 `tf_native_context_unavailable`：AuthKit 标识字符串长度 36，不能由当前适配器识别为 SDK 要求的 hardware20；Mac 型号可读，机器证明头不可用。不能将 UUID 任意填充或截断后冒充已验证身份，也不能把缺少证明头理解成登录成功。原生就绪门禁按预期停止任务；本次没有挂载账号输入、登录 Apple、接受邀请、取包或交付。
 
 后续需要验证受支持的 Mac 身份映射与机器证明获取方法，再接独立 TestFlight 认证。当前 App Store 机器人运行路线没有修改。原德国区/CN Secrets、FairPlay 模型与授权数没有改变。
+
+## 2026-11-09：原生接口扫描与邀请适配器
+
+[接口验证 42646358995](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42646358995) 在源码 `f2162fbd535962de4f625b64be189b3d1fd0a130` 完成 13 项 Python 测试和 16 项 CTest；原生能力门禁仍按预期失败，因此不能将整个运行标为成功或声称已认证。凭据无关的发现程序自检通过，公开信息仅含类型/长度、框架可用性及框架自身的类/选择器名，不含真实标识、账号或原始框架日志。
+
+实际检查到 AuthKit 字符串长度 36、AMS deviceGUID 字符串长度 12，均不匹配 SDK hardware20。StoreServices 框架可加载，但该运行环境未找到所查 SSDevice 接口。TestFlightCore 可加载，读取了设备/标识相关的 Objective-C 接口元数据；这次有界扫描未找到可直接取得 hardware20 的方法。不据此断言所有原生或其他平台路径都不可能。
+
+另纠正当前前置探针的适用范围：固定 SDK 的 `StoreSession::testflight_context()` 明确要求 `macos_accounts` 会话，并从会话内的 machine_id 注入 X-Apple-AMD-M。它不是要求在账号登录前从 AMSAnisette 获取这个头。现有 Configurator 会话不能直接作为该 Mac Store 会话。因此旧探针缺少该头不单独证明平台无法认证；它只是当前探针未建立完整环境。
+
+`.github/ops/tf_invitation.py` 新增离线请求计划与 SQLite 接受意图记录：严格限定 Apple join 链接与固定 API 地址；POST 前持久化意图，重启/任务号变化后不自动重复接受；2xx 仅标记需要校验，绝不当作已加入或已下载。4 项邀请测试覆盖伪装域名、路径/查询注入、响应分类及跨连接重启恢复。实现未接机器人、未签名或发送真实邀请请求，未复用抓包会话头。
+
+当前 GitHub 原生路径仍缺可验证的 TF hardware20 与独立 Mac Store 会话。SDK 文档公开支持虚拟设备身份，但项目当前约束要求原生身份；在这项约束改变前，不将虚拟配置伪称成原生设备，也不挂载账号去运行该替代路线。两条路线的认证、邀请、取包、解密与交付仍需分别提供真实证据。没有修改既有账号 Secrets、模型、授权数或 VPS 部署。

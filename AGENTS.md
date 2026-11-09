@@ -240,3 +240,11 @@ Checks 不是 fine-grained PAT 的必填权限。遇到 Checks 权限拒绝时�
 - First public workflow testflight-prototype.yml compiles a native AuthKit/AMS Mac profile reader and builds/tests the pinned SDK without Apple inputs. Use actual native 20-byte identity and machine headers; fail closed if unavailable, never synthesize a supposed physical device or log raw identity/header values.
 - Account/session creation, invitation acceptance, package acquisition, transport removal and full content decryption are distinct proofs. Do not promise existing App Store model compatibility or substitute formal App Store A.I./TestFlight client IDs for the beta build.
 - Automatic invitation acceptance does not authorize optional Apple security upgrades, arbitrary new legal agreements, personal-phone infrastructure or third-party decrypt services. A real account verification challenge may use the approved source/run-bound maintenance pattern only when actually waiting.
+
+## TestFlight adapter and native discovery follow-up (2026-11-09)
+
+- Latest isolated prototype source f2162fbd535962de4f625b64be189b3d1fd0a130, run 42646358995, passed 13 Python and 16 CTest checks, but failed the native readiness gate. Do not report whole-run success or a TF login/download.
+- Native discovery found AuthKit identifier length 36 and AMS GUID length 12. A bounded Objective-C metadata scan of the available TestFlightCore framework found no directly usable hardware20 getter. This is a limited observed surface, not proof that every native route is impossible.
+- The SDK's Mac StoreSession adapter supplies AMD-M from its authenticated machine_id. The earlier unauthenticated AMSAnisette probe is not proof that no native machine identity can ever work. Configurator and macos_accounts sessions remain distinct.
+- Offline tf_invitation.py plans fixed Apple requests and journals acceptance intent before a future POST. It has no live authentication/HTTP integration. A 2xx alone is not verified membership; ambiguous acceptance must not auto-repeat.
+- Existing original-native-identity constraints remain in force; SDK virtual profiles have not been used with Apple inputs. No new account authorization, credential/model replacement, invitation acceptance, file send or VPS deployment occurred.
