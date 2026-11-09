@@ -184,6 +184,8 @@ class VersionBrowser:
         pending=self.state.get("pending")
         if not pending:
             return
+        retirement=getattr(self.c,"retirement",None)
+        if callable(retirement):retirement("catalog",pending["rid"],pending["app"])
         self.state["pending"]=None
         self.save()
         run=self.api.find(pending["rid"],pending["app"])

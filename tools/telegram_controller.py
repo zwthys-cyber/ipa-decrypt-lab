@@ -42,7 +42,8 @@ def event(status, **fields):
     print(json.dumps({"schema":"telegram-session-v1","status":status,**fields}),flush=True)
 
 class Controller:
-    def __init__(self, bot, github, owner, crypt, token, journal=None, submission_limit=3, *, admission=None, authorization=None, strict_ownership=False):
+    def __init__(self, bot, github, owner, crypt, token, journal=None, submission_limit=3, *, admission=None, authorization=None, strict_ownership=False, retirement=None):
+        self.retirement=retirement
         self.admission,self.authorization,self.strict_ownership=admission,authorization,strict_ownership
         self.submission_limit = submission_limit
         self.journal = journal
@@ -175,6 +176,7 @@ class Controller:
                 self.say("找不到属于你的任务。")
                 return
             self.record(rid,"cancelled")
+            if callable(self.retirement):self.retirement("export",rid,self.current["app"])
             self.current = None
             self.github.cancel(rid)
             self.card(rid).update("cancelled",force=True)

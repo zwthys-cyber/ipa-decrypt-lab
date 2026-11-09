@@ -47,7 +47,7 @@ class AccessControl:
               ON CONFLICT(namespace,uid) DO UPDATE SET enabled=1,daily_limit=excluded.daily_limit,at=excluded.at""",
               (self.scope,uid,limit,int(time.time())))
 
-    def revoke(self,uid,work):
+    def revoke(self,uid,work,scope,browser_state):
         require(uid!=self.admin and self.profile(uid) is not None,"invalid_guest_identity")
         with self.db:
             self.db.execute("BEGIN IMMEDIATE")
@@ -57,6 +57,15 @@ class AccessControl:
                 self.db.execute("INSERT OR IGNORE INTO retired_work(namespace,rid,kind,app,at) VALUES(?,?,?,?,?)",
                     (self.scope,item["rid"],item["kind"],item["app"],int(time.time())))
             self.db.execute("UPDATE tenant_access SET enabled=0,at=? WHERE namespace=? AND uid=?",(int(time.time()),self.scope,uid))
+            self.db.execute("UPDATE tasks SET state='cancelled',at=? WHERE scope=? AND state='pending'",(int(time.time()),scope))
+            self.db.execute("""INSERT INTO metadata(scope,name,value) VALUES(?,'version_browser',?)
+              ON CONFLICT(scope,name) DO UPDATE SET value=excluded.value""",(scope,json.dumps(browser_state,separators=(",",":"))))
+
+    def retire(self,kind,rid,app):
+        request_id(rid);require(kind in ("export","catalog"),"invalid_retirement")
+        with self.db:
+            self.db.execute("INSERT OR IGNORE INTO retired_work(namespace,rid,kind,app,at) VALUES(?,?,?,?,?)",
+                (self.scope,rid,kind,app,int(time.time())))
 
     def retired(self):
         return [dict(rid=r[0],kind=r[1],app=r[2]) for r in self.db.execute(
@@ -137,7 +146,7 @@ class MultiUserService:
             api=ScopedGitHub(self.github,ledger,uid,allowed)
             controller=self.factory(self.bot,api,uid,self.crypt,self.token,journal=ledger,
                 submission_limit=profile["daily_limit"],admission=lambda kind:self.admit(uid,kind),
-                authorization=allowed,strict_ownership=True)
+                authorization=allowed,strict_ownership=True,retirement=self.retire)
             controller.started=time.time()-86400
             self.controllers[uid]=controller
         self.controllers[uid].submission_limit=profile["daily_limit"]
@@ -161,6 +170,9 @@ class MultiUserService:
         elif kind=="catalog" and self.access.queries()>=20:text="服务最近 24 小时的版本查询额度已用完，请稍后再试。"
         if text:self.bot.message(uid,text);return False
         return True
+
+    def retire(self,kind,rid,app):
+        self.access.retire(kind,rid,app);self.retired=self.access.retired()
 
     def handle(self,update):
         principal=actor(update)
@@ -197,12 +209,13 @@ class MultiUserService:
             if command=="/allow":
                 limit=int(parts[2]) if len(parts)==3 else min(3,self.limit)
                 self.access.grant(uid,limit);self.sync();self.tenant(uid)
-                self.bot.message(self.admin,"已授权 "+str(uid)+"，每日最多 "+str(limit)+" 次；仍受服务总额度限制。")
+                reply="已授权 "+str(uid)+"，每日最多 "+str(limit)+" 次；仍受服务总额度限制。"
             else:
                 self.revoke(uid)
-                self.bot.message(self.admin,"已移除授权并停止自动交付。后台任务如仍在取消中，会等待平台确认后再接新任务。")
+                reply="已移除授权并停止自动交付。后台任务如仍在取消中，会等待平台确认后再接新任务。"
         except (ValueError,APIError,QueueError):
-            self.bot.message(self.admin,"操作未完成。用法：/allow 用户ID [每日额度]；/deny 用户ID；/users。管理员身份固定，额度须为 1 到 "+str(self.limit)+"。")
+            reply="操作未完成。用法：/allow 用户ID [每日额度]；/deny 用户ID；/users。管理员身份固定，额度须为 1 到 "+str(self.limit)+"。"
+        self.bot.message(self.admin,reply)
 
     def revoke(self,uid):
         require(uid!=self.admin and uid in self.enabled,"invalid_guest_identity")
@@ -210,11 +223,10 @@ class MultiUserService:
         for row in c.journal.pending():work.append(dict(rid=row["rid"],app=row["app"],kind="export"))
         pending=c.browser.state.get("pending")
         if pending:work.append(dict(rid=pending["rid"],app=pending["app"],kind="catalog"))
-        self.access.revoke(uid,work);self.sync();self.controllers.pop(uid,None);self.configured.discard(uid)
+        state=dict(c.browser.state,pending=None)
+        self.access.revoke(uid,work,c.journal.scope,state);self.sync();self.controllers.pop(uid,None);self.configured.discard(uid)
         try:
-            for row in work:
-                if row["kind"]=="export":c.journal.write(row["rid"],"cancelled")
-            if pending:c.browser.state["pending"]=None;c.browser.save()
+            c.journal.load();c.browser.state=state
             c.current=None
             for row in work:
                 try:
