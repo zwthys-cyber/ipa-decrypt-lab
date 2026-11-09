@@ -1,6 +1,12 @@
 name: TestFlight autonomous pipeline prototype
 run-name: TF-background-preflight
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/testflight-prototype.yml'
+      - '.github/ops/tf_*'
+      - '.github/ops/test_tf_*'
   workflow_dispatch:
     inputs:
       inspect_saved_cn:
