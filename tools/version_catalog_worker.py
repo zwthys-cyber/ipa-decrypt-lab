@@ -6,6 +6,9 @@ import re
 import subprocess
 import sys
 import tempfile
+from contextlib import contextmanager
+from account_profile import profile_for_request
+from cn_private_export import saved_session
 from app_preflight import check_app
 from version_request import external_id
 from native_store import authenticate, run, classify, classify_download, DOWNLOAD_STAGES
@@ -36,6 +39,25 @@ def parse_page(output, before=""):
         raise ValueError("catalog_unavailable")
     return int(totals[0]),[dict(id=i,version=v,date=d) for i,v,d in rows],next_before
 
+@contextmanager
+def catalog_session(binary,profile,env):
+    if profile=="cn":
+        with saved_session(binary,env) as (value,child,path):
+            yield value["email"],child,["--guid",value["guid"]]
+    else:
+        email=env["APPLE_ID"].strip()
+        child={k:env[k] for k in ("HOME","PATH","LANG","LAB_KBSYNC_HELPER") if k in env}
+        child["APPLEPACKAGE_PASSWORD"]=env["APPLE_PASSWORD"]
+        try:
+            login=["login",email]
+            if env.get("APPLE_2FA_CODE"):login+=["--code",env["APPLE_2FA_CODE"]]
+            if classify(authenticate(binary,login,child,execute=run))!="authenticated":
+                raise ValueError("catalog_authentication_failed")
+            yield email,child,[]
+        finally:
+            try:run(binary,["logout",email],child)
+            except Exception:pass
+
 def main():
     os.umask(0o077)
     stage="input"
@@ -48,25 +70,20 @@ def main():
         before=os.environ.get("CATALOG_BEFORE","")
         if before and (not paged or not external_id(before)):
             raise ValueError("invalid_request")
-        if not re.fullmatch(r"[a-f0-9]{32}",rid):
+        if not re.fullmatch(r"(?:cn_)?[a-f0-9]{32}",rid):
+            raise ValueError("invalid_request")
+        profile=profile_for_request(rid)
+        if os.environ.get("CATALOG_ACCOUNT_PROFILE","default")!=profile:
             raise ValueError("invalid_request")
         stage="metadata"
-        info=check_app(app,historical=True)
-        email=os.environ["APPLE_ID"].strip()
-        env={k:os.environ[k] for k in ("HOME","PATH","LANG","LAB_KBSYNC_HELPER") if k in os.environ}
-        env.update(APPLEPACKAGE_PASSWORD=os.environ["APPLE_PASSWORD"],LAB_VERSION_CATALOG="1",LAB_CATALOG_BEFORE=before,LAB_CATALOG_PAGED="1" if paged else "0")
+        info=check_app(app,historical=True,profile=profile)
         binary=str(Path(sys.argv[1]).resolve())
-        try:
-            stage="authenticating"
-            login=["login",email]
-            if os.environ.get("APPLE_2FA_CODE"):
-                login += ["--code",os.environ["APPLE_2FA_CODE"]]
-            result=authenticate(binary,login,env,execute=run)
-            if classify(result)!="authenticated":
-                raise ValueError("catalog_authentication_failed")
+        stage="authenticating"
+        with catalog_session(binary,profile,dict(os.environ)) as (email,env,identity_args):
+            env.update(LAB_VERSION_CATALOG="1",LAB_CATALOG_BEFORE=before,LAB_CATALOG_PAGED="1" if paged else "0")
             with tempfile.TemporaryDirectory(prefix="catalog-private-") as directory:
                 stage="catalog_query"
-                result=run(binary,["download",email,info["bundleId"],"--output",str(Path(directory)/"unused.ipa")],env,timeout=300)
+                result=run(binary,["download",email,info["bundleId"],*identity_args,"--output",str(Path(directory)/"unused.ipa")],env,timeout=300)
                 markers=re.findall(r"^IPA_LAB_STAGE:([a-z_]+)$",result.stdout or "",re.M)
                 last_stage=next((s for s in reversed(markers) if s in DOWNLOAD_STAGES),"unknown")
                 print(json.dumps({"status":"catalog_native_result","returncode":result.returncode,
@@ -85,12 +102,9 @@ def main():
                 else:
                     total,rows=parse_rows(result.stdout or "")
                     next_before=""
-        finally:
-            try: run(binary,["logout",email],env)
-            except Exception: pass
         payload={"schema":"ipa-version-catalog-v2" if paged else "ipa-version-catalog-v1","request_id":rid,"app_id":app,
                  "run_id":os.environ["GITHUB_RUN_ID"],"source_commit":os.environ["GITHUB_SHA"],
-                 "total":total,"rows":rows,"before":before,"next_before":next_before}
+                 "account_profile":profile,"current_version":info.get("version",""),"total":total,"rows":rows,"before":before,"next_before":next_before}
         Path("catalog-out").mkdir(mode=0o700)
         Path("catalog-out/versions.json").write_text(json.dumps(payload))
         print(json.dumps({"status":"version_catalog_ready","count":len(rows),"total":total}))

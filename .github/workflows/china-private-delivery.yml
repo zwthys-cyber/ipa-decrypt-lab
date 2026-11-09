@@ -1,5 +1,5 @@
 name: China private verified IPA delivery
-run-name: delivery-${{ inputs.request_id }}-app${{ inputs.app_id }}-macos-26-intel
+run-name: delivery-${{ inputs.request_id }}-app${{ inputs.app_id }}-macos-26-intel${{ inputs.version && format('-version{0}', inputs.version) || '' }}
 on:
   workflow_dispatch:
     inputs:
@@ -16,6 +16,35 @@ on:
         description: CN-bound opaque request ID (cn_ plus 32 lowercase hex characters)
         type: string
         default: 'cn_00000000000000000000000000000001'
+      version:
+        description: Optional exact display version or Apple external version ID
+        type: string
+        default: ''
+  workflow_call:
+    inputs:
+      mode:
+        type: string
+        default: export
+      app_id:
+        type: string
+        required: true
+      request_id:
+        type: string
+        required: true
+      version:
+        type: string
+        required: true
+    secrets:
+      APPLE_CN_ID:
+        required: true
+      APPLE_CN_GUID:
+        required: true
+      APPLE_CN_SESSION_B64:
+        required: true
+      FAIRPLAY_CN_MODEL_B64:
+        required: true
+      FAIRPLAY_CN_STATE_B64:
+        required: true
 permissions:
   contents: read
   actions: read
@@ -41,6 +70,7 @@ jobs:
         timeout-minutes: 1
         env:
           DELIVERY_APP_ID: ${{ inputs.app_id }}
+          DELIVERY_VERSION: ${{ inputs.version }}
         run: python3 tools/app_preflight.py
       - name: App unavailable in CN storefront
         if: failure() && steps.eligibility.outputs.eligibility == 'app_not_found_in_cn'
@@ -117,6 +147,9 @@ jobs:
         run: exit 1
       - name: Apple login access denied
         if: failure() && steps.export.outputs.authentication_failure == 'access_denied'
+        run: exit 1
+      - name: Historical version unavailable
+        if: failure() && steps.export.outputs.version_failure != ''
         run: exit 1
       - name: Retain encrypted delivery for at most one day
         if: success() && inputs.mode == 'export'

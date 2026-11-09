@@ -10,6 +10,19 @@ import zipfile
 from telegram_api import APIError
 from telegram_queue import QueueError, require, request_id, sha256
 from version_request import selector, external_id
+from account_profile import profile_for_request
+
+def catalog_workflow(rid):
+    profile=profile_for_request(rid)
+    require(profile in {"default","cn"},"invalid_catalog_profile")
+    return "china-version-catalog.yml" if profile=="cn" else WORKFLOW
+
+def cache_key(app,profile="default"):
+    require(profile in {"default","cn"},"invalid_catalog_profile")
+    return "cn:"+app if profile=="cn" else app
+
+def target(app,profile):
+    return "https://apps.apple.com/cn/app/id"+app if profile=="cn" else app
 
 WORKFLOW="version-catalog.yml"
 TTL=21600  # Button lifetime remains six hours.
@@ -24,6 +37,7 @@ def validate(payload,rid,app,run_id,commit,before=""):
             and payload.get("request_id")==rid and payload.get("app_id")==app
             and payload.get("run_id")==str(run_id) and payload.get("source_commit")==commit,
             "invalid_version_catalog")
+    require(payload.get("account_profile","default")==profile_for_request(rid),"catalog_account_profile_mismatch")
     paged=payload["schema"]=="ipa-version-catalog-v2"
     rows=payload.get("rows")
     require(isinstance(rows,list) and (0 if paged else 1)<=len(rows)<=(10 if paged else 60)
@@ -67,12 +81,12 @@ class CatalogAPI:
         request_id(rid)
         require(re.fullmatch(r"[1-9][0-9]{4,19}",app or ""),"invalid_app_id")
         for page in (1,2,3):
-            data=self.github.call("/actions/workflows/"+WORKFLOW+"/runs?event=workflow_dispatch&per_page=100&page="+str(page))
+            data=self.github.call("/actions/workflows/"+catalog_workflow(rid)+"/runs?event=workflow_dispatch&per_page=100&page="+str(page))
             require(isinstance(data,dict) and isinstance(data.get("workflow_runs"),list),"invalid_catalog_runs")
             for run in data["workflow_runs"]:
                 if (run.get("display_title")=="versions-"+rid+"-app"+app
                         and run.get("event")=="workflow_dispatch" and run.get("head_branch")=="main"
-                        and run.get("path")==".github/workflows/"+WORKFLOW):
+                        and run.get("path")==".github/workflows/"+catalog_workflow(rid)):
                     return run
             if len(data["workflow_runs"])<100:
                 break
@@ -81,11 +95,14 @@ class CatalogAPI:
     def dispatch(self,rid,app,before=""):
         if self.find(rid,app):
             return
-        self.github.call("/actions/workflows/"+WORKFLOW+"/dispatches",
-                         {"ref":"main","inputs":{"app_id":app,"request_id":rid,"runner":"macos-26-intel","paged":"true","before":before}},"POST")
+        self.github.call("/actions/workflows/"+catalog_workflow(rid)+"/dispatches",
+                         {"ref":"main","inputs":{"app_id":app,"request_id":rid,**({} if profile_for_request(rid)=="cn" else {"runner":"macos-26-intel"}),"paged":"true","before":before}},"POST")
 
     def result(self,run,rid,app,before=""):
         require(run.get("status")=="completed" and run.get("conclusion")=="success","catalog_not_ready")
+        require(run.get("event")=="workflow_dispatch" and run.get("head_branch")=="main"
+                and run.get("path")==".github/workflows/"+catalog_workflow(rid)
+                and run.get("display_title")=="versions-"+rid+"-app"+app,"invalid_catalog_run")
         run_id=run["id"]
         data=self.github.call("/actions/runs/"+str(run_id)+"/artifacts?per_page=100")
         found=[a for a in data.get("artifacts",[]) if a.get("name")=="versions-"+rid and a.get("expired") is False]
@@ -129,28 +146,30 @@ class VersionBrowser:
         while len(cache)>MAX_APPS:
             del cache[min(cache,key=lambda key:cache[key].get("used_at",cache[key]["at"]))]
 
-    def begin(self,app,update_id):
+    def begin(self,app,update_id,profile="default"):
         now=int(time.time())
         self.prune()
-        entry=self.state.get("cache",{}).get(app)
-        rid=self.query_id(app,update_id,"view")
+        entry=self.state.get("cache",{}).get(cache_key(app,profile))
+        rid=self.query_id(app,update_id,"view",profile)
         if entry:
             entry["used_at"]=now
-            self.open(app,rid,entry)
+            self.open(app,rid,entry,profile)
             if now-entry["at"]<FRESH_TTL:
                 return
             if self.c.current or self.state.get("pending"):
                 self.c.say("已显示缓存列表，空闲时可点击“刷新列表”更新。")
                 return
-            self.start(app,update_id,background=True)
+            self.start(app,update_id,background=True,profile=profile)
             return
-        self.start(app,update_id)
+        self.start(app,update_id,profile=profile)
 
-    def query_id(self,app,update_id,suffix=""):
+    def query_id(self,app,update_id,suffix="",profile="default"):
         text="versions:"+str(self.c.owner)+":"+str(update_id)+":"+app+":"+suffix
-        return hmac.new(self.c.token.encode(),text.encode(),hashlib.sha256).hexdigest()[:32]
+        cache_key(app,profile)
+        digest=hmac.new(self.c.token.encode(),text.encode(),hashlib.sha256).hexdigest()[:32]
+        return "cn_"+digest if profile=="cn" else digest
 
-    def start(self,app,update_id,before="",background=False):
+    def start(self,app,update_id,before="",background=False,profile="default"):
         now=int(time.time())
         if self.c.current:
             self.c.say("已有下载任务处理中；缓存列表仍可查看，新查询请稍后再试。")
@@ -166,12 +185,12 @@ class VersionBrowser:
         admission=getattr(self.c,"admission",None)
         if callable(admission) and not admission("catalog"):
             return
-        self.c.github.preflight_app(app,historical=True)
-        rid=self.query_id(app,update_id,before or "first")
+        self.c.github.preflight_app(app,historical=True,profile="cn") if profile=="cn" else self.c.github.preflight_app(app,historical=True)
+        rid=self.query_id(app,update_id,before or "first",profile)
         view=self.state.get("view")
         self.state["queries"]=queries+[now]
         self.state["pending"]={"rid":rid,"app":app,"at":now,"before":before,
-            "background":background,"view_rid":view["rid"] if before and view else ""}
+            "profile":profile,"background":background,"view_rid":view["rid"] if before and view else ""}
         self.save()
         self.c.say("已显示缓存，正在后台刷新最近版本。" if background else
                    "正在加载更早版本…" if before else "正在查询最近 10 个历史版本，完成后显示选择列表。")
@@ -237,7 +256,9 @@ class VersionBrowser:
         now=int(time.time())
         cache=self.state.setdefault("cache",{})
         before=pending.get("before","")
-        old=cache.get(pending["app"])
+        profile=profile_for_request(pending["rid"])
+        key=cache_key(pending["app"],profile)
+        old=cache.get(key)
         view=self.state.get("view")
         if before:
             # Append only to the exact cursor that was durably dispatched.
@@ -254,19 +275,20 @@ class VersionBrowser:
                 entry["next_before"]=""
         else:
             entry.update(at=now,used_at=now)
-        cache[pending["app"]]=entry
+        cache[key]=entry
         self.prune()
         self.state["pending"]=None
         self.save()
-        if (before and view and view["rid"]==pending.get("view_rid") and view["app"]==pending["app"]):
+        if (before and view and view["rid"]==pending.get("view_rid") and view["app"]==pending["app"] and view.get("profile","default")==profile):
             old_count=len(view["rows"])
             view.update(rows=entry["rows"],total=entry["total"],next_before=entry.get("next_before",""))
             self.save()
             self.render(min(old_count//PAGE,max(0,(len(view["rows"])-1)//PAGE)))
         elif not before and not pending.get("suppress_open"):
-            self.open(pending["app"],pending["rid"],entry)
+            self.open(pending["app"],pending["rid"],entry,profile)
 
-    def open(self,app,rid,entry):
+    def open(self,app,rid,entry,profile="default"):
+        require(profile_for_request(rid)==profile,"catalog_account_profile_mismatch")
         self.state["view"]={"rid":rid,"app":app,"at":int(time.time()),"rows":entry["rows"],
                             "total":entry["total"],"message_id":0,"used":[],
                             "next_before":entry.get("next_before",""),"cache_at":entry["at"]}
@@ -284,7 +306,7 @@ class VersionBrowser:
         prefix="vc:"+view["rid"]+":"
         keyboard=[]
         chunk=[]
-        text="App ID："+view["app"]+" · 请选择版本\n第 "+str(page+1)+"/"+str(pages)+" 页"
+        text=("中国区" if view.get("profile")=="cn" else "外区")+" · App ID："+view["app"]+" · 请选择版本\n第 "+str(page+1)+"/"+str(pages)+" 页"
         text+="\n点击版本即提交下载解密；实际可下载性以 Apple 响应为准。"
         if time.time()-view.get("cache_at",view["at"])>=FRESH_TTL:
             text+="\n当前显示旧缓存，可先查看；刷新后会提供新列表。"
@@ -339,7 +361,7 @@ class VersionBrowser:
             try: self.c.bot.call("answerCallbackQuery",{"callback_query_id":query_id,"text":text})
             except APIError: pass
         data=query.get("data")
-        match=re.fullmatch(r"vc:([a-f0-9]{32}):([pvmr]):([0-9]{1,3})",data) if isinstance(data,str) else None
+        match=re.fullmatch(r"vc:((?:cn_)?[a-f0-9]{32}):([pvmr]):([0-9]{1,3})",data) if isinstance(data,str) else None
         view=self.state.get("view")
         if (not match or not view or view.get("closed") or match[1]!=view["rid"]
                 or message.get("message_id")!=view["message_id"]
@@ -361,7 +383,7 @@ class VersionBrowser:
                 return None
             answer("正在准备查询")
             try:
-                self.start(view["app"],update["update_id"],before=before,background=not before)
+                self.start(view["app"],update["update_id"],before=before,background=not before,profile=view.get("profile","default"))
             except Exception:
                 # Durable dispatch intent, if recorded, is retained; never repost here.
                 self.c.say("暂时无法启动查询，已有列表仍可查看。")
@@ -382,7 +404,7 @@ class VersionBrowser:
                 "_version_label":view["rows"][index]["version"],
                 "message":{"date":int(time.time()),"from":{"id":self.c.owner,"is_bot":False},
                            "chat":{"id":self.c.owner,"type":"private"},
-                           "text":"/version "+view["app"]+" "+view["rows"][index]["id"]}}
+                           "text":"/version "+target(view["app"],view.get("profile","default"))+" "+view["rows"][index]["id"]}}
 
     def consume(self,choice):
         view=self.state.get("view")
@@ -391,7 +413,7 @@ class VersionBrowser:
         view["used"].append(index)
         view["closed"]=True
         pending=self.state.get("pending")
-        if pending and pending["app"]==view["app"]:
+        if pending and pending["app"]==view["app"] and profile_for_request(pending["rid"])==view.get("profile","default"):
             pending["suppress_open"]=True
         self.save()
         # Cosmetic edit cannot abort or repeat the durable task submission.

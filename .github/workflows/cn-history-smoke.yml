@@ -1,0 +1,79 @@
+name: Verify CN history without sending an IPA
+on:
+  workflow_run:
+    workflows: ["Build isolated CN live-auth client"]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: read
+  actions: read
+  checks: write
+concurrency:
+  group: cn-history-proof
+  cancel-in-progress: false
+jobs:
+  catalog:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_sha == github.sha &&
+      contains(github.event.workflow_run.head_commit.message, '[cn-history-verify]')
+    uses: ./.github/workflows/china-version-catalog.yml
+    with:
+      app_id: '1661733229'
+      request_id: cn_99999999999999999999999999999999
+      paged: true
+    secrets:
+      APPLE_CN_ID: ${{ secrets.APPLE_CN_ID }}
+      APPLE_CN_GUID: ${{ secrets.APPLE_CN_GUID }}
+      APPLE_CN_SESSION_B64: ${{ secrets.APPLE_CN_SESSION_B64 }}
+  select:
+    needs: catalog
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version_id: ${{ steps.select.outputs.version_id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Select an authenticated CN version older than current
+        id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/ops/cn_history_proof.py choose
+  export:
+    needs: select
+    uses: ./.github/workflows/china-private-delivery.yml
+    with:
+      mode: export
+      app_id: '1661733229'
+      request_id: cn_88888888888888888888888888888888
+      version: ${{ needs.select.outputs.version_id }}
+    secrets:
+      APPLE_CN_ID: ${{ secrets.APPLE_CN_ID }}
+      APPLE_CN_GUID: ${{ secrets.APPLE_CN_GUID }}
+      APPLE_CN_SESSION_B64: ${{ secrets.APPLE_CN_SESSION_B64 }}
+      FAIRPLAY_CN_MODEL_B64: ${{ secrets.FAIRPLAY_CN_MODEL_B64 }}
+      FAIRPLAY_CN_STATE_B64: ${{ secrets.FAIRPLAY_CN_STATE_B64 }}
+  proof:
+    needs: export
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify actual historical receipt and source binding
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/ops/cn_history_proof.py record
+      - name: Identify verified source fingerprint
+        id: source
+        run: echo "fingerprint=$(python3 tools/native_runtime.py fingerprint)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: cn-history-proof-${{ steps.source.outputs.fingerprint }}
+          path: cn-history-proof/proof.json
+          retention-days: 30
+          if-no-files-found: error

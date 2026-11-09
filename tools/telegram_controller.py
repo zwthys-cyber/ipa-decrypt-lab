@@ -138,10 +138,10 @@ class Controller:
                 return
             try:
                 app,profile=parse_target(parts[1])
-                if profile in {"cn","tf"}:
-                    self.say("TestFlight 不支持历史版本查询，请直接发送邀请链接。" if profile=="tf" else "中国区暂支持最新版下载；历史版本请使用外区链接或数字 App ID。")
+                if profile=="tf":
+                    self.say("TestFlight 不支持历史版本查询，请直接发送邀请链接。")
                     return
-                self.browser.begin(app,update_number)
+                self.browser.begin(app,update_number,profile="cn") if profile=="cn" else self.browser.begin(app,update_number)
             except PreflightError as exc:
                 self.say(MESSAGES[exc.status])
             except (ValueError,TypeError):
@@ -206,9 +206,6 @@ class Controller:
             if version:
                 self.say("TestFlight 当前只获取可用测试构建，不支持指定 App Store 历史版本。")
                 return
-        if profile=="cn" and version:
-            self.say("中国区暂支持最新版下载；指定旧版不会回退到外区账号。")
-            return
         pending_catalog=self.browser.state.get("pending")
         if self.current or (pending_catalog and not pending_catalog.get("background")):
             self.say("已有任务处理中，请用 /status 查询，或先 /cancel。")
@@ -231,7 +228,7 @@ class Controller:
             if profile=="tf":
                 pass
             elif version:
-                self.github.preflight_app(app, historical=True)
+                self.github.preflight_app(app, historical=True,profile="cn") if profile=="cn" else self.github.preflight_app(app, historical=True)
             elif profile=="cn":
                 self.github.preflight_app(app,profile="cn")
             else:

@@ -64,11 +64,14 @@ class AccountProfileTests(unittest.TestCase):
             gh.preflight_app.assert_called_once_with(APP)
             gh.dispatch.assert_called_once_with(APP,opaque_id("synthetic",OWNER,1,APP))
 
-    def test_cn_history_rejected_before_query_or_dispatch(self):
-        for text in ("/versions "+URL,"/version "+URL+" 1.0"):
-            c,bot,gh=self.controller();c.handle(update(text=text))
-            gh.dispatch.assert_not_called();gh.preflight_app.assert_not_called()
-            self.assertTrue(any("中国区暂支持最新版" in call.args[1] for call in bot.message.call_args_list))
+    def test_cn_history_keeps_cn_binding_before_query_and_dispatch(self):
+        c,bot,gh=self.controller();c.handle(update(text="/version "+URL+" 1.0"))
+        gh.preflight_app.assert_called_once_with(APP,historical=True,profile="cn")
+        gh.dispatch.assert_called_once_with(APP,c.current["rid"],version="1.0")
+        self.assertTrue(c.current["rid"].startswith("cn_"))
+        c,bot,gh=self.controller();c.browser.begin=Mock()
+        c.handle(update(text="/versions "+URL))
+        c.browser.begin.assert_called_once_with(APP,1,profile="cn")
 
     def test_cn_lookup_failure_never_falls_back_or_records_submission(self):
         c,bot,gh=self.controller();gh.preflight_app.side_effect=PreflightError("app_not_found_in_cn")
@@ -84,8 +87,10 @@ class AccountProfileTests(unittest.TestCase):
         self.assertEqual(payload,{"ref":"main","inputs":{"mode":"export","app_id":APP,"request_id":RID}})
         self.assertEqual(method,"POST")
         gh.call.reset_mock()
-        for invoke in (lambda:gh.dispatch(APP,RID,version="1.0"),lambda:gh.retry(APP,RID,123)):
-            with self.assertRaises(QueueError):invoke()
+        gh.dispatch(APP,RID,version="1.0")
+        self.assertEqual(gh.call.call_args.args[1]["inputs"]["version"],"1.0")
+        gh.call.reset_mock()
+        with self.assertRaises(QueueError):gh.retry(APP,RID,123)
         gh.call.assert_not_called()
 
     def test_run_lookup_rejects_cross_workflow_and_untrusted_branch(self):

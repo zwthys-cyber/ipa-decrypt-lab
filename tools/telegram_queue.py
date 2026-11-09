@@ -140,7 +140,6 @@ class GitHub:
             return {"id":response["workflow_run_id"],"status":"queued"} if isinstance(response,dict) and type(response.get("workflow_run_id")) is int else {"status":"dispatch_pending"}
         require(re.fullmatch(r"[1-9][0-9]{4,19}", app or ""), "invalid_app_id")
         cn=profile_for_request(rid)=="cn"
-        require(not (cn and version),"cn_history_not_supported")
         existing = self.find(rid)
         if existing:
             return existing

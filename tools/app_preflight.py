@@ -37,7 +37,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 def check_app(identifier, historical=False, profile="default"):
-    if profile not in ("default","cn") or profile=="cn" and historical:
+    if profile not in ("default","cn"):
         raise PreflightError("metadata_invalid_response")
     if not isinstance(identifier,str) or not re.fullmatch(r"[1-9][0-9]{4,19}",identifier):
         raise PreflightError("invalid_app_id")

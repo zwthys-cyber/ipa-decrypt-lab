@@ -1,4 +1,5 @@
-"""Verified CN latest export using only the stored independent CN profile."""
+"""Verified CN latest/historical export using only the stored independent CN profile."""
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -15,6 +16,7 @@ from app_preflight import check_app,PreflightError
 from private_export import (require,ExportError,export_original,main,run,check_capacity,
                             DOWNLOAD_TIMEOUT,MAX_BYTES)
 from progress_stream import run_download
+from version_request import selector,resolved_marker
 
 def validate_profile(env):
     require(not any(env.get(k) for k in ("APPLE_ID","APPLE_PASSWORD","APPLE_2FA_CODE",
@@ -34,19 +36,12 @@ def bound_account(path,value,env):
     decode(dict(env,APPLE_CN_SESSION_B64=base64.b64encode(json.dumps(current).encode()).decode()))
     return current
 
-def export(binary,engine,crypt,target,request_id,recipient,output_dir,progress=None,measurement=None):
-    progress=progress or (lambda stage:None)
-    require(os.environ.get("GITHUB_ACTIONS")=="true","requires_github_actions")
-    require(profile_for_request(request_id)=="cn","invalid_cn_request_id")
-    require(not os.environ.get("DELIVERY_VERSION"),"cn_history_not_supported")
-    require(re.fullmatch(r"[1-9][0-9]{4,19}",target or ""),"canonical_app_id_required")
-    require(re.fullmatch(r"age1[0-9a-z]{58}",recipient or ""),"missing_delivery_recipient")
-    require(not output_dir.exists(),"output_directory_exists")
-    progress("metadata")
-    try:info=check_app(target,profile="cn")
-    except PreflightError as error:raise ExportError(error.status) from None
-    check_capacity(info,output_dir.parent)
-    env=dict(os.environ);value=validate_profile(env)
+@contextmanager
+def saved_session(binary,env,progress=None,value=None):
+    """Restore only the existing CN identity; no password, OTP or model required."""
+    require(not any(env.get(k) for k in ("APPLE_ID","APPLE_PASSWORD","APPLE_2FA_CODE",
+            "FAIRPLAY_MODEL_B64","FAIRPLAY_STATE_B64")),"foreign_account_secrets_present")
+    if value is None:value,_=decode(env)
     folder=Path(env["HOME"])/".ipatool"/hashlib.md5(value["email"].lower().encode()).hexdigest()
     path=folder/"account.json"
     require(not folder.parent.is_symlink() and not folder.exists() and not folder.is_symlink(),"cn_cache_not_empty")
@@ -55,26 +50,48 @@ def export(binary,engine,crypt,target,request_id,recipient,output_dir,progress=N
     try:
         with os.fdopen(os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600),"w") as stream:
             json.dump(value["account"],stream)
-        progress("authenticating")
-        # No password, OTP, enrollment, alternate account or interactive code wait.
+        if progress:progress("authenticating")
         result=run(binary,["resume-cn",value["email"],"--guid",value["guid"]],child)
         require(result.returncode==0,"cn_session_requires_maintenance")
         bound_account(path,value,env)
+        yield value,child,path
+        bound_account(path,value,env)
+    finally:
+        if folder.exists() and not folder.is_symlink():shutil.rmtree(folder)
+
+def export(binary,engine,crypt,target,request_id,recipient,output_dir,progress=None,measurement=None):
+    progress=progress or (lambda stage:None)
+    require(os.environ.get("GITHUB_ACTIONS")=="true","requires_github_actions")
+    require(profile_for_request(request_id)=="cn","invalid_cn_request_id")
+    requested=selector(os.environ.get("DELIVERY_VERSION",""))
+    require(re.fullmatch(r"[1-9][0-9]{4,19}",target or ""),"canonical_app_id_required")
+    require(re.fullmatch(r"age1[0-9a-z]{58}",recipient or ""),"missing_delivery_recipient")
+    require(not output_dir.exists(),"output_directory_exists")
+    progress("metadata")
+    try:info=check_app(target,historical=bool(requested),profile="cn")
+    except PreflightError as error:raise ExportError(error.status) from None
+    check_capacity({} if requested else info,output_dir.parent)
+    env=dict(os.environ);value=validate_profile(env)
+    with saved_session(binary,env,progress,value) as (value,child,path):
+        if requested:child["LAB_REQUESTED_VERSION"]=requested
         with tempfile.TemporaryDirectory(prefix="ipa-cn-delivery-private-") as directory:
             root=Path(directory);root.chmod(0o700);original=root/"source.ipa"
-            progress("downloading")
+            progress("resolving_version" if requested else "downloading")
             args=["download",value["email"],info["bundleId"],"--guid",value["guid"],"--output",str(original)]
             result=(run_download(binary,args,child,DOWNLOAD_TIMEOUT,measurement) if measurement
                     else run(binary,args,child,timeout=DOWNLOAD_TIMEOUT))
+            if requested and result.returncode!=0:
+                markers=re.findall(r"^IPA_LAB_VERSION_ERROR:([a-z_]+)$",result.stdout or "",re.M)
+                known={"invalid_version","version_not_found","version_search_limit","version_lookup_unavailable"}
+                raise ExportError(markers[-1] if markers and markers[-1] in known else "version_download_rejected")
             require(result.returncode==0 and original.is_file(),"cn_download_rejected")
+            version_id,resolved=resolved_marker(result.stdout or "",requested) if requested else ("","")
             bound_account(path,value,env)
-            # The common verifier sees only the CN model during this isolated worker.
+            # The common verifier receives only the bound CN model, never the foreign model.
             os.environ["FAIRPLAY_MODEL_B64"]=env["FAIRPLAY_CN_MODEL_B64"]
             try:
                 return export_original(engine,crypt,root,original,info,target,request_id,recipient,
-                                       output_dir,progress,profile="cn")
+                                       output_dir,progress,requested,version_id,resolved,profile="cn")
             finally:os.environ.pop("FAIRPLAY_MODEL_B64",None)
-    finally:
-        if folder.exists() and not folder.is_symlink():shutil.rmtree(folder)
 
 if __name__=="__main__":raise SystemExit(main(export))
