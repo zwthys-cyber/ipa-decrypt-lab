@@ -7,7 +7,7 @@ on:
         description: Verify precompiled runtime, or export verified IPA as age ciphertext
         type: choice
         default: preflight
-        options: [preflight, diagnose, existing_entitlement]
+        options: [preflight, diagnose, existing_entitlement, response_control]
 permissions:
   contents: read
   actions: read
@@ -151,7 +151,7 @@ jobs:
           retention-days: 1
           if-no-files-found: error
       - name: Retain only the fully verified encrypted control result
-        if: success() && inputs.mode == 'existing_entitlement'
+        if: success() && (inputs.mode == 'existing_entitlement' || inputs.mode == 'response_control')
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: cn-existing-entitlement-${{ github.run_id }}

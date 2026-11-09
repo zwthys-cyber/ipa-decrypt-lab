@@ -8,6 +8,11 @@ final class LabCNPurchaseTraceTests:XCTestCase {
         XCTAssertTrue(lines.contains("IPA_CN_PURCHASE_SUCCESS_TYPE:true"))
         XCTAssertFalse(lines.joined().contains("PRIVATE"))
     }
+    func testMessageClassificationNeverPublishesMessage() {
+        let lines=LabCNPurchaseTrace.lines(["customerMessage":"License required in this storefront PRIVATE_ACCOUNT"])
+        XCTAssertTrue(lines.contains("IPA_CN_PURCHASE_MESSAGE_KINDS:license,storefront"))
+        XCTAssertFalse(lines.joined().contains("PRIVATE"))
+    }
     func testMalformedAndUnboundedCodesAreNotPublished() {
         let invalid:[Any]=["PRIVATE",true,99999999,"4\nSECRET",["token":"PRIVATE"]]
         for value in invalid {

@@ -38,3 +38,9 @@ class NativeTracePrivacyTests(unittest.TestCase):
         report=summarize(subprocess.CompletedProcess([],1,"IPA_CN_PURCHASE_HTTP:200\nIPA_CN_PURCHASE_FAILURE:-5000\nIPA_CN_PURCHASE_MESSAGE:true\nIPA_CN_PURCHASE_PHASE:parse_response\nIPA_CN_PURCHASE_ROOT:dictionary\nIPA_CN_PURCHASE_PRIVATE:SECRET\n","PRIVATE_EMAIL"))
         self.assertEqual(report["purchase_trace"],{"http":200,"failure":-5000,"message":True,"phase":"parse_response","root":"dictionary"})
         self.assertNotIn("PRIVATE",json.dumps(report))
+
+class EntitlementTracePrivacyTests(unittest.TestCase):
+    def test_only_closed_semantic_categories_and_identity_booleans(self):
+        report=summarize(subprocess.CompletedProcess([],1,"IPA_CN_ENTITLEMENT_MESSAGE_KINDS:license,storefront\nIPA_CN_ENTITLEMENT_APP_MATCH:false\nIPA_CN_ENTITLEMENT_FAILURE:9610\nIPA_CN_ENTITLEMENT_MESSAGE_KINDS:PRIVATE_SECRET\n","PRIVATE"))
+        self.assertEqual(report["entitlement_trace"],{"message_categories":["license","storefront"],"app_match":False,"failure":9610})
+        self.assertNotIn("PRIVATE",json.dumps(report))

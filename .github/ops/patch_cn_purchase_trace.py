@@ -27,3 +27,17 @@ if os.environ.get("CN_LICENSE_CONTROL")=="existing_entitlement":
     assert "LabPurchaseUnconfirmed" in block
     source=source[:begin]+'            print("IPA_CN_LICENSE_CONTROL:existing_entitlement")\n'+source[end:]
     path.write_text(source)
+
+path=root/"Sources/ApplePackage/Commands/LabEntDownload.swift"
+source=path.read_text()
+anchor='        print("IPA_LAB_STAGE:validate_ent_product")'
+assert source.count(anchor)==1
+source=source.replace(anchor,anchor+'\n        for line in LabCNPurchaseTrace.entitlement(dict,app:app,version:version) { print(line) }')
+path.write_text(source)
+if os.environ.get("CN_LICENSE_CONTROL")=="response_control":
+    path=root/"Sources/ApplePackageTool/Commands/Download.swift"
+    source=path.read_text()
+    anchor='                print("IPA_LAB_LICENSE:unconfirmed_5002")\n            }'
+    assert source.count(anchor)==1
+    source=source.replace(anchor,'                print("IPA_LAB_LICENSE:unconfirmed_5002")\n            } catch {\n                print("IPA_CN_CONTROL:purchase_failed_inspect_entitlement")\n            }')
+    path.write_text(source)

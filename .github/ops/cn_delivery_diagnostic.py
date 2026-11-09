@@ -25,6 +25,18 @@ def summarize(result):
         if match:trace[match[1].lower()]=match[2]=="true"
         match=re.fullmatch(r"IPA_CN_PURCHASE_(PHASE|ROOT):(prepare_request|send_request|parse_response|dictionary|not_dictionary)",line)
         if match:trace[match[1].lower()]=match[2]
+    entitlement={}
+    kinds={"license","storefront","terms","account_setup","authentication","age","restriction","temporary"}
+    for line in raw.splitlines():
+        match=re.fullmatch(r"IPA_CN_(PURCHASE|ENTITLEMENT)_MESSAGE_KINDS:([a-z_,]*)",line)
+        if match:
+            values=match[2].split(",") if match[2] else []
+            if set(values)<=kinds:
+                (trace if match[1]=="PURCHASE" else entitlement)["message_categories"]=values
+        match=re.fullmatch(r"IPA_CN_(PURCHASE|ENTITLEMENT)_(HAS_FAILURE_TYPE|MESSAGE|ACTION|SUCCESS_TYPE|APP_MATCH|VERSION_MATCH|BUNDLE_MATCH|DIALOG):(true|false)",line)
+        if match:(trace if match[1]=="PURCHASE" else entitlement)[match[2].lower()]=match[3]=="true"
+        match=re.fullmatch(r"IPA_CN_ENTITLEMENT_(HTTP|FAILURE|STATUS|ITEMS):(-?[0-9]{1,7})",line)
+        if match and -999999<=int(match[2])<=999999:entitlement[match[1].lower()]=int(match[2])
     text=raw.lower()
     patterns={
         "invalid_purchase_response":"invalid purchase response",
@@ -48,7 +60,7 @@ def summarize(result):
             "download_succeeded":result.returncode==0,
             "classification":classify_download(result),
             "diagnostic":safe_failure(result),"native_error_codes":domains,"transport":authentication_diagnostics(result),
-            "purchase_trace":trace,"error_categories":matches,"stdout_bytes":len((result.stdout or "").encode()),"stderr_bytes":len((result.stderr or "").encode())}
+            "purchase_trace":trace,"entitlement_trace":entitlement,"error_categories":matches,"stdout_bytes":len((result.stdout or "").encode()),"stderr_bytes":len((result.stderr or "").encode())}
 
 def main():
     original=worker.run_download
@@ -57,16 +69,16 @@ def main():
         report=summarize(result)
         Path("cn-download-diagnostic.json").write_text(json.dumps(report))
         print(json.dumps(report),flush=True)
-        if result.returncode==0 and os.environ.get("CN_LICENSE_CONTROL")!="existing_entitlement":
+        if result.returncode==0 and os.environ.get("CN_LICENSE_CONTROL") not in ("existing_entitlement","response_control"):
             raise worker.ExportError("cn_diagnostic_download_succeeded")
         return result
     worker.run_download=probe
     try:code=worker.main(worker.export)
     finally:worker.run_download=original
-    if os.environ.get("CN_LICENSE_CONTROL")=="existing_entitlement":
+    if os.environ.get("CN_LICENSE_CONTROL") in ("existing_entitlement","response_control"):
         if Path("cn-download-diagnostic.json").is_file():
             report=json.loads(Path("cn-download-diagnostic.json").read_text())
-            report.update(control="existing_entitlement",export_succeeded=code==0)
+            report.update(control=os.environ.get("CN_LICENSE_CONTROL"),export_succeeded=code==0)
             if code==0:
                 receipt=json.loads(Path("delivery-out/receipt.json").read_text())
                 report.update(plaintext_verified=receipt.get("plaintext_verified") is True,
