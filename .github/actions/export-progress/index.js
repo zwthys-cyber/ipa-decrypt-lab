@@ -44,12 +44,17 @@ function launch(command,args,options) {
     child.once('exit',code=>finish(code === null ? 1 : code));
   });
 }
+function accountRoute(profile,rid) {
+  const expected=rid.startsWith('tf_')?'tf':rid.startsWith('cn_')?'cn':'default';
+  if (!['default','cn','tf'].includes(profile||'default') || (profile||'default')!==expected) throw new Error('invalid_account_profile');
+  return expected;
+}
 async function main() {
   const env=process.env;
   const identity={rid:env.DELIVERY_REQUEST_ID,run:env.GITHUB_RUN_ID,commit:env.GITHUB_SHA};
-  if (!/^(?:cn_)?[a-f0-9]{32}$/.test(identity.rid||'') || !/^[0-9]+$/.test(identity.run||'') || !/^[a-f0-9]{40}$/.test(identity.commit||'') || env.GITHUB_REPOSITORY !== 'zwthys-cyber/ipa-decrypt-lab') throw new Error('invalid_progress_identity');
-  const cn=env.DELIVERY_ACCOUNT_PROFILE === 'cn';
-  if (!['default','cn'].includes(env.DELIVERY_ACCOUNT_PROFILE||'default') || cn !== identity.rid.startsWith('cn_')) throw new Error('invalid_account_profile');
+  if (!/^(?:(?:cn|tf)_)?[a-f0-9]{32}$/.test(identity.rid||'') || !/^[0-9]+$/.test(identity.run||'') || !/^[a-f0-9]{40}$/.test(identity.commit||'') || env.GITHUB_REPOSITORY !== 'zwthys-cyber/ipa-decrypt-lab') throw new Error('invalid_progress_identity');
+  const route=accountRoute(env.DELIVERY_ACCOUNT_PROFILE,identity.rid);
+  const cn=route==='cn',tf=route==='tf';
   const root=fs.mkdtempSync(path.join(env.RUNNER_TEMP||os.tmpdir(),'ipa-progress-'));
   fs.chmodSync(root,0o700);
   const input=path.join(root,'worker.json');
@@ -89,7 +94,7 @@ async function main() {
   try {
     const probe=env.INPUT_PROBE === 'true';
     if(probe && (identity.rid !== 'f'.repeat(32) || ['APPLE_ID','APPLE_PASSWORD','FAIRPLAY_MODEL_B64','DELIVERY_AGE_IDENTITY','TELEGRAM_BOT_TOKEN'].some(key => env[key]))) throw new Error('invalid_probe_context');
-    const command=probe ? 'ulimit -c 0\nexec python3 tools/progress_probe.py' : cn ? 'ulimit -c 0\nexec python3 tools/cn_private_export.py --binary runtime/ApplePackageTool --engine runtime/offline-engine --crypt runtime/delivery-crypt' : 'ulimit -c 0\nexec python3 tools/private_export.py --binary runtime/ApplePackageTool --engine runtime/offline-engine --crypt runtime/delivery-crypt';
+    const command=probe ? 'ulimit -c 0\nexec python3 tools/progress_probe.py' : tf ? 'ulimit -c 0\nexec python3 .github/ops/tf_task_worker.py' : cn ? 'ulimit -c 0\nexec python3 tools/cn_private_export.py --binary runtime/ApplePackageTool --engine runtime/offline-engine --crypt runtime/delivery-crypt' : 'ulimit -c 0\nexec python3 tools/private_export.py --binary runtime/ApplePackageTool --engine runtime/offline-engine --crypt runtime/delivery-crypt';
     worker=spawn('bash',['-e','-c',command],{env:{...env,IPA_PROGRESS_FILE:input,PYTHONUNBUFFERED:'1'},stdio:['ignore','inherit','inherit']});
     const terminate=signal=>{if(worker&&!worker.killed)worker.kill(signal)};
     process.once('SIGTERM',()=>terminate('SIGTERM'));
@@ -107,5 +112,5 @@ async function main() {
     try {fs.rmSync(root,{recursive:true,force:true})} catch {}
   }
 }
-module.exports={validateSnapshot,uploaderEnvironment};
+module.exports={validateSnapshot,uploaderEnvironment,accountRoute};
 if(require.main===module)main().catch(()=>{console.log('{"schema":"ipa-progress-feed-v1","status":"worker_wrapper_failed"}');process.exitCode=1});

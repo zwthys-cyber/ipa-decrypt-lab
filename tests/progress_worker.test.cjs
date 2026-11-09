@@ -29,3 +29,11 @@ test('CN progress remains profile-bound and uploader strips every CN secret',()=
  const env=uploaderEnvironment({APPLE_CN_ID:'private-cn',APPLE_CN_GUID:'private-cn',APPLE_CN_SESSION_B64:'private-cn',FAIRPLAY_CN_MODEL_B64:'private-cn',FAIRPLAY_CN_STATE_B64:'private-cn'},'/tmp/progress','cn-progress');
  assert.equal(JSON.stringify(env).includes('private-cn'),false);
 });
+
+test('TF progress selects a distinct worker and cannot cross account profiles',()=>{
+  const {accountRoute}=require('../.github/actions/export-progress/index.js');
+  assert.equal(accountRoute('tf','tf_'+'a'.repeat(32)),'tf');
+  assert.throws(()=>accountRoute('cn','tf_'+'a'.repeat(32)));
+  assert.throws(()=>accountRoute('tf','cn_'+'a'.repeat(32)));
+  assert.throws(()=>accountRoute('tf','a'.repeat(32)));
+});
