@@ -1,0 +1,32 @@
+import base64
+import copy
+import json
+import unittest
+from unittest.mock import patch
+from cn_arm_policy import snapshot,validate_backup,allow_reference,CNReferenceError
+import test_cn_session
+class CNARMReferenceBoundary(unittest.TestCase):
+    def setUp(self):
+        fixture=test_cn_session.CNSavedSessionContracts();fixture.setUp();self.env=dict(fixture.env)
+        checkpoint={'schema':'ipa-lab-private-fairplay-state-v1','hardware':base64.b64encode(bytes.fromhex(fixture.value['guid'])).decode(),'files':{'fpsd_sidb':base64.b64encode(b'SYNTHETIC_STATE').decode()}}
+        self.env['FAIRPLAY_CN_STATE_B64']=base64.b64encode(json.dumps(checkpoint).encode()).decode()
+        self.env.update(GITHUB_ACTIONS='true',GITHUB_REPOSITORY='zwthys-cyber/ipa-decrypt-lab',GITHUB_WORKFLOW_REF='zwthys-cyber/ipa-decrypt-lab/.github/workflows/cn-arm-model-bootstrap.yml@refs/heads/main',GITHUB_REF='refs/heads/main',GITHUB_EVENT_NAME='workflow_dispatch',GITHUB_RUN_ATTEMPT='1',CN_REFERENCE_ACK='true',CN_REFERENCE_NONCE='b'*32,GITHUB_SHA='a'*40,CN_MODEL_STATE_PRESENT='true')
+        self.env['CN_RECOVERY_BACKUP_B64']=base64.b64encode(json.dumps(snapshot(self.env)).encode()).decode()
+        self.env['CN_ARM_REFERENCE_APPROVAL']=json.dumps({'schema':'cn-arm-reference-approval-v1','nonce':'b'*32,'commit':'a'*40,'expires':1100})
+    def ready(self,env):
+        with patch('cn_arm_policy.platform.system',return_value='Darwin'),patch('cn_arm_policy.platform.machine',return_value='arm64'),patch('cn_arm_policy.platform.mac_ver',return_value=('15.7.2',(),'')):
+            allow_reference(env,now=1000)
+    def test_one_source_nonce_and_preserved_profile_can_pass(self):self.ready(self.env)
+    def test_no_approval_rerun_other_workflow_or_wrong_nonce_can_authorize(self):
+        for key,bad in [('CN_REFERENCE_ACK','false'),('CN_ARM_REFERENCE_APPROVAL','{}'),('CN_REFERENCE_NONCE','c'*32),('GITHUB_SHA','c'*40),('GITHUB_RUN_ATTEMPT','2'),('GITHUB_WORKFLOW_REF','other/workflow@refs/heads/main'),('CN_MODEL_STATE_PRESENT','false')]:
+            env=dict(self.env);env[key]=bad
+            with self.assertRaises(Exception):self.ready(env)
+    def test_expiry_and_wrong_platform_stop_before_native_authentication(self):
+        env=dict(self.env);approval=json.loads(env['CN_ARM_REFERENCE_APPROVAL']);approval['expires']=999;env['CN_ARM_REFERENCE_APPROVAL']=json.dumps(approval)
+        with self.assertRaises(Exception):self.ready(env)
+        with patch('cn_arm_policy.platform.system',return_value='Darwin'),patch('cn_arm_policy.platform.machine',return_value='x86_64'):
+            with self.assertRaises(Exception):allow_reference(self.env,now=1000)
+    def test_changed_session_or_state_cannot_reuse_a_stale_backup(self):
+        value=validate_backup(self.env);self.assertEqual(value['schema'],'cn-arm-prior-profile-v1')
+        env=dict(self.env);backup=copy.deepcopy(value);backup['state_b64']=base64.b64encode(b'PRIVATE_OTHER_STATE').decode();env['CN_RECOVERY_BACKUP_B64']=base64.b64encode(json.dumps(backup).encode()).decode()
+        with self.assertRaises(Exception):validate_backup(env)

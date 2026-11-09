@@ -1,0 +1,199 @@
+name: Isolated ARM CN model reference
+run-name: CN-arm-model-${{ inputs.mode }}
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Public preparation, private backup, explicitly approved new ARM enrollment, or saved-state replay
+        type: choice
+        default: preflight
+        options: [preflight, backup, trial, replay]
+      acknowledge_new_computer:
+        description: Explicit operator approval is additionally required through a one-time source-bound Secret
+        type: boolean
+        default: false
+      reference_nonce:
+        description: Public nonce bound to the separately approved one-time trial; never a verification code
+        type: string
+        default: ''
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: china-account-onboarding
+  cancel-in-progress: false
+jobs:
+  reference:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    timeout-minutes: 40
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+      LAB_BUILD_JOBS: '2'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: DrWhax/unfairplay
+          ref: 26a099fcb2292eaacd9e0ce89793cdbc88e516d1
+          path: native-source/unfairplay
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Lakr233/ApplePackage
+          ref: 391bfe6ee6598d73e4f94b88b38b50bd6f6ec67b
+          path: native-source/ApplePackage
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: majd/ipatool
+          ref: d9c0247daea564d3ec7d04a9b015d0a29af66b04
+          path: native-source/ipatool
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: native-source/ipatool/go.mod
+          cache: true
+          cache-dependency-path: native-source/ipatool/go.sum
+      - name: Build and test bounded kbsync helper
+        run: |
+          mkdir -p native-source/ipatool/cmd/lab-kbsync
+          cp tools/kbsync_main.go native-source/ipatool/cmd/lab-kbsync/main.go
+          cp tests/kbsync_main_test.go native-source/ipatool/cmd/lab-kbsync/main_test.go
+          cd native-source/ipatool
+          go test ./cmd/lab-kbsync
+          go build -o ../../lab-kbsync ./cmd/lab-kbsync
+      - name: Build and test offline backend
+        working-directory: native-source/unfairplay
+        run: |
+          go test -p 2 -timeout 180s ./...
+          go vet -p 2 ./...
+          go test -race -p 2 -timeout 180s ./...
+          go build -p 2 -trimpath -o ../../offline-engine ./cmd/unfairplay
+      - name: Test Python orchestrator before native compilation
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Test progress wrapper privacy and counter contracts
+        run: node --test tests/progress_worker.test.cjs
+      - name: Check all isolated account and approval contracts
+        run: |
+          python3 -m unittest discover -s .github/ops -p 'test_*.py' -v
+          node --test .github/ops/cn_action.test.cjs
+      - name: Check Swift toolchain and correct ambiguous diagnostics
+        run: |
+          swift --version
+          python3 tools/patch_swift_diagnostics.py native-source/ApplePackage
+          python3 tools/patch_ent_download.py native-source/ApplePackage
+          python3 .github/ops/patch_cn_login.py native-source/ApplePackage
+      - name: Restore public-source Swift build cache
+        id: swift-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: native-source/ApplePackage/.build
+          key: cn-arm-macos15-ARM64-xcode26.2-391bfe6-${{ hashFiles('.github/ops/ChinaLogin.swift', '.github/ops/LabCNLoginFlow.swift', '.github/ops/LabCNLoginFlowTests.swift', '.github/ops/LabCNSummary.swift', '.github/ops/LabCNSummaryTests.swift', '.github/ops/patch_cn_login.py', 'tools/StoreAMD.swift', 'tools/StoreBagTransport.m', 'tools/StoreBagTransport.h', 'tools/patch_swift_diagnostics.py', 'tools/patch_ent_download.py', 'tools/LabEntDownload.swift', 'tests/LabEntDownloadTests.swift') }}
+          restore-keys: |
+            cn-arm-macos15-ARM64-xcode26.2-391bfe6-
+      - name: Compile native client and test targets
+        timeout-minutes: 15
+        working-directory: native-source/ApplePackage
+        run: swift build -j "$LAB_BUILD_JOBS" --build-tests
+      - name: Test independent signing request construction
+        timeout-minutes: 3
+        working-directory: native-source/ApplePackage
+        run: swift test --skip-build --filter 'SAPAuthenticationRequestTests|LabEntDownloadTests|LabAuthRouteTests|LabStoreAMD|LabCNLoginFlowTests|LabCNSummaryTests'
+      - name: Build independent native client
+        timeout-minutes: 8
+        working-directory: native-source/ApplePackage
+        run: swift build -j "$LAB_BUILD_JOBS" --product ApplePackageTool
+      - name: Verify cached or freshly built native client exists
+        run: test -x native-source/ApplePackage/.build/debug/ApplePackageTool
+      - name: Save public-source build cache before credentials are supplied
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: native-source/ApplePackage/.build
+          key: ${{ steps.swift-cache.outputs.cache-primary-key }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: FiloSottile/age
+          ref: b74dce4cdbe35b5e5f66c06d9612b72f89028758
+          path: native-source/age
+          persist-credentials: false
+      - name: Build and test private delivery encryption
+        run: |
+          mkdir -p native-source/age/cmd/lab-delivery-crypt
+          cp tools/delivery_crypto.go native-source/age/cmd/lab-delivery-crypt/main.go
+          cp tests/delivery_crypto_test.go native-source/age/cmd/lab-delivery-crypt/main_test.go
+          cd native-source/age
+          go test -p 2 -timeout 120s ./cmd/lab-delivery-crypt
+          go build -p 2 -trimpath -o ../../delivery-crypt ./cmd/lab-delivery-crypt
+      - name: Build and test repository-only CN sealing without credentials
+        run: |
+          for purpose in session model backup; do
+            mkdir -p "native-source/age/cmd/lab-cn-$purpose-seal"
+            cp ".github/ops/cn_${purpose}_seal.go" "native-source/age/cmd/lab-cn-$purpose-seal/main.go"
+            cp ".github/ops/cn_${purpose}_seal_test.go" "native-source/age/cmd/lab-cn-$purpose-seal/main_test.go"
+          done
+          cd native-source/age
+          for purpose in session model backup; do
+            go test -p 2 -timeout 120s "./cmd/lab-cn-$purpose-seal"
+            go build -p 2 -trimpath -o "../../cn-$purpose-seal" "./cmd/lab-cn-$purpose-seal"
+          done
+      - name: Prepare and relocate the public ARM research runtime
+        run: |
+          mkdir arm-runtime
+          cp native-source/ApplePackage/.build/debug/ApplePackageTool lab-kbsync offline-engine delivery-crypt cn-session-seal cn-model-seal cn-backup-seal arm-runtime/
+          cp -R native-source/ApplePackage/.build/debug/ApplePackage_ApplePackage.bundle arm-runtime/
+          clang -dynamiclib -Wall -Wextra tools/NativeImportIO.c -install_name @rpath/libNativeImportIO.dylib -o arm-runtime/libNativeImportIO.dylib
+          clang -fobjc-arc -DLAB_IMPORT_IO -framework Foundation tools/NativeMachineEnrollment.m -Larm-runtime -lNativeImportIO -Wl,-rpath,@executable_path -o arm-runtime/native-machine-enrollment
+          arm-runtime/native-machine-enrollment --io-contract
+          arm-runtime/native-machine-enrollment --response-contract
+          swiftc native-source/ApplePackage/Sources/ApplePackage/Configuration/DeviceIdentifier.swift tools/NativeDeviceIdentity.swift -o arm-runtime/native-device-identity
+          mv native-source/ApplePackage/.build native-source/ApplePackage/.build-hidden
+          arm-runtime/ApplePackageTool --help
+          arm-runtime/offline-engine --help
+          otool -L arm-runtime/ApplePackageTool
+          python3 .github/ops/cn_arm_model.py --mode preflight
+      - name: Check the fixed free CN model sample without credentials
+        if: inputs.mode == 'trial' || inputs.mode == 'replay'
+        run: python3 .github/ops/cn_download_probe.py --metadata --app-id 1661733229
+      - name: Seal the existing CN profile before any extra enrollment
+        if: inputs.mode == 'backup'
+        env:
+          APPLE_CN_ID: ${{ secrets.APPLE_CN_ID }}
+          APPLE_CN_GUID: ${{ secrets.APPLE_CN_GUID }}
+          APPLE_CN_SESSION_B64: ${{ secrets.APPLE_CN_SESSION_B64 }}
+          FAIRPLAY_CN_STATE_B64: ${{ secrets.FAIRPLAY_CN_STATE_B64 }}
+        run: python3 .github/ops/cn_arm_model.py --mode backup
+      - name: Run one source-bound approved ARM trial or saved-state replay
+        if: inputs.mode == 'trial' || inputs.mode == 'replay'
+        env:
+          APPLE_CN_ID: ${{ secrets.APPLE_CN_ID }}
+          APPLE_CN_GUID: ${{ secrets.APPLE_CN_GUID }}
+          APPLE_CN_SESSION_B64: ${{ secrets.APPLE_CN_SESSION_B64 }}
+          FAIRPLAY_CN_STATE_B64: ${{ secrets.FAIRPLAY_CN_STATE_B64 }}
+          CN_MODEL_STATE_PRESENT: ${{ secrets.FAIRPLAY_CN_STATE_B64 != '' }}
+          CN_RECOVERY_BACKUP_B64: ${{ secrets.CN_RECOVERY_BACKUP_B64 }}
+          CN_ARM_REFERENCE_APPROVAL: ${{ inputs.mode == 'trial' && secrets.CN_ARM_REFERENCE_APPROVAL || '' }}
+          CN_REFERENCE_ACK: ${{ inputs.acknowledge_new_computer && 'true' || 'false' }}
+          CN_REFERENCE_NONCE: ${{ inputs.reference_nonce }}
+          CN_LIVE_TASK: ${{ inputs.mode == 'trial' && 'arm_model_trial' || 'arm_model_replay' }}
+          GH_TOKEN: ${{ github.token }}
+          DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
+          LAB_KBSYNC_HELPER: ${{ github.workspace }}/arm-runtime/lab-kbsync
+        uses: ./.github/actions/cn-auth
+      - name: Publish reviewed receipts and repository-recipient ciphertext only
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: cn-arm-model-result-${{ github.run_id }}
+          path: |
+            cn-model-receipt.json
+            cn-arm-backup-receipt.json
+            cn-recovery-backup-secret-relay.json
+            cn-model-secret-relay.json
+            cn-state-secret-relay.json
+            cn-guid-secret-relay.json
+            cn-session-secret-relay.json
+          retention-days: 1
+          if-no-files-found: ignore

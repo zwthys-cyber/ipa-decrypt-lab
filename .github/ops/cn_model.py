@@ -105,10 +105,15 @@ def base():
         'verification_code_used':False,'model_recovered':False,'decryption_proven':False,'plaintext_verified':False,
         'runtime_verified':False,'plaintext_retained':False,'checkpoint_saved':False,'model_secret_prepared':False}
 
-def trial(runtime,env,mode,report):
+def trial(runtime,env,mode,report,reference_enrollment=False):
     require(not any(env.get(k) for k in ('APPLE_ID','APPLE_PASSWORD','FAIRPLAY_MODEL_B64','FAIRPLAY_STATE_B64')),'foreign_account_secrets_present')
     require(mode in ('trial','replay'),'cn_model_mode_invalid')
-    require(mode=='replay' or env.get('CN_MODEL_STATE_PRESENT')!='true','cn_saved_state_requires_replay')
+    if reference_enrollment:
+        from cn_arm_policy import allow_reference
+        require(mode=='trial','cn_reference_mode_invalid');allow_reference(env)
+        report['reference_enrollment']=True
+    else:
+        require(mode=='replay' or env.get('CN_MODEL_STATE_PRESENT')!='true','cn_saved_state_requires_replay')
     if mode=='replay':checkpoint.validate(checkpoint.decode_bytes(env.get('FAIRPLAY_CN_STATE_B64',''),checkpoint.LIMIT))
     report['checkpoint_preflight']=checkpoint_preflight()
     value,_=decode(env);info=json.loads(Path('cn-sample-metadata.json').read_text())
