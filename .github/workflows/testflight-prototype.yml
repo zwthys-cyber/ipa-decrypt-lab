@@ -1,0 +1,60 @@
+name: TestFlight autonomous pipeline prototype
+run-name: TF-background-preflight
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: testflight-prototype
+  cancel-in-progress: false
+jobs:
+  public:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-26-intel
+    timeout-minutes: 35
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Test closed native profile reporting without credentials
+        run: python3 -m unittest discover -s .github/ops -p 'test_tf_native.py'
+      - name: Compile the genuine Mac profile reader
+        run: |
+          mkdir -p tf-native-source
+          cp tools/StoreBagTransport.m tf-native-source/StoreBagTransport.m
+          cp tools/StoreBagTransport.h tf-native-source/LabStoreBagTransport.h
+          clang -fobjc-arc -fblocks -framework Foundation -I tf-native-source .github/ops/tf_native_profile.m tf-native-source/StoreBagTransport.m -o tf-native-profile
+      - name: Check genuine native identity and machine headers before private inputs
+        id: native
+        continue-on-error: true
+        run: |
+          ulimit -c 0
+          python3 .github/ops/tf_native_check.py --binary tf-native-profile
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: apple-auth/apple-auth
+          ref: 98c862f7bebc8283a9b87f1578e703f0765dc81d
+          path: native-source/apple-auth
+          persist-credentials: false
+      - name: Install public SDK build dependencies
+        run: brew install cmake ninja pkgconf mbedtls@3 curl nlohmann-json libzip
+      - name: Build the pinned TestFlight transport SDK without accounts
+        run: |
+          tf_prefix="$(brew --prefix mbedtls@3);$(brew --prefix curl);$(brew --prefix nlohmann-json);$(brew --prefix libzip)"
+          cmake -S native-source/apple-auth -B tf-sdk-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$tf_prefix" -DAPPLE_AUTH_WITH_TESTFLIGHT=ON -DAPPLE_AUTH_BUILD_EXAMPLES=ON -DBUILD_TESTING=ON
+          cmake --build tf-sdk-build --parallel 4
+      - name: Verify public crypto and transport contracts
+        run: ctest --test-dir tf-sdk-build --output-on-failure --timeout 180
+      - name: Gate native readiness before any future account operation
+        if: steps.native.outcome != 'success'
+        run: exit 2
+      - name: Retain only the closed preflight receipt
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: tf-public-preflight-${{ github.run_id }}
+          path: tf-native-receipt.json
+          retention-days: 1
+          if-no-files-found: error
