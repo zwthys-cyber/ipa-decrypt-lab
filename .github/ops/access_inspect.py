@@ -40,11 +40,21 @@ def inspect(root,request,nonce,now=None):
         own=scope(request['uid'])
         item=db.execute('SELECT state FROM tasks WHERE scope=? AND rid=?',(own,request['expected_request'])).fetchone() if request['expected_request'] else None
         task_state=item[0] if item and item[0] in STATES else None
+        admin_item=db.execute('SELECT 1 FROM tasks WHERE scope=? AND rid=?',(scope(owner),request['expected_request'])).fetchone() if request['expected_request'] else None
+        card=db.execute('SELECT value FROM metadata WHERE scope=? AND name=?',(own,'progress:'+request['expected_request'])).fetchone() if request['expected_request'] else None
+        progress=json.loads(card[0]) if card else {}
+        phase=progress.get('stage') if isinstance(progress,dict) else None
+        if phase not in {'done','uploading','retrieving','delivery_verifying','failed','unknown','cancelled'}:phase='processing' if phase else None
+
         return {'schema':'ipa-private-access-inspection-v1','status':'inspected',
                 'runtime_source':source,'service_state':state,'service_task_active':health.get('task_active') is True,
                 'target_is_administrator':admin,'target_authorized':admin or bool(row and row[0]==1),
                 'target_daily_limit':row[1] if row and not admin else None,
-                'expected_request_owned':item is not None,'expected_request_state':task_state}
+                'expected_request_owned':item is not None,'expected_request_state':task_state,
+                'separate_from_administrator':not admin and item is not None and admin_item is None,
+                'expected_progress_stage':phase,
+                'expected_progress_finished':isinstance(progress.get('finished'),(int,float)) and not isinstance(progress.get('finished'),bool),
+                'expected_progress_message_saved':type(progress.get('message_id')) is int and progress['message_id']>0}
     finally:db.close()
 
 def main():
