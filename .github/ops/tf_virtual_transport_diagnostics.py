@@ -51,3 +51,28 @@ def session_observations(raw):
         result.append(value)
         if len(result)==4:break
     return result
+
+def store_observations(raw):
+    result=[]
+    keys={"body_bytes","format","content_type","content_encoding","parsed","object","status_kind",
+        "status_zero","status_code","status_in_range","person_id_present","password_token_present",
+        "failure_present","error_code_present","message_present","dialog_present","parse_failure"}
+    flags={"parsed","object","status_zero","status_in_range","person_id_present","password_token_present",
+        "failure_present","error_code_present","message_present","dialog_present"}
+    enums={"format":{"empty","other","gzip","json","binary_plist","xml","html"},
+        "content_type":{"missing","other","html","plist","json","binary"},
+        "content_encoding":{"missing","other","gzip","deflate","br"},
+        "status_kind":{"absent","integer","string","boolean","floating","other"},
+        "parse_failure":{"none","empty","oversized","json_error","invalid_plist","unsupported_plist","other"}}
+    for line in raw.splitlines():
+        if not line.startswith(b"TF_STORE:") or len(line)>2048:continue
+        try:value=json.loads(line[9:])
+        except (ValueError,UnicodeError):continue
+        if type(value) is not dict or set(value)!=keys:continue
+        if any(type(value[k]) is not bool for k in flags):continue
+        if any(type(value[k]) is not str or value[k] not in options for k,options in enums.items()):continue
+        if type(value["body_bytes"]) is not int or not 0<=value["body_bytes"]<=16777217:continue
+        if type(value["status_code"]) is not int or not -99999999<=value["status_code"]<=99999999:continue
+        result.append(value)
+        if len(result)==4:break
+    return result

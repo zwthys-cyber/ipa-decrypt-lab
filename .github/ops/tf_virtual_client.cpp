@@ -6,7 +6,7 @@
 #include <iostream>
 #include <regex>
 #include <ctime>
-namespace apple_auth { APPLE_AUTH_CLIENT_EXPORT Transport lab_tf_curl_transport(); APPLE_AUTH_CLIENT_EXPORT int lab_tf_pet_contract(); APPLE_AUTH_CLIENT_EXPORT AccountSession lab_tf_refresh_pet(Client&,const AccountSession&,const Transport&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_auth_contract(); APPLE_AUTH_CLIENT_EXPORT bool lab_tf_account_session_valid(const AccountSession&,std::int64_t); APPLE_AUTH_CLIENT_EXPORT std::int64_t lab_tf_retry_after(const HttpResponse&,std::int64_t); }
+namespace apple_auth { APPLE_AUTH_CLIENT_EXPORT Transport lab_tf_curl_transport(); APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_store_shape(const HttpResponse&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_pet_contract(); APPLE_AUTH_CLIENT_EXPORT AccountSession lab_tf_refresh_pet(Client&,const AccountSession&,const Transport&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_auth_contract(); APPLE_AUTH_CLIENT_EXPORT bool lab_tf_account_session_valid(const AccountSession&,std::int64_t); APPLE_AUTH_CLIENT_EXPORT std::int64_t lab_tf_retry_after(const HttpResponse&,std::int64_t); }
 #include <sys/stat.h>
 using namespace apple_auth;
 using Json=nlohmann::json;
@@ -60,6 +60,9 @@ void classify(const std::exception& error,Json& report) {
         report["apple_error_code"]=std::stoi(match[1]);
     std::string category="unclassified_exception";
     for(const auto& item:std::vector<std::pair<std::string,std::string>>{
+        {"Invalid plist","store_response_plist_invalid"},
+        {"Empty Store response","store_response_empty"},
+        {"Unsupported plist","store_response_plist_unsupported"},
         {"Mac Store authentication rejected","mac_store_authentication_rejected"},
         {"Missing Mac anisette header","mac_store_header_missing"},
         {"Mac PET has expired","mac_pet_expired"},
@@ -122,6 +125,14 @@ int self_test() {
     classify(std::runtime_error("Mac Store authentication rejected PRIVATE_ACCOUNT"),diagnostic);
     require(diagnostic["failure_category"]=="mac_store_authentication_rejected" &&
             diagnostic.dump().find("PRIVATE_ACCOUNT")==std::string::npos);
+    const auto shape=Json::parse(lab_tf_store_shape({200,
+        Bytes{'{','"','s','t','a','t','u','s','"',':','0','}'},{}}));
+    require(shape["parsed"]==true && shape["status_zero"]==true);
+    const std::string html="<!DOCTYPE html><html>PRIVATE_ACCOUNT PRIVATE_TOKEN</html>";
+    const auto rejected=lab_tf_store_shape({200,Bytes(html.begin(),html.end()),{{"Content-Type","text/html"}}});
+    require(rejected.find("PRIVATE_")==std::string::npos);
+    const auto metadata=Json::parse(rejected);
+    require(metadata["format"]=="html" && metadata["parsed"]==false && metadata["parse_failure"]=="invalid_plist");
     return 0;
 }
 }
@@ -149,6 +160,7 @@ int main(int argc,char **argv) {
             if(report["stage"]=="grandslam_login" && (stage=="gsa_srp_init" || stage=="gsa_srp_complete" || stage=="gsa_service"))
                 report["account_login_attempted"]=true;
             const auto response=base(request);report["http_status"]=response.status;
+            if(stage=="store_authentication")std::cerr<<"TF_STORE:"<<lab_tf_store_shape(response)<<std::endl;
             const auto retry=lab_tf_retry_after(response,std::time(nullptr));
             report["retry_after_known"]=retry>=0;
             report["retry_after_seconds"]=retry>=0 ? retry : 0;
