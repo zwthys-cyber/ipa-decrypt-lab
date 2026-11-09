@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 import os
 import subprocess
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'tools'))
 import private_fairplay_state as checkpoint
 
 BOOLS=('sidb_authenticated','exact_route_matched','first_block_accepted','full_license_accepted','model_written')
