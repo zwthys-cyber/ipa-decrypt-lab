@@ -10,7 +10,7 @@ class VirtualExperimentTests(unittest.TestCase):
             "virtual_identity":True,"account_login_attempted":False,"gsa_authenticated":False,
             "mac_store_authenticated":False,"tf_authenticated":False,"catalog_received":False,
             "verification_requested":False,"http_status":0,"sdk_error_code":0,
-            "apple_error_code":0,"failure_category":"none","last_request_stage":"none"}
+            "apple_error_code":0,"failure_category":"none","last_request_stage":"none","gsa_session_reused":False,"retry_after_known":False,"retry_after_seconds":0}
 
     def test_raw_account_fields_cannot_be_published(self):
         for key in ("email","headers","sessionId","password","hardware20","error"):
@@ -49,3 +49,9 @@ class VirtualExperimentTests(unittest.TestCase):
             self.assertGreater(len(pack_private(root)),0)
             (root/"link").symlink_to(item)
             with self.assertRaises(ValueError):pack_private(root)
+
+    def test_restored_gsa_proof_does_not_require_another_password_attempt(self):
+        value=self.fixture();value.update(gsa_authenticated=True,gsa_session_reused=True)
+        self.assertTrue(validate(value)["gsa_session_reused"])
+        value["gsa_session_reused"]=False
+        with self.assertRaises(ValueError):validate(value)

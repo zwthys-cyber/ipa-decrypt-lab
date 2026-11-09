@@ -4,7 +4,7 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
-from tf_virtual_restore import RUN, SOURCE, unpack_private
+from tf_virtual_restore import ORIGIN_RUN as RUN, ORIGIN_SOURCE as SOURCE, unpack_private
 
 class VirtualRestoreTests(unittest.TestCase):
     def archive(self,extra=None,source=SOURCE):

@@ -1,4 +1,4 @@
-"""Restore only the fixed, digest-bound encrypted first virtual experiment."""
+"""Restore the fixed authenticated state while preserving its original virtual identity."""
 import hashlib
 import io
 import json
@@ -13,10 +13,12 @@ import zipfile
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/"tools"))
 from telegram_queue import GitHub
 
-RUN=42650873653
-SOURCE="19244adbe73f71156a91a5c1cb20965925928054"
-ARCHIVE_DIGEST="sha256:a2c539e96826e6c23e499182947cec4b3d7ff0eea75c88c92d34e2622bcc69ba"
-CIPHER_DIGEST="e71716798312872371bb1822d30754b8f5ebfd5414e386e36584491c3d23e76c"
+RUN=42662277216
+ORIGIN_RUN=42650873653
+ORIGIN_SOURCE="19244adbe73f71156a91a5c1cb20965925928054"
+SOURCE="084ad0d0ce7ac83610515a8418483034ee5a0ba0"
+ARCHIVE_DIGEST="sha256:38af27165f6e76972a01ed0c1d4e331d3abe1894ec188a43258f7466ee48955b"
+CIPHER_DIGEST="3a058dc0241a26c94e5799be536f0710aab8c36c0ff2b61c2c4d9889d7562f0d"
 
 def require(value):
     if not value:raise ValueError("tf_virtual_restore_invalid")
@@ -43,7 +45,7 @@ def unpack_private(raw,root):
     profile=json.loads(files["profile.json"])
     require(type(profile) is dict and profile.get("schema")=="testflight-virtual-profile-v1"
             and profile.get("origin")=="independent_sdk_virtual_identity"
-            and profile.get("run_id")==str(RUN) and profile.get("source_commit")==SOURCE
+            and profile.get("run_id")==str(ORIGIN_RUN) and profile.get("source_commit")==ORIGIN_SOURCE
             and type(profile.get("hardware20")) is str
             and re.fullmatch(r"[a-f0-9]{40}",profile["hardware20"]) is not None)
     for name,data in files.items():
@@ -60,7 +62,7 @@ def restore(root,env):
             and run.get("conclusion")=="failure" and run.get("run_attempt")==1
             and run.get("path")==".github/workflows/testflight-virtual.yml")
     items=api.call("/actions/runs/"+str(RUN)+"/artifacts?per_page=100")["artifacts"]
-    found=[item for item in items if item.get("name")=="tf-virtual-sealed-"+str(RUN) and not item.get("expired")]
+    found=[item for item in items if item.get("name")=="tf-virtual-sealed-"+str(RUN)+"-attempt-1" and not item.get("expired")]
     require(len(found)==1)
     item=found[0]
     require(item.get("digest")==ARCHIVE_DIGEST and 0<item.get("size_in_bytes",0)<4*1024*1024)
@@ -74,10 +76,12 @@ def restore(root,env):
             cipher=zipped.read("tf-virtual-state.age")
             receipt=json.loads(zipped.read("tf-virtual-receipt.json"))
         require(hashlib.sha256(cipher).hexdigest()==CIPHER_DIGEST and receipt.get("source_commit")==SOURCE
-                and receipt.get("run_id")==str(RUN) and receipt.get("sealed_state_sha256")==CIPHER_DIGEST)
+                and receipt.get("run_id")==str(RUN) and receipt.get("sealed_state_sha256")==CIPHER_DIGEST
+                and receipt.get("result",{}).get("gsa_authenticated") is True)
         identity=work/"identity.txt"
         identity.write_text(env["DELIVERY_AGE_IDENTITY"]);identity.chmod(0o600)
         child={k:env[k] for k in ("HOME","PATH","LANG") if k in env}
         result=subprocess.run(["age","-d","-i",str(identity)],input=cipher,capture_output=True,timeout=30,env=child)
         require(result.returncode==0)
         unpack_private(result.stdout,root)
+        require((root/"account.plist").is_file())

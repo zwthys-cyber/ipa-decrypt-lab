@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       run_control:
-        description: One bounded GSA stage diagnostic with restored identity
+        description: Resume a verified GSA session after cooldown without a password login
         type: boolean
         default: false
 permissions:
@@ -56,18 +56,19 @@ jobs:
           cmake -S native-source/apple-auth -B tf-sdk-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$tf_prefix" -DAPPLE_AUTH_WITH_TESTFLIGHT=ON -DAPPLE_AUTH_BUILD_EXAMPLES=ON
           cmake --build tf-sdk-build --parallel 4
           ctest --test-dir tf-sdk-build --output-on-failure --no-tests=error --timeout 180
-      - name: Trace one source-bound GSA attempt with restored identity
+      - name: Resume saved verified GSA session after cooldown
         if: ${{ inputs.run_control || (github.event_name == 'push' && contains(github.event.head_commit.message, '[tf-virtual-control-once]')) }}
         env:
           APPLE_CN_ID: ${{ secrets.APPLE_CN_ID }}
-          APPLE_CN_PASSWORD: ${{ secrets.APPLE_CN_PASSWORD }}
-          TF_VIRTUAL_RESTORE_RUN: '42650873653'
+          TF_VIRTUAL_RESTORE_RUN: '42662277216'
+          TF_VIRTUAL_RESUME_STORE: '1'
+          TF_VIRTUAL_NOT_BEFORE: '1794245200'
           DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
           GH_TOKEN: ${{ github.token }}
-          CN_LIVE_TASK: tf_virtual_auth
-          TF_VIRTUAL_LIVE_OTP: '1'
           TF_CURL_FRESH_GSA: '1'
-        uses: ./.github/actions/cn-auth
+        run: |
+          ulimit -c 0
+          python3 .github/ops/tf_virtual.py
       - name: Retain only encrypted state and a closed receipt
         if: ${{ always() && (inputs.run_control || (github.event_name == 'push' && contains(github.event.head_commit.message, '[tf-virtual-control-once]'))) }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
@@ -79,6 +80,4 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-# One fresh-connection control; no raw wire data or automatic login retry.
-
-# Reuse one anisette/CPD set per SRP exchange and require an explicit integer zero OTP result.
+# One resume after a local 600-second fallback cooldown; no password or GSA relogin.

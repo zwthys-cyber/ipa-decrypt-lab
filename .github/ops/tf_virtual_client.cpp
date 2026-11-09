@@ -6,12 +6,13 @@
 #include <iostream>
 #include <regex>
 #include <ctime>
-namespace apple_auth { APPLE_AUTH_CLIENT_EXPORT Transport lab_tf_curl_transport(); APPLE_AUTH_CLIENT_EXPORT int lab_tf_auth_contract(); }
+namespace apple_auth { APPLE_AUTH_CLIENT_EXPORT Transport lab_tf_curl_transport(); APPLE_AUTH_CLIENT_EXPORT int lab_tf_auth_contract(); APPLE_AUTH_CLIENT_EXPORT bool lab_tf_account_session_valid(const AccountSession&,std::int64_t); APPLE_AUTH_CLIENT_EXPORT std::int64_t lab_tf_retry_after(const HttpResponse&,std::int64_t); }
 #include <sys/stat.h>
 using namespace apple_auth;
 using Json=nlohmann::json;
 namespace {
 struct VerificationNeeded {};
+struct SavedSessionInvalid {};
 void require(bool ok) { if(!ok) throw std::runtime_error("invalid input"); }
 Json read_profile(const std::filesystem::path& root) {
     struct stat info{};
@@ -31,6 +32,8 @@ Bytes hardware(const Json& profile) {
     return result;
 }
 std::string request_stage(const HttpRequest& request) {
+    if(request.url.find("startMachineProvisioning")!=std::string::npos)return "mid_start";
+    if(request.url.find("finishMachineProvisioning")!=std::string::npos)return "mid_finish";
     if(request.url.find("/grandslam/GsService2/lookup")!=std::string::npos)return "gsa_lookup";
     if(request.method=="POST" && request.url.find("/grandslam/GsService2")!=std::string::npos) {
         const std::string body(request.body.begin(),request.body.end());
@@ -63,7 +66,8 @@ void classify(const std::exception& error,Json& report) {
         {"HTTP ","http_response_error"}}) {
         if(text.find(item.first)!=std::string::npos) { category=item.second;break; }
     }
-    report["failure_category"]=category;
+    report["failure_category"]=report["http_status"]==429 ? "rate_limited" : category;
+    if(report["http_status"]==429)report["status"]="rate_limited";
 }
 int self_test() {
     unsigned calls=0;
@@ -111,11 +115,11 @@ int main(int argc,char **argv) {
         {"status","failed"},{"virtual_identity",true},{"account_login_attempted",false},
         {"gsa_authenticated",false},{"mac_store_authenticated",false},
         {"tf_authenticated",false},{"catalog_received",false},{"verification_requested",false},
-        {"http_status",0},{"sdk_error_code",0},{"apple_error_code",0},{"failure_category","none"},{"last_request_stage","none"}};
+        {"http_status",0},{"sdk_error_code",0},{"apple_error_code",0},{"failure_category","none"},{"last_request_stage","none"},{"gsa_session_reused",false},{"retry_after_known",false},{"retry_after_seconds",0}};
     try {
         if(argc==2 && std::string(argv[1])=="--self-test")return self_test();
         if(argc==2 && std::string(argv[1])=="--auth-self-test")return lab_tf_auth_contract();
-        require(argc==3 && (std::string(argv[1])=="--authenticate" || std::string(argv[1])=="--prepare-lookup" || std::string(argv[1])=="--lookup"));
+        require(argc==3 && (std::string(argv[1])=="--authenticate" || std::string(argv[1])=="--prepare-lookup" || std::string(argv[1])=="--lookup" || std::string(argv[1])=="--resume-store"));
         const char *actions=std::getenv("GITHUB_ACTIONS");
         require(actions && std::string(actions)=="true");
         const std::filesystem::path root=argv[2];
@@ -126,15 +130,20 @@ int main(int argc,char **argv) {
         options.transport=[base,&report](const HttpRequest& request) -> HttpResponse {
             const auto stage=request_stage(request);
             report["last_request_stage"]=stage;report["http_status"]=0;
-            if(stage=="gsa_srp_init" || stage=="gsa_srp_complete" || stage=="gsa_service")
+            if(report["stage"]=="grandslam_login" && (stage=="gsa_srp_init" || stage=="gsa_srp_complete" || stage=="gsa_service"))
                 report["account_login_attempted"]=true;
             const auto response=base(request);report["http_status"]=response.status;
+            const auto retry=lab_tf_retry_after(response,std::time(nullptr));
+            report["retry_after_known"]=retry>=0;
+            report["retry_after_seconds"]=retry>=0 ? retry : 0;
             return response;
         };
         Client client(root/"sdk",options);
-        report["stage"]="grandslam_provisioning";
-        client.provision();
         const std::string command=argv[1];
+        if(command!="--resume-store") {
+            report["stage"]="grandslam_provisioning";
+            client.provision();
+        }
         if(command=="--prepare-lookup" || command=="--lookup") {
             auto headers=client.headers();
             const auto seconds=std::time(nullptr);
@@ -158,11 +167,17 @@ int main(int argc,char **argv) {
             return 0;
         }
         std::string email,password;
-        require(bool(std::getline(std::cin,email)) && bool(std::getline(std::cin,password)) &&
-                !email.empty() && !password.empty() && email.size()<320 && password.size()<2048);
+        require(bool(std::getline(std::cin,email)) && !email.empty() && email.size()<320);
+        AccountSession account;
+        if(command=="--resume-store") {
+            account=AccountSession::load(root/"account.plist");
+            if(!lab_tf_account_session_valid(account,std::time(nullptr)))throw SavedSessionInvalid{};
+            report["gsa_authenticated"]=true;report["gsa_session_reused"]=true;
+        } else {
+            require(bool(std::getline(std::cin,password)) && !password.empty() && password.size()<2048);
         report["stage"]="grandslam_login";
         bool verificationUsed=false;
-        const auto account=client.login(email,password,[&]() -> std::string {
+        account=client.login(email,password,[&]() -> std::string {
             report["verification_requested"]=true;
             const char *live=std::getenv("TF_VIRTUAL_LIVE_OTP");
             if(!live || std::string(live)!="1" || verificationUsed)throw VerificationNeeded{};
@@ -176,6 +191,7 @@ int main(int argc,char **argv) {
         report["gsa_authenticated"]=true;
         account.save(root/"account.plist");
         client.set_session_data(account.plist);
+        }
         report["stage"]="mac_store_login";
         const auto store=client.login_store_with_pet(email,account);
         report["mac_store_authenticated"]=true;
@@ -192,6 +208,8 @@ int main(int argc,char **argv) {
         report["stage"]="testflight_catalog";
         tf.save_catalog(root/"catalog.json");
         report["catalog_received"]=true;report["status"]="catalog_verified";
+    } catch(const SavedSessionInvalid&) {
+        report["status"]="saved_session_invalid";report["failure_category"]="saved_session_invalid";
     } catch(const VerificationNeeded&) {
         report["status"]="verification_required";report["verification_requested"]=true;
         report["failure_category"]="verification_required";

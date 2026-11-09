@@ -83,3 +83,15 @@
 [42657854276](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42657854276) 在相同源码 `39999fb59146e6a1954a89db264676a05a340037`、相同恢复身份下完成两次受限运行，公共检查均通过；实际认证均为 `last_request_stage=gsa_srp_complete`、`transport_timeout`、HTTP 状态 0、未取得 Apple 错误码。没有产生可提交验证码的等待请求，没有中继文件投递，没有使用聊天验证码。先前一次实际进入验证要求的证据仍然有效，但不能推广成稳定登录成功。
 
 目前没有活跃验证码会话，GSA/Mac Store/TF 会话仍未取得。后续若继续，先区分 SRP 完成请求的协议兼容与服务响应问题；不要继续凭旧验证码或普通重试宣称修复。只有新的真实等待请求建立后才能要求新验证码。
+
+## 2026-11-09：真实验证码中继与 GSA 令牌取得
+
+[新连接对照 42660282023](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42660282023) 记录各段独立连接，SRP 完成请求 379ms 返回 200；真实等待请求发布后，新的验证码通过 source/run/nonce/期限绑定的 age 密文进入同一进程。随后响应处理失败，不能凭 HTTP 200 声称验证通过。中继文件及本地临时明文均已清理。一次对照不足以证明此前所有超时均由连接复用造成。
+
+对固定 SDK 另加两项独立兼容修复：每次 SRP 交换复用相同机器证明/CPD；验证码校验识别 Response/Status 包装，仍要求明确的整数 ec=0，拒绝缺失、非零、布尔/字符串成功值及冲突状态。新增原生合成控制证明两段 CPD/头一致，错误服务器 M2 证明仍被拒绝。对照参考 [SideInstaller 实现](https://github.com/FrizzleM/SideInstaller/blob/main/ish/sideinstaller.py)，未运行第三方服务或放宽密码/证明校验。
+
+[42662277216](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42662277216) 在源码 `084ad0d0ce7ac83610515a8418483034ee5a0ba0` 通过 26 项 Python、2 项 Node 与 18 项 CTest。真实验证码已送入绑定进程，验证响应为顶层明确整数 ec=0，随后 SRP 重新认证取得 GSA 令牌（gsa_authenticated=true）。本次真实响应未触发新增的 Response 包装分支，不能把实际成功单独归因于该兼容分支。
+
+之后 Mac Store 阶段返回 HTTP 429，尚未取得 Mac Store 或 TF 会话。包含 GSA 令牌的独立状态已 age 加密，artifact 为 tf-virtual-sealed-42662277216-attempt-1，ZIP/密文摘要在恢复器中固定。原虚拟身份 origin 仍是 42650873653 / 19244adbe73f71156a91a5c1cb20965925928054，不把新的状态载体误作新设备。
+
+下一控制使用已验证 GSA 会话，先检查 PET 绑定和有效期，再在本地 600 秒冷却策略后恢复 Mac Store 步骤；该等待值是未记录到 Retry-After 时的本地保守策略，不是已观测的 Apple 指令。恢复工作流不挂载 Apple 密码、不重新执行 GSA 密码登录，过期即停止。后续响应会记录受限的 Retry-After 数值以遵守服务端等待要求。没有 TF 邀请接受、下载、内容解密或文件交付证据。
