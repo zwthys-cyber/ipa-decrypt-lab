@@ -18,6 +18,7 @@ from telegram_queue import failure_kind
 from china_auth import failure_diagnostic
 from cn_download_probe import TARGET,LIMIT
 from cn_license_profile import profile as license_profile
+from cn_recovery_inspect import inspect as inspect_recovery
 from machine_enrollment import clean,COMMERCE_READY,stop_private_group
 from fairplay_state_observer import collect
 from model_bootstrap import candidate_app,input_profile,state_ready,setup_summary,recovery_diagnostics,recover_checkpoint
@@ -188,6 +189,9 @@ def trial(runtime,env,mode,report):
                     'TMPDIR='+str(root),'SUDO_UID='+str(os.getuid()),'SUDO_GID='+str(os.getgid()),engine,'setup','--app',str(app),'--ipa',str(ipa),'--model-dir',str(models)]
                 code,out,err=private(argv,model_env,timeout=300)
             if code:
+                encoded=env.get('FAIRPLAY_CN_STATE_B64','') if mode=='replay' else base64.b64encode(saved.read_bytes()).decode()
+                try:report['offline_inspection']=inspect_recovery('cn-recovery-inspect',app,root,encoded)
+                except Exception:report['offline_inspection']={'status':'diagnostic_unavailable'}
                 report.update(status='cn_checkpoint_ready_model_recovery_pending' if report['checkpoint_saved'] else 'cn_replay_session_saved_recovery_pending',recovery_diagnostics=recovery_diagnostics(out+err));return
             model,setup=setup_summary(out,models,**({'schema':'unfairplay-enrollment-recovery-v1','model_key':'enrollment_model'} if mode=='replay' else {}))
             report.update(setup,model_recovered=True)

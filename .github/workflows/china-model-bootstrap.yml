@@ -9,7 +9,7 @@ on:
         default: preflight
         options: [preflight, trial, replay]
       app_id:
-        description: Fixed free CN model sample; both are preflighted before credentials
+        description: Fixed free CN model sample; all are preflighted before credentials
         type: choice
         default: '1661733229'
         options: ['1661733229', '6599842047', '1530340312']
@@ -39,6 +39,28 @@ jobs:
         env:
           CN_SAMPLE_APP_ID: ${{ inputs.app_id || '1661733229' }}
         run: python3 .github/ops/cn_download_probe.py --metadata --app-id "$CN_SAMPLE_APP_ID"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: DrWhax/unfairplay
+          ref: 26a099fcb2292eaacd9e0ce89793cdbc88e516d1
+          path: diagnostic-source
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.0'
+          cache-dependency-path: diagnostic-source/go.sum
+      - name: Build and test public offline diagnostic before account access
+        run: |
+          cp .github/ops/cn_recovery_inspect.go diagnostic-source/internal/recovery/lab_cn_inspection.go
+          cp .github/ops/cn_recovery_inspect_test.go diagnostic-source/internal/recovery/lab_cn_inspection_test.go
+          mkdir -p diagnostic-source/cmd/lab-cn-inspection
+          cp .github/ops/cn_recovery_inspect_main.go diagnostic-source/cmd/lab-cn-inspection/main.go
+          cd diagnostic-source
+          gofmt -w internal/recovery/lab_cn_inspection.go internal/recovery/lab_cn_inspection_test.go cmd/lab-cn-inspection/main.go
+          go test -p 2 -timeout 180s ./...
+          go vet -p 2 ./...
+          go test -race -p 2 -timeout 180s ./...
+          go build -p 2 -trimpath -o ../cn-recovery-inspect ./cmd/lab-cn-inspection
       - name: Fetch verified public CN client and independent model support
         env:
           GH_TOKEN: ${{ github.token }}
