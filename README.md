@@ -8,6 +8,8 @@
 
 部分国区专属应用仍有许可兼容问题：抖音在 GitHub 境外出口下收到地区不可用相关提示，尚未修复，需大陆出口对照。样本成功不代表所有国区应用都能下载。见 [当前限制与证据](docs/CHINA-ACCOUNT.md)。
 
+TestFlight 公开邀请目前尚未接入自动取包和解密；公开页面可访问不等于取得 IPA。具体检查见 [TestFlight 当前边界](docs/TESTFLIGHT.md)。
+
 ## 下载
 
 当前成品版本为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。里面有 Linux amd64 服务器端，以及 macOS 26 / 15 Intel 运行包；用途、配置和校验方法见 [发布说明](docs/RELEASES.md)。

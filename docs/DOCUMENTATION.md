@@ -17,6 +17,7 @@
 | [VPS 部署](VPS-DEPLOYMENT.md) | 私有配置、安装、健康检查和回滚 |
 | [任务恢复](SESSION-RECOVERY.md) | SQLite、取消、未知发送结果和备份 |
 | [中国区账号接入](CHINA-ACCOUNT.md) | 实时验证码、独立模型/备份、保存模型复用、链接路由、会话维护及验证边界 |
+| [TestFlight 检查](TESTFLIGHT.md) | 公开邀请、独立测试会话、TF 构建与当前未验证范围 |
 | [认证兼容](AUTH-COMPATIBILITY.md) | 当前原生登录、SP 挑战、bag 与设备证明 |
 | [下载模块](DOWNLOADER.md) | 当前工作流、组件及早期 Go 研究入口 |
 | [代理约束](../AGENTS.md) | 编译位置、凭据保护、平台及验证边界 |
