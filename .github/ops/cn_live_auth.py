@@ -14,15 +14,29 @@ import tempfile
 import time
 from china_auth import settings,ChinaAuthError,failure_diagnostic
 from cn_protocol import GitHub,poll_code,require
+from cn_session import decode as decode_saved_session
 
 MARKER=b'IPA_CN_AUTH:verification_pending'
 
-def live(binary,crypt,env,relay=None,command=None,window=300,poll_interval=3):
-    email,password,guid,_=settings(env)
+def live(binary,crypt,env,relay=None,command=None,window=300,poll_interval=3,prepared_session=False,native_guid=None):
+    saved=None
+    if prepared_session:
+        saved,_=decode_saved_session(env)
+        email=saved['email'];password=saved['account']['password'];guid=native_guid or saved['guid']
+        require(isinstance(guid,str) and re.fullmatch(r'[A-F0-9]{12}',guid),'invalid_prepared_guid')
+    else:
+        require(native_guid is None,'unexpected_native_guid')
+        email,password,guid,_=settings(env)
     folder=Path(env['HOME'])/'.ipatool'/hashlib.md5(email.lower().encode()).hexdigest()
-    if folder.exists() or folder.is_symlink():raise ChinaAuthError('china_account_cache_not_empty')
-    child_env={key:env[key] for key in ('HOME','PATH','LANG') if key in env};child_env['APPLEPACKAGE_PASSWORD']=password
-    args=command or [binary,'login-cn',email,'--guid',guid]
+    if prepared_session:
+        path=folder/'account.json'
+        require(not folder.is_symlink() and path.is_file() and not path.is_symlink() and path.stat().st_mode&0o077==0 and 0<path.stat().st_size<=32768,'prepared_cn_cache_invalid')
+        existing=json.loads(path.read_bytes())
+        require(existing==saved['account'],'prepared_cn_cache_binding')
+    elif folder.exists() or folder.is_symlink():raise ChinaAuthError('china_account_cache_not_empty')
+    child_env={key:env[key] for key in ('HOME','PATH','LANG') if key in env}
+    if not prepared_session:child_env['APPLEPACKAGE_PASSWORD']=password
+    args=command or [binary,'resume-cn' if prepared_session else 'login-cn',email,'--guid',guid]
     process=subprocess.Popen(args,env=child_env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     selector=selectors.DefaultSelector();selector.register(process.stdout,selectors.EVENT_READ,'stdout');selector.register(process.stderr,selectors.EVENT_READ,'stderr')
     capture={'stdout':bytearray(),'stderr':bytearray()};partial=bytearray();waiting=None;submitted=False;next_poll=0
@@ -75,7 +89,7 @@ def live(binary,crypt,env,relay=None,command=None,window=300,poll_interval=3):
         for stream in (process.stdin,process.stdout,process.stderr):
             try:stream.close()
             except OSError:pass
-        if folder.exists() and not folder.is_symlink():shutil.rmtree(folder)
+        if not prepared_session and folder.exists() and not folder.is_symlink():shutil.rmtree(folder)
 
 def seal_session(sealer,envelope,env):
     with tempfile.TemporaryDirectory(prefix='cn-session-private-') as directory:

@@ -13,7 +13,7 @@ import sys
 import tempfile
 import time
 from cn_session import decode,query,UA
-from cn_live_auth import seal_session
+from cn_live_auth import seal_session,live
 from china_auth import failure_diagnostic
 from cn_download_probe import TARGET,LIMIT
 from machine_enrollment import clean,COMMERCE_READY,stop_private_group
@@ -112,10 +112,11 @@ def trial(runtime,env,mode,report):
     try:
         fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
         with os.fdopen(fd,'w') as stream:json.dump(value['account'],stream)
-        code,out,err=private([binary,'resume-cn',value['email'],'--guid',guid],child,timeout=120)
-        if code:
-            report.update(status='cn_cookie_refresh_rejected',diagnostic=failure_diagnostic(subprocess.CompletedProcess([],code,out.decode(errors='replace'),err.decode(errors='replace'))));return
-        account=account_at(path,value);current=dict(value,account=account,guid=guid,created=int(time.time()))
+        authenticated,current=live(binary,str(runtime/'delivery-crypt'),env,prepared_session=True,native_guid=guid)
+        if authenticated.get('authenticated') is not True:
+            report.update(status='cn_cookie_refresh_rejected',diagnostic=authenticated.get('diagnostic',{}));return
+        report['verification_code_used']=authenticated.get('verification_submitted') is True
+        account=account_at(path,value)
         report['cookie_refresh_authenticated']=True
         count=query(bound_env(env,current));report['count_query']=count
         require(count.get('session_reused') is True,'cn_computer_count_unavailable')

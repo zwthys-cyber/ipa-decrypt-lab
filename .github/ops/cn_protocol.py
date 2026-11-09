@@ -47,8 +47,9 @@ def artifact_bytes(api,item,member,max_bytes=32768):
 def waiting_request(api,run_id,nonce,commit):
     require(isinstance(run_id,str) and re.fullmatch(r'[1-9][0-9]{0,19}',run_id) and isinstance(nonce,str) and re.fullmatch(r'[a-f0-9]{32}',nonce) and re.fullmatch(r'[a-f0-9]{40}',commit or ''),'invalid_cn_identity')
     run=api.call('/actions/runs/'+str(run_id))
-    require(run.get('path')==AUTH and run.get('head_branch')=='main' and run.get('event')=='workflow_dispatch'
-            and run.get('display_title')=='China-account-authenticate' and run.get('status')=='in_progress' and run.get('head_sha')==commit,'cn_auth_session_not_waiting')
+    trusted_titles={AUTH:{'China-account-authenticate'},'.github/workflows/china-model-bootstrap.yml':{'CN-model-trial','CN-model-replay'}}
+    require(run.get('path') in trusted_titles and run.get('head_branch')=='main' and run.get('event')=='workflow_dispatch'
+            and run.get('display_title') in trusted_titles[run['path']] and run.get('status')=='in_progress' and run.get('head_sha')==commit,'cn_auth_session_not_waiting')
     name='cn-auth-request-'+str(run_id)+'-'+nonce
     items=api.call('/actions/runs/'+str(run_id)+'/artifacts?per_page=100').get('artifacts',[])
     found=[x for x in items if x.get('name')==name]

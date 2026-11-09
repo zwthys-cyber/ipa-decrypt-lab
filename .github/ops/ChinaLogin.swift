@@ -39,7 +39,15 @@ struct ChinaResume: AsyncParsableCommand, Sendable {
                 throw ValidationError("CN session binding failed")
             }
             let session = try await Authenticator(cookies: account.cookie)
-            let updated = try await session.authenticate(email: address, password: account.password)
+            let savedPassword = account.password
+            let updated = try await LabCNLoginFlow.authenticate(perform: { code in
+                try await session.authenticate(email: address, password: savedPassword, code: code)
+            }, nextCode: {
+                print("IPA_CN_AUTH:verification_pending")
+                fflush(nil)
+                guard let value = readLine() else { throw LabCNLoginError.inputClosed }
+                return value
+            })
             guard updated.store == "143465", updated.email.lowercased() == address.lowercased() else {
                 throw ValidationError("CN refreshed session binding failed")
             }

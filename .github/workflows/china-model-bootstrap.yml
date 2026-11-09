@@ -56,11 +56,11 @@ jobs:
           APPLE_CN_SESSION_B64: ${{ secrets.APPLE_CN_SESSION_B64 }}
           CN_MODEL_STATE_PRESENT: ${{ secrets.FAIRPLAY_CN_STATE_B64 != '' }}
           FAIRPLAY_CN_STATE_B64: ${{ inputs.mode == 'replay' && secrets.FAIRPLAY_CN_STATE_B64 || '' }}
-          CN_BOOTSTRAP_MODE: ${{ inputs.mode }}
+          CN_LIVE_TASK: ${{ inputs.mode == 'trial' && 'model_trial' || 'model_replay' }}
+          GH_TOKEN: ${{ github.token }}
+          DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
           LAB_KBSYNC_HELPER: ${{ github.workspace }}/cn-runtime/lab-kbsync
-        run: |
-          ulimit -c 0
-          python3 .github/ops/cn_model.py --runtime cn-runtime --mode "$CN_BOOTSTRAP_MODE"
+        uses: ./.github/actions/cn-auth
       - name: Publish only sanitized receipt and repository-public-key sealed CN candidates
         if: always() && inputs.mode != 'preflight'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9

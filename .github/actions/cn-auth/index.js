@@ -40,7 +40,11 @@ async function main() {
   }
   const timer=setInterval(()=>{publish().catch(()=>{if(worker)worker.kill('SIGTERM')})},1000);
   try {
-    worker=spawn('bash',['-e','-c','ulimit -c 0\nexec python3 .github/ops/cn_live_auth.py --binary cn-runtime/ApplePackageTool --crypt cn-runtime/delivery-crypt --sealer cn-runtime/cn-session-seal'],{
+    const commands={auth:'exec python3 .github/ops/cn_live_auth.py --binary cn-runtime/ApplePackageTool --crypt cn-runtime/delivery-crypt --sealer cn-runtime/cn-session-seal',
+      model_trial:'exec python3 .github/ops/cn_model.py --runtime cn-runtime --mode trial',
+      model_replay:'exec python3 .github/ops/cn_model.py --runtime cn-runtime --mode replay'};
+    const role=env.CN_LIVE_TASK||'auth';if(!Object.hasOwn(commands,role))throw Error();
+    worker=spawn('bash',['-e','-c','ulimit -c 0\n'+commands[role]],{
       env:{...env,CN_HANDSHAKE_FILE:input,PYTHONUNBUFFERED:'1'},stdio:['ignore','inherit','inherit']});
     for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>{if(worker&&!worker.killed)worker.kill(signal)});
     const code=await new Promise(resolve=>{worker.once('error',()=>resolve(2));worker.once('exit',code=>resolve(code===null?2:code))});
