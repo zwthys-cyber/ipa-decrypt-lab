@@ -1,0 +1,112 @@
+name: Export a verified TestFlight beta privately
+run-name: delivery-${{ inputs.request_id }}-tf${{ inputs.invite }}-macos-26-intel
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Inspect existing membership or export the available beta
+        type: choice
+        options: [inspect, export]
+        default: inspect
+      invite:
+        description: Apple public invitation code
+        required: true
+      request_id:
+        description: Owner-scoped tf_ request identifier
+        required: true
+  workflow_call:
+    inputs:
+      mode:
+        type: string
+        default: inspect
+      invite:
+        type: string
+        required: true
+      request_id:
+        type: string
+        required: true
+permissions:
+  contents: read
+  actions: read
+  checks: write
+concurrency:
+  group: testflight-account-worker
+  cancel-in-progress: false
+jobs:
+  export:
+    if: github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: macos-26-intel
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Validate public TF request before private inputs
+        env:
+          DELIVERY_REQUEST_ID: ${{ inputs.request_id }}
+          DELIVERY_INVITE: ${{ inputs.invite }}
+          TF_TASK_MODE: ${{ inputs.mode }}
+        run: |
+          python3 - <<'PY'
+          import os,re
+          assert re.fullmatch(r"tf_[a-f0-9]{32}",os.environ["DELIVERY_REQUEST_ID"])
+          assert re.fullmatch(r"[A-Za-z0-9_-]{6,80}",os.environ["DELIVERY_INVITE"])
+          assert os.environ["TF_TASK_MODE"] in {"inspect","export"}
+          PY
+      - name: Install public runtime libraries and secure transport on GitHub
+        run: brew install mbedtls@3 curl libzip age sshpass
+      - name: Load the exact verified TestFlight runtime without compilation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/ops/tf_task_runtime.py fetch
+      - name: Load the verified CN offline engine without compilation or account login
+        if: inputs.mode == 'export'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+        run: python3 .github/ops/cn_runtime.py fetch cn-runtime
+      - name: Export only after complete plaintext verification
+        id: export
+        env:
+          DELIVERY_ACCOUNT_PROFILE: tf
+          DELIVERY_REQUEST_ID: ${{ inputs.request_id }}
+          DELIVERY_INVITE: ${{ inputs.invite }}
+          TF_TASK_MODE: ${{ inputs.mode }}
+          DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
+          FAIRPLAY_CN_MODEL_B64: ${{ inputs.mode == 'export' && secrets.FAIRPLAY_CN_MODEL_B64 || '' }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          SSHPASS: ${{ secrets.VPS_SSH_PASSWORD }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          GH_TOKEN: ${{ github.token }}
+        uses: ./.github/actions/export-progress
+      - name: TestFlight session requires maintenance
+        if: failure() && steps.export.outputs.status == 'testflight_session_requires_maintenance'
+        run: exit 1
+      - name: TestFlight invitation or membership unavailable
+        if: failure() && (steps.export.outputs.status == 'testflight_invitation_unavailable' || steps.export.outputs.status == 'testflight_acceptance_outcome_unknown')
+        run: exit 1
+      - name: TestFlight model or plaintext validation failed
+        if: failure() && (steps.export.outputs.status == 'testflight_plaintext_validation_failed' || steps.export.outputs.status == 'testflight_model_unavailable')
+        run: exit 1
+      - name: Retain only verified recipient-encrypted delivery
+        if: success() && inputs.mode == 'export'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: delivery-${{ inputs.request_id }}
+          path: |
+            delivery-out/package.ipa.age
+            delivery-out/receipt.json
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+      - name: Retain only the closed TF result
+        if: always() && hashFiles('tf-worker-result.json') != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: tf-result-${{ inputs.request_id }}
+          path: tf-worker-result.json
+          retention-days: 1
+          if-no-files-found: error
+      - name: Remove encrypted delivery workspace
+        if: always()
+        run: rm -rf -- delivery-out

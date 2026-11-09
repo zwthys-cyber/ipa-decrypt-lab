@@ -1,0 +1,32 @@
+name: Read-only production TestFlight session smoke
+on:
+  push:
+    branches: [main]
+    paths: ['.github/ops/tf_task_worker.py', '.github/workflows/testflight-smoke.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  checks: write
+jobs:
+  public:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Test TF worker, credential boundaries and durable acceptance without secrets
+        run: |
+          python3 -m unittest discover -s .github/ops -p 'test_tf_task*.py' -v
+          python3 -m unittest discover -s tests -p 'test_testflight_routing.py' -v
+          node --test tests/progress_worker.test.cjs
+  inspect:
+    needs: public
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[tf-worker-inspect-once]')
+    uses: ./.github/workflows/testflight-private-delivery.yml
+    with:
+      mode: inspect
+      invite: yoNuHexZ
+      request_id: tf_ffffffffffffffffffffffffffffffff
+    secrets: inherit
