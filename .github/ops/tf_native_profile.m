@@ -7,8 +7,10 @@
 #import <fcntl.h>
 #import <unistd.h>
 #import <string.h>
+#import <stdio.h>
 #import "LabStoreBagTransport.h"
 
+static void stage(const char *name) { dprintf(STDERR_FILENO,"TF_PROBE_STAGE:%s\n",name); }
 static id object0(id target, NSString *name) {
     SEL selector=NSSelectorFromString(name);
     if(!target || ![target respondsToSelector:selector])return nil;
@@ -30,20 +32,25 @@ static NSString *hex20(id value) {
     return nil;
 }
 static NSDictionary *profile(NSMutableDictionary *report) {
+    stage("started");
     dlopen("/System/Library/PrivateFrameworks/AuthKit.framework/AuthKit",RTLD_NOW|RTLD_LOCAL);
     id device=object0(NSClassFromString(@"AKDevice"),@"currentDevice");
+    stage("identity");
     id raw=object0(device,@"uniqueDeviceIdentifier");
     NSString *identity=hex20(raw);
     report[@"native_identifier_length"]=@([raw isKindOfClass:NSString.class] ? MIN([raw length],128) : 0);
     report[@"native_udid_20"]=@(identity!=nil);
     report[@"hardware_source"]=identity ? @"authkit_unique_identifier" : @"unavailable";
+    stage("model");
     char modelBuffer[256]={0};size_t length=sizeof(modelBuffer);
     NSString *model=nil;
     if(sysctlbyname("hw.model",modelBuffer,&length,NULL,0)==0)
         model=[[NSString alloc] initWithBytes:modelBuffer length:strnlen(modelBuffer,sizeof(modelBuffer)) encoding:NSUTF8StringEncoding];
     BOOL modelValid=safe(model,128) && [model rangeOfString:@"Mac" options:NSCaseInsensitiveSearch].location!=NSNotFound;
     report[@"native_mac_model"]=@(modelValid);
+    stage("bag");
     id bag=[LabStoreBagTransport nativeBag];
+    stage("headers");
     Class anisette=NSClassFromString(@"AMSAnisette");
     SEL headersSelector=NSSelectorFromString(@"headersForRequest:account:type:bag:");
     id headers=nil;
@@ -95,6 +102,7 @@ int main(int argc,char **argv) {
             } else if(argc!=1)ok=NO;
             report[@"status"]=ok ? @"ready" : @"native_context_unavailable";
         } @catch(NSException *exception) { report[@"status"]=@"native_probe_stopped";ok=NO; }
+        stage("finished");
         NSData *data=[NSJSONSerialization dataWithJSONObject:report options:NSJSONWritingSortedKeys error:nil];
         if(data)write(STDOUT_FILENO,data.bytes,data.length);
         write(STDOUT_FILENO,"\n",1);
