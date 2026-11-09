@@ -41,7 +41,19 @@ jobs:
           python3 -m unittest discover -s .github/ops -p 'test_tf_virtual*.py'
           python3 -m unittest discover -s .github/ops -p 'test_tf_invitation.py'
           node --test .github/ops/cn_action.test.cjs
+      - name: Fingerprint public runtime ABI
+        id: native-abi
+        run: |
+          tf_abi="$( { xcodebuild -version; brew list --versions mbedtls@3 curl nlohmann-json libzip cmake ninja; } | shasum -a 256 | cut -d ' ' -f1)"
+          echo "abi=$tf_abi" >> "$GITHUB_OUTPUT"
+      - name: Restore exact public native build
+        id: native-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: tf-sdk-build
+          key: tf-virtual-public-v1-macos26-${{ runner.arch }}-${{ steps.native-abi.outputs.abi }}-98c862f7-${{ hashFiles('.github/ops/tf_sdk*', '.github/ops/tf_virtual*.cpp', '.github/ops/tf_virtual*.cmake', '.github/ops/tf_virtual*patch.py') }}
       - name: Compile isolated client without Apple inputs
+        if: steps.native-cache.outputs.cache-hit != 'true'
         run: |
           python3 .github/ops/tf_virtual_transport_patch.py native-source/apple-auth/src/client/transport.cpp
           python3 .github/ops/tf_virtual_auth_patch.py native-source/apple-auth/src/client/authentication.cpp
@@ -57,7 +69,14 @@ jobs:
           tf_prefix="$(brew --prefix mbedtls@3);$(brew --prefix curl);$(brew --prefix nlohmann-json);$(brew --prefix libzip)"
           cmake -S native-source/apple-auth -B tf-sdk-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$tf_prefix" -DAPPLE_AUTH_WITH_TESTFLIGHT=ON -DAPPLE_AUTH_BUILD_EXAMPLES=ON
           cmake --build tf-sdk-build --parallel 4
-          ctest --test-dir tf-sdk-build --output-on-failure --no-tests=error --timeout 180
+      - name: Verify native runtime before any private inputs
+        run: ctest --test-dir tf-sdk-build --output-on-failure --no-tests=error --timeout 180
+      - name: Save only verified public native build
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: tf-sdk-build
+          key: ${{ steps.native-cache.outputs.cache-primary-key }}
       - name: Resume saved PET once after the observed Retry-After
         if: ${{ inputs.run_control || (github.event_name == 'push' && contains(github.event.head_commit.message, '[tf-virtual-control-once]')) }}
         env:
