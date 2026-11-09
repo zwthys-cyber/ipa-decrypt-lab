@@ -40,10 +40,10 @@ APPLE_AUTH_CLIENT_EXPORT int lab_tf_pet_contract() {
         auto headers=[](){return Headers{{"X-Apple-I-MD","SYNTHETIC"},{"X-Apple-I-MD-M","SYNTHETIC"},
             {"X-Apple-I-MD-LU","SYNTHETIC"},{"X-Apple-I-MD-RINFO","1"},
             {"X-Mme-Device-Id","SYNTHETIC"},{"X-MMe-Client-Info","SYNTHETIC"}};};
-        const auto grant=exchange_pet_session(account,headers,server,[now](){return now;});
+        const auto grant=exchange_pet_session(account,headers,server,[](){return std::int64_t(1700000000);});
         if(!requested || grant.token!="FRESH_SYNTHETIC" || grant.expires_at_ms!=(now+300)*1000)return 2;
         tamper=true;bool rejected=false;
-        try{(void)exchange_pet_session(account,headers,server,[now](){return now;});}
+        try{(void)exchange_pet_session(account,headers,server,[](){return std::int64_t(1700000000);});}
         catch(const std::exception& error){rejected=std::string(error.what())=="Application-token authentication failed";}
         return rejected ? 0 : 2;
     }catch(...){return 2;}
