@@ -44,3 +44,9 @@ class EntitlementTracePrivacyTests(unittest.TestCase):
         report=summarize(subprocess.CompletedProcess([],1,"IPA_CN_ENTITLEMENT_MESSAGE_KINDS:license,storefront\nIPA_CN_ENTITLEMENT_APP_MATCH:false\nIPA_CN_ENTITLEMENT_FAILURE:9610\nIPA_CN_ENTITLEMENT_MESSAGE_KINDS:PRIVATE_SECRET\n","PRIVATE"))
         self.assertEqual(report["entitlement_trace"],{"message_categories":["license","storefront"],"app_match":False,"failure":9610})
         self.assertNotIn("PRIVATE",json.dumps(report))
+
+class MarkerIsolationTests(unittest.TestCase):
+    def test_diagnostic_markers_do_not_invent_license_or_version_errors(self):
+        report=summarize(subprocess.CompletedProcess([],1,"IPA_LAB_STAGE:validate_product\nIPA_CN_LICENSE_CONTROL:existing_entitlement\nIPA_CN_ENTITLEMENT_VERSION_MATCH:false\n","Error: invalid response"))
+        self.assertEqual(report["classification"],"native_download_failed")
+        self.assertEqual(report["diagnostic"]["stage"],"validate_product")

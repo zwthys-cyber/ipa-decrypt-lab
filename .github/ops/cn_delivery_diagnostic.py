@@ -2,6 +2,7 @@
 import json
 import os
 import re
+import subprocess
 from pathlib import Path
 import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/"tools"))
@@ -37,7 +38,10 @@ def summarize(result):
         if match:(trace if match[1]=="PURCHASE" else entitlement)[match[2].lower()]=match[3]=="true"
         match=re.fullmatch(r"IPA_CN_ENTITLEMENT_(HTTP|FAILURE|STATUS|ITEMS):(-?[0-9]{1,7})",line)
         if match and -999999<=int(match[2])<=999999:entitlement[match[1].lower()]=int(match[2])
-    text=raw.lower()
+    cleaned=subprocess.CompletedProcess([],result.returncode,
+        "\n".join(line for line in (result.stdout or "").splitlines() if not line.startswith("IPA_CN_")),
+        result.stderr or "")
+    text=((cleaned.stdout or "")+"\n"+(cleaned.stderr or "")).lower()
     patterns={
         "invalid_purchase_response":"invalid purchase response",
         "purchase_failed":"purchase failed",
@@ -58,8 +62,8 @@ def summarize(result):
     matches=[name for name,pattern in patterns.items() if pattern in text]
     return {"schema":"cn-download-diagnostic-v1","app_id":"1142110895",
             "download_succeeded":result.returncode==0,
-            "classification":classify_download(result),
-            "diagnostic":safe_failure(result),"native_error_codes":domains,"transport":authentication_diagnostics(result),
+            "classification":classify_download(cleaned),
+            "diagnostic":safe_failure(cleaned),"native_error_codes":domains,"transport":authentication_diagnostics(cleaned),
             "purchase_trace":trace,"entitlement_trace":entitlement,"error_categories":matches,"stdout_bytes":len((result.stdout or "").encode()),"stderr_bytes":len((result.stderr or "").encode())}
 
 def main():
