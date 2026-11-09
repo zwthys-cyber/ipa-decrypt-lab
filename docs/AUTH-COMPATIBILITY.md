@@ -27,3 +27,8 @@ GitHub Actions 的 `store-login-diagnostic.yml` 只执行有界登录及清理�
 ## 历史 plist-compat 实验
 
 早期比较过固定 AssppWeb 与 ipatool 请求模板，`plist-compat` 只调整 plist Content-Type 和 attempt 值；没有证明这项调整单独恢复登录。它是 `store-download.yml` 的受控 Go 客户端对照，不是当前生产修复。历史运行与版本范围见[下载调查](DOWNLOADER.md)、[Swift 初次对照](NATIVE-STORE.md)及[项目状态](PROJECT-STATUS.md)。
+
+
+## 中国区账号的独立接入状态（2026-11-09）
+
+中国区账号已通过实时验证码登录，并在新 GitHub 运行器上通过 Cookie 刷新下载免费原包；没有再次使用验证码。中国区独立模型、解密、历史版本与机器人地区路由仍未完成，当前正式任务保持原线路。原德国区账号、模型和安全设置未改动。详见 [中国区接入说明](CHINA-ACCOUNT.md)。

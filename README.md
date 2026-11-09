@@ -4,6 +4,8 @@
 
 目前开放管理员和白名单用户私聊，可处理美区免费应用，IPA 最大 **2000 MB**。每人任务、文件、进度和额度独立；收费和应用安装后的兼容性仍在待办里。
 
+中国区账号接入已验证真实登录、跨运行器 Cookie 刷新和免费原包下载；中国区独立模型、解密及机器人地区选择仍在接入中。当前正式任务保持原线路。见 [中国区接入状态](docs/CHINA-ACCOUNT.md)。
+
 ## 下载
 
 当前成品版本为 [v0.1.0-alpha.4](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.4)。里面有 Linux amd64 服务器端，以及 macOS 26 / 15 Intel 运行包；用途、配置和校验方法见 [发布说明](docs/RELEASES.md)。

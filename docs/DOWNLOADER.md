@@ -24,3 +24,8 @@ Apple Secrets 使用 `APPLE_ID`、`APPLE_PASSWORD`，需要时配置短期 `APPL
 `store-download.yml`（Original App Store IPA）保留为固定 ipatool 提交的受控研究入口，不是生产机器人采用的下载路径。旧 ARM 对照也不能推广成现有生产平台支持；当前生产仅允许 macOS 26 Intel 与 macOS 15 Intel。
 
 早期 generic BadLogin、5002、空响应与 HTTP 拒绝没有证明密码错误、账号封禁或明确双重认证要求。Go 的 plist-compat 实验、首次 Swift 登录及 ent/download 历程，分别见[认证兼容](AUTH-COMPATIBILITY.md)、[原生对照](NATIVE-STORE.md)和[下载结果](../NATIVE-DOWNLOAD-RESULTS.md)。历史失败结论由[最新项目状态](PROJECT-STATUS.md)中的实测更新。
+
+
+## 中国区账号的独立接入状态（2026-11-09）
+
+中国区账号已通过实时验证码登录，并在新 GitHub 运行器上通过 Cookie 刷新下载免费原包；没有再次使用验证码。中国区独立模型、解密、历史版本与机器人地区路由仍未完成，当前正式任务保持原线路。原德国区账号、模型和安全设置未改动。详见 [中国区接入说明](CHINA-ACCOUNT.md)。
