@@ -1,5 +1,7 @@
 """Closed-vocabulary response diagnostics for two fixed read-only CN queries."""
+import argparse
 import json
+import platform
 import os
 from pathlib import Path
 import plistlib
@@ -69,7 +71,20 @@ def bodies():
     variants=[('account_context',CONTEXT_QUERY),('frontend_line_breaks',multiline),('frontend_escaped_breaks',multiline.replace('\n','\\n'))]
     return [(label,json.dumps({'query':query},separators=(',',':')).encode()) for label,query in variants]
 
-def trial(env,opener=None):
+def client_agents(info=None,system_version=None):
+    agents=[('configurator_legacy',summary.UA)]
+    if info is None:
+        path=Path('/System/Applications/Music.app/Contents/Info.plist')
+        if not path.is_file():return agents
+        info=plistlib.loads(path.read_bytes())
+    version=info.get('CFBundleShortVersionString')
+    system_version=platform.mac_ver()[0] if system_version is None else system_version
+    require(isinstance(version,str) and re.fullmatch(r'[0-9]+(?:[.][0-9]+){0,4}',version) is not None)
+    require(isinstance(system_version,str) and re.fullmatch(r'[0-9]+(?:[.][0-9]+){0,3}',system_version) is not None)
+    agents.append(('installed_music','Music/'+version+' (Macintosh; OS X '+system_version+')'))
+    return agents
+
+def trial(env,opener=None,clients=False):
     value,session=decode(env);pod=value['account'].get('pod')
     require(pod is None or isinstance(pod,str) and re.fullmatch(r'[1-9][0-9]{0,2}',pod) is not None)
     url='https://'+('p'+pod+'-buy.itunes.apple.com' if pod else 'buy.itunes.apple.com')+'/account/v1/summary/graphql'
@@ -77,8 +92,10 @@ def trial(env,opener=None):
     attempts=[]
     report={'schema':'cn-summary-diagnostic-v1','status':'count_not_observed','computer_count_observed':False,
             'login_attempted':False,'machine_authorization_attempted':False,'deauthorization_attempted':False,'attempts':attempts}
-    for label,body in bodies():
+    variants=[(label,summary.BODY,agent) for label,agent in client_agents()] if clients else [(label,body,None) for label,body in bodies()]
+    for label,body,agent in variants:
         request=summary.make_request(url,session);request.data=body
+        if agent:request.add_header('User-Agent',agent)
         try:
             try:response=opener.open(request,timeout=20)
             except urllib.error.HTTPError as error:response=error
@@ -95,7 +112,8 @@ def trial(env,opener=None):
 
 def main():
     os.umask(0o077)
-    try:value=trial(dict(os.environ))
+    parser=argparse.ArgumentParser();parser.add_argument('--clients',action='store_true');args=parser.parse_args()
+    try:value=trial(dict(os.environ),clients=args.clients)
     except Exception:value={'schema':'cn-summary-diagnostic-v1','status':'diagnostic_failed','computer_count_observed':False}
     Path('cn-session-receipt.json').write_text(json.dumps(value));print(json.dumps(value),flush=True)
     return 0 if value.get('computer_count_observed') is True else 2

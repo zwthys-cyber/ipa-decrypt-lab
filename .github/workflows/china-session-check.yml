@@ -7,7 +7,7 @@ on:
         description: Synthetic checks, or one read-only query using the saved CN session
         type: choice
         default: test
-        options: [test, query, native-query, diagnostic]
+        options: [test, query, native-query, diagnostic, client-query]
 permissions:
   contents: read
   actions: read
@@ -46,6 +46,15 @@ jobs:
         run: |
           ulimit -c 0
           python3 .github/ops/cn_summary_diagnostic.py
+      - name: Compare legacy Configurator and installed Music identifiers on the same read-only query
+        if: inputs.mode == 'client-query'
+        env:
+          APPLE_CN_ID: ${{ secrets.APPLE_CN_ID }}
+          APPLE_CN_GUID: ${{ secrets.APPLE_CN_GUID }}
+          APPLE_CN_SESSION_B64: ${{ secrets.APPLE_CN_SESSION_B64 }}
+        run: |
+          ulimit -c 0
+          python3 .github/ops/cn_summary_diagnostic.py --clients
       - name: Fetch verified CN runtime without account secrets
         if: inputs.mode == 'native-query'
         env:
