@@ -129,9 +129,9 @@ int self_test() {
         Bytes{'{','"','s','t','a','t','u','s','"',':','0','}'},{}}));
     require(shape["parsed"]==true && shape["status_zero"]==true);
     const std::string html="<!DOCTYPE html><html>PRIVATE_ACCOUNT PRIVATE_TOKEN</html>";
-    const auto rejected=lab_tf_store_shape({200,Bytes(html.begin(),html.end()),{{"Content-Type","text/html"}}});
-    require(rejected.find("PRIVATE_")==std::string::npos);
-    const auto metadata=Json::parse(rejected);
+    const auto rejectedShape=lab_tf_store_shape({200,Bytes(html.begin(),html.end()),{{"Content-Type","text/html"}}});
+    require(rejectedShape.find("PRIVATE_")==std::string::npos);
+    const auto metadata=Json::parse(rejectedShape);
     require(metadata["format"]=="html" && metadata["parsed"]==false && metadata["parse_failure"]=="invalid_plist");
     return 0;
 }
