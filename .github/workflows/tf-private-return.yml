@@ -1,0 +1,47 @@
+name: Return the verified fixed TestFlight beta privately
+on:
+  push:
+    branches: [main]
+    paths: ['.github/ops/tf_return*', '.github/ops/test_tf_return.py', '.github/workflows/tf-private-return.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tf-fixed-private-return
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify owner isolation, package proofs, persistent intent and closed output without secrets
+        env:
+          PYTHONPATH: tools:.github/ops
+        run: python3 -m unittest discover -s .github/ops -p 'test_tf_return.py' -v
+  return:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.run_attempt == 1 && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[tf-private-return-once]'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install SSH transport only on the GitHub runner
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends sshpass
+      - name: Return once through the existing owner-private Bot API without restarting the controller
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          SSHPASS: ${{ secrets.VPS_SSH_PASSWORD }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: python3 .github/ops/tf_return_transport.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always() && hashFiles('tf-return-receipt.json') != ''
+        with:
+          name: tf-private-return-${{ github.run_id }}
+          path: tf-return-receipt.json
+          retention-days: 1
+          if-no-files-found: error
