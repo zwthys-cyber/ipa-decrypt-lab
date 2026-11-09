@@ -1,5 +1,18 @@
 # 项目进展
 
+## 2026-11-09 真实普通用户收发验证
+
+已核对一位管理员已授权的真实普通用户及其现有请求，没有重复提交或发送文件，也没有更改既有每日额度。受检账号不是管理员，已授权且每日额度为 3 次；具体 Telegram 用户 ID、授权表、消息 ID 均保持私有。
+
+- [真实任务 42543990293](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42543990293) 对 App ID `544007664` 成功导出，8 个加密切片、50,780 页全部验证，清理后明文 147,146,888 字节；7 份有效数字进度快照。`plaintext_verified=true`、`runtime_verified=false`，明文未公开。
+- [只读权限检查 42544362020](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42544362020) 确认受检账号为普通已授权用户，目标请求在其私有作用域中已记为 delivered。该状态只在文件发送回执和接收私聊校验通过后写入。
+- [最终进度检查 42544535030](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42544535030) 确认该任务与管理员作用域分离，进度为 done，完成耗时已冻结且消息标识已私有保存；服务 ready、当前无活动任务。输出仅为固定状态和布尔值，不含实际用户、任务或消息标识。
+
+诊断器先在 GitHub-hosted runner 通过 5 项合成测试，再经固定 SSH 主机校验只读查询已验证的 VPS 运行源码和 SQLite。没有部署、重启服务、修改白名单或调用 Telegram 发送接口。目标数据仅经有时效的临时 Secret 传递，工作流参数只有不含身份信息的随机 nonce；远端私有临时文件和该 Secret 在检查结束后删除，没有上传私有诊断附件。
+
+该证据补齐了一个真实普通用户的提交、进度和发送确认；跨用户越权拒绝及各种故障/恢复边界仍主要由此前真实临时 SQLite 的合成回归覆盖，不能把本次检查说成已在生产尝试所有攻击或进行了安装运行验证。
+
+
 ## 2026-11-09 多用户白名单
 
 alpha.3 已在 [42541919654](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42541919654) 发布，完整提供进度和提速成品。随后本轮加入管理员白名单，alpha.4 已包含本轮功能并完成部署、发布，最终证据见下方记录。
@@ -10,7 +23,7 @@ alpha.3 已在 [42541919654](https://github.com/zwthys-cyber/ipa-decrypt-lab/act
 - 撤权和取消意图、待终止工作流占位写入私有 SQLite；重启不自动交付已撤权或取消的任务。取消结果不明时保留全局占位，不盲目重试。
 - 旧管理员的任务 hash 作用域、全局更新游标和六项凭据保持兼容；只有一个常驻轮询进程，备份覆盖整库。
 
-[首轮服务器构建 42542616482](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42542616482) 已在 Ubuntu/Debian 13 各运行 466 项 Python 测试（各跳过 1 项），其中新增 15 项使用真实临时 SQLite 的多用户隔离/撤权/取消/恢复测试；另有 Node、Go、systemd 凭据和包检查。合成身份没有写入线上白名单，没有向额外 Telegram 用户发送测试消息或 IPA。多用户真实私聊交付需由管理员授权真实用户后另行记录，不能用合成测试替代该证据。
+[首轮服务器构建 42542616482](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42542616482) 已在 Ubuntu/Debian 13 各运行 466 项 Python 测试（各跳过 1 项），其中新增 15 项使用真实临时 SQLite 的多用户隔离/撤权/取消/恢复测试；另有 Node、Go、systemd 凭据和包检查。合成身份没有写入线上白名单，没有向额外 Telegram 用户发送测试消息或 IPA。随后已经补充一个真实普通用户的私聊请求和交付证据，见本页最新验证记录；合成测试与实际收发证据分别记录。
 
 使用步骤见[白名单说明](MULTI-USER.md)，版本范围见[alpha.4](releases/v0.1.0-alpha.4.md)。
 
@@ -26,7 +39,7 @@ alpha.3 已在 [42541919654](https://github.com/zwthys-cyber/ipa-decrypt-lab/act
 - [普通任务取包预检 42543135884](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42543135884)：默认 macOS 26 成功获取精确匹配的运行包并准备固定公共资源，未进行 Apple 账号导出或 Telegram 文件发送。
 - [alpha.4 发布 42543237386](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42543237386)：检查 22 份 Markdown、生产来源、平台、源码指纹、artifact/package 摘要与清单后公开 3 个组件包和 8 个附件。[下载 alpha.4](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.4)。
 
-本轮未向线上白名单加入任何额外用户，也没有向其他用户发送测试消息或 IPA。当前管理员可在私聊中自行授权真实用户；真实第二位用户的提交和交付仍应另记证据。后续文档提交没有改变已验证的运行源码/指纹或重新部署服务。
+本轮未向线上白名单加入任何额外用户，也没有向其他用户发送测试消息或 IPA。当前管理员可在私聊中自行授权真实用户；后续真实第二位用户的提交和交付已单独记录在本页最新验证节。后续文档提交没有改变已验证的运行源码/指纹或重新部署服务。
 
 ## 2026-11-08 X 导出加速：移除重复压缩
 

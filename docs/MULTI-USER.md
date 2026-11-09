@@ -42,3 +42,7 @@
 新增测试使用真实临时 SQLite 和合成 Telegram/GitHub 客户端，验证跨用户任务号、接收方绑定、回调、额度、撤权、取消、重启和更新去重。线上不会自动加入测试用户。真实第二个用户的私聊提交和交付须由管理员授权实际用户后再单独记录；合成测试不代表进行了真实多用户文件发送。
 
 本版已经[部署并通过健康检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42543133206)，[公开 alpha.4](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.4) 提供匹配成品。Ubuntu/Debian 13 各完成 466 项 Python 测试（各跳过 1 项）；两个 macOS Intel 平台各完成 466 项 Python（各跳过 2 项）、2 项 Node、21 项 Swift 和 Go/独立启动检查。[完整证据](PROJECT-STATUS.md)。线上没有加入合成测试身份，其他真实用户须由管理员自行授权。
+
+## 已记录的真实普通用户案例
+
+2026-11-09 已核对 [42543990293](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42543990293) 的真实普通白名单用户请求：非管理员、每日 3 次、任务归属独立、文件已确认送达；进度 done、计时冻结。[只读最终检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42544535030) 没有重启服务、更改授权或重复发送文件，临时诊断 Secret 已删除。用户数字 ID 和消息 ID 未进入公开仓库/日志。这是单个实际案例；越权和故障恢复测试仍按前文的合成验证范围解释。详见[项目状态](PROJECT-STATUS.md)。

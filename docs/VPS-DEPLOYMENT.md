@@ -106,3 +106,11 @@ alpha.4 增加 `multi_user.py` 服务模块，现有六项凭据保持不变。�
 服务只启动一个轮询进程，使用全局更新游标和全局下载/查询准入；每用户任务、列表和进度独立。旧管理员作用域保持兼容，备份整库即可同时保留 ACL 和所有恢复记录。先完成 GitHub 上的 Ubuntu/Debian 13、双平台运行包与发布验证，再安装已验证成品。部署不会自动给任何额外用户授权。命令和配额见[白名单说明](MULTI-USER.md)。
 
 白名单版已在 [42543133206](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42543133206) 完成实际安装和健康检查，运行源码为 `b92dc1575123e1b7eab2283b62d355539fc71e4d`。构建在 Ubuntu/Debian 13 各运行 466 项 Python 测试（各跳过 1 项）及 Node/Go/systemd 检查。没有添加其他线上用户或替换六项凭据；管理员按需授权即可。[alpha.4 公开附件](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.4) 已完成来源和摘要校验。
+
+## 私有权限与交付状态的只读诊断
+
+`private-access-inspection.yml` 用于管理员明确指定目标后的运行检查：工作流参数仅为随机 nonce，目标身份及预期请求经短时 `IPAZAKE_PRIVATE_INSPECTION` Secret 传递。不要把真实用户 ID 或私有记录放入公开输入、源码、运行标题或附件。
+
+`.github/ops` 中的诊断器先在 GitHub-hosted runner 运行合成测试，再通过固定主机密钥的 SSH 只读查询已验证服务源码、健康状态、授权及私有任务/进度记录；VPS 不运行测试套件或编译。输出限定为角色、额度、状态和布尔值，不回显用户、聊天、任务、消息 ID 或凭据。检查不调用 Telegram、不改变授权、不部署/重启服务。当前诊断器固定检查已部署的 b92dc157 源码，运行源码变动后需重新审查该限定。
+
+[42544535030](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42544535030) 已确认一个真实普通用户的 delivered、独立作用域和最终进度 done。检查结束清理远端/runner 私有临时文件，并删除临时诊断 Secret。该操作工具不进入运行包或原生运行源码指纹，不需要为只读检查重发 Release。
