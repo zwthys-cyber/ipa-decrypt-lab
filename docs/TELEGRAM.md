@@ -4,6 +4,8 @@
 
 主人在私聊中直接发送完整的 `https://testflight.apple.com/join/<邀请码>` 链接，即提交独立 TF 任务。后台检查资格、必要时有界接受邀请、获取可用测试构建并完成解密验证，再自动回传；不会改为下载 App Store 正式版。任务编号以 `tf_` 开头，`/status`、`/cancel`、`/get` 继续绑定原请求和主人。
 
+TF 文件名带英文测试标识，例如 `CapyPlayer_Beta_1.1.7.ipa`，仅影响新发送的文件名称。应用包内容与版本不因此改变，旧消息中的文件不会自动改名。
+
 其他白名单用户暂不开放 TF；TF 不支持 `/versions` 或指定 App Store 旧版本。会话或接口访问需要维护、额外协议、限流以及模型/明文验证失败时停止，不自动密码重登、申请新电脑授权或重发未知接受请求。接受过程中取消时保留未知意图，不继续发起读取或下载。详情与真实验证范围见 [TestFlight](TESTFLIGHT.md)。
 
 
@@ -111,7 +113,7 @@ Actions 运行包保留 30 天，每周刷新。源码更新后需要先完成�
 
 ## 配置与恢复
 
-将 Apple 账号和模型放在 GitHub Secrets。VPS 只保存 Telegram 凭据、交付私钥和限定仓库权限的 GitHub token。部署配置见 [VPS 说明](VPS-DEPLOYMENT.md)，公开版本见 [发布说明](RELEASES.md)。
+将 Apple 账号和模型放在 GitHub Secrets。VPS 保存 Telegram 凭据、交付私钥、限定仓库权限的 GitHub token，以及 TF 会话的私有密文和接受意图记录；状态助手不解封 Apple 会话。部署配置见 [VPS 说明](VPS-DEPLOYMENT.md)，公开版本见 [发布说明](RELEASES.md)。
 
 恢复记录保存在私有 SQLite。重启后继续跟踪原任务，不重复提交；发送结果不明时不自动重发。不要在另一台机器启动同一个机器人的轮询进程。具体规则见 [任务恢复](SESSION-RECOVERY.md)。
 

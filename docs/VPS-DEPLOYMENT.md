@@ -125,7 +125,7 @@ VPS 的六项凭据及私有 SQLite 原样保留；不要向服务器复制 Appl
 
 ## TestFlight 状态与部署门禁（2026-11-09）
 
-TF 接入已部署到现有控制器，修正版为 [42710092658](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42710092658)。发布流程先在 GitHub 验证当前源码的两种 Intel 基础运行包、CN 变体、TF 原生组件及真实无发送导出证明，再经既有固定 SSH 安装已测试成品。VPS 不编译、不运行测试，也不做 FairPlay 内容解密。
+TF 接入已部署到现有控制器，最新部署为 [42714903713](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42714903713)，运行源码 `d53f7defdc65fb11e5b3c04ac3e612990ed6430c`，服务 ready 健康检查通过。此前交付绑定修正版为 [42710092658](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42710092658)。新 TF 文件使用 `名称_Beta_版本.ipa`，App Store 命名不变。发布流程先在 GitHub 验证当前源码的两种 Intel 基础运行包、CN 变体、TF 原生组件及真实无发送导出证明，再经既有固定 SSH 安装已测试成品。VPS 不编译、不运行测试，也不做 FairPlay 内容解密。
 
 - `/var/lib/ipazake/testflight/session.age`：原独立虚拟 Mac 身份与 TF 上下文的持久密文。VPS 状态助手不解封此文件；GitHub worker 才临时解封。
 - `/var/lib/ipazake/testflight/acceptance.sqlite`：首次需要接受新邀请时创建的持久意图；含原邀请码的历史接受保护。不得删除或清空来重试未知 POST。
