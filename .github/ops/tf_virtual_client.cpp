@@ -7,7 +7,7 @@
 #include <regex>
 #include <ctime>
 #include <optional>
-namespace apple_auth { APPLE_AUTH_CLIENT_EXPORT int lab_tf_plain_transport_contract(); APPLE_AUTH_CLIENT_EXPORT Transport lab_tf_curl_transport(); APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_beta_download(const std::filesystem::path&,const std::filesystem::path&); APPLE_AUTH_CLIENT_EXPORT void lab_tf_invitation_bind(const std::filesystem::path&,const Transport&); APPLE_AUTH_CLIENT_EXPORT void lab_tf_invitation_refresh(const std::filesystem::path&,const Transport&); APPLE_AUTH_CLIENT_EXPORT void lab_tf_invitation_accept(const std::filesystem::path&,const Transport&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_invitation_post_contract(); APPLE_AUTH_CLIENT_EXPORT void lab_tf_invitation_get(const std::filesystem::path&,const Transport&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_invitation_contract(); APPLE_AUTH_CLIENT_EXPORT StoreSession lab_tf_replay_store(const std::filesystem::path&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_cookie_contract(); APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_cookie_inspect(const std::filesystem::path&); APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_store_shape(const HttpResponse&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_pet_contract(); APPLE_AUTH_CLIENT_EXPORT AccountSession lab_tf_refresh_pet(Client&,const AccountSession&,const Transport&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_auth_contract(); APPLE_AUTH_CLIENT_EXPORT bool lab_tf_account_session_valid(const AccountSession&,std::int64_t); APPLE_AUTH_CLIENT_EXPORT std::int64_t lab_tf_retry_after(const HttpResponse&,std::int64_t); }
+namespace apple_auth { APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_task(const std::string&,const std::filesystem::path&,const std::filesystem::path&,const std::filesystem::path&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_task_contract(); APPLE_AUTH_CLIENT_EXPORT int lab_tf_plain_transport_contract(); APPLE_AUTH_CLIENT_EXPORT Transport lab_tf_curl_transport(); APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_beta_download(const std::filesystem::path&,const std::filesystem::path&); APPLE_AUTH_CLIENT_EXPORT void lab_tf_invitation_bind(const std::filesystem::path&,const Transport&); APPLE_AUTH_CLIENT_EXPORT void lab_tf_invitation_refresh(const std::filesystem::path&,const Transport&); APPLE_AUTH_CLIENT_EXPORT void lab_tf_invitation_accept(const std::filesystem::path&,const Transport&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_invitation_post_contract(); APPLE_AUTH_CLIENT_EXPORT void lab_tf_invitation_get(const std::filesystem::path&,const Transport&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_invitation_contract(); APPLE_AUTH_CLIENT_EXPORT StoreSession lab_tf_replay_store(const std::filesystem::path&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_cookie_contract(); APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_cookie_inspect(const std::filesystem::path&); APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_store_shape(const HttpResponse&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_pet_contract(); APPLE_AUTH_CLIENT_EXPORT AccountSession lab_tf_refresh_pet(Client&,const AccountSession&,const Transport&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_auth_contract(); APPLE_AUTH_CLIENT_EXPORT bool lab_tf_account_session_valid(const AccountSession&,std::int64_t); APPLE_AUTH_CLIENT_EXPORT std::int64_t lab_tf_retry_after(const HttpResponse&,std::int64_t); }
 #include <sys/stat.h>
 using namespace apple_auth;
 using Json=nlohmann::json;
@@ -165,6 +165,18 @@ int main(int argc,char **argv) {
         {"http_status",0},{"sdk_error_code",0},{"apple_error_code",0},{"failure_category","none"},{"last_request_stage","none"},{"store_profile_ready",false},{"gsa_session_reused",false},{"retry_after_known",false},{"retry_after_seconds",0}};
     try {
         if(argc==2 && std::string(argv[1])=="--plain-transport-self-test")return lab_tf_plain_transport_contract();
+        if(argc==2 && std::string(argv[1])=="--task-self-test")return lab_tf_task_contract();
+        if(argc==6 && std::string(argv[1])=="--tf-task") {
+            require(std::getenv("GITHUB_ACTIONS") && std::string(std::getenv("GITHUB_ACTIONS"))=="true");
+            const std::filesystem::path root=argv[3],output=argv[5];
+            (void)read_profile(root);
+            struct stat info{};
+            require(lstat(output.c_str(),&info)==0 && S_ISDIR(info.st_mode) && !(info.st_mode&077));
+            const auto result=lab_tf_task(argv[2],root,argv[4],output);
+            std::cout<<result<<std::endl;
+            return Json::parse(result).at("status")=="failed" || Json::parse(result).at("status")=="session_requires_maintenance" ||
+                Json::parse(result).at("status")=="rate_limited" ? 2 : 0;
+        }
         if(argc==2 && std::string(argv[1])=="--self-test")return self_test();
         if(argc==2 && std::string(argv[1])=="--auth-self-test")return lab_tf_auth_contract();
         if(argc==2 && std::string(argv[1])=="--pet-self-test")return lab_tf_pet_contract();

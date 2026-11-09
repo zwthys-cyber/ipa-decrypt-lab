@@ -19,3 +19,7 @@ add_test(NAME tf_virtual_invitation_get_contract COMMAND tf_virtual_client --inv
 add_test(NAME tf_virtual_invitation_post_contract COMMAND tf_virtual_client --invite-post-self-test)
 
 add_test(NAME tf_virtual_plain_transport_contract COMMAND tf_virtual_client --plain-transport-self-test)
+
+target_sources(apple_auth_client PRIVATE lab_tf_task_native.cpp)
+add_test(NAME tf_generic_invitation_contract COMMAND tf_virtual_client --task-self-test)
+set_target_properties(apple_auth apple_auth_client tf_virtual_client PROPERTIES BUILD_RPATH "@loader_path")

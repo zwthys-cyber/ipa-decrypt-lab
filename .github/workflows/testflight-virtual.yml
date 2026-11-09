@@ -58,7 +58,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: tf-sdk-build
-          key: tf-virtual-public-v1-macos26-${{ runner.arch }}-${{ steps.native-abi.outputs.abi }}-98c862f7-${{ hashFiles('.github/ops/tf_sdk*', '.github/ops/tf_virtual*.cpp', '.github/ops/tf_virtual*.cmake', '.github/ops/tf_virtual*patch.py') }}
+          key: tf-virtual-public-v1-macos26-${{ runner.arch }}-${{ steps.native-abi.outputs.abi }}-98c862f7-${{ hashFiles('.github/ops/tf_task_native.cpp', '.github/ops/tf_sdk*', '.github/ops/tf_virtual*.cpp', '.github/ops/tf_virtual*.cmake', '.github/ops/tf_virtual*patch.py') }}
       - name: Compile isolated client without Apple inputs
         if: steps.native-cache.outputs.cache-hit != 'true'
         run: |
@@ -68,6 +68,7 @@ jobs:
           python3 .github/ops/tf_virtual_invitation_patch.py native-source/apple-auth/src/testflight/internal.hpp native-source/apple-auth/src/testflight/protocol.cpp
           cp .github/ops/tf_virtual_pet_contract.cpp native-source/apple-auth/lab_tf_pet_contract.cpp
           cp .github/ops/tf_sdk_contract.cpp native-source/apple-auth/tf_sdk_contract.cpp
+          cp .github/ops/tf_task_native.cpp native-source/apple-auth/lab_tf_task_native.cpp
           cp .github/ops/tf_virtual_client.cpp native-source/apple-auth/tf_virtual_client.cpp
           cp .github/ops/tf_virtual_transport_bridge.cpp native-source/apple-auth/lab_tf_transport_bridge.cpp
           cp .github/ops/tf_virtual_auth_contract.cpp native-source/apple-auth/lab_tf_auth_contract.cpp
