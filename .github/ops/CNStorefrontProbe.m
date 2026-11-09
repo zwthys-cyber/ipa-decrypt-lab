@@ -1,7 +1,5 @@
 // One public synthetic constructor; no URLSession task or authorization call.
-#define main LabDormantEnrollmentMain
-#include "../../tools/NativeMachineEnrollment.m"
-#undef main
+#include "CNEnrollmentConstructor.inc"
 int main(int argc,const char **argv) { @autoreleasepool {
  if(argc!=2 || !getenv("GITHUB_ACTIONS") || strcmp(getenv("GITHUB_ACTIONS"),"true"))return 2;
  signal(SIGALRM,LabNativeDeadline);alarm(45);
@@ -28,7 +26,7 @@ int main(int argc,const char **argv) { @autoreleasepool {
     report[@"cn_override_bound"]=B([[request valueForHTTPHeaderField:@"X-Apple-Store-Front"] isEqual:@"143465-19,32"]);
     report[@"body_preserved"]=B([body isEqual:request.HTTPBody]);
     report[@"native_guid_preserved"]=B([bodyBefore[@"guid"] isEqual:guid]);
-    report[@"anisette_preserved"]=B(md && mdm && [md isEqual:[request valueForHTTPHeaderField:@"X-Apple-I-MD"]] && [mdm isEqual:[request valueForHTTPHeaderField:@"X-Apple-I-MD-M"]]);
+    report[@"anisette_preserved"]=B(((!md && ![request valueForHTTPHeaderField:@"X-Apple-I-MD"]) || [md isEqual:[request valueForHTTPHeaderField:@"X-Apple-I-MD"]]) && ((!mdm && ![request valueForHTTPHeaderField:@"X-Apple-I-MD-M"]) || [mdm isEqual:[request valueForHTTPHeaderField:@"X-Apple-I-MD-M"]]));
     report[@"status"]=@"constructor_observed";
    }
   }

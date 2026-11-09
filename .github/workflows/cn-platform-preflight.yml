@@ -38,7 +38,8 @@ jobs:
           mkdir public-native
           clang -dynamiclib -Wall -Wextra tools/NativeImportIO.c -install_name @rpath/libNativeImportIO.dylib -o public-native/libNativeImportIO.dylib
           clang -fobjc-arc -DLAB_IMPORT_IO -framework Foundation tools/NativeMachineEnrollment.m -Lpublic-native -lNativeImportIO -Wl,-rpath,@executable_path -o public-native/native-machine-enrollment
-          clang -fobjc-arc -framework Foundation .github/ops/CNStorefrontProbe.m -o public-native/cn-storefront-probe
+          python3 .github/ops/cn_constructor_include.py
+          clang -fobjc-arc -Itools -framework Foundation .github/ops/CNStorefrontProbe.m -o public-native/cn-storefront-probe
           public-native/native-machine-enrollment --io-contract
           public-native/native-machine-enrollment --response-contract
           swiftc public-source/Sources/ApplePackage/Configuration/DeviceIdentifier.swift tools/NativeDeviceIdentity.swift -o public-native/native-device-identity
