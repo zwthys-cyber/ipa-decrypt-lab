@@ -11,7 +11,7 @@ import tempfile
 
 KEYS={"schema","stage","status","virtual_identity","account_login_attempted","gsa_authenticated",
       "mac_store_authenticated","tf_authenticated","catalog_received","verification_requested",
-      "http_status","sdk_error_code"}
+      "http_status","sdk_error_code","apple_error_code","failure_category"}
 STAGES={"initialization","grandslam_provisioning","grandslam_login","mac_store_login",
         "testflight_session","testflight_catalog"}
 def validate(value):
@@ -30,6 +30,11 @@ def validate(value):
     if any(flags[i] and not flags[i-1] for i in range(1,len(flags))):raise ValueError()
     if value["status"]=="catalog_verified" and not all(flags):raise ValueError()
     if value["status"]=="verification_required" and not value["verification_requested"]:raise ValueError()
+    if type(value["apple_error_code"]) is not int or not -99999999<=value["apple_error_code"]<=99999999:raise ValueError()
+    if value["failure_category"] not in {"none","unclassified_exception","nonstandard_exception",
+        "apple_authentication_rejected","account_session_rejected","account_token_missing",
+        "response_schema_invalid","transport_timeout","transport_error","http_response_error",
+        "verification_required"}:raise ValueError()
     return value
 
 def public_env(env):
@@ -68,7 +73,13 @@ def main():
             profile={"schema":"testflight-virtual-profile-v1",
                      "origin":"independent_sdk_virtual_identity","hardware20":secrets.token_hex(20),
                      "run_id":env["GITHUB_RUN_ID"],"source_commit":env["GITHUB_SHA"]}
-            (root/"profile.json").write_text(json.dumps(profile))
+            if env.get("TF_VIRTUAL_RESTORE_RUN"):
+                from tf_virtual_restore import restore
+                restore(root,env)
+                receipt["identity_reused"]=True
+            else:
+                (root/"profile.json").write_text(json.dumps(profile))
+                receipt["identity_reused"]=False
             try:
                 result=subprocess.run([binary,"--authenticate",str(root)],input=(email+"\n"+password+"\n").encode(),
                     stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=240,env=child)

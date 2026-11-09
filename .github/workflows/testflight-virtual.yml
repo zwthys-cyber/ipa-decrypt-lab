@@ -15,6 +15,7 @@ on:
         default: false
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: testflight-virtual-research
   cancel-in-progress: false
@@ -29,7 +30,7 @@ jobs:
           persist-credentials: false
       - name: Test privacy and state guards without account inputs
         run: |
-          python3 -m unittest discover -s .github/ops -p 'test_tf_virtual.py'
+          python3 -m unittest discover -s .github/ops -p 'test_tf_virtual*.py'
           python3 -m unittest discover -s .github/ops -p 'test_tf_invitation.py'
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -55,6 +56,9 @@ jobs:
         env:
           APPLE_CN_ID: ${{ secrets.APPLE_CN_ID }}
           APPLE_CN_PASSWORD: ${{ secrets.APPLE_CN_PASSWORD }}
+          TF_VIRTUAL_RESTORE_RUN: '42650873653'
+          DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           ulimit -c 0
           python3 .github/ops/tf_virtual.py
@@ -70,3 +74,5 @@ jobs:
           if-no-files-found: error
 
 # One source-bound authentication control after preflight 42650011477.
+
+# Diagnostic control reuses the fixed encrypted identity from run 42650873653.

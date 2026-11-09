@@ -9,7 +9,8 @@ class VirtualExperimentTests(unittest.TestCase):
         return {"schema":"testflight-virtual-auth-v1","stage":"initialization","status":"failed",
             "virtual_identity":True,"account_login_attempted":False,"gsa_authenticated":False,
             "mac_store_authenticated":False,"tf_authenticated":False,"catalog_received":False,
-            "verification_requested":False,"http_status":0,"sdk_error_code":0}
+            "verification_requested":False,"http_status":0,"sdk_error_code":0,
+            "apple_error_code":0,"failure_category":"none"}
 
     def test_raw_account_fields_cannot_be_published(self):
         for key in ("email","headers","sessionId","password","hardware20","error"):
@@ -24,7 +25,7 @@ class VirtualExperimentTests(unittest.TestCase):
         self.assertEqual(validate(value)["status"],"catalog_verified")
 
     def test_boolean_and_status_fields_are_closed(self):
-        for key,value in (("virtual_identity",1),("http_status",True),("status","PRIVATE"),("stage","PRIVATE")):
+        for key,value in (("virtual_identity",1),("http_status",True),("status","PRIVATE"),("stage","PRIVATE"),("failure_category","PRIVATE"),("apple_error_code",True)):
             candidate=self.fixture();candidate[key]=value
             with self.assertRaises(ValueError):validate(candidate)
 

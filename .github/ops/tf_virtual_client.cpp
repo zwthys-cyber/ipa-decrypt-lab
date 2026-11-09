@@ -28,6 +28,28 @@ Bytes hardware(const Json& profile) {
         result.push_back(static_cast<std::uint8_t>(std::stoul(text.substr(i,2),nullptr,16)));
     return result;
 }
+void classify(const std::exception& error,Json& report) {
+    const std::string text=error.what();
+    if(text.size()>32768) { report["failure_category"]="unclassified_exception";return; }
+    std::smatch match;
+    if(std::regex_search(text,match,std::regex("HTTP ([1-5][0-9]{2})")))
+        report["http_status"]=std::stoi(match[1]);
+    if(std::regex_search(text,match,std::regex("code (-?[0-9]{1,8})")))
+        report["apple_error_code"]=std::stoi(match[1]);
+    std::string category="unclassified_exception";
+    for(const auto& item:std::vector<std::pair<std::string,std::string>>{
+        {"Apple authentication rejected","apple_authentication_rejected"},
+        {"GrandSlam session rejected","account_session_rejected"},
+        {"usable account token","account_token_missing"},
+        {"json.exception","response_schema_invalid"},
+        {"GrandSlam missing","response_schema_invalid"},
+        {"timed out","transport_timeout"},{"timeout","transport_timeout"},
+        {"resolve","transport_error"},{"curl","transport_error"},
+        {"HTTP ","http_response_error"}}) {
+        if(text.find(item.first)!=std::string::npos) { category=item.second;break; }
+    }
+    report["failure_category"]=category;
+}
 int self_test() {
     unsigned calls=0;
     ClientOptions options;options.device_platform=DevicePlatform::mac;
@@ -55,6 +77,13 @@ int self_test() {
     try { Client mismatch(ByteView(state),other); }
     catch(const std::exception&) { rejected=true; }
     require(rejected && calls==0);
+    Json diagnostic={{"http_status",0},{"apple_error_code",0}};
+    classify(std::runtime_error("GrandSlam HTTP 503 PRIVATE_ACCOUNT"),diagnostic);
+    require(diagnostic["http_status"]==503 && diagnostic["failure_category"]=="http_response_error" &&
+            diagnostic.dump().find("PRIVATE_ACCOUNT")==std::string::npos);
+    classify(std::runtime_error("Apple authentication rejected (code -22406)"),diagnostic);
+    require(diagnostic["apple_error_code"]==-22406 &&
+            diagnostic["failure_category"]=="apple_authentication_rejected");
     return 0;
 }
 }
@@ -63,7 +92,7 @@ int main(int argc,char **argv) {
         {"status","failed"},{"virtual_identity",true},{"account_login_attempted",false},
         {"gsa_authenticated",false},{"mac_store_authenticated",false},
         {"tf_authenticated",false},{"catalog_received",false},{"verification_requested",false},
-        {"http_status",0},{"sdk_error_code",0}};
+        {"http_status",0},{"sdk_error_code",0},{"apple_error_code",0},{"failure_category","none"}};
     try {
         if(argc==2 && std::string(argv[1])=="--self-test")return self_test();
         require(argc==3 && std::string(argv[1])=="--authenticate");
@@ -104,13 +133,13 @@ int main(int argc,char **argv) {
         report["catalog_received"]=true;report["status"]="catalog_verified";
     } catch(const VerificationNeeded&) {
         report["status"]="verification_required";report["verification_requested"]=true;
+        report["failure_category"]="verification_required";
     } catch(const Error& error) {
         report["sdk_error_code"]=static_cast<int>(error.code());
-        const std::string text=error.what();
-        std::smatch match;
-        if(std::regex_search(text,match,std::regex("HTTP ([1-5][0-9]{2})")))
-            report["http_status"]=std::stoi(match[1]);
-    } catch(...) {}
+        classify(error,report);
+    } catch(const std::exception& error) {
+        classify(error,report);
+    } catch(...) { report["failure_category"]="nonstandard_exception"; }
     std::cout<<report.dump()<<'\n';
     return report["status"]=="catalog_verified" ? 0 : 2;
 }
