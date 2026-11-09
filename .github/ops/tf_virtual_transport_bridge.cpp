@@ -1,3 +1,4 @@
+#include <regex>
 #include "testflight/internal.hpp"
 #include "client/client_internal.hpp"
 #include <algorithm>
@@ -262,5 +263,44 @@ APPLE_AUTH_CLIENT_EXPORT void lab_tf_invitation_bind(const std::filesystem::path
     tfdetail::Engine engine(lab_bound_tf_context(root),transport);
     const auto found=engine.invitation_app_binding(app.at("bundleId").get<std::string>());
     netdetail::require(found==scalar(app.at("appAdamId")),"Catalog detail target mismatch");
+}
+}
+
+namespace apple_auth {
+APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_beta_download(const std::filesystem::path& root,const std::filesystem::path& output) {
+    using netdetail::Json;
+    Json report={{"schema","tf-beta-download-v1"},{"status","failed"},{"stage","target_binding"},
+        {"downloaded",false},{"transport_removed",false},{"decryption_proven",false},
+        {"archive_members",0},{"encrypted_images",0},{"clear_images",0},{"downloaded_bytes",0},
+        {"output_bytes",0},{"http_status",0},{"failure_category","none"}};
+    auto base=lab_tf_curl_transport();
+    Transport transport=[&](const HttpRequest& request)->HttpResponse {
+        report["http_status"]=0;
+        const auto response=base(request);report["http_status"]=response.status;return response;
+    };
+    try {
+        lab_tf_invitation_bind(root,transport);
+        const auto info=Json::parse(netdetail::read_file(root/"invitation.json",1024*1024));
+        const auto bundle=info.at("app").at("bundleId").get<std::string>();
+        (void)lab_bound_tf_context(root);
+        auto client=TestFlightClient::load(root/"tf-session.json",std::nullopt,transport);
+        report["stage"]="download_and_transport";
+        const auto result=client.download(bundle,output/"beta.ipa",true);
+        std::filesystem::copy_file(result.artifacts/"install-metadata.json",root/"tf-install-metadata.json",
+            std::filesystem::copy_options::overwrite_existing);
+        std::filesystem::permissions(root/"tf-install-metadata.json",std::filesystem::perms::owner_read|std::filesystem::perms::owner_write);
+        report["archive_members"]=result.archive.members;report["encrypted_images"]=result.archive.encrypted_images;
+        report["clear_images"]=result.archive.clear_images;report["downloaded_bytes"]=result.downloaded_bytes;
+        report["output_bytes"]=std::filesystem::file_size(output/"beta.ipa");
+        report["downloaded"]=true;report["transport_removed"]=true;
+        report["stage"]="archive_received";report["status"]="beta_downloaded";
+    } catch(const std::exception& error) {
+        const std::string text=error.what();
+        if(text.size()<=32768)netdetail::write_private(root/"download-failure.txt",netdetail::bytes(text));
+        std::smatch match;
+        if(std::regex_search(text,match,std::regex("HTTP ([1-5][0-9]{2})")))report["http_status"]=std::stoi(match[1]);
+        report["failure_category"]=report["http_status"]==429 ? "rate_limited" : "download_or_metadata_failed";
+    } catch(...) {report["failure_category"]="nonstandard_exception";}
+    return report.dump();
 }
 }

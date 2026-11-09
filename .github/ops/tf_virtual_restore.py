@@ -13,12 +13,12 @@ import zipfile
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/"tools"))
 from telegram_queue import GitHub
 
-RUN=42692803345
+RUN=42694923538
 ORIGIN_RUN=42650873653
 ORIGIN_SOURCE="19244adbe73f71156a91a5c1cb20965925928054"
-SOURCE="688b5356aa33a9653517f62445856a08c72819c4"
-ARCHIVE_DIGEST="sha256:ef17167286b96a905675675c4b03d45751e6c90734c1c8cce31c4fedb12d09aa"
-CIPHER_DIGEST="11dfcb05e8a8b83867ecad4a5ee8c01d4be937e18eac9e330bc8747e6fc591a2"
+SOURCE="e86e8c8773955951492dcd1b31b1c5c75babbd34"
+ARCHIVE_DIGEST="sha256:87064c512d191696bd8a4a12906e17f685fc56437196006176e7035720c14f80"
+CIPHER_DIGEST="214dd5ef48c9d38dc59833f3e20f26f8fe57fed640a8122b42959bfbfee47a10"
 
 def require(value):
     if not value:raise ValueError("tf_virtual_restore_invalid")
@@ -34,7 +34,7 @@ def unpack_private(raw,root):
             require(not path.is_absolute() and all(part not in ("",".","..") for part in path.parts))
             require(member.name==str(path) and member.isfile() and not member.mode&0o077)
             require(member.name not in files and 0<=member.size<=16*1024*1024)
-            require(member.name in {"profile.json","account.plist","mac-store.plist","tf-session.json","catalog.json","failure.txt","store-auth-response.bin","store-auth-meta.json","tf-auth-response.bin","tf-auth-meta.json","invitation.json","accept-response.json","invitation-intents.sqlite","invitation-intent-approved.json"}
+            require(member.name in {"profile.json","account.plist","mac-store.plist","tf-session.json","catalog.json","failure.txt","store-auth-response.bin","store-auth-meta.json","tf-auth-response.bin","tf-auth-meta.json","invitation.json","accept-response.json","invitation-intents.sqlite","invitation-intent-approved.json","tf-install-metadata.json","download-failure.txt"}
                     or len(path.parts)>=2 and path.parts[0]=="sdk"
                     and all(re.fullmatch(r"[A-Za-z0-9_.-]{1,128}",part) is not None for part in path.parts[1:]))
             total+=member.size;require(total<=32*1024*1024)
@@ -59,10 +59,10 @@ def restore(root,env):
     api=GitHub(env["GH_TOKEN"])
     run=api.call("/actions/runs/"+str(RUN))
     require(run.get("head_sha")==SOURCE and run.get("head_branch")=="main" and run.get("status")=="completed"
-            and run.get("conclusion")=="failure" and run.get("run_attempt")==1
+            and run.get("conclusion")=="success" and run.get("run_attempt")==1
             and run.get("path")==".github/workflows/testflight-virtual.yml")
     items=api.call("/actions/runs/"+str(RUN)+"/artifacts?per_page=100")["artifacts"]
-    found=[item for item in items if item.get("name")=="tf-invite-accept-"+str(RUN)+"-attempt-1" and not item.get("expired")]
+    found=[item for item in items if item.get("name")=="tf-invite-resolution-"+str(RUN)+"-attempt-1" and not item.get("expired")]
     require(len(found)==1)
     item=found[0]
     require(item.get("digest")==ARCHIVE_DIGEST and 0<item.get("size_in_bytes",0)<4*1024*1024)
@@ -77,9 +77,9 @@ def restore(root,env):
             receipt=json.loads(zipped.read("tf-accept-receipt.json"))
         require(hashlib.sha256(cipher).hexdigest()==CIPHER_DIGEST and receipt.get("source_commit")==SOURCE
                 and receipt.get("run_id")==str(RUN) and receipt.get("sealed_state_sha256")==CIPHER_DIGEST
-                and receipt.get("acceptance_attempted") is True and receipt.get("post_response_confirmed") is True
+                and receipt.get("invitation_accepted") is True and receipt.get("details_result",{}).get("status")=="invitation_binding_verified"
                 and receipt.get("result",{}).get("tf_authenticated") is True
-                and receipt.get("status")=="acceptance_outcome_unverified" and receipt.get("result",{}).get("catalog_received") is True)
+                and receipt.get("status")=="membership_verified" and receipt.get("result",{}).get("catalog_received") is True)
         identity=work/"identity.txt"
         identity.write_text(env["DELIVERY_AGE_IDENTITY"]);identity.chmod(0o600)
         child={k:env[k] for k in ("HOME","PATH","LANG") if k in env}
