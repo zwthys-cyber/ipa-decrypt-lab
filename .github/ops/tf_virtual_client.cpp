@@ -299,7 +299,11 @@ int main(int argc,char **argv) {
             {"X-Apple-Device-Model",model},{"X-Apple-TA-Device",model},
             {"X-Apple-TestFlight-iOS","0"},{"X-Apple-Rosetta-Available","0"}};
         report["stage"]="testflight_session";
-        auto tf=TestFlightClient::from_store_session(store,hw,headers,options.transport);
+        require(std::regex_match(model,std::regex("(Mac|iMac)[A-Za-z0-9,]+")));
+        TestFlightOptions tfOptions;
+        tfOptions.device_model=model;
+        tfOptions.device_name="IPADecryptLab independent virtual Mac";
+        auto tf=TestFlightClient::from_store_session(store,hw,headers,options.transport,tfOptions);
         report["tf_authenticated"]=true;
         tf.save(root/"tf-session.json");
         report["stage"]="testflight_catalog";
