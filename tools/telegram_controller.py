@@ -175,8 +175,8 @@ class Controller:
             if self.strict_ownership and (self.journal is None or rid not in self.journal.records):
                 self.say("找不到属于你的任务。")
                 return
-            self.record(rid,"cancelled")
             if callable(self.retirement):self.retirement("export",rid,self.current["app"])
+            self.record(rid,"cancelled")
             self.current = None
             self.github.cancel(rid)
             self.card(rid).update("cancelled",force=True)
@@ -378,6 +378,10 @@ class Controller:
         return False
 
     def tick(self):
+        if self.strict_ownership and self.current is not None:
+            prior=self.journal.records.get(self.current["rid"],{}) if self.journal is not None else {}
+            if prior.get("state")!="pending":
+                self.current=None
         self.browser.tick()
         if not self.current:
             return

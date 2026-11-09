@@ -1,5 +1,6 @@
 """Real SQLite tenant boundaries; Telegram/GitHub side effects are synthetic."""
 import json
+import os
 import sqlite3
 import sys
 import tempfile
@@ -32,6 +33,7 @@ def callback(uid,chat=None):
 class MultiUserContracts(unittest.TestCase):
     def setUp(self):
         self.directory=tempfile.TemporaryDirectory();self.path=Path(self.directory.name)/"state.sqlite3"
+        self.environment=patch.dict(os.environ,{"TMPDIR":self.directory.name});self.environment.start()
         self.bot=Mock();self.bot.message.return_value={"message_id":7}
         self.gh=Mock();self.gh.dispatch.return_value={"status":"queued"};self.gh.find.return_value=None
         self.menu=patch('multi_user.configure',return_value={});self.menu.start()
@@ -39,7 +41,7 @@ class MultiUserContracts(unittest.TestCase):
         self.service=MultiUserService(self.bot,self.gh,ADMIN,"crypt","synthetic",self.journal,20,ServerController)
         self.number=10
     def tearDown(self):
-        self.service.close();self.journal.close();self.menu.stop();self.directory.cleanup()
+        self.service.close();self.journal.close();self.menu.stop();self.environment.stop();self.directory.cleanup()
     def send(self,uid,text):
         self.number+=1;item=update(uid,text,self.number);process_update(self.service,self.journal,item);return item
     def grant(self,uid=ALICE,limit=3):self.send(ADMIN,"/allow "+str(uid)+" "+str(limit))
@@ -124,6 +126,7 @@ class MultiUserContracts(unittest.TestCase):
         b=self.service.tenant(BOB);b.current=None
         for i in range(18):self.journal.write(format(i+10,'032x'),"closed",APP)
         self.assertEqual(self.service.access.submissions(),20)
+        self.assertFalse(self.service.admit(BOB,"export"))
         self.send(BOB,APP);self.assertEqual(self.gh.dispatch.call_count,1)
         tomorrow=(int(time.time())//86400+1)*86400
         with patch('multi_user.time.time',return_value=tomorrow):self.assertEqual(self.service.access.submissions(),0)
@@ -187,6 +190,28 @@ class MultiUserContracts(unittest.TestCase):
         self.gh.deliver.assert_not_called();self.gh.dispatch.assert_not_called()
         notices=[call.args[0] for call in self.bot.message.call_args_list if '上次文件发送结果需要确认' in call.args[1]]
         self.assertEqual(notices,[ALICE])
+
+    def test_atomic_cancel_intent_prevents_auto_delivery_after_interruption(self):
+        self.grant();c=self.service.tenant(ALICE)
+        c.journal.write(RID,"pending",APP);c.current={'rid':RID,'app':APP}
+        self.service.retire(ALICE,"export",RID,APP)
+        self.gh.find.return_value={'status':'completed','conclusion':'success'}
+        self.service.tick()
+        self.assertIsNone(c.current)
+        self.assertEqual(c.journal.records[RID]['state'],'cancelled')
+        self.gh.deliver.assert_not_called()
+
+    def test_catalog_cancel_is_atomic_and_cannot_retire_other_users_work(self):
+        self.grant();self.grant(BOB);c=self.service.tenant(ALICE)
+        c.browser.state['pending']={'rid':RID,'app':APP,'at':int(time.time())};c.browser.save()
+        with self.assertRaises(QueueError):self.service.retire(BOB,"catalog",RID,APP)
+        self.service.retire(ALICE,"catalog",RID,APP)
+        self.assertIsNone(c.browser.state['pending'])
+        self.assertIsNone(c.journal.browser_load()['pending'])
+        self.assertEqual(len(self.service.retired),1)
+        self.restart();self.service.recover()
+        self.assertIsNone(self.service.tenant(ALICE).browser.state['pending'])
+        self.gh.deliver.assert_not_called();self.gh.dispatch.assert_not_called()
 
     def test_claimed_update_and_failed_acl_write_cannot_grant_access(self):
         with patch.object(self.service.access,'grant',side_effect=sqlite3.OperationalError('synthetic')):

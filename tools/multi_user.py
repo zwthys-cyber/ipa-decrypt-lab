@@ -61,11 +61,17 @@ class AccessControl:
             self.db.execute("""INSERT INTO metadata(scope,name,value) VALUES(?,'version_browser',?)
               ON CONFLICT(scope,name) DO UPDATE SET value=excluded.value""",(scope,json.dumps(browser_state,separators=(",",":"))))
 
-    def retire(self,kind,rid,app):
+    def retire(self,kind,rid,app,scope,browser_state=None):
         request_id(rid);require(kind in ("export","catalog"),"invalid_retirement")
         with self.db:
+            self.db.execute("BEGIN IMMEDIATE")
             self.db.execute("INSERT OR IGNORE INTO retired_work(namespace,rid,kind,app,at) VALUES(?,?,?,?,?)",
                 (self.scope,rid,kind,app,int(time.time())))
+            if kind=="export":
+                self.db.execute("UPDATE tasks SET state='cancelled',at=? WHERE scope=? AND rid=? AND state='pending'",(int(time.time()),scope,rid))
+            else:
+                self.db.execute("""INSERT INTO metadata(scope,name,value) VALUES(?,'version_browser',?)
+                  ON CONFLICT(scope,name) DO UPDATE SET value=excluded.value""",(scope,json.dumps(browser_state,separators=(",",":"))))
 
     def retired(self):
         return [dict(rid=r[0],kind=r[1],app=r[2]) for r in self.db.execute(
@@ -146,7 +152,7 @@ class MultiUserService:
             api=ScopedGitHub(self.github,ledger,uid,allowed)
             controller=self.factory(self.bot,api,uid,self.crypt,self.token,journal=ledger,
                 submission_limit=profile["daily_limit"],admission=lambda kind:self.admit(uid,kind),
-                authorization=allowed,strict_ownership=True,retirement=self.retire)
+                authorization=allowed,strict_ownership=True,retirement=lambda kind,rid,app:self.retire(uid,kind,rid,app))
             controller.started=time.time()-86400
             self.controllers[uid]=controller
         self.controllers[uid].submission_limit=profile["daily_limit"]
@@ -171,8 +177,18 @@ class MultiUserService:
         if text:self.bot.message(uid,text);return False
         return True
 
-    def retire(self,kind,rid,app):
-        self.access.retire(kind,rid,app);self.retired=self.access.retired()
+    def retire(self,uid,kind,rid,app):
+        require(uid in self.enabled and uid in self.controllers,"user_not_authorized")
+        c=self.controllers[uid];state=None
+        if kind=="export":c.github.own(rid)
+        else:
+            pending=c.browser.state.get("pending")
+            require(pending and pending["rid"]==rid and pending["app"]==app,"catalog_not_owned")
+            state=dict(c.browser.state,pending=None)
+        self.access.retire(kind,rid,app,c.journal.scope,state)
+        c.journal.load()
+        if state is not None:c.browser.state=state
+        self.retired=self.access.retired()
 
     def handle(self,update):
         principal=actor(update)
