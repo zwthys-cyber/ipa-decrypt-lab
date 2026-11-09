@@ -24,6 +24,10 @@ TERMS={
     'unsupported':('unsupported','not supported','not available'),
     'country':('country','storefront','region'),
     'account_setup':('account setup','account not found','not initialized','terms and conditions','terms of service'),
+    'unknown':('unknown error','未知错误','未知錯誤'),
+    'retry_later':('try again','try later','稍后再试','稍後再試','稍后重试'),
+    'chinese_authentication':('登录','登陆','验证','驗證','密碼','密码'),
+    'chinese_account_setup':('条款','條款','尚未使用','未使用过','未使用過'),
     'cookie':('cookie',),'token':('token',),'dsid':('dsid',),
 }
 
@@ -54,12 +58,16 @@ def profile(raw):
         scan(value)
         if numeric:result['numeric_errors']=numeric
     else:messages.append(raw[:8192].decode(errors='replace'))
-    text=' '.join(messages).lower()
+    text=' '.join(messages).lower().replace('_',' ')
     result['mentions']={name:any(term in text for term in terms) for name,terms in TERMS.items()}
     return result
 
+# Derived from Apple's public account frontend; request no billing or payment fields.
+CONTEXT_QUERY='query requestAccountSummary { account { appleId country } authorizations { authorizedComputers } }'
 def bodies():
-    return [('minimal',summary.BODY),('explicit_operation',json.dumps({'operationName':'requestAccountSummary','variables':{},'query':summary.QUERY},separators=(',',':')).encode())]
+    multiline='query requestAccountSummary {\n  account { appleId country }\n  authorizations { authorizedComputers }\n}'
+    variants=[('account_context',CONTEXT_QUERY),('frontend_line_breaks',multiline),('frontend_escaped_breaks',multiline.replace('\n','\\n'))]
+    return [(label,json.dumps({'query':query},separators=(',',':')).encode()) for label,query in variants]
 
 def trial(env,opener=None):
     value,session=decode(env);pod=value['account'].get('pod')

@@ -2,7 +2,7 @@ import io
 import json
 import unittest
 import urllib.error
-from cn_summary_diagnostic import profile,bodies,trial
+from cn_summary_diagnostic import profile,bodies,trial,CONTEXT_QUERY
 from store_account_summary import QUERY
 import test_cn_session
 
@@ -14,9 +14,9 @@ class CNSummaryDiagnosticContracts(unittest.TestCase):
         self.assertTrue(result['mentions']['operation']);self.assertTrue(result['mentions']['missing_field'])
         self.assertEqual(result['numeric_errors'],{'errorCode':500})
     def test_body_variants_are_only_the_fixed_readonly_query(self):
-        variants=bodies();self.assertEqual([x[0] for x in variants],['minimal','explicit_operation'])
+        variants=bodies();self.assertEqual([x[0] for x in variants],['account_context','frontend_line_breaks','frontend_escaped_breaks'])
         for _,raw in variants:
-            self.assertEqual(json.loads(raw)['query'],QUERY)
+            self.assertEqual(' '.join(json.loads(raw)['query'].replace('\\n',' ').split()),CONTEXT_QUERY)
             self.assertNotIn('mutation',raw.decode().lower())
     def test_stops_on_auth_rejection_or_valid_count(self):
         fixture=test_cn_session.CNSavedSessionContracts();fixture.setUp()
