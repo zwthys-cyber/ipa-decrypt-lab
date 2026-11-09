@@ -41,6 +41,19 @@ def summarize_probe(result):
     try:
         return validate(value), "valid_report", diagnostics
     except ValueError:
+        if isinstance(value, dict):
+            diagnostics["missing_fields"] = sorted(KEYS - set(value))
+            diagnostics["extra_field_count"] = min(len(set(value) - KEYS), 128)
+            diagnostics["field_types"] = {
+                key: type(value[key]).__name__ if type(value[key]) in (bool, int, str, dict, list, type(None)) else "other"
+                for key in sorted(KEYS & set(value))
+            }
+            for key, allowed in (
+                ("status", {"ready", "native_context_unavailable", "native_probe_stopped", "unavailable"}),
+                ("schema", {"testflight-native-preflight-v1"}),
+                ("hardware_source", {"authkit_unique_identifier", "unavailable"})):
+                candidate = value.get(key)
+                diagnostics[key] = candidate if type(candidate) is str and candidate in allowed else "unrecognized"
         return None, "invalid_report", diagnostics
 
 def main():
