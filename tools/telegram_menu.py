@@ -2,7 +2,7 @@
 from telegram_api import APIError
 
 HOME_TEXT=("IPA 下载助手\n\n"
-           "最新版：直接发送 App Store 链接或 App ID。\n"
+           "最新版：直接发送 App Store 链接或 App ID。\n主人可发送 TestFlight 邀请链接。\n"
            "旧版本：点击下方按钮查看用法。\n\n"
            "国区 /cn/ 链接自动选择中国区账号；其他链接和数字 ID 使用外区账号。\n中国区仅最新版，支持免费应用 · IPA 最大 2000 MB")
 COMMANDS = [
@@ -25,7 +25,7 @@ def show_menu(bot,owner,page="home",message_id=None):
         buttons=[[{"text":"‹ 返回","callback_data":"menu:home"}]]
     else:
         text=("使用帮助\n\n"
-              "直接发送 App Store 链接或数字 ID，下载最新版。\n"
+              "直接发送 App Store 链接或数字 ID，下载最新版。\n主人也可发送 TestFlight 邀请链接，自动获取可用测试构建。\n"
               "/status 查看任务进度\n"
               "/cancel 取消当前任务\n"
               "/get 任务编号 取回已完成文件\n"

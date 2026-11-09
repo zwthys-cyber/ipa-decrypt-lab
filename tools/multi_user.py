@@ -153,6 +153,7 @@ class MultiUserService:
             controller=self.factory(self.bot,api,uid,self.crypt,self.token,journal=ledger,
                 submission_limit=profile["daily_limit"],admission=lambda kind:self.admit(uid,kind),
                 authorization=allowed,strict_ownership=True,retirement=lambda kind,rid,app:self.retire(uid,kind,rid,app))
+            controller.testflight_allowed=uid==self.admin
             controller.started=time.time()-86400
             self.controllers[uid]=controller
         self.controllers[uid].submission_limit=profile["daily_limit"]

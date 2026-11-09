@@ -33,6 +33,7 @@ def event(status, **fields):
 
 class Controller:
     def __init__(self, bot, github, owner, crypt, token, journal=None, submission_limit=3, *, admission=None, authorization=None, strict_ownership=False, retirement=None):
+        self.testflight_allowed=False
         self.retirement=retirement
         self.admission,self.authorization,self.strict_ownership=admission,authorization,strict_ownership
         self.submission_limit = submission_limit
@@ -137,8 +138,8 @@ class Controller:
                 return
             try:
                 app,profile=parse_target(parts[1])
-                if profile=="cn":
-                    self.say("中国区暂支持最新版下载；历史版本请使用外区链接或数字 App ID。")
+                if profile in {"cn","tf"}:
+                    self.say("TestFlight 不支持历史版本查询，请直接发送邀请链接。" if profile=="tf" else "中国区暂支持最新版下载；历史版本请使用外区链接或数字 App ID。")
                     return
                 self.browser.begin(app,update_number)
             except PreflightError as exc:
@@ -196,8 +197,15 @@ class Controller:
             else:
                 app,profile = parse_target(text)
         except (ValueError,TypeError):
-            self.say("请发送完整 App Store 链接或数字 App ID。用 /help 查看指令。")
+            self.say("请发送完整 App Store 链接、TestFlight 邀请链接或数字 App ID。用 /help 查看指令。")
             return
+        if profile=="tf":
+            if not self.testflight_allowed:
+                self.say("TestFlight 当前仅向机器人主人开放。")
+                return
+            if version:
+                self.say("TestFlight 当前只获取可用测试构建，不支持指定 App Store 历史版本。")
+                return
         if profile=="cn" and version:
             self.say("中国区暂支持最新版下载；指定旧版不会回退到外区账号。")
             return
@@ -212,15 +220,17 @@ class Controller:
             self.say("请稍候 30 秒再提交。")
             return
         rid = opaque_id(self.token,self.owner,update_number,app + (":" + version if version else ""))
-        if profile=="cn": rid="cn_"+rid
+        if profile in {"cn","tf"}: rid=profile+"_"+rid
         if self.journal is not None and rid in self.journal.records:
             self.say("这个请求已记录，请用 /status 或 /get 查询。")
             return
         if callable(self.admission) and not self.admission("export"):
             return
-        self.say("正在检查"+("中国区" if profile=="cn" else "外区（美区查询）")+"上架情况、价格和容量…")
+        self.say("正在创建 TestFlight 任务，将检查测试资格并验证可用构建…" if profile=="tf" else "正在检查"+("中国区" if profile=="cn" else "外区（美区查询）")+"上架情况、价格和容量…")
         try:
-            if version:
+            if profile=="tf":
+                pass
+            elif version:
                 self.github.preflight_app(app, historical=True)
             elif profile=="cn":
                 self.github.preflight_app(app,profile="cn")
@@ -324,7 +334,7 @@ class Controller:
         if current.get("recovered"):
             return False
         rid=current["rid"]
-        if profile_for_request(rid)=="cn":
+        if profile_for_request(rid) in {"cn","tf"}:
             return False
         if type(run.get("id")) is not int:
             return False

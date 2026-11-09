@@ -10,10 +10,15 @@ MAX_RUNS=2
 
 def matches(run,rid):
     title=run.get("display_title","")
+    if rid.startswith("tf_"):
+        return re.fullmatch(r"delivery-"+re.escape(rid)+r"-tf[A-Za-z0-9_-]{6,80}-macos-26-intel",title) is not None
     return (title=="delivery-"+rid or
             re.fullmatch(r"delivery-"+re.escape(rid)+r"-app[1-9][0-9]{4,19}-(?:macos-(?:15|26)(?:-intel)?)(?:-version([0-9.]{1,32}))?",title) is not None)
 
 def app_from_run(run,rid):
+    if rid.startswith("tf_"):
+        match=re.fullmatch(r"delivery-"+re.escape(rid)+r"-tf([A-Za-z0-9_-]{6,80})-macos-26-intel",run.get("display_title",""))
+        return match[1] if match else ""
     m=re.fullmatch(r"delivery-"+re.escape(rid)+r"-app([1-9][0-9]{4,19})-(?:macos-(?:15|26)(?:-intel)?)(?:-version([0-9.]{1,32}))?",
                    run.get("display_title",""))
     return m.group(1) if m else ""

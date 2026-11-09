@@ -65,7 +65,7 @@ class GitHub:
         require((path.startswith("/actions/") or
                  re.fullmatch(r"/check-runs(?:/[1-9][0-9]*)?",path) or
                  re.fullmatch(r"/commits/[a-f0-9]{40}/check-runs\?check_name=delivery-journal-[a-f0-9]{32}&filter=all&per_page=100&page=[1-5]",path) or
-                 re.fullmatch(r"/commits/[a-f0-9]{40}/check-runs\?check_name=delivery-progress-(?:cn_)?[a-f0-9]{32}&per_page=100",path))
+                 re.fullmatch(r"/commits/[a-f0-9]{40}/check-runs\?check_name=delivery-progress-(?:(?:cn|tf)_)?[a-f0-9]{32}&per_page=100",path))
                 and "\n" not in path, "invalid_github_path")
         request = urllib.request.Request("https://api.github.com/repos/" + REPOSITORY + path,
             data=None if payload is None else json.dumps(payload).encode(),
@@ -129,6 +129,15 @@ class GitHub:
     def dispatch(self, app, rid, version=""):
         version=selector(version)
         request_id(rid)
+        if profile_for_request(rid)=="tf":
+            require(type(app) is str and re.fullmatch(r"[A-Za-z0-9_-]{6,80}",app) and not version,"invalid_testflight_target")
+            existing=self.find(rid)
+            if existing:
+                require(app_from_run(existing,rid)==app,"testflight_target_mismatch")
+                return existing
+            response=self.call("/actions/workflows/testflight-private-delivery.yml/dispatches",
+                {"ref":"main","inputs":{"mode":"export","invite":app,"request_id":rid}},"POST")
+            return {"id":response["workflow_run_id"],"status":"queued"} if isinstance(response,dict) and type(response.get("workflow_run_id")) is int else {"status":"dispatch_pending"}
         require(re.fullmatch(r"[1-9][0-9]{4,19}", app or ""), "invalid_app_id")
         cn=profile_for_request(rid)=="cn"
         require(not (cn and version),"cn_history_not_supported")
@@ -163,7 +172,7 @@ class GitHub:
         return True
 
     def retry(self,app,rid,old_id,cancel_requested=False,version=""):
-        require(profile_for_request(rid)!="cn","cn_runner_retry_not_supported")
+        require(profile_for_request(rid) not in {"cn","tf"},"stateful_runner_retry_not_supported")
         version=selector(version)
         request_id(rid)
         require(re.fullmatch(r"[1-9][0-9]{4,19}",app or ""),"missing_retry_app")
@@ -268,6 +277,9 @@ class GitHub:
 
     def failure_reason(self,run):
         messages = {
+            "TestFlight session requires maintenance": "TestFlight 会话需要主人维护，任务已停止；不会自动重新登录或切换 App Store。",
+            "TestFlight invitation or membership unavailable": "TestFlight 邀请或测试资格不可用，或之前加入结果不明。未重复接受邀请，也未回退正式版。",
+            "TestFlight model or plaintext validation failed": "该测试包未通过现有模型和完整明文验证，未交付文件，也未新增电脑授权。",
             "CN session requires maintenance": "中国区登录状态需要管理员更新验证，任务已停止；不会切换到外区账号。",
             "Apple login access denied": "Apple 登录接口拒绝访问（HTTP 401/403），尚未开始下载；已停止自动重试。该响应不能单独证明密码错误，需检查账号状态及运行器的访问条件。",
             "Apple login temporarily unavailable": "Apple 登录服务暂不可用，已自动尝试 3 次仍未恢复；尚未开始下载。请稍后再试。",
@@ -402,6 +414,8 @@ class GitHub:
                         "invalid_artifact_sizes")
                 receipt = json.loads(z.read("receipt.json"))
                 validate_receipt(receipt, rid, run_id, run["head_sha"])
+                if profile_for_request(rid)=="tf":
+                    require(receipt.get("target_type")=="testflight" and receipt.get("testflight_invite")==app_from_run(run,rid),"testflight_delivery_target_mismatch")
                 require(receipt.get("requested_version","")==requested_version,"receipt_version_mismatch")
                 if requested_version:
                     resolved_marker("IPA_LAB_VERSION:" + str(receipt.get("external_version_id","")) + ":" + str(receipt.get("resolved_version","")), requested_version)

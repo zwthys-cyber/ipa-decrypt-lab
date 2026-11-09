@@ -7,6 +7,7 @@ import re
 import sqlite3
 import time
 from telegram_queue import QueueError, request_id, require
+from account_profile import profile_for_request
 
 STATES={"pending","sending","delivered","cancelled","closed"}
 
@@ -47,7 +48,7 @@ class PersistentJournal:
     def write(self,rid,state,app=""):
         request_id(rid)
         require(state in STATES and isinstance(app,str) and
-                (not app or re.fullmatch(r"[1-9][0-9]{4,19}",app)),"invalid_journal_record")
+                (not app or re.fullmatch(r"[A-Za-z0-9_-]{6,80}" if profile_for_request(rid)=="tf" else r"[1-9][0-9]{4,19}",app)),"invalid_journal_record")
         now=int(time.time())
         with self.db:
             self.db.execute("BEGIN IMMEDIATE")
