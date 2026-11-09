@@ -38,7 +38,7 @@ def validate(value):
     if value["failure_category"] not in {"none","unclassified_exception","nonstandard_exception",
         "apple_authentication_rejected","account_session_rejected","account_token_missing",
         "response_schema_invalid","transport_timeout","transport_error","http_response_error",
-        "verification_required","verification_response_unconfirmed","verification_repeated","server_proof_invalid","rate_limited","saved_session_invalid","mac_store_authentication_rejected","mac_store_header_missing","mac_pet_expired","store_dsid_invalid","store_signing_failed","store_response_plist_invalid","store_response_empty","store_response_plist_unsupported"}:raise ValueError()
+        "verification_required","verification_response_unconfirmed","verification_repeated","server_proof_invalid","rate_limited","saved_session_invalid","mac_store_authentication_rejected","mac_store_header_missing","mac_pet_expired","store_dsid_invalid","store_signing_failed","store_response_plist_invalid","store_response_empty","store_response_plist_unsupported","store_cookie_invalid","store_session_incomplete","store_account_id_invalid","store_header_invalid","store_session_format_invalid","store_session_encoding_invalid"}:raise ValueError()
     if value["last_request_stage"] not in {"none","other_apple","gsa_lookup","gsa_service","gsa_apptokens","gsa_srp_init","gsa_srp_complete","mid_start","mid_finish","store_authentication","store_sap_setup"}:raise ValueError()
     if type(value["retry_after_seconds"]) is not int or not 0<=value["retry_after_seconds"]<=9223372036854775807:raise ValueError()
     return value

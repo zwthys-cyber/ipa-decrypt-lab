@@ -50,6 +50,14 @@ std::string request_stage(const HttpRequest& request) {
     }
     return "other_apple";
 }
+void save_failure(const std::filesystem::path& root,const std::exception& error) noexcept {
+    try {
+        const std::string text=error.what();
+        if(root.empty() || text.size()>32768)return;
+        std::ofstream file(root/"failure.txt",std::ios::binary);
+        file.write(text.data(),text.size());
+    } catch(...) {}
+}
 void classify(const std::exception& error,Json& report) {
     const std::string text=error.what();
     if(text.size()>32768) { report["failure_category"]="unclassified_exception";return; }
@@ -60,6 +68,15 @@ void classify(const std::exception& error,Json& report) {
         report["apple_error_code"]=std::stoi(match[1]);
     std::string category="unclassified_exception";
     for(const auto& item:std::vector<std::pair<std::string,std::string>>{
+        {"Invalid saved Store cookie","store_cookie_invalid"},
+        {"Invalid Store cookies","store_cookie_invalid"},
+        {"Incomplete Store session","store_session_incomplete"},
+        {"Invalid Store account ID","store_account_id_invalid"},
+        {"Invalid Store identifier","store_account_id_invalid"},
+        {"Invalid Store header value","store_header_invalid"},
+        {"Unsupported Store session format","store_session_format_invalid"},
+        {"Unsupported JSON value in plist","store_session_encoding_invalid"},
+        {"Invalid UTF-8 plist string","store_session_encoding_invalid"},
         {"Invalid plist","store_response_plist_invalid"},
         {"Empty Store response","store_response_empty"},
         {"Unsupported plist","store_response_plist_unsupported"},
@@ -137,6 +154,7 @@ int self_test() {
 }
 }
 int main(int argc,char **argv) {
+    std::filesystem::path failureRoot;
     Json report={{"schema","testflight-virtual-auth-v1"},{"stage","initialization"},
         {"status","failed"},{"virtual_identity",true},{"account_login_attempted",false},
         {"gsa_authenticated",false},{"mac_store_authenticated",false},
@@ -151,16 +169,26 @@ int main(int argc,char **argv) {
         require(actions && std::string(actions)=="true");
         const std::filesystem::path root=argv[2];
         const auto profile=read_profile(root);
+        failureRoot=root;
         const auto hw=hardware(profile);
         ClientOptions options;options.device_platform=DevicePlatform::mac;
         auto base=lab_tf_curl_transport();
-        options.transport=[base,&report](const HttpRequest& request) -> HttpResponse {
+        options.transport=[base,&report,&root](const HttpRequest& request) -> HttpResponse {
             const auto stage=request_stage(request);
             report["last_request_stage"]=stage;report["http_status"]=0;
             if(report["stage"]=="grandslam_login" && (stage=="gsa_srp_init" || stage=="gsa_srp_complete" || stage=="gsa_service"))
                 report["account_login_attempted"]=true;
             const auto response=base(request);report["http_status"]=response.status;
-            if(stage=="store_authentication")std::cerr<<"TF_STORE:"<<lab_tf_store_shape(response)<<std::endl;
+            if(stage=="store_authentication") {
+                std::cerr<<"TF_STORE:"<<lab_tf_store_shape(response)<<std::endl;
+                if(response.body.size()<=(16u<<20)) {
+                    std::ofstream bodyFile(root/"store-auth-response.bin",std::ios::binary);
+                    bodyFile.write(reinterpret_cast<const char*>(response.body.data()),response.body.size());
+                    std::ofstream metaFile(root/"store-auth-meta.json",std::ios::binary);
+                    metaFile<<Json{{"status",response.status},{"url",request.url},
+                        {"request_headers",request.headers},{"response_headers",response.headers}}.dump();
+                }
+            }
             const auto retry=lab_tf_retry_after(response,std::time(nullptr));
             report["retry_after_known"]=retry>=0;
             report["retry_after_seconds"]=retry>=0 ? retry : 0;
@@ -267,6 +295,7 @@ int main(int argc,char **argv) {
         report["failure_category"]="verification_required";
     } catch(const Error& error) {
         report["sdk_error_code"]=static_cast<int>(error.code());
+        save_failure(failureRoot,error);
         classify(error,report);
     } catch(const std::exception& error) {
         classify(error,report);
