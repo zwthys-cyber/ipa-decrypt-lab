@@ -7,7 +7,7 @@ on:
         description: Verify precompiled runtime, or export verified IPA as age ciphertext
         type: choice
         default: preflight
-        options: [preflight, diagnose]
+        options: [preflight, diagnose, existing_entitlement]
 permissions:
   contents: read
   actions: read
@@ -32,7 +32,7 @@ jobs:
           python3 -m unittest discover -s .github/ops -p 'test_cn_delivery_diagnostic.py'
       - name: Check App Store eligibility before loading runtime
         id: eligibility
-        if: inputs.mode == 'diagnose'
+        if: inputs.mode != 'preflight'
         timeout-minutes: 1
         env:
           DELIVERY_APP_ID: 1142110895
@@ -90,6 +90,8 @@ jobs:
           path: native-source/ApplePackage
           persist-credentials: false
       - name: Instrument the pinned native purchase parser without changing requests
+        env:
+          CN_LICENSE_CONTROL: ${{ inputs.mode }}
         run: |
           python3 tools/patch_swift_diagnostics.py native-source/ApplePackage
           python3 tools/patch_ent_download.py native-source/ApplePackage
@@ -112,8 +114,9 @@ jobs:
         run: cp native-source/ApplePackage/.build/debug/ApplePackageTool runtime/ApplePackageTool
       - name: Export only after complete plaintext verification
         id: export
-        if: inputs.mode == 'diagnose'
+        if: inputs.mode != 'preflight'
         env:
+          CN_LICENSE_CONTROL: ${{ inputs.mode }}
           FAIRPLAY_CN_MODEL_B64: ${{ secrets.FAIRPLAY_CN_MODEL_B64 }}
           FAIRPLAY_CN_STATE_B64: ${{ secrets.FAIRPLAY_CN_STATE_B64 }}
           LAB_KBSYNC_HELPER: ${{ github.workspace }}/runtime/lab-kbsync
@@ -140,11 +143,22 @@ jobs:
         if: failure() && steps.export.outputs.authentication_failure == 'access_denied'
         run: exit 1
       - name: Retain closed download diagnosis only
-        if: always() && inputs.mode == 'diagnose'
+        if: always() && inputs.mode != 'preflight'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: cn-download-diagnostic-${{ github.run_id }}
           path: cn-download-diagnostic.json
+          retention-days: 1
+          if-no-files-found: error
+      - name: Retain only the fully verified encrypted control result
+        if: success() && inputs.mode == 'existing_entitlement'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: cn-existing-entitlement-${{ github.run_id }}
+          path: |
+            delivery-out/package.ipa.age
+            delivery-out/receipt.json
+          compression-level: 0
           retention-days: 1
           if-no-files-found: error
       - name: Remove any delivery workspace

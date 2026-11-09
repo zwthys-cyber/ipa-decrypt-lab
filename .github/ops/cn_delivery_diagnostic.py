@@ -1,5 +1,6 @@
 """Bounded diagnosis of one CN app; emit only reviewed native categories."""
 import json
+import os
 import re
 from pathlib import Path
 import sys
@@ -56,12 +57,23 @@ def main():
         report=summarize(result)
         Path("cn-download-diagnostic.json").write_text(json.dumps(report))
         print(json.dumps(report),flush=True)
-        if result.returncode==0:
+        if result.returncode==0 and os.environ.get("CN_LICENSE_CONTROL")!="existing_entitlement":
             raise worker.ExportError("cn_diagnostic_download_succeeded")
         return result
     worker.run_download=probe
     try:code=worker.main(worker.export)
     finally:worker.run_download=original
+    if os.environ.get("CN_LICENSE_CONTROL")=="existing_entitlement":
+        if Path("cn-download-diagnostic.json").is_file():
+            report=json.loads(Path("cn-download-diagnostic.json").read_text())
+            report.update(control="existing_entitlement",export_succeeded=code==0)
+            if code==0:
+                receipt=json.loads(Path("delivery-out/receipt.json").read_text())
+                report.update(plaintext_verified=receipt.get("plaintext_verified") is True,
+                              encrypted_images=receipt.get("encrypted_images"),decrypted_pages=receipt.get("decrypted_pages"))
+            Path("cn-download-diagnostic.json").write_text(json.dumps(report))
+            print(json.dumps(report),flush=True)
+        return code
     return 0 if Path("cn-download-diagnostic.json").is_file() else code
 
 if __name__=="__main__":raise SystemExit(main())

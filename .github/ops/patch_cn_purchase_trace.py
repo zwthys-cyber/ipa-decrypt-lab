@@ -1,6 +1,7 @@
 """Instrument only a CI-built diagnostic client; no request changes."""
 from pathlib import Path
 import sys
+import os
 root=Path(sys.argv[1]);ops=Path(__file__).resolve().parent
 path=root/"Sources/ApplePackage/Commands/Purchase.swift"
 source=path.read_text()
@@ -15,3 +16,14 @@ replace("        guard let dict = plist else { try ensureFailed(Strings.invalidR
 path.write_text(source)
 (root/"Sources/ApplePackage/Commands/LabCNPurchaseTrace.swift").write_text((ops/"LabCNPurchaseTrace.swift").read_text())
 (root/"Tests/ApplePackageTests/LabCNPurchaseTraceTests.swift").write_text((ops/"LabCNPurchaseTraceTests.swift").read_text())
+
+if os.environ.get("CN_LICENSE_CONTROL")=="existing_entitlement":
+    path=root/"Sources/ApplePackageTool/Commands/Download.swift"
+    source=path.read_text()
+    begin=source.index('            print("IPA_LAB_STAGE:acquire_free_license")')
+    end=source.index('            if ProcessInfo.processInfo.environment["LAB_VERSION_CATALOG"]',begin)
+    block=source[begin:end]
+    assert block.count("try await Purchase.purchase(account: &account, app: app)")==1
+    assert "LabPurchaseUnconfirmed" in block
+    source=source[:begin]+'            print("IPA_CN_LICENSE_CONTROL:existing_entitlement")\n'+source[end:]
+    path.write_text(source)
