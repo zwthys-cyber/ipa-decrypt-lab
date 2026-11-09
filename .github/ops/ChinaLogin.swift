@@ -17,7 +17,7 @@ struct ChinaLogin: AsyncParsableCommand, Sendable {
             try await session.authenticate(email: address, password: password, code: code)
         }, nextCode: {
             print("IPA_CN_AUTH:verification_pending")
-            fflush(stdout)
+            fflush(nil)
             guard let value = readLine() else { throw LabCNLoginError.inputClosed }
             return value
         })
