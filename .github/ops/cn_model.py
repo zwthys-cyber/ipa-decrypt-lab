@@ -176,17 +176,33 @@ def trial(runtime,env,mode,report):
     finally:
         if folder.exists() and not folder.is_symlink():shutil.rmtree(folder)
 
+def public_preflight(runtime):
+    require(os.environ.get('GITHUB_ACTIONS')=='true','requires_github_actions')
+    require(not any(os.environ.get(k) for k in ('APPLE_CN_ID','APPLE_CN_PASSWORD','APPLE_CN_SESSION_B64','APPLE_ID','APPLE_PASSWORD')),'preflight_received_credentials')
+    env={k:os.environ[k] for k in ('HOME','PATH','LANG') if k in os.environ};env['GITHUB_ACTIONS']='true'
+    code,raw,_=private([str(runtime/'native-device-identity')],env,timeout=10)
+    require(code==0 and re.fullmatch(rb'[A-F0-9]{12}',raw),'cn_native_identity_unavailable')
+    with tempfile.TemporaryDirectory(prefix='cn-public-model-preflight-') as directory:
+        path=Path(directory)/'prepared.json'
+        code,_,_=private([str(runtime/'native-machine-enrollment'),'--prepare-probe',str(path)],env,data=json.dumps({'guid':raw.decode(),'user_agent':UA}).encode(),timeout=45)
+        require(code==0 and path.is_file() and path.stat().st_size<=65536,'cn_native_preflight_failed')
+        prepared=clean(json.loads(path.read_text()))
+    require(prepared.get('status')=='commerce_request_prepared' and prepared.get('authorization_request_attempted') is False,'cn_native_preflight_failed')
+    return dict(base(),status='cn_native_preflight_ready',native_preflight=prepared)
+
 def main():
-    os.umask(0o077);parser=argparse.ArgumentParser();parser.add_argument('--runtime',required=True);parser.add_argument('--mode',choices=('trial','replay'),required=True);args=parser.parse_args()
+    os.umask(0o077);parser=argparse.ArgumentParser();parser.add_argument('--runtime',required=True);parser.add_argument('--mode',choices=('preflight','trial','replay'),required=True);args=parser.parse_args()
     def stop(*_):raise InterruptedError()
     signal.signal(signal.SIGTERM,stop);signal.signal(signal.SIGINT,stop)
     report=base()
-    try:trial(Path(args.runtime).resolve(),dict(os.environ),args.mode,report)
+    try:
+        if args.mode=='preflight':report=public_preflight(Path(args.runtime).resolve())
+        else:trial(Path(args.runtime).resolve(),dict(os.environ),args.mode,report)
     except CNModelError as error:report['status']=str(error)
     except subprocess.TimeoutExpired:report['status']='cn_model_timeout_do_not_repeat'
     except Exception:report['status']='cn_model_trial_stopped_do_not_repeat'
     report.update(run_id=os.environ.get('GITHUB_RUN_ID'),source_commit=os.environ.get('GITHUB_SHA'))
     Path('cn-model-receipt.json').write_text(json.dumps(report));print(json.dumps(report),flush=True)
     # A preserved authenticated checkpoint is a completed stage, never a claim of recovered model.
-    return 0 if report.get('model_secret_prepared') is True or report.get('checkpoint_saved') is True and report.get('session_secret_prepared') is True and report.get('guid_secret_prepared') is True else 2
+    return 0 if report.get('status')=='cn_native_preflight_ready' or report.get('model_secret_prepared') is True or report.get('checkpoint_saved') is True and report.get('session_secret_prepared') is True and report.get('guid_secret_prepared') is True else 2
 if __name__=='__main__':raise SystemExit(main())

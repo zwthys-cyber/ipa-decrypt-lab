@@ -48,6 +48,7 @@ jobs:
         run: |
           cn-runtime/lab-kbsync --prewarm
           python3 tools/fairplay_state_observer.py
+          python3 .github/ops/cn_model.py --runtime cn-runtime --mode preflight
       - name: Run one bounded CN model trial or authenticated saved-state replay
         if: inputs.mode != 'preflight'
         env:
