@@ -11,6 +11,16 @@
 alpha.5 文档和发布流程包含链接分区，安装/运行、中国区历史和收费仍待实现。原德国区账号 Secrets、模型和安全设置未修改。实际导出、部署与公开发布以完成记录为准。见 [中国区操作说明](CHINA-ACCOUNT.md)。
 
 
+## 正式导出、部署与发布完成
+
+- [国区独立客户端 42565388618](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42565388618) 在 macOS 26 Intel 通过 29 项 Swift、Go 密封/原生前置条件及重定位，普通任务成功按精确指纹取包。
+- [国区真实普通导出 42565938868](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42565938868)：App ID 1530340312，6 个加密切片、164 页完整明文验证，清理后 2,061,272 字节，4 份固定数字进度快照。账号已清理，仅留 age 密文及绑定 `account_profile=cn` 的回执；ZIP、密文摘要、运行/源码/地区回执均已核验。未发送 Telegram 文件，不等于安装运行或一次真实用户国区收发。
+- [外区预检 42565489090](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42565489090) 在最终源码正确加载新默认运行包及固定公共资源，没有加载 Apple 凭据。
+- [服务器 build-only 42565464660](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42565464660) 和 [正式部署 42566050391](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42566050391) 均通过 Ubuntu/Debian 13 各 480 项 Python（各跳过 1 项）、3 项 Node、Go、大容量加密、systemd 凭据和包检查。部署返回 `persistent_service_ready_verified`，保留原 SQLite、白名单、六项运行凭据和单轮询进程。
+- [alpha.5 发布 42566052613](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42566052613) 校验 24 份 Markdown、精确源码/指纹、产物摘要、清单与许可证后发布 3 个组件包、8 个附件。[下载 v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。
+
+本轮发布/部署运行源码为 `48ad5b75eb61a6cc5f01ffb539f06a33055adc9a`。后续提交只补齐事实与文档，不改变运行代码或重新部署。原德国区 Secrets、安全设置及旧 CN Intel 备份未改动，没有新增电脑授权、线上测试用户或额外测试文件发送。
+
 ## 2026-11-09 中国区独立模型已恢复
 
 用户批准的一次额外 ARM 初始化 [42562058217](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42562058217) 成功，授权数量 2 → 3。中国区 LocalSend 的 31 个加密切片、11,744 页同时通过模型恢复和独立完整明文校验；配套模型/状态/GUID/会话已核验并保存为 CN 专用 Secrets。临时批准和验证码 Secret 已删除，旧 Intel 档案继续保存在 GitHub 专用加密备份中，德国区和 alpha.4 默认服务未变。
@@ -25,7 +35,7 @@ alpha.5 文档和发布流程包含链接分区，安装/运行、中国区历�
 
 现有检查点、配套 GUID 和会话已经加入 GitHub 专用加密备份及读回核验流程。额外一台 ARM 原生初始化对照已准备为受限入口，尚未获准或执行；需要用户明确同意一次新增授权，保留旧备份，并通过源码/标识/有效期/任务去重/实时数量检查。德国区账号和 alpha.4 默认服务保持原样。详情见 [中国区说明](CHINA-ACCOUNT.md)。
 
-## 2026-11-09 中国区最新状态：许可证首块校验阻塞
+## 2026-11-09 历史阶段：旧 Intel 状态的许可证首块失败
 
 中国区登录、跨运行器刷新、免费原包下载和授权数量查询已通过；独立模型及机器人地区路由仍未完成。
 
@@ -300,7 +310,9 @@ IPA 审计采用分块临时文件和只读映射，避免把大程序整体读�
 后续需核实原生 Store SP 注册的 bag 配置、异步错误及响应对象约定，在相同 GitHub 运行器上取得有效的 AMD 证明，再分别验证登录、原应用下载、解密和私人交付。现有证据不能确定密码错误、账号受限或出口 IP 被封。源码与运行包已更新，机器人自动使用匹配运行包；没有重新部署 VPS 控制器，没有额外发送 Telegram 消息或 IPA。
 
 
-## 2026-11-09 中国区账号接入进行中
+## 2026-11-09 历史阶段：中国区账号初始接入
+
+以下为初始阶段记录，后续模型、路由和部署已完成，最新事实见本页开头。
 
 **中国区登录、跨运行器 Cookie 刷新和免费原包下载已验证；中国区模型、解密及正式机器人路由尚未完成。**
 
@@ -313,7 +325,7 @@ IPA 审计采用分块临时文件和只读映射，避免把大程序整体读�
 德国区账号、alpha.4 服务、默认线路、现有模型和安全设置保持原样。操作及证据边界见 [CHINA-ACCOUNT.md](CHINA-ACCOUNT.md)。
 
 
-## 2026-11-09 中国区授权数量兼容问题已定位
+## 2026-11-09 历史阶段：中国区授权数量兼容问题定位
 
 - [客户端标识对照 42550766669](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42550766669)：同一保存会话的账号摘要查询改用 Configurator/2.17 后返回 200，实际授权电脑数为 0；2.21 登录和下载路径保持原样。修复后的固定查询 [42551097522](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42551097522) 通过，取代上一阶段“接口 500 阻塞”的当前结论。
 - 模型基础工具 [42551095068](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42551095068) 通过独立构建、原生构造预检、29 项 Swift、Go 密封及重定位检查。中国区模型与状态 Secret 使用独立目的地，未挂载或替换德国区材料。

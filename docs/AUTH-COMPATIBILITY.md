@@ -1,6 +1,6 @@
 # 认证兼容与故障诊断
 
-当前版本为 [v0.1.0-alpha.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.2)。2026-11-08 的[正式 X 导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)已验证原生登录、下载及完整解密恢复；不要再把历史 204/403/SP 失败写成当前运行状态。
+当前版本为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。2026-11-08 的[正式 X 导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)已验证原生登录、下载及完整解密恢复；不要再把历史 204/403/SP 失败写成当前运行状态。
 
 ## 当前生产链路
 
@@ -31,4 +31,4 @@ GitHub Actions 的 `store-login-diagnostic.yml` 只执行有界登录及清理�
 
 ## 中国区账号的独立接入状态（2026-11-09）
 
-中国区账号已通过实时验证码登录，并在新 GitHub 运行器上通过 Cookie 刷新下载免费原包；没有再次使用验证码。中国区独立模型、解密、历史版本与机器人地区路由仍未完成，当前正式任务保持原线路。原德国区账号、模型和安全设置未改动。详见 [中国区接入说明](CHINA-ACCOUNT.md)。
+中国区模型恢复、跨运行器复用、保存状态重放和独立真实导出均通过。`/cn/` 链接使用国区账号，其余链接和数字 ID 使用原外区账号；国区暂只支持免费最新版。普通国区任务不挂载外区凭据、不预填验证码、不新增电脑授权；会话需要验证时由管理员维护。原德国区账号、模型和安全设置保持原样。详见 [中国区接入说明](CHINA-ACCOUNT.md)。

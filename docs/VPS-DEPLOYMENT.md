@@ -6,7 +6,7 @@
 
 ## 获取成品
 
-[v0.1.0-alpha.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.2) 提供 Linux amd64 服务器包。它是命令行和 systemd 服务，不是桌面安装程序，也不带账号配置。
+[v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5) 提供 Linux amd64 服务器包。它是命令行和 systemd 服务，不是桌面安装程序，也不带账号配置。
 
 需要重新构建时，运行 `vps-release.yml`，默认 `deploy=false`。工作流会完成 Python 回归、Go 加密测试、真实 systemd 凭据挂载检查和 Debian 13 容器兼容性验证，然后生成无凭据的发布包及 SHA-256。
 
@@ -120,3 +120,5 @@ alpha.4 增加 `multi_user.py` 服务模块，现有六项凭据保持不变。�
 控制器包新增 `account_profile.py`，按 `/cn/` 链接选择固定中国区工作流，数字 ID 与其他地区链接仍使用原外区工作流。普通国区任务只在 GitHub macOS 26 Intel 使用独立 CN 运行包。上线前需要新的双平台默认运行包和匹配 CN 运行包均成功，避免缺包影响任务。
 
 VPS 的六项凭据及私有 SQLite 原样保留；不要向服务器复制 Apple 账号、会话、GUID、检查点或模型。CN Secrets 只配置在 GitHub，见 [中国区说明](CHINA-ACCOUNT.md)。既有白名单、全局配额和单轮询进程约束继续适用。
+
+[alpha.5 部署 42566050391](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42566050391) 已完成安装和实际 ready 健康检查，运行源码 `48ad5b75eb61a6cc5f01ffb539f06a33055adc9a`。构建/部署在 GitHub 完成 Ubuntu/Debian 13 各 480 项 Python、Node/Go/systemd 与包检查；服务器只安装运行成品，原 SQLite、白名单和六项凭据保留。

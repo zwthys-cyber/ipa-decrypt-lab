@@ -1,6 +1,6 @@
 # 中国区账号与链接识别
 
-中国区独立模型已恢复并在新的 Intel 运行器复用成功。机器人按 App Store 链接选择账号：中国区链接使用独立中国区账号，其余地区链接和数字 App ID 使用原外区账号。中国区先支持免费应用最新版，IPA 上限 2000 MB；外区历史版本功能保留。
+中国区独立模型已恢复，在新的 Intel 运行器复用及真实导出通过，链接路由已部署。机器人按 App Store 链接选择账号：中国区链接使用独立中国区账号，其余地区链接和数字 App ID 使用原外区账号。中国区先支持免费应用最新版，IPA 上限 2000 MB；外区历史版本功能保留。
 
 ## 链接规则
 
@@ -38,6 +38,8 @@ Cookie 可能过期。需要验证码时普通任务明确停止，提示管理�
 | 新 Intel 运行器复用保存模型 | [42563127722](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42563127722) | 另一款国区样本 1530340312，6 个切片、164 页完整验证，检查点/GUID 匹配，不恢复模型、不新增授权、无验证码 |
 | 保存状态独立重放 | [42563352128](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42563352128) | 同一小样本 6 个切片、164 页完整验证，状态绑定正确，数量仍为 3；最新会话已核验保存 |
 | 链接、账号与恢复契约 | [42564779892](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42564779892) | 480 项主 Python、68 项隔离 Python、5 项 Node；覆盖国区链接、外区兼容、拒绝历史跨区、SQLite 恢复、用户隔离及公开进度的凭据隔离 |
+
+[真实导出 42565938868](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42565938868) 使用保存模型完成另一款国区样本的 6 切片、164 页验证、账号清理与 age 加密；独立核验 ZIP/密文摘要及地区回执。链接路由已在 [42566050391](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42566050391) 部署并返回服务 ready；[alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5) 已发布。没有新增 Telegram 测试文件发送，也没有验证一次真实用户的国区请求到收件全过程。
 
 这些证据没有验证安装、重签名或应用实际运行。模型证明和机器人导出/部署是不同阶段；后者以 [项目状态](PROJECT-STATUS.md) 的正式导出、部署记录为准，没有额外向 Telegram 用户发送测试文件。
 
