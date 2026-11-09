@@ -110,7 +110,8 @@ def trial(runtime,env,mode,report):
     if mode=='replay':checkpoint.validate(checkpoint.decode_bytes(env.get('FAIRPLAY_CN_STATE_B64',''),checkpoint.LIMIT))
     report['checkpoint_preflight']=checkpoint_preflight()
     value,_=decode(env);info=json.loads(Path('cn-sample-metadata.json').read_text())
-    require(info.get('app_id')==TARGET,'cn_sample_binding')
+    require(info.get('app_id') in (TARGET,'6599842047'),'cn_sample_binding')
+    report['app_id']=info['app_id']
     binary=str(runtime/'ApplePackageTool');engine=str(runtime/'offline-engine');sealer=str(runtime/'cn-model-seal')
     child={k:env[k] for k in ('HOME','PATH','LANG','LAB_KBSYNC_HELPER') if k in env};child['GITHUB_ACTIONS']='true'
     guid=value['guid']

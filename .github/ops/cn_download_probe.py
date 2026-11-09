@@ -26,22 +26,22 @@ class CNDownloadError(ValueError):pass
 def require(value,label):
     if not value:raise CNDownloadError(label)
 
-def check_metadata(value):
+def check_metadata(value,target=TARGET):
     require(isinstance(value,dict) and value.get('resultCount')==1 and isinstance(value.get('results'),list) and len(value['results'])==1,'cn_sample_unavailable')
     app=value['results'][0]
-    require(isinstance(app,dict) and app.get('trackId')==int(TARGET) and app.get('wrapperType')=='software'
+    require(isinstance(app,dict) and app.get('trackId')==int(target) and app.get('wrapperType')=='software'
         and app.get('kind')=='software' and type(app.get('price')) in (int,float) and app['price']==0 and app.get('currency')=='CNY'
         and isinstance(app.get('bundleId'),str) and re.fullmatch(r'[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+',app['bundleId']), 'cn_sample_ineligible')
     size=app.get('fileSizeBytes')
     require(isinstance(size,str) and re.fullmatch(r'[0-9]{1,12}',size) and 0<int(size)<=LIMIT,'cn_sample_too_large')
-    return {'app_id':TARGET,'bundle_id':app['bundleId'],'listed_bytes':int(size)}
+    return {'app_id':target,'bundle_id':app['bundleId'],'listed_bytes':int(size)}
 
-def metadata():
+def metadata(target=TARGET):
     opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    with opener.open('https://itunes.apple.com/lookup?'+urllib.parse.urlencode({'id':TARGET,'country':'cn','entity':'software'}),timeout=20) as response:
+    with opener.open('https://itunes.apple.com/lookup?'+urllib.parse.urlencode({'id':target,'country':'cn','entity':'software'}),timeout=20) as response:
         require(response.status==200,'cn_metadata_http_failed');raw=response.read(2*1024*1024+1)
     require(len(raw)<=2*1024*1024,'cn_metadata_oversized')
-    return check_metadata(json.loads(raw))
+    return check_metadata(json.loads(raw),target)
 
 def safe_failure(result):
     text=((result.stdout or '')+'\n'+(result.stderr or '')).lower()
@@ -100,11 +100,11 @@ def probe(binary,env,info,execute=None,resume=False,seal=None):
 
 def main():
     os.umask(0o077)
-    p=argparse.ArgumentParser();p.add_argument('--metadata',action='store_true');p.add_argument('--binary');p.add_argument('--resume',action='store_true');args=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--metadata',action='store_true');p.add_argument('--binary');p.add_argument('--resume',action='store_true');p.add_argument('--app-id',choices=(TARGET,'6599842047'),default=TARGET);args=p.parse_args()
     try:
         require(os.environ.get('GITHUB_ACTIONS')=='true','requires_github_actions')
         if args.metadata:
-            value=metadata();Path('cn-sample-metadata.json').write_text(json.dumps(value));print(json.dumps({'schema':'cn-sample-v1','status':'eligible','app_id':TARGET}));return 0
+            value=metadata(args.app_id);Path('cn-sample-metadata.json').write_text(json.dumps(value));print(json.dumps({'schema':'cn-sample-v1','status':'eligible','app_id':args.app_id}));return 0
         info=json.loads(Path('cn-sample-metadata.json').read_text())
         value=probe(str(Path(args.binary).resolve()),dict(os.environ),info,resume=args.resume)
     except Exception as exc:
