@@ -13,12 +13,12 @@ import zipfile
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/"tools"))
 from telegram_queue import GitHub
 
-RUN=42689737849
+RUN=42692803345
 ORIGIN_RUN=42650873653
 ORIGIN_SOURCE="19244adbe73f71156a91a5c1cb20965925928054"
-SOURCE="2fe7b05a0775d424c0e1722208b72e81c5c62154"
-ARCHIVE_DIGEST="sha256:0af4eb00fed037612744c41a5a50b9ec159e51d8484eb0ddf2138b0d2e7b13c0"
-CIPHER_DIGEST="8fcfb2a1d71f998b5e96db2df7bc3ddc506f2edcc71d5fc574f5a57a193b8c47"
+SOURCE="688b5356aa33a9653517f62445856a08c72819c4"
+ARCHIVE_DIGEST="sha256:ef17167286b96a905675675c4b03d45751e6c90734c1c8cce31c4fedb12d09aa"
+CIPHER_DIGEST="11dfcb05e8a8b83867ecad4a5ee8c01d4be937e18eac9e330bc8747e6fc591a2"
 
 def require(value):
     if not value:raise ValueError("tf_virtual_restore_invalid")
@@ -59,10 +59,10 @@ def restore(root,env):
     api=GitHub(env["GH_TOKEN"])
     run=api.call("/actions/runs/"+str(RUN))
     require(run.get("head_sha")==SOURCE and run.get("head_branch")=="main" and run.get("status")=="completed"
-            and run.get("conclusion")=="success" and run.get("run_attempt")==1
+            and run.get("conclusion")=="failure" and run.get("run_attempt")==1
             and run.get("path")==".github/workflows/testflight-virtual.yml")
     items=api.call("/actions/runs/"+str(RUN)+"/artifacts?per_page=100")["artifacts"]
-    found=[item for item in items if item.get("name")=="tf-virtual-sealed-"+str(RUN)+"-attempt-1" and not item.get("expired")]
+    found=[item for item in items if item.get("name")=="tf-invite-accept-"+str(RUN)+"-attempt-1" and not item.get("expired")]
     require(len(found)==1)
     item=found[0]
     require(item.get("digest")==ARCHIVE_DIGEST and 0<item.get("size_in_bytes",0)<4*1024*1024)
@@ -71,15 +71,15 @@ def restore(root,env):
         archive=work/"sealed.zip";api.archive(item["id"],archive,max_bytes=4*1024*1024)
         require("sha256:"+hashlib.sha256(archive.read_bytes()).hexdigest()==ARCHIVE_DIGEST)
         with zipfile.ZipFile(archive) as zipped:
-            require(len(zipped.infolist())==2 and set(zipped.namelist())=={"tf-virtual-state.age","tf-virtual-receipt.json"})
+            require(len(zipped.infolist())==2 and set(zipped.namelist())=={"tf-accept-state.age","tf-accept-receipt.json"})
             require(all(info.file_size<4*1024*1024 for info in zipped.infolist()))
-            cipher=zipped.read("tf-virtual-state.age")
-            receipt=json.loads(zipped.read("tf-virtual-receipt.json"))
+            cipher=zipped.read("tf-accept-state.age")
+            receipt=json.loads(zipped.read("tf-accept-receipt.json"))
         require(hashlib.sha256(cipher).hexdigest()==CIPHER_DIGEST and receipt.get("source_commit")==SOURCE
                 and receipt.get("run_id")==str(RUN) and receipt.get("sealed_state_sha256")==CIPHER_DIGEST
-                and receipt.get("result",{}).get("gsa_authenticated") is True
+                and receipt.get("acceptance_attempted") is True and receipt.get("post_response_confirmed") is True
                 and receipt.get("result",{}).get("tf_authenticated") is True
-                and receipt.get("result",{}).get("status")=="invitation_inspected")
+                and receipt.get("status")=="acceptance_outcome_unverified" and receipt.get("result",{}).get("catalog_received") is True)
         identity=work/"identity.txt"
         identity.write_text(env["DELIVERY_AGE_IDENTITY"]);identity.chmod(0o600)
         child={k:env[k] for k in ("HOME","PATH","LANG") if k in env}
