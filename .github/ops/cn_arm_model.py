@@ -3,6 +3,7 @@ import argparse
 import base64
 import json
 import os
+import platform
 from pathlib import Path
 import signal
 import tempfile
@@ -37,6 +38,7 @@ def main():
     signal.signal(signal.SIGTERM,stop);signal.signal(signal.SIGINT,stop)
     runtime=Path('arm-runtime').resolve();env=dict(os.environ);report=base();report['reference_platform']='macos-15-arm64'
     try:
+        if a.mode!='backup' and not (platform.system()=='Darwin' and platform.machine()=='arm64' and platform.mac_ver()[0].split('.')[0]=='15'):raise ValueError('cn_arm_host_rejected')
         if a.mode=='preflight':
             report=public_preflight(runtime);report.update(status='cn_arm_public_preflight_ready',reference_platform='macos-15-arm64')
         elif a.mode=='backup':report=backup(runtime,env)
