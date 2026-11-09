@@ -47,7 +47,9 @@ function launch(command,args,options) {
 async function main() {
   const env=process.env;
   const identity={rid:env.DELIVERY_REQUEST_ID,run:env.GITHUB_RUN_ID,commit:env.GITHUB_SHA};
-  if (!/^[a-f0-9]{32}$/.test(identity.rid||'') || !/^[0-9]+$/.test(identity.run||'') || !/^[a-f0-9]{40}$/.test(identity.commit||'') || env.GITHUB_REPOSITORY !== 'zwthys-cyber/ipa-decrypt-lab') throw new Error('invalid_progress_identity');
+  if (!/^(?:cn_)?[a-f0-9]{32}$/.test(identity.rid||'') || !/^[0-9]+$/.test(identity.run||'') || !/^[a-f0-9]{40}$/.test(identity.commit||'') || env.GITHUB_REPOSITORY !== 'zwthys-cyber/ipa-decrypt-lab') throw new Error('invalid_progress_identity');
+  const cn=env.DELIVERY_ACCOUNT_PROFILE === 'cn';
+  if (!['default','cn'].includes(env.DELIVERY_ACCOUNT_PROFILE||'default') || cn !== identity.rid.startsWith('cn_')) throw new Error('invalid_account_profile');
   const root=fs.mkdtempSync(path.join(env.RUNNER_TEMP||os.tmpdir(),'ipa-progress-'));
   fs.chmodSync(root,0o700);
   const input=path.join(root,'worker.json');
@@ -87,7 +89,7 @@ async function main() {
   try {
     const probe=env.INPUT_PROBE === 'true';
     if(probe && (identity.rid !== 'f'.repeat(32) || ['APPLE_ID','APPLE_PASSWORD','FAIRPLAY_MODEL_B64','DELIVERY_AGE_IDENTITY','TELEGRAM_BOT_TOKEN'].some(key => env[key]))) throw new Error('invalid_probe_context');
-    const command=probe ? 'ulimit -c 0\nexec python3 tools/progress_probe.py' : 'ulimit -c 0\nexec python3 tools/private_export.py --binary runtime/ApplePackageTool --engine runtime/offline-engine --crypt runtime/delivery-crypt';
+    const command=probe ? 'ulimit -c 0\nexec python3 tools/progress_probe.py' : cn ? 'ulimit -c 0\nexec python3 tools/cn_private_export.py --binary runtime/ApplePackageTool --engine runtime/offline-engine --crypt runtime/delivery-crypt' : 'ulimit -c 0\nexec python3 tools/private_export.py --binary runtime/ApplePackageTool --engine runtime/offline-engine --crypt runtime/delivery-crypt';
     worker=spawn('bash',['-e','-c',command],{env:{...env,IPA_PROGRESS_FILE:input,PYTHONUNBUFFERED:'1'},stdio:['ignore','inherit','inherit']});
     const terminate=signal=>{if(worker&&!worker.killed)worker.kill(signal)};
     process.once('SIGTERM',()=>terminate('SIGTERM'));

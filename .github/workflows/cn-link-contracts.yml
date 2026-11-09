@@ -1,0 +1,22 @@
+name: CN link routing contracts
+on:
+  push:
+    branches: [main, 'codex/cn-link-routing-*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Regression and private account isolation without credentials
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends python3-pil
+          /usr/bin/python3 -m unittest discover -s tests -p 'test_*.py'
+          python3 -m unittest discover -s .github/ops -p 'test_*.py'
+          node --test tests/progress_worker.test.cjs .github/ops/*.test.cjs

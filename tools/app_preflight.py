@@ -8,14 +8,16 @@ import urllib.request
 from capacity import MAX_IPA_BYTES
 
 MESSAGES = {
-    "app_not_found_in_us": "美区未查询到此应用，可能仅在其他地区上架或已下架。当前仅支持美区。",
-    "paid_app_not_supported": "此应用在美区不是免费应用，当前仅支持免费应用。",
+    "app_not_found_in_us": "美区未查询到此应用，可能仅在其他地区上架或已下架。外区链接使用原有账号，美区查询不到时不会自动切换。",
+    "app_not_found_in_cn": "中国区未查询到此应用，可能未上架或已下架；不会切换到外区账号。",
+    "paid_app_not_supported": "此应用在所选地区不是免费应用，当前仅支持免费应用。",
     "source_too_large": "商店标注的应用大小超过 2000 MB 上限，当前不支持。",
     "metadata_network_failed": "暂时无法查询 App Store，请稍后再试；网络异常不代表应用下架。",
     "metadata_invalid_response": "App Store 返回的信息不完整，暂时无法确认能否下载，请稍后再试。",
     "invalid_app_id": "应用 ID 格式不正确。",
 }
 STEP_NAMES = {
+    "app_not_found_in_cn": "App unavailable in CN storefront",
     "app_not_found_in_us": "App unavailable in US storefront",
     "paid_app_not_supported": "Paid app unsupported",
     "source_too_large": "IPA exceeds 2000 MB capacity",
@@ -34,11 +36,13 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
 
-def check_app(identifier, historical=False):
+def check_app(identifier, historical=False, profile="default"):
+    if profile not in ("default","cn") or profile=="cn" and historical:
+        raise PreflightError("metadata_invalid_response")
     if not isinstance(identifier,str) or not re.fullmatch(r"[1-9][0-9]{4,19}",identifier):
         raise PreflightError("invalid_app_id")
     url="https://itunes.apple.com/lookup?"+urllib.parse.urlencode(
-        {"id":identifier,"country":"us","entity":"software"})
+        {"id":identifier,"country":"cn" if profile=="cn" else "us","entity":"software"})
     try:
         opener=urllib.request.build_opener(NoRedirect())
         with opener.open(url,timeout=8) as response:
@@ -53,11 +57,13 @@ def check_app(identifier, historical=False):
             raise ValueError()
         results=payload["results"]
         if payload.get("resultCount")==0 and results==[]:
-            raise PreflightError("app_not_found_in_us")
+            raise PreflightError("app_not_found_in_cn" if profile=="cn" else "app_not_found_in_us")
         if len(results)!=1 or not isinstance(results[0],dict):
             raise ValueError()
         info=results[0]
         if str(info.get("trackId"))!=identifier or not isinstance(info.get("bundleId"),str) or not info["bundleId"]:
+            raise ValueError()
+        if profile=="cn" and info.get("currency")!="CNY":
             raise ValueError()
         price=info.get("price")
         if type(price) not in (int,float) or price<0:
@@ -81,7 +87,7 @@ def check_app(identifier, historical=False):
 def main():
     status="eligible"
     try:
-        check_app(os.environ.get("DELIVERY_APP_ID",""), historical=bool(os.environ.get("DELIVERY_VERSION","")))
+        check_app(os.environ.get("DELIVERY_APP_ID",""), historical=bool(os.environ.get("DELIVERY_VERSION","")), profile=os.environ.get("DELIVERY_ACCOUNT_PROFILE","default"))
     except PreflightError as exc:
         status=exc.status
     output=os.environ.get("GITHUB_OUTPUT")

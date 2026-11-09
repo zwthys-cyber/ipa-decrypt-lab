@@ -154,6 +154,64 @@ def verify_output(path, before):
         require(archive.testzip() is None, "output_crc_failed")
     return after
 
+def export_original(engine, crypt, root, original, info, identifier, request_id, recipient,
+                    output_dir, progress, requested="", version_id="", resolved_version="", profile="default"):
+    candidate,cleaned=root/"candidate.ipa",root/"delivery.ipa"
+    require(0 < original.stat().st_size <= MAX_BYTES, "source_too_large")
+    progress("auditing")
+    before = audit(original)
+    require(before["bundle_id"] == info["bundleId"], "downloaded_app_mismatch")
+    verify_version(before, requested, resolved_version)
+    model = root/"model.bin"
+    with os.fdopen(os.open(model, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), "wb") as stream:
+        stream.write(base64.b64decode(os.environ["FAIRPLAY_MODEL_B64"], validate=True))
+    child_env = {k: os.environ[k] for k in ("HOME", "PATH", "LANG") if k in os.environ}
+    child_env.update(TMPDIR=str(root), TMP=str(root), TEMP=str(root))
+    report_path = root/"private-report.json"
+    progress("decrypting")
+    completed = subprocess.run([engine, "decrypt", "--input", str(original),
+        "--output", str(candidate), "--report", str(report_path), "--model", str(model),
+        "--strip-account-data"], stdin=subprocess.DEVNULL, capture_output=True,
+        env=child_env, timeout=DECRYPT_TIMEOUT)
+    require(completed.returncode == 0 and candidate.is_file() and report_path.is_file(),
+            "decryption_rejected")
+    require(report_path.stat().st_size <= 8 * 1024 * 1024, "report_too_large")
+    progress("verifying")
+    report = json.loads(report_path.read_bytes())
+    images, pages = validate_report(report, before, candidate)
+    scrub_archive(candidate, cleaned, crypt=crypt)
+    verified = verify_output(cleaned, before)
+    verify_version(verified, requested, resolved_version)
+    original.unlink()
+    candidate.unlink()
+    progress("encrypting")
+    sealed = root/"package.ipa.age"
+    completed = subprocess.run([crypt, "encrypt", str(cleaned), str(sealed), recipient],
+        stdin=subprocess.DEVNULL, capture_output=True, env=dict(child_env, GITHUB_ACTIONS="true"),
+        timeout=CRYPTO_TIMEOUT)
+    require(completed.returncode == 0 and sealed.is_file(), "delivery_encryption_failed")
+    receipt = {
+        "schema": "ipa-private-delivery-v1", "status": "encrypted_artifact_ready",
+        "request_id": request_id, "app_id": identifier,
+        "account_profile": profile,
+        "requested_version": requested, "resolved_version": resolved_version,
+        "external_version_id": version_id,
+        "run_id": str(os.environ.get("GITHUB_RUN_ID", "")),
+        "source_commit": os.environ.get("GITHUB_SHA", ""),
+        "plaintext_verified": True, "runtime_verified": False,
+        "account_data_removed": True, "plaintext_published": False,
+        "encrypted_images": images, "decrypted_pages": pages,
+        "plaintext_bytes": cleaned.stat().st_size, "plaintext_sha256": digest(cleaned),
+        "ciphertext_bytes": sealed.stat().st_size, "ciphertext_sha256": digest(sealed),
+        "recipient": recipient,
+    }
+    output_dir.mkdir(mode=0o700)
+    sealed.replace(output_dir/"package.ipa.age")
+    (output_dir/"receipt.json").write_text(json.dumps(receipt, sort_keys=True) + "\n")
+    return {k: receipt[k] for k in ("schema", "status", "request_id", "app_id",
+            "plaintext_verified", "runtime_verified", "encrypted_images", "decrypted_pages",
+            "plaintext_bytes", "plaintext_published")}
+
 def export(binary, engine, crypt, target, request_id, recipient, output_dir, progress=None, measurement=None):
     progress = progress or (lambda stage: None)
     require(os.environ.get("GITHUB_ACTIONS") == "true", "requires_github_actions")
@@ -208,66 +266,16 @@ def export(binary, engine, crypt, target, request_id, recipient, output_dir, pro
                 raise ExportError(markers[-1] if markers and markers[-1] in known else "version_download_rejected")
             require(result.returncode == 0 and original.is_file(), classify_download(result))
             version_id, resolved_version = resolved_marker(result.stdout or "", requested) if requested else ("", "")
-            require(0 < original.stat().st_size <= MAX_BYTES, "source_too_large")
-            progress("auditing")
-            before = audit(original)
-            require(before["bundle_id"] == info["bundleId"], "downloaded_app_mismatch")
-            verify_version(before, requested, resolved_version)
-            model = root/"model.bin"
-            with os.fdopen(os.open(model, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), "wb") as stream:
-                stream.write(base64.b64decode(os.environ["FAIRPLAY_MODEL_B64"], validate=True))
-            child_env = {k: os.environ[k] for k in ("HOME", "PATH", "LANG") if k in os.environ}
-            child_env.update(TMPDIR=str(root), TMP=str(root), TEMP=str(root))
-            report_path = root/"private-report.json"
-            progress("decrypting")
-            completed = subprocess.run([engine, "decrypt", "--input", str(original),
-                "--output", str(candidate), "--report", str(report_path), "--model", str(model),
-                "--strip-account-data"], stdin=subprocess.DEVNULL, capture_output=True,
-                env=child_env, timeout=DECRYPT_TIMEOUT)
-            require(completed.returncode == 0 and candidate.is_file() and report_path.is_file(),
-                    "decryption_rejected")
-            require(report_path.stat().st_size <= 8 * 1024 * 1024, "report_too_large")
-            progress("verifying")
-            report = json.loads(report_path.read_bytes())
-            images, pages = validate_report(report, before, candidate)
-            scrub_archive(candidate, cleaned, crypt=crypt)
-            verified = verify_output(cleaned, before)
-            verify_version(verified, requested, resolved_version)
-            original.unlink()
-            candidate.unlink()
-            progress("encrypting")
-            sealed = root/"package.ipa.age"
-            completed = subprocess.run([crypt, "encrypt", str(cleaned), str(sealed), recipient],
-                stdin=subprocess.DEVNULL, capture_output=True, env=dict(child_env, GITHUB_ACTIONS="true"),
-                timeout=CRYPTO_TIMEOUT)
-            require(completed.returncode == 0 and sealed.is_file(), "delivery_encryption_failed")
-            receipt = {
-                "schema": "ipa-private-delivery-v1", "status": "encrypted_artifact_ready",
-                "request_id": request_id, "app_id": identifier,
-                "requested_version": requested, "resolved_version": resolved_version,
-                "external_version_id": version_id,
-                "run_id": str(os.environ.get("GITHUB_RUN_ID", "")),
-                "source_commit": os.environ.get("GITHUB_SHA", ""),
-                "plaintext_verified": True, "runtime_verified": False,
-                "account_data_removed": True, "plaintext_published": False,
-                "encrypted_images": images, "decrypted_pages": pages,
-                "plaintext_bytes": cleaned.stat().st_size, "plaintext_sha256": digest(cleaned),
-                "ciphertext_bytes": sealed.stat().st_size, "ciphertext_sha256": digest(sealed),
-                "recipient": recipient,
-            }
-            output_dir.mkdir(mode=0o700)
-            sealed.replace(output_dir/"package.ipa.age")
-            (output_dir/"receipt.json").write_text(json.dumps(receipt, sort_keys=True) + "\n")
-            return {k: receipt[k] for k in ("schema", "status", "request_id", "app_id",
-                    "plaintext_verified", "runtime_verified", "encrypted_images", "decrypted_pages",
-                    "plaintext_bytes", "plaintext_published")}
+            return export_original(engine,crypt,root,original,info,identifier,request_id,recipient,
+                                   output_dir,progress,requested,version_id,resolved_version)
     finally:
         try:
             run(binary, ["logout", email], env)
         except Exception:
             pass
 
-def main():
+def main(exporter=None):
+    exporter = export if exporter is None else exporter
     p = argparse.ArgumentParser()
     p.add_argument("--binary", required=True)
     p.add_argument("--engine", required=True)
@@ -285,7 +293,7 @@ def main():
         print(json.dumps({"schema":"ipa-export-stage-v1","stage":value}),flush=True)
     try:
         recipient = json.loads(Path("config/delivery.json").read_text())["recipient"]
-        result = export(str(Path(args.binary).resolve()), str(Path(args.engine).resolve()),
+        result = exporter(str(Path(args.binary).resolve()), str(Path(args.engine).resolve()),
                         str(Path(args.crypt).resolve()), os.environ.get("DELIVERY_APP_ID", ""),
                         os.environ.get("DELIVERY_REQUEST_ID", ""), recipient, output, advance, measurement=progress.measure)
         progress.advance("artifact_ready")
@@ -306,7 +314,7 @@ def main():
     if category and os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"],"a") as stream:
             stream.write("capacity_failure="+category+"\n")
-    auth_failure = ("temporary_unavailable" if status in {
+    auth_failure = ("cn_session_maintenance" if status == "cn_session_requires_maintenance" else "temporary_unavailable" if status in {
         "native_auth_service_unavailable", "native_auth_transport_failed"
     } else "access_denied" if status == "native_auth_access_denied" else "")
     if auth_failure:

@@ -4,7 +4,7 @@ from telegram_api import APIError
 HOME_TEXT=("IPA 下载助手\n\n"
            "最新版：直接发送 App Store 链接或 App ID。\n"
            "旧版本：点击下方按钮查看用法。\n\n"
-           "支持美区免费应用 · IPA 最大 2000 MB")
+           "国区 /cn/ 链接自动选择中国区账号；其他链接和数字 ID 使用外区账号。\n中国区仅最新版，支持免费应用 · IPA 最大 2000 MB")
 COMMANDS = [
     {"command":"start","description":"打开首页"},
     {"command":"status","description":"查看任务进度"},
@@ -30,7 +30,7 @@ def show_menu(bot,owner,page="home",message_id=None):
               "/cancel 取消当前任务\n"
               "/get 任务编号 取回已完成文件\n"
               "/id 查看自己的数字 ID\n\n"
-              "仅支持美区免费应用，文件最大 2000 MB。\n"
+              "国区 /cn/ 链接自动选择中国区账号；其他链接和数字 ID 使用外区账号。\n中国区仅最新版，支持免费应用，文件最大 2000 MB。\n"
               "仅已获授权用户私聊可用。")
         buttons=[[{"text":"‹ 返回","callback_data":"menu:home"}]]
     payload={"chat_id":owner,"text":text,"reply_markup":{"inline_keyboard":buttons},

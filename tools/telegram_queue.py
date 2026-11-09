@@ -22,6 +22,7 @@ from delivery_scheduler import matches, retryable, alternate, MAX_RUNS, PRIMARY_
 
 REPOSITORY = "zwthys-cyber/ipa-decrypt-lab"
 WORKFLOW = "private-delivery.yml"
+from account_profile import REQUEST_ID_PATTERN, profile_for_request, workflow_for_request
 from capacity import (MAX_IPA_BYTES, MAX_CIPHER_BYTES, MAX_ARTIFACT_BYTES,
                       MIN_FREE_BYTES, CRYPTO_TIMEOUT, TELEGRAM_TIMEOUT)
 MAX_FILE = MAX_IPA_BYTES
@@ -40,7 +41,7 @@ def require(ok, status):
         raise QueueError(status)
 
 def request_id(value):
-    require(isinstance(value, str) and re.fullmatch(r"[0-9a-f]{32}", value), "invalid_request_id")
+    require(isinstance(value, str) and re.fullmatch(REQUEST_ID_PATTERN, value), "invalid_request_id")
     return value
 
 def sha256(path):
@@ -64,7 +65,7 @@ class GitHub:
         require((path.startswith("/actions/") or
                  re.fullmatch(r"/check-runs(?:/[1-9][0-9]*)?",path) or
                  re.fullmatch(r"/commits/[a-f0-9]{40}/check-runs\?check_name=delivery-journal-[a-f0-9]{32}&filter=all&per_page=100&page=[1-5]",path) or
-                 re.fullmatch(r"/commits/[a-f0-9]{40}/check-runs\?check_name=delivery-progress-[a-f0-9]{32}&per_page=100",path))
+                 re.fullmatch(r"/commits/[a-f0-9]{40}/check-runs\?check_name=delivery-progress-(?:cn_)?[a-f0-9]{32}&per_page=100",path))
                 and "\n" not in path, "invalid_github_path")
         request = urllib.request.Request("https://api.github.com/repos/" + REPOSITORY + path,
             data=None if payload is None else json.dumps(payload).encode(),
@@ -100,13 +101,13 @@ class GitHub:
         found=[]
         # Bounded alpha sessions create few runs; do not expose arbitrary workflow access.
         for page in (1,2,3):
-            data = self.call("/actions/workflows/" + WORKFLOW + "/runs?event=workflow_dispatch&per_page=100&page=" + str(page))
+            data = self.call("/actions/workflows/" + workflow_for_request(rid) + "/runs?event=workflow_dispatch&per_page=100&page=" + str(page))
             require(isinstance(data, dict) and isinstance(data.get("workflow_runs"), list), "invalid_run_list")
             for run in data["workflow_runs"]:
                 if (matches(run,rid)
                         and run.get("event") == "workflow_dispatch"
                         and run.get("head_branch") == "main"
-                        and run.get("path") == ".github/workflows/" + WORKFLOW):
+                        and run.get("path") == ".github/workflows/" + workflow_for_request(rid)):
                     found.append(run)
             if len(data["workflow_runs"]) < 100:
                 break
@@ -122,18 +123,20 @@ class GitHub:
                 return run
         return runs[0] if runs else None
 
-    def preflight_app(self, app, historical=False):
-        return check_app(app, historical=historical)
+    def preflight_app(self, app, historical=False, profile="default"):
+        return check_app(app, historical=historical, profile=profile)
 
     def dispatch(self, app, rid, version=""):
         version=selector(version)
         request_id(rid)
         require(re.fullmatch(r"[1-9][0-9]{4,19}", app or ""), "invalid_app_id")
+        cn=profile_for_request(rid)=="cn"
+        require(not (cn and version),"cn_history_not_supported")
         existing = self.find(rid)
         if existing:
             return existing
-        response = self.call("/actions/workflows/" + WORKFLOW + "/dispatches",
-            {"ref":"main", "inputs":{"mode":"export", "app_id":app, "request_id":rid,"runner":PRIMARY_RUNNER, **({"version":version} if version else {})}}, "POST")
+        response = self.call("/actions/workflows/" + workflow_for_request(rid) + "/dispatches",
+            {"ref":"main", "inputs":{"mode":"export", "app_id":app, "request_id":rid, **({} if cn else {"runner":PRIMARY_RUNNER}), **({"version":version} if version else {})}}, "POST")
         if isinstance(response, dict) and type(response.get("workflow_run_id")) is int:
             return {"id":response["workflow_run_id"], "status":"queued"}
         return {"status":"dispatch_pending"}
@@ -160,6 +163,7 @@ class GitHub:
         return True
 
     def retry(self,app,rid,old_id,cancel_requested=False,version=""):
+        require(profile_for_request(rid)!="cn","cn_runner_retry_not_supported")
         version=selector(version)
         request_id(rid)
         require(re.fullmatch(r"[1-9][0-9]{4,19}",app or ""),"missing_retry_app")
@@ -172,12 +176,12 @@ class GitHub:
         old=self.call("/actions/runs/"+str(int(old_id)))
         require(matches(old,rid) and old.get("head_branch")=="main"
                 and old.get("event")=="workflow_dispatch"
-                and old.get("path")==".github/workflows/"+WORKFLOW,"invalid_retry_source")
+                and old.get("path")==".github/workflows/"+workflow_for_request(rid),"invalid_retry_source")
         require(version_from_run(old)==version,"retry_version_mismatch")
         jobs=self.jobs(old)
         require(retryable(old,jobs,cancel_requested),"retry_not_safe")
         target=alternate(jobs)
-        result=self.call("/actions/workflows/"+WORKFLOW+"/dispatches",
+        result=self.call("/actions/workflows/"+workflow_for_request(rid)+"/dispatches",
             {"ref":"main","inputs":{"mode":"export","app_id":app,"request_id":rid,"runner":target, **({"version":version} if version else {})}},"POST")
         return {"status":"dispatch_pending","runner":target,
                 **({"id":result["workflow_run_id"]} if isinstance(result,dict)
@@ -188,7 +192,7 @@ class GitHub:
         request_id(rid)
         identifier=run.get("id")
         if (type(identifier) is not int or run.get("head_branch")!="main"
-                or run.get("event")!="workflow_dispatch" or run.get("path")!=".github/workflows/"+WORKFLOW
+                or run.get("event")!="workflow_dispatch" or run.get("path")!=".github/workflows/"+workflow_for_request(rid)
                 or not re.fullmatch(r"[a-f0-9]{40}",run.get("head_sha", ""))):
             return None
         now=time.monotonic()
@@ -264,6 +268,7 @@ class GitHub:
 
     def failure_reason(self,run):
         messages = {
+            "CN session requires maintenance": "中国区登录状态需要管理员更新验证，任务已停止；不会切换到外区账号。",
             "Apple login access denied": "Apple 登录接口拒绝访问（HTTP 401/403），尚未开始下载；已停止自动重试。该响应不能单独证明密码错误，需检查账号状态及运行器的访问条件。",
             "Apple login temporarily unavailable": "Apple 登录服务暂不可用，已自动尝试 3 次仍未恢复；尚未开始下载。请稍后再试。",
             "IPA exceeds 2000 MB capacity": "IPA 超过当前容量上限：2000 MB（2,000,000,000 字节），或解压后的程序规模超出检查预算。",
@@ -345,7 +350,7 @@ class GitHub:
         if (not isinstance(run,dict) or type(run.get("id")) is not int
                 or not matches(run,rid) or run.get("event")!="workflow_dispatch"
                 or run.get("head_branch")!="main"
-                or run.get("path")!=".github/workflows/"+WORKFLOW):
+                or run.get("path")!=".github/workflows/"+workflow_for_request(rid)):
             return False
         if run.get("status")=="completed":
             return run.get("conclusion")=="success"
@@ -454,6 +459,8 @@ def personalized(name):
             or parts[-1].endswith((".sinf",".supf",".supp")))
 
 def validate_receipt(r, rid, run_id, commit):
+    request_id(rid)
+    require(isinstance(r,dict) and r.get("account_profile","default")==profile_for_request(rid),"delivery_account_profile_mismatch")
     require(isinstance(r, dict) and r.get("schema") == "ipa-private-delivery-v1"
         and r.get("status") == "encrypted_artifact_ready" and r.get("request_id") == rid
         and r.get("run_id") == str(run_id) and r.get("source_commit") == commit

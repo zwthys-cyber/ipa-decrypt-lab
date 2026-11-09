@@ -4,7 +4,7 @@ import hmac
 import json
 import re
 import time
-import urllib.parse
+from account_profile import parse_target, profile_for_request, REQUEST_ID_PATTERN
 from version_request import selector, VersionError
 from telegram_api import APIError, private_message
 from telegram_queue import QueueError, failure_kind
@@ -17,17 +17,7 @@ from delivery_scheduler import app_from_run, queued_too_long, retryable, MAX_RUN
 HELP = HOME_TEXT
 
 def target_id(text):
-    if not isinstance(text,str) or len(text)>1024:
-        raise ValueError("invalid target")
-    if re.fullmatch(r"[1-9][0-9]{4,19}",text):
-        return text
-    value = urllib.parse.urlsplit(text)
-    found = re.search(r"/id([1-9][0-9]{4,19})/?$",value.path)
-    if (value.scheme!="https" or value.hostname!="apps.apple.com" or value.port not in (None,443)
-            or value.username or value.password or value.fragment or not found
-            or any(c.isspace() for c in text)):
-        raise ValueError("invalid target")
-    return found.group(1)
+    return parse_target(text)[0]
 
 def owner_id(value):
     if not re.fullmatch(r"[1-9][0-9]{4,19}",value or ""):
@@ -134,7 +124,7 @@ class Controller:
         if command in ("/latest","/decrypt"):
             parts = text.split()
             if len(parts) == 1:
-                self.say("下载最新版：请发送美区免费应用的 App Store 链接或数字 App ID。\n也可直接输入：/latest 444934666")
+                self.say("下载最新版：请发送免费应用的 App Store 链接（按链接地区选择账号）或数字 App ID。\n也可直接输入：/latest 444934666")
                 return
             if len(parts) != 2:
                 self.say("用法：/latest AppID或商店链接。指定旧版请用 /version AppID 版本号。")
@@ -146,7 +136,11 @@ class Controller:
                 self.say("用法：/versions AppID或商店链接。查询后可点击版本按钮下载。")
                 return
             try:
-                self.browser.begin(target_id(parts[1]),update_number)
+                app,profile=parse_target(parts[1])
+                if profile=="cn":
+                    self.say("中国区暂支持最新版下载；历史版本请使用外区链接或数字 App ID。")
+                    return
+                self.browser.begin(app,update_number)
             except PreflightError as exc:
                 self.say(MESSAGES[exc.status])
             except (ValueError,TypeError):
@@ -185,7 +179,7 @@ class Controller:
             return
         if command=="/get":
             parts = text.split()
-            if len(parts)!=2 or not re.fullmatch(r"[a-f0-9]{32}",parts[1]):
+            if len(parts)!=2 or not re.fullmatch(REQUEST_ID_PATTERN,parts[1]):
                 self.say("用法：/get 后跟任务编号。")
                 return
             self.deliver(parts[1])
@@ -197,12 +191,15 @@ class Controller:
                 if len(parts) != 3:
                     self.say("用法：/version AppID或商店链接 版本号\n例如：/version 444934666 9.3.55")
                     return
-                app = target_id(parts[1])
+                app,profile = parse_target(parts[1])
                 version = selector(parts[2])
             else:
-                app = target_id(text)
+                app,profile = parse_target(text)
         except (ValueError,TypeError):
             self.say("请发送完整 App Store 链接或数字 App ID。用 /help 查看指令。")
+            return
+        if profile=="cn" and version:
+            self.say("中国区暂支持最新版下载；指定旧版不会回退到外区账号。")
             return
         pending_catalog=self.browser.state.get("pending")
         if self.current or (pending_catalog and not pending_catalog.get("background")):
@@ -215,15 +212,18 @@ class Controller:
             self.say("请稍候 30 秒再提交。")
             return
         rid = opaque_id(self.token,self.owner,update_number,app + (":" + version if version else ""))
+        if profile=="cn": rid="cn_"+rid
         if self.journal is not None and rid in self.journal.records:
             self.say("这个请求已记录，请用 /status 或 /get 查询。")
             return
         if callable(self.admission) and not self.admission("export"):
             return
-        self.say("正在检查美区上架情况、价格和容量…")
+        self.say("正在检查"+("中国区" if profile=="cn" else "外区（美区查询）")+"上架情况、价格和容量…")
         try:
             if version:
                 self.github.preflight_app(app, historical=True)
+            elif profile=="cn":
+                self.github.preflight_app(app,profile="cn")
             else:
                 self.github.preflight_app(app)
         except PreflightError as exc:
@@ -324,6 +324,8 @@ class Controller:
         if current.get("recovered"):
             return False
         rid=current["rid"]
+        if profile_for_request(rid)=="cn":
+            return False
         if type(run.get("id")) is not int:
             return False
         run_id=run["id"]

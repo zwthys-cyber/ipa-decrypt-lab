@@ -1,3 +1,4 @@
+from account_profile import REQUEST_ID_PATTERN, profile_for_request
 """Sanitized worker stages and a single Telegram progress card; measured counters and explicitly labelled workflow-step progress."""
 import json
 import os
@@ -97,7 +98,7 @@ class WorkerProgress:
         self.counter=None
         self.run_id=os.environ.get("GITHUB_RUN_ID","")
         self.commit=os.environ.get("GITHUB_SHA","")
-        self.valid=bool(re.fullmatch(r"[a-f0-9]{32}",rid or "")
+        self.valid=bool(re.fullmatch(REQUEST_ID_PATTERN,rid or "")
                         and re.fullmatch(r"[0-9]+",self.run_id)
                         and re.fullmatch(r"[a-f0-9]{40}",self.commit)
                         and os.environ.get("GITHUB_REPOSITORY")=="zwthys-cyber/ipa-decrypt-lab"
@@ -216,6 +217,7 @@ class ProgressCard:
         filled=percent//10
         lines=["【进度演示，不执行下载】" if self.demo else "IPA 任务进度"]
         if self.app: lines.append("App ID："+self.app)
+        lines.append("下载地区："+("中国区" if self.rid.startswith("cn_") else "外区"))
         lines.extend(["流程进度："+"█"*filled+"░"*(10-filled)+f" {percent}%",
                       f"已完成：{complete}/{len(STEPS)} 步（按步骤，非剩余时间估算）",
                       "阶段："+LABELS[stage]])
