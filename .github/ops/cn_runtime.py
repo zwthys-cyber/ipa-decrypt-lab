@@ -50,7 +50,7 @@ def fetch(destination,model_support=False):
     for item in items:
         if item.get('name')!=name or item.get('expired') is not False:continue
         run=client.call('/actions/runs/'+str(item.get('workflow_run',{}).get('id')))
-        if not (run.get('path')==WORKFLOW and run.get('head_branch')=='main' and run.get('event')=='workflow_dispatch'
+        if not (run.get('path')==WORKFLOW and run.get('head_branch')=='main' and run.get('event') in ('workflow_dispatch','workflow_run')
                 and run.get('status')=='completed' and run.get('conclusion')=='success'
                 and run.get('head_sha')==item.get('workflow_run',{}).get('head_sha')):continue
         if not re.fullmatch('sha256:[a-f0-9]{64}',item.get('digest','')) or not 0<item.get('size_in_bytes',0)<=MAX_ARCHIVE:raise ValueError('CN artifact bounds')
