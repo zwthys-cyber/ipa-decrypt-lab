@@ -25,3 +25,10 @@ class NativeDomainPrivacyTests(unittest.TestCase):
         self.assertEqual(report["native_error_codes"],{"StoreAMD":4})
         self.assertTrue(report["diagnostic"]["store_device_proof_failed"])
         self.assertNotIn("PRIVATE",json.dumps(report))
+
+class HTTPFailurePrivacyTests(unittest.TestCase):
+    def test_http_purchase_error_is_classified_without_body(self):
+        report=summarize(subprocess.CompletedProcess([],1,"IPA_LAB_STAGE:acquire_free_license\n","Error: request failed with status 302 PRIVATE_ACCOUNT"))
+        self.assertEqual(report["transport"]["http_statuses"],[302])
+        self.assertEqual(report["error_categories"],["request_failed"])
+        self.assertNotIn("PRIVATE",json.dumps(report))
