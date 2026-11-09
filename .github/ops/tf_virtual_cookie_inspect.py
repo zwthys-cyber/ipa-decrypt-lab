@@ -22,16 +22,24 @@ def validate(value):
 def main():
     os.umask(0o077);env=dict(os.environ)
     receipt={"schema":"tf-cookie-probe-v1","status":"inspection_failed",
-             "run_id":env.get("GITHUB_RUN_ID"),"source_commit":env.get("GITHUB_SHA")}
+             "run_id":env.get("GITHUB_RUN_ID"),"source_commit":env.get("GITHUB_SHA"),"stage":"initialization"}
     try:
         if env.get("GITHUB_ACTIONS")!="true":raise ValueError()
         from tf_virtual_restore import restore
         with tempfile.TemporaryDirectory(prefix="tf-cookie-offline-",dir=env["RUNNER_TEMP"]) as folder:
             root=Path(folder);root.chmod(0o700)
+            receipt["stage"]="restore"
             restore(root,env)
+            receipt["stage"]="native_inspection"
             result=subprocess.run([str(Path("tf-sdk-build/tf_virtual_client").resolve()),"--cookie-inspect",str(root)],
                 capture_output=True,timeout=30,env=public_env(env))
-            if result.returncode or len(result.stdout)>4096:raise ValueError()
+            receipt["native_exit"]=max(0,min(255,result.returncode))
+            if len(result.stdout)>4096:raise ValueError()
+            if result.returncode:
+                from tf_virtual import validate as validate_auth
+                receipt["native_failure"]=validate_auth(json.loads(result.stdout))
+                raise ValueError()
+            receipt["stage"]="summary_validation"
             receipt["result"]=validate(json.loads(result.stdout))
             receipt["status"]="inspection_verified"
     except Exception:
