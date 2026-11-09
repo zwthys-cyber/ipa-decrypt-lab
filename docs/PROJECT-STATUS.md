@@ -2,7 +2,7 @@
 
 ## 2026-11-09 多用户白名单
 
-alpha.3 已在 [42541919654](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42541919654) 发布，完整提供进度和提速成品。随后本轮加入管理员白名单，alpha.4 包含本轮功能；最终构建、部署和发布证据补充在本节。
+alpha.3 已在 [42541919654](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42541919654) 发布，完整提供进度和提速成品。随后本轮加入管理员白名单，alpha.4 已包含本轮功能并完成部署、发布，最终证据见下方记录。
 
 - 固定管理员通过 `/allow 用户ID [每日额度]`、`/deny 用户ID`、`/users` 管理授权；默认只保留管理员有权限，不公开注册，不开通收费。最多 50 名已授权普通用户，私有身份历史有界。
 - 普通用户默认每日 3 次，管理员可设为不超过服务总额度的值；全服务默认每日 20 次。所有人共用串行准入，历史查询另有全局每滚动 24 小时 20 次上限。已有缓存不消耗远程查询额度。
@@ -16,6 +16,17 @@ alpha.3 已在 [42541919654](https://github.com/zwthys-cyber/ipa-decrypt-lab/act
 
 
 
+
+
+### 最终验证、部署和公开成品
+
+- [alpha.3 发布 42541919654](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42541919654)：先将进度与提速改动打包公开，保留旧版本。
+- [双平台生产 42542616831](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42542616831)：源码 `12ca5e2f3f65e7b2adbd42cb5dabbea6efdae874`，两平台各运行 466 项 Python 测试（各跳过 2 项）、2 项 Node 测试、21 项 Swift 测试和 Go/独立启动检查。
+- [最终服务器 build-only 42543061196](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42543061196) 与[实际部署 42543133206](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42543133206)：发布/部署源码 `b92dc1575123e1b7eab2283b62d355539fc71e4d`。Ubuntu 与 Debian 13 各运行 466 项 Python 测试（各跳过 1 项），Node、Go、大容量加密/systemd/包检查通过；安装后实际返回 `persistent_service_ready_verified`。
+- [普通任务取包预检 42543135884](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42543135884)：默认 macOS 26 成功获取精确匹配的运行包并准备固定公共资源，未进行 Apple 账号导出或 Telegram 文件发送。
+- [alpha.4 发布 42543237386](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42543237386)：检查 22 份 Markdown、生产来源、平台、源码指纹、artifact/package 摘要与清单后公开 3 个组件包和 8 个附件。[下载 alpha.4](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.4)。
+
+本轮未向线上白名单加入任何额外用户，也没有向其他用户发送测试消息或 IPA。当前管理员可在私聊中自行授权真实用户；真实第二位用户的提交和交付仍应另记证据。后续文档提交没有改变已验证的运行源码/指纹或重新部署服务。
 
 ## 2026-11-08 X 导出加速：移除重复压缩
 

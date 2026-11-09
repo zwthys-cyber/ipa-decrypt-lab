@@ -104,3 +104,5 @@ main 新增流程步骤比例、真实下载字节计数和完整耗时。VPS �
 alpha.4 增加 `multi_user.py` 服务模块，现有六项凭据保持不变。管理员仍由 `TELEGRAM_OWNER_ID` 固定；白名单保存在现有私有 SQLite 中，默认没有其他用户。不要把用户 ID 列表加入仓库、发布附件或公开日志。
 
 服务只启动一个轮询进程，使用全局更新游标和全局下载/查询准入；每用户任务、列表和进度独立。旧管理员作用域保持兼容，备份整库即可同时保留 ACL 和所有恢复记录。先完成 GitHub 上的 Ubuntu/Debian 13、双平台运行包与发布验证，再安装已验证成品。部署不会自动给任何额外用户授权。命令和配额见[白名单说明](MULTI-USER.md)。
+
+白名单版已在 [42543133206](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42543133206) 完成实际安装和健康检查，运行源码为 `b92dc1575123e1b7eab2283b62d355539fc71e4d`。构建在 Ubuntu/Debian 13 各运行 466 项 Python 测试（各跳过 1 项）及 Node/Go/systemd 检查。没有添加其他线上用户或替换六项凭据；管理员按需授权即可。[alpha.4 公开附件](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.4) 已完成来源和摘要校验。
