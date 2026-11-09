@@ -1,0 +1,45 @@
+name: Verify saved China account session
+run-name: CN-session-${{ inputs.mode }}
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Synthetic checks, or one read-only query using the saved CN session
+        type: choice
+        default: test
+        options: [test, query]
+permissions:
+  contents: read
+concurrency:
+  group: china-account-onboarding
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify account binding and read-only behavior without secrets
+        run: |
+          python3 -m unittest discover -s .github/ops -p 'test_*.py' -v
+          node --test .github/ops/cn_action.test.cjs
+      - name: Query saved CN session without login, password or verification code
+        if: inputs.mode == 'query'
+        env:
+          APPLE_CN_ID: ${{ secrets.APPLE_CN_ID }}
+          APPLE_CN_GUID: ${{ secrets.APPLE_CN_GUID }}
+          APPLE_CN_SESSION_B64: ${{ secrets.APPLE_CN_SESSION_B64 }}
+        run: |
+          ulimit -c 0
+          python3 .github/ops/cn_session.py
+      - name: Publish only a sanitized session-reuse receipt
+        if: always() && inputs.mode == 'query'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: cn-session-receipt-${{ github.run_id }}
+          path: cn-session-receipt.json
+          retention-days: 1
+          if-no-files-found: ignore
