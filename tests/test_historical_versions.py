@@ -46,7 +46,7 @@ class HistoricalVersionTests(unittest.TestCase):
         bot,gh=Mock(),Mock()
         gh.dispatch.return_value={"status":"queued"}
         c=Controller(bot,gh,OWNER,"crypt","synthetic")
-        message=update("/version https://apps.apple.com/cn/app/qq/id444934666 9.3.55")
+        message=update("/version https://apps.apple.com/us/app/qq/id444934666 9.3.55")
         c.handle(message)
         c.handle(message)
         gh.preflight_app.assert_called_once_with(APP,historical=True)
