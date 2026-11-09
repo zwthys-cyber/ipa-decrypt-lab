@@ -6,6 +6,8 @@
 
 中国区模型已恢复，并通过跨运行器复用、保存状态重放和真实导出，链接路由已[部署](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42566050391)。`/cn/` 商店链接自动使用中国区账号，其他地区链接及数字 App ID 使用原外区账号。中国区先支持最新版；外区历史版本保持可用。见 [中国区接入状态](docs/CHINA-ACCOUNT.md)。
 
+部分国区专属应用仍有许可兼容问题：抖音在 GitHub 境外出口下收到地区不可用相关提示，尚未修复，需大陆出口对照。样本成功不代表所有国区应用都能下载。见 [当前限制与证据](docs/CHINA-ACCOUNT.md)。
+
 ## 下载
 
 当前成品版本为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。里面有 Linux amd64 服务器端，以及 macOS 26 / 15 Intel 运行包；用途、配置和校验方法见 [发布说明](docs/RELEASES.md)。
