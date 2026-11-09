@@ -6,7 +6,7 @@
 #include <iostream>
 #include <regex>
 #include <ctime>
-namespace apple_auth { APPLE_AUTH_CLIENT_EXPORT Transport lab_tf_curl_transport(); APPLE_AUTH_CLIENT_EXPORT int lab_tf_auth_contract(); APPLE_AUTH_CLIENT_EXPORT bool lab_tf_account_session_valid(const AccountSession&,std::int64_t); APPLE_AUTH_CLIENT_EXPORT std::int64_t lab_tf_retry_after(const HttpResponse&,std::int64_t); }
+namespace apple_auth { APPLE_AUTH_CLIENT_EXPORT Transport lab_tf_curl_transport(); APPLE_AUTH_CLIENT_EXPORT int lab_tf_pet_contract(); APPLE_AUTH_CLIENT_EXPORT AccountSession lab_tf_refresh_pet(Client&,const AccountSession&,const Transport&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_auth_contract(); APPLE_AUTH_CLIENT_EXPORT bool lab_tf_account_session_valid(const AccountSession&,std::int64_t); APPLE_AUTH_CLIENT_EXPORT std::int64_t lab_tf_retry_after(const HttpResponse&,std::int64_t); }
 #include <sys/stat.h>
 using namespace apple_auth;
 using Json=nlohmann::json;
@@ -39,6 +39,7 @@ std::string request_stage(const HttpRequest& request) {
         const std::string body(request.body.begin(),request.body.end());
         if(body.find("<string>init</string>")!=std::string::npos)return "gsa_srp_init";
         if(body.find("<string>complete</string>")!=std::string::npos)return "gsa_srp_complete";
+        if(body.find("<string>apptokens</string>")!=std::string::npos)return "gsa_apptokens";
         return "gsa_service";
     }
     return "other_apple";
@@ -119,7 +120,8 @@ int main(int argc,char **argv) {
     try {
         if(argc==2 && std::string(argv[1])=="--self-test")return self_test();
         if(argc==2 && std::string(argv[1])=="--auth-self-test")return lab_tf_auth_contract();
-        require(argc==3 && (std::string(argv[1])=="--authenticate" || std::string(argv[1])=="--prepare-lookup" || std::string(argv[1])=="--lookup" || std::string(argv[1])=="--resume-store" || std::string(argv[1])=="--store-preflight"));
+        if(argc==2 && std::string(argv[1])=="--pet-self-test")return lab_tf_pet_contract();
+        require(argc==3 && (std::string(argv[1])=="--authenticate" || std::string(argv[1])=="--prepare-lookup" || std::string(argv[1])=="--lookup" || std::string(argv[1])=="--resume-store" || std::string(argv[1])=="--store-preflight" || std::string(argv[1])=="--refresh-pet-store"));
         const char *actions=std::getenv("GITHUB_ACTIONS");
         require(actions && std::string(actions)=="true");
         const std::filesystem::path root=argv[2];
@@ -140,7 +142,7 @@ int main(int argc,char **argv) {
         };
         Client client(root/"sdk",options);
         const std::string command=argv[1];
-        if(command!="--resume-store" && command!="--store-preflight") {
+        if(command!="--resume-store" && command!="--store-preflight" && command!="--refresh-pet-store") {
             report["stage"]="grandslam_provisioning";
             client.provision();
         }
@@ -178,7 +180,17 @@ int main(int argc,char **argv) {
         std::string email,password;
         require(bool(std::getline(std::cin,email)) && !email.empty() && email.size()<320);
         AccountSession account;
-        if(command=="--resume-store") {
+        if(command=="--refresh-pet-store") {
+            account=AccountSession::load(root/"account.plist");
+            report["stage"]="store_provisioning";
+            client.provision_store();
+            report["store_profile_ready"]=true;
+            report["stage"]="gsa_token_refresh";
+            account=lab_tf_refresh_pet(client,account,options.transport);
+            if(!lab_tf_account_session_valid(account,std::time(nullptr)))throw SavedSessionInvalid{};
+            account.save(root/"account.plist");client.set_session_data(account.plist);
+            report["gsa_authenticated"]=true;report["gsa_session_reused"]=true;
+        } else if(command=="--resume-store") {
             account=AccountSession::load(root/"account.plist");
             if(!lab_tf_account_session_valid(account,std::time(nullptr)))throw SavedSessionInvalid{};
             report["gsa_authenticated"]=true;report["gsa_session_reused"]=true;

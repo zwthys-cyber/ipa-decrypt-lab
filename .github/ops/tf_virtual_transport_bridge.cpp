@@ -63,3 +63,19 @@ APPLE_AUTH_CLIENT_EXPORT std::int64_t lab_tf_retry_after(const HttpResponse& res
     return result;
 }
 }
+
+#include <ctime>
+namespace apple_auth::netdetail {
+DeveloperSession exchange_pet_session(const AccountSession&,const std::function<Headers()>&,
+    const Transport&,const std::function<std::int64_t()>&);
+}
+namespace apple_auth {
+APPLE_AUTH_CLIENT_EXPORT AccountSession lab_tf_refresh_pet(Client& client,const AccountSession& account,const Transport& transport) {
+    const auto grant=netdetail::exchange_pet_session(account,[&client](){return client.headers();},
+        transport,[](){return std::int64_t(std::time(nullptr));});
+    auto value=netdetail::parse_plist(account.plist);
+    value["t"]["com.apple.gs.idms.pet"]["token"]=grant.token;
+    value["t"]["com.apple.gs.idms.pet"]["expiry"]=grant.expires_at_ms;
+    return AccountSession::from_plist(netdetail::encode_plist(value));
+}
+}

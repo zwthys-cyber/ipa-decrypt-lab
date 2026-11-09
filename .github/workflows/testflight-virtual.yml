@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       run_control:
-        description: Inspect the saved session and preflight Store device provisioning without account login
+        description: Prewarm Store signing and try one saved-root PET refresh without password
         type: boolean
         default: false
 permissions:
@@ -45,6 +45,8 @@ jobs:
         run: |
           python3 .github/ops/tf_virtual_transport_patch.py native-source/apple-auth/src/client/transport.cpp
           python3 .github/ops/tf_virtual_auth_patch.py native-source/apple-auth/src/client/authentication.cpp
+          python3 .github/ops/tf_virtual_pet_patch.py native-source/apple-auth/src/client/authentication.cpp native-source/apple-auth/src/client/store.cpp
+          cp .github/ops/tf_virtual_pet_contract.cpp native-source/apple-auth/lab_tf_pet_contract.cpp
           cp .github/ops/tf_sdk_contract.cpp native-source/apple-auth/tf_sdk_contract.cpp
           cp .github/ops/tf_virtual_client.cpp native-source/apple-auth/tf_virtual_client.cpp
           cp .github/ops/tf_virtual_transport_bridge.cpp native-source/apple-auth/lab_tf_transport_bridge.cpp
@@ -56,11 +58,12 @@ jobs:
           cmake -S native-source/apple-auth -B tf-sdk-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$tf_prefix" -DAPPLE_AUTH_WITH_TESTFLIGHT=ON -DAPPLE_AUTH_BUILD_EXAMPLES=ON
           cmake --build tf-sdk-build --parallel 4
           ctest --test-dir tf-sdk-build --output-on-failure --no-tests=error --timeout 180
-      - name: Inspect saved session and provision Store device without account requests
+      - name: Prewarm Store signing then refresh the saved short-lived PET once
         if: ${{ inputs.run_control || (github.event_name == 'push' && contains(github.event.head_commit.message, '[tf-virtual-control-once]')) }}
         env:
           TF_VIRTUAL_RESTORE_RUN: '42662277216'
-          TF_VIRTUAL_STORE_PREFLIGHT: '1'
+          TF_VIRTUAL_REFRESH_PET_STORE: '1'
+          APPLE_CN_ID: ${{ secrets.APPLE_CN_ID }}
           TF_VIRTUAL_NOT_BEFORE: '1794245200'
           DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
           GH_TOKEN: ${{ github.token }}
@@ -79,4 +82,4 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-# Store device preflight is independent of PET expiry and sends no Apple ID, password or PET.
+# Fixed PET grant only; no password fallback, no OTP action, no enrollment.
