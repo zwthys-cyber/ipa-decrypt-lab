@@ -10,7 +10,7 @@ class CNDeliveryDiagnosticTests(unittest.TestCase):
     def test_only_closed_categories_and_numeric_codes_escape(self):
         result=subprocess.CompletedProcess([],1,"IPA_LAB_STAGE:acquire_free_license\nIPA_LAB_FAILURE:9610\nPRIVATE_ACCOUNT\nIPA_LAB_STAGE:PRIVATE_PATH\nIPA_LAB_HTTP:200\n","failureType: 9610 PRIVATE_PASSWORD")
         report=summarize(result)
-        self.assertEqual(report["diagnostic"],{"stage":"acquire_free_license","exit_code":1,"apple_failure_code":9610,"http_statuses":[200]})
+        self.assertEqual({k:v for k,v in report["diagnostic"].items() if k not in {"store_device_proof_failed","terms_confirmation_required","verification_required","token_expired"}},{"stage":"acquire_free_license","exit_code":1,"apple_failure_code":9610,"http_statuses":[200]})
         self.assertFalse(report["download_succeeded"])
         self.assertNotIn("PRIVATE",json.dumps(report))
 
@@ -18,3 +18,10 @@ class CNDeliveryDiagnosticTests(unittest.TestCase):
         report=summarize(subprocess.CompletedProcess([],0,"IPA_LAB_STAGE:publish_file\n",""))
         self.assertTrue(report["download_succeeded"])
         self.assertNotIn("plaintext_verified",report)
+
+class NativeDomainPrivacyTests(unittest.TestCase):
+    def test_reviewed_error_domain_only(self):
+        report=summarize(subprocess.CompletedProcess([],1,"IPA_LAB_STAGE:acquire_free_license\n","The operation failed. (StoreAMD error 4.) PRIVATE_TOKEN error 12"))
+        self.assertEqual(report["native_error_codes"],{"StoreAMD":4})
+        self.assertTrue(report["diagnostic"]["store_device_proof_failed"])
+        self.assertNotIn("PRIVATE",json.dumps(report))
