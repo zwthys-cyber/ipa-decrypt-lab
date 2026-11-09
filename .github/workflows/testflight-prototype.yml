@@ -33,6 +33,7 @@ jobs:
         run: |
           python3 -m unittest discover -s .github/ops -p 'test_tf_native.py'
           python3 -m unittest discover -s .github/ops -p 'test_tf_cn_context.py'
+          python3 -m unittest discover -s .github/ops -p 'test_tf_invitation.py'
       - name: Inspect native identity providers without account inputs
         run: |
           ulimit -c 0
