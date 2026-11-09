@@ -51,6 +51,12 @@ def query(env,fetch=None):
     report={'schema':'cn-session-reuse-v1','status':'session_reused' if success else 'saved_session_query_failed',
             'session_reused':success,'country_bound':'cn','login_attempted':False,'verification_code_used':False,
             'machine_authorization_attempted':False,'deauthorization_attempted':False,'downloaded':False}
+    statuses={'computer_count_observed','apple_request_refused','graphql_errors','http_refused','computer_count_not_returned','response_not_structured','response_shape_unexpected','unexpected_unauthenticated_count','redirect_blocked','response_oversized','transport_failed','query_failed'}
+    report['query_status']=result.get('status') if result.get('status') in statuses else 'unknown'
+    for key in ('session_cookie_header_present','login_user_agent_preserved','graphql_errors_present','error_mentions_authentication','error_mentions_unknown_field'):
+        if type(result.get(key)) is bool:report[key]=result[key]
+    for key in ('apple_failure_code','graphql_error_count'):
+        if type(result.get(key)) is int and -999999<=result[key]<=999999:report[key]=result[key]
     if success:report['authorized_computers']=result['authorized_computers']
     if type(result.get('http_status')) is int and 100<=result['http_status']<=599:report['http_status']=result['http_status']
     return report
