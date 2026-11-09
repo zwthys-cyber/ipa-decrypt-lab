@@ -1,0 +1,70 @@
+name: Isolated virtual Mac TestFlight research
+run-name: TF-virtual-Mac-research
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/testflight-virtual.yml'
+      - '.github/ops/tf_virtual*'
+      - '.github/ops/test_tf_virtual.py'
+  workflow_dispatch:
+    inputs:
+      authenticate:
+        description: One bounded isolated CN Mac Store and TF login, no invitation acceptance
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: testflight-virtual-research
+  cancel-in-progress: false
+jobs:
+  virtual:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-26-intel
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Test privacy and state guards without account inputs
+        run: |
+          python3 -m unittest discover -s .github/ops -p 'test_tf_virtual.py'
+          python3 -m unittest discover -s .github/ops -p 'test_tf_invitation.py'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: apple-auth/apple-auth
+          ref: 98c862f7bebc8283a9b87f1578e703f0765dc81d
+          path: native-source/apple-auth
+          persist-credentials: false
+      - name: Install public build and encryption dependencies
+        run: brew install cmake ninja pkgconf mbedtls@3 curl nlohmann-json libzip age
+      - name: Compile isolated client without Apple inputs
+        run: |
+          cp .github/ops/tf_sdk_contract.cpp native-source/apple-auth/tf_sdk_contract.cpp
+          cp .github/ops/tf_virtual_client.cpp native-source/apple-auth/tf_virtual_client.cpp
+          cat .github/ops/tf_sdk_contract.cmake >> native-source/apple-auth/CMakeLists.txt
+          cat .github/ops/tf_virtual_client.cmake >> native-source/apple-auth/CMakeLists.txt
+          cat .github/ops/tf_sdk_compat.cmake >> native-source/apple-auth/CMakeLists.txt
+          tf_prefix="$(brew --prefix mbedtls@3);$(brew --prefix curl);$(brew --prefix nlohmann-json);$(brew --prefix libzip)"
+          cmake -S native-source/apple-auth -B tf-sdk-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$tf_prefix" -DAPPLE_AUTH_WITH_TESTFLIGHT=ON -DAPPLE_AUTH_BUILD_EXAMPLES=ON
+          cmake --build tf-sdk-build --parallel 4
+          ctest --test-dir tf-sdk-build --output-on-failure --no-tests=error --timeout 180
+      - name: Run one source-bound virtual authentication experiment
+        if: ${{ inputs.authenticate || (github.event_name == 'push' && contains(github.event.head_commit.message, '[tf-virtual-auth-once]')) }}
+        env:
+          APPLE_CN_ID: ${{ secrets.APPLE_CN_ID }}
+          APPLE_CN_PASSWORD: ${{ secrets.APPLE_CN_PASSWORD }}
+        run: |
+          ulimit -c 0
+          python3 .github/ops/tf_virtual.py
+      - name: Retain only encrypted state and a closed receipt
+        if: ${{ always() && (inputs.authenticate || (github.event_name == 'push' && contains(github.event.head_commit.message, '[tf-virtual-auth-once]'))) }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: tf-virtual-sealed-${{ github.run_id }}
+          path: |
+            tf-virtual-state.age
+            tf-virtual-receipt.json
+          retention-days: 1
+          if-no-files-found: error

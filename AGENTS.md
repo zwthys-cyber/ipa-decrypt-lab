@@ -248,3 +248,10 @@ Checks 不是 fine-grained PAT 的必填权限。遇到 Checks 权限拒绝时�
 - The SDK's Mac StoreSession adapter supplies AMD-M from its authenticated machine_id. The earlier unauthenticated AMSAnisette probe is not proof that no native machine identity can ever work. Configurator and macos_accounts sessions remain distinct.
 - Offline tf_invitation.py plans fixed Apple requests and journals acceptance intent before a future POST. It has no live authentication/HTTP integration. A 2xx alone is not verified membership; ambiguous acceptance must not auto-repeat.
 - Existing original-native-identity constraints remain in force; SDK virtual profiles have not been used with Apple inputs. No new account authorization, credential/model replacement, invitation acceptance, file send or VPS deployment occurred.
+
+## Authorized isolated virtual Mac evaluation (2026-11-09)
+
+- After the native-only limitation and the SDK virtual-profile alternative were explicitly explained, the user instructed continuing with that alternative. This permits an independent, clearly labeled SDK virtual Mac experiment; the earlier native-only preflight requirement does not gate this isolated route. Never describe a virtual profile as a physical device or as a recovered native hardware identity.
+- Preserve original DE/CN credentials, saved sessions, FairPlay models and authorization counts. No new FairPlay enrollment, deauthorization, security upgrade or agreement acceptance. The experiment uses the CN account only for bounded GSA/Mac Store/TF authentication after public compilation/tests.
+- testflight-virtual.yml defaults to public tests. A deliberate [tf-virtual-auth-once] source commit or explicit workflow input enables one bounded login attempt after those checks, with no automatic relogin. A verification callback records an actual challenge and stops; it must not invent an OTP result.
+- Persist the independent profile/SDK state only on the runner and in age ciphertext for the fixed existing delivery recipient, plus a closed receipt. No plaintext state/credentials/headers enter public output. This experiment does not yet accept invitations, purchase, download, decrypt or send a file.
