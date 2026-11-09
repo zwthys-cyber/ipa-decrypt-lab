@@ -1,5 +1,6 @@
 #import <Foundation/Foundation.h>
 #import <objc/message.h>
+#import <objc/runtime.h>
 #import <dlfcn.h>
 #import <unistd.h>
 #import <sys/stat.h>
@@ -32,6 +33,36 @@ static NSDictionary *inspect(NSString *className,NSString *factory,NSString *nam
         return @{@"available":@NO,@"value":shape(nil)};
     }
 }
+
+static NSArray *testflightSurface(void) {
+    unsigned count=0;
+    Class *classes=objc_copyClassList(&count);
+    NSMutableArray *surface=[NSMutableArray array];
+    for(unsigned i=0;i<count && surface.count<128;i++) {
+        const char *image=class_getImageName(classes[i]);
+        if(!image || !strstr(image,"/TestFlightCore.framework/"))continue;
+        NSString *className=NSStringFromClass(classes[i]);
+        if(className.length>192)continue;
+        for(NSNumber *classMethod in @[@NO,@YES]) {
+            Class owner=classMethod.boolValue ? object_getClass(classes[i]) : classes[i];
+            unsigned methodsCount=0;
+            Method *methods=class_copyMethodList(owner,&methodsCount);
+            for(unsigned j=0;j<methodsCount && surface.count<128;j++) {
+                NSString *selector=NSStringFromSelector(method_getName(methods[j]));
+                NSString *lower=selector.lowercaseString;
+                BOOL relevant=NO;
+                for(NSString *term in @[@"device",@"identifier",@"hardware",@"unique",@"udid",@"machine",@"hash"])
+                    if([lower containsString:term])relevant=YES;
+                if(!relevant || selector.length>192 || [lower hasPrefix:@"set"])continue;
+                [surface addObject:@{@"class":className,@"selector":selector,@"class_method":classMethod}];
+            }
+            free(methods);
+        }
+    }
+    free(classes);
+    return surface;
+}
+
 int main(int argc,char **argv) {
     @autoreleasepool {
         umask(077);
@@ -57,10 +88,10 @@ int main(int argc,char **argv) {
             candidates[selector]=inspect(@"AMSDevice",@"",selector);
         }
         NSDictionary *report=@{@"schema":@"testflight-native-discovery-v1",
-            @"frameworks":frameworks,@"candidates":candidates,
+            @"frameworks":frameworks,@"candidates":candidates,@"testflight_surface":testflightSurface(),
             @"account_operation_attempted":@NO,@"raw_values_published":@NO};
         NSData *encoded=[NSJSONSerialization dataWithJSONObject:report options:NSJSONWritingSortedKeys error:nil];
-        if(!encoded || encoded.length>16384)return 2;
+        if(!encoded || encoded.length>65536)return 2;
         write(STDOUT_FILENO,encoded.bytes,encoded.length);write(STDOUT_FILENO,"\n",1);
         return 0;
     }

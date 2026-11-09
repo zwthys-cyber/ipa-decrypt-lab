@@ -6,7 +6,7 @@ import subprocess
 
 def validate(value):
     if type(value) is not dict or set(value) != {
-        "schema","frameworks","candidates","account_operation_attempted","raw_values_published"
+        "schema","frameworks","candidates","testflight_surface","account_operation_attempted","raw_values_published"
     }:
         raise ValueError()
     if value["schema"] != "testflight-native-discovery-v1":
@@ -32,6 +32,15 @@ def validate(value):
             raise ValueError()
         if type(shape["length"]) is not int or not 0 <= shape["length"] <= 256:
             raise ValueError()
+    surface=value["testflight_surface"]
+    if type(surface) is not list or len(surface)>128:
+        raise ValueError()
+    for entry in surface:
+        if type(entry) is not dict or set(entry)!={"class","selector","class_method"} or type(entry["class_method"]) is not bool:
+            raise ValueError()
+        for key in ("class","selector"):
+            if type(entry[key]) is not str or not 0<len(entry[key])<=192 or any(ord(c)<32 or ord(c)>126 for c in entry[key]):
+                raise ValueError()
     return value
 
 def main():
@@ -42,7 +51,7 @@ def main():
         check=subprocess.run([binary,"--self-test"],stdin=subprocess.DEVNULL,capture_output=True,timeout=15,env=env)
         if check.returncode:raise ValueError()
         result=subprocess.run([binary],stdin=subprocess.DEVNULL,capture_output=True,timeout=60,env=env)
-        if result.returncode or len(result.stdout)>16384:raise ValueError()
+        if result.returncode or len(result.stdout)>65536:raise ValueError()
         value=validate(json.loads(result.stdout))
         print(json.dumps(value,sort_keys=True),flush=True)
         return 0
