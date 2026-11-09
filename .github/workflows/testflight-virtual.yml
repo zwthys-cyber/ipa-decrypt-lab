@@ -83,3 +83,5 @@ jobs:
           if-no-files-found: error
 
 # Explicit dedicated live maintenance after signing prewarm; one bound code, no enrollment.
+
+# Retry scheduler-only internal error 42672190788: no runner or account request executed.
