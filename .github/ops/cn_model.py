@@ -61,6 +61,14 @@ def gate(count,profile,prepared,observation):
         and prepared.get('running_as_root') is False and all(prepared.get(k) is True for k in COMMERCE_READY),'cn_native_binding_not_ready')
     require(observation.get('root_status')=='observed','cn_state_observer_not_ready')
 
+def authorization_outcome(raw):
+    require(isinstance(raw,dict) and raw.get('schema')=='ipa-lab-machine-enrollment-v1'
+        and type(raw.get('authorization_request_attempted')) is bool,'cn_authorization_outcome_unknown_do_not_retry')
+    result=clean(raw);attempted=result.get('authorization_request_attempted') is True
+    complete=result.get('http_status')==200 and type(result.get('apple_failure_present')) is bool
+    definitive=complete and (result['apple_failure_present'] is True or result.get('keybag_present') is True)
+    return result,attempted and not definitive
+
 def seal_file(sealer,path,purpose,env):
     arguments=[sealer,str(path)]+([] if purpose=='model' else [purpose])
     code,out,_=private(arguments,{'PATH':'/usr/bin:/bin','GITHUB_ACTIONS':'true'},timeout=20)
@@ -139,7 +147,7 @@ def trial(runtime,env,mode,report):
                 report['authorization_outcome_uncertain']=True
                 code,_,_=private([str(runtime/'native-machine-enrollment'),str(native_report)],child,data=native_input,timeout=80)
                 require(code==0 and native_report.is_file() and native_report.stat().st_size<=65536,'cn_authorization_outcome_unknown_do_not_retry')
-                result=clean(json.loads(native_report.read_text()));report['authorization_outcome_uncertain']=False
+                result,uncertain=authorization_outcome(json.loads(native_report.read_text()));report['authorization_outcome_uncertain']=uncertain
                 report['authorization_request_attempted']=result.get('authorization_request_attempted') is True
                 result.update(store_session_authenticated=True,state_observation_before=before,state_observation_after=collect())
                 after=query(bound_env(env,current));report['count_query_after']=after

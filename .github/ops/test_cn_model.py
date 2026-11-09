@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from cn_model import gate,payload,account_at,CNModelError,COMMERCE_READY,base
+from cn_model import gate,payload,account_at,CNModelError,COMMERCE_READY,base,authorization_outcome
 import test_cn_session
 
 class CNModelBoundaries(unittest.TestCase):
@@ -36,6 +36,13 @@ class CNModelBoundaries(unittest.TestCase):
             with self.assertRaises(CNModelError):account_at(path,self.value)
             path.chmod(0o600);link=Path(directory)/'alias';link.symlink_to(path)
             with self.assertRaises(CNModelError):account_at(link,self.value)
+    def test_timeout_or_partial_response_keeps_authorization_outcome_uncertain(self):
+        base_raw={'schema':'ipa-lab-machine-enrollment-v1','authorization_request_attempted':True}
+        for extra in ({'status':'request_timeout'},{'status':'request_stopped'},{'http_status':500},{'http_status':200,'apple_failure_present':False,'keybag_present':False}):
+            _,uncertain=authorization_outcome(dict(base_raw,**extra));self.assertTrue(uncertain)
+        _,uncertain=authorization_outcome(dict(base_raw,http_status=200,apple_failure_present=True));self.assertFalse(uncertain)
+        _,uncertain=authorization_outcome(dict(base_raw,authorization_request_attempted=False));self.assertFalse(uncertain)
+        with self.assertRaises(CNModelError):authorization_outcome({'schema':'unknown'})
     def test_initial_report_never_claims_model_or_authorization_success(self):
         result=base()
         for key in ('authorization_request_attempted','model_recovered','decryption_proven','plaintext_verified','checkpoint_saved','model_secret_prepared'):
