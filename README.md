@@ -6,7 +6,7 @@
 
 ## 下载
 
-当前成品版本为 [v0.1.0-alpha.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.2)。里面有 Linux amd64 服务器端，以及 macOS 26 / 15 Intel 运行包；用途、配置和校验方法见 [发布说明](docs/RELEASES.md)。
+当前成品版本为 [v0.1.0-alpha.3](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.3)。里面有 Linux amd64 服务器端，以及 macOS 26 / 15 Intel 运行包；用途、配置和校验方法见 [发布说明](docs/RELEASES.md)。
 
 这些包需要配合仓库工作流和自己的私有配置使用。Apple 账号、授权模型、Telegram 凭据和应用 IPA 都不随发布包提供。
 
@@ -42,7 +42,7 @@ X 的后续加速对比已通过：删除账号元数据时直接复制保留项
 
 解密成功的判断包含完整切片和页面校验，不能只看 `cryptid=0`。尚未把重签名、安装和实际运行纳入验证，所以结果里的 `runtime_verified` 仍为 `false`。
 
-进度卡升级已[部署](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443436341)，并通过[实际 X 导出与数字快照验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42444399936)。官方 Actions 已升级为固定提交的 Node.js 24 版本；新 downloader 和双平台生产任务均无 Node.js 20 弃用警告。公开 alpha.2 附件仍是升级前的版本快照。
+进度卡升级已[部署](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443436341)，并通过[实际 X 导出与数字快照验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42444399936)。官方 Actions 已升级为固定提交的 Node.js 24 版本；新 downloader 和双平台生产任务均无 Node.js 20 弃用警告。alpha.3 已打包这些进度和提速改动；alpha.2 保留为历史快照。
 
 ## 部署与配置
 

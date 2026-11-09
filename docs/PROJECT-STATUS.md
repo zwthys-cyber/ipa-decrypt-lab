@@ -31,7 +31,7 @@
 后台以一天有效的小型数字快照补充 Checks，上报只包含绑定任务/run/源码的固定阶段、时间和计数，VPS 使用已有 Actions 权限读取。合成探针、双平台构建、实际导出和控制器部署均已通过，具体证据见下方“进度升级验证与部署”。公开 alpha.2 成品仍是进度升级前的快照。
 
 
-当前公开成品版本：[v0.1.0-alpha.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.2)。下载、构建与发布步骤见[成品包说明](RELEASES.md)；完整文档导航见[文档索引](DOCUMENTATION.md)。旧版公开 Release 不再作为下载入口，历史构建与失败记录仍按各自日期保留。
+当前公开成品版本：[v0.1.0-alpha.3](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.3)。alpha.3 将已验证的进度和导出加速打包；此前各节中 alpha.2 的描述保留其历史范围。下载、构建与发布步骤见[成品包说明](RELEASES.md)；完整文档导航见[文档索引](DOCUMENTATION.md)。旧版公开 Release 不再作为下载入口，历史构建与失败记录仍按各自日期保留。
 
 
 

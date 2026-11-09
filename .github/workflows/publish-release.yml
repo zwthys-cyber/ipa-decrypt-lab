@@ -10,12 +10,12 @@ on:
         description: Successful dual-platform native-runtime-build run matching this source fingerprint
         type: string
         required: true
-        default: '42439002658'
+        default: '42445031389'
 permissions:
   contents: write
   actions: read
 concurrency:
-  group: public-release-v0.1.0-alpha.2
+  group: public-release-v0.1.0-alpha.3
   cancel-in-progress: false
 jobs:
   publish:
@@ -73,7 +73,7 @@ jobs:
           out=Path("release-assets")
           out.mkdir()
           client=GitHub(os.environ["GH_TOKEN"])
-          info={"schema":"ipa-lab-release-v1","tag":"v0.1.0-alpha.2","source_commit":sha,"packages":[]}
+          info={"schema":"ipa-lab-release-v1","tag":"v0.1.0-alpha.3","source_commit":sha,"packages":[]}
           def digest(path):
               with path.open("rb") as stream:
                   return hashlib.file_digest(stream,"sha256").hexdigest()
@@ -153,6 +153,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v0.1.0-alpha.2 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "v0.1.0-alpha.2 — 登录与设备验证修复版" --notes-file docs/releases/v0.1.0-alpha.2.md --draft --prerelease
-          gh release upload v0.1.0-alpha.2 release-assets/* --repo "$GITHUB_REPOSITORY"
-          gh release edit v0.1.0-alpha.2 --repo "$GITHUB_REPOSITORY" --draft=false --prerelease
+          gh release create v0.1.0-alpha.3 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "v0.1.0-alpha.3 — 进度与导出加速版" --notes-file docs/releases/v0.1.0-alpha.3.md --draft --prerelease
+          gh release upload v0.1.0-alpha.3 release-assets/* --repo "$GITHUB_REPOSITORY"
+          gh release edit v0.1.0-alpha.3 --repo "$GITHUB_REPOSITORY" --draft=false --prerelease

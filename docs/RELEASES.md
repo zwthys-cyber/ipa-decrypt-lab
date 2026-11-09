@@ -1,6 +1,6 @@
 # 成品包下载
 
-当前版本为 **v0.1.0-alpha.2**，下载入口是 [GitHub Releases](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.2)。旧版 `v0.1.0-alpha.1` 的公开 Release 和附件由本次发布替换，源码标签及历史发布说明保留。
+当前版本为 **v0.1.0-alpha.3**，下载入口是 [GitHub Releases](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.3)。alpha.3 包含进度卡、真实下载计数、完整计时、Node.js 24 Actions 和导出加速。alpha.2 保留为历史版本。旧版 `v0.1.0-alpha.1` 的公开 Release 和附件由本次发布替换，源码标签及历史发布说明保留。
 
 ## 选哪个包
 
@@ -54,3 +54,7 @@ macOS 可用 `shasum -a 256 文件名`，再与清单中对应条目比较。只
 本轮没有覆盖 `v0.1.0-alpha.2` 的附件或标签。main 已加入实时数字快照、步骤进度和完整耗时，控制器已[部署](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443436341)；对应[双平台原生包](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443706492)和[服务器 build-only 包](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443709848)均已通过验证。普通任务使用新的匹配运行包；下载旧 Release 安装并不自动获得 main 的新功能。
 
 所有官方 Actions 固定到使用 Node.js 24 的发布提交：checkout v7.0.1、setup-go v7.0.0、cache v6.1.0 和 upload-artifact v7.0.2。后续正式发布应重新选择当前源码的生产运行、通过现有摘要与来源校验，并使用新版本号；不能把历史 alpha.2 的构建来源改写为本轮来源。
+
+## alpha.3 发布范围
+
+本版将此前 main 的进度与提速改动打包为正式可下载的预览附件。仍是管理员私聊版，多用户白名单正在下一阶段实现；不包含收费功能或安装运行验证。版本说明见 [alpha.3](releases/v0.1.0-alpha.3.md)。
