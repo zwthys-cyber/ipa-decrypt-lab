@@ -31,7 +31,17 @@ def patch_store(raw):
     source=raw.decode()
     if source.count(old)!=1:raise ValueError("tf_store_anchor_invalid")
     return source.replace(old,new)
+def patch_client(raw):
+    if hashlib.sha1(b"blob "+str(len(raw)).encode()+b"\0"+raw).hexdigest()!="0487dcad3a8e0e8d9e80a393f5495d030245b594":
+        raise ValueError("tf_client_source_mismatch")
+    old="    impl_->store_client().provision();"
+    new="    impl_->store_client(device_platform() == DevicePlatform::mac ? StoreProtocol::macos_accounts : StoreProtocol::android_music).provision();"
+    source=raw.decode()
+    if source.count(old)!=1:raise ValueError("tf_client_anchor_invalid")
+    return source.replace(old,new)
 if __name__=="__main__":
     auth=Path(sys.argv[1]);store=Path(sys.argv[2])
     auth.write_text(patch_auth(auth.read_text()))
     store.write_text(patch_store(store.read_bytes()))
+
+    client=Path(sys.argv[3]);client.write_text(patch_client(client.read_bytes()))
