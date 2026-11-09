@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       run_control:
-        description: Resume saved PET after the observed 18-second Retry-After
+        description: Run one explicit authentication after exact public runtime verification
         type: boolean
         default: false
 permissions:
@@ -77,19 +77,19 @@ jobs:
         with:
           path: tf-sdk-build
           key: ${{ steps.native-cache.outputs.cache-primary-key }}
-      - name: Resume saved PET once after the observed Retry-After
+      - name: Authenticate once using the verified public runtime
         if: ${{ inputs.run_control || (github.event_name == 'push' && contains(github.event.head_commit.message, '[tf-virtual-control-once]')) }}
         env:
           TF_VIRTUAL_RESTORE_RUN: '42675996429'
-          TF_VIRTUAL_RESUME_STORE: '1'
+          TF_VIRTUAL_LIVE_OTP: '1'
+          CN_LIVE_TASK: tf_virtual_auth
+          APPLE_CN_PASSWORD: ${{ secrets.APPLE_CN_PASSWORD }}
           APPLE_CN_ID: ${{ secrets.APPLE_CN_ID }}
           TF_VIRTUAL_NOT_BEFORE: '1794249719'
           DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
           GH_TOKEN: ${{ github.token }}
           TF_CURL_FRESH_GSA: '1'
-        run: |
-          ulimit -c 0
-          python3 .github/ops/tf_virtual.py
+        uses: ./.github/actions/cn-auth
       - name: Retain only encrypted state and a closed receipt
         if: ${{ always() && hashFiles('tf-virtual-receipt.json') != '' && (inputs.run_control || (github.event_name == 'push' && contains(github.event.head_commit.message, '[tf-virtual-control-once]'))) }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
