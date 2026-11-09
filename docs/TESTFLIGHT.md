@@ -128,3 +128,12 @@
 [新 runner 42677692634](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42677692634) 实际命中缓存、跳过编译并通过19项 CTest，再次取得 GSA 令牌；Store 返回429/Retry-After17秒。新的恢复载体及摘要已固定到恢复器，保留原虚拟身份绑定。
 
 [无密码恢复 42677924391](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42677924391) 遵守冷却时间，令牌绑定有效且还剩221秒，已实际进入 Store 步骤。最后响应是HTTP200，随后发生未分类错误；仍没有 Store/TF 会话。旧报告只给出 other_apple，尚不能断定最后响应来自 SAP准备还是账号认证，也不能认定限流已完全解除。后续补充固定阶段和错误类别，只做公共验证；不公开原始响应、不自动重试账号登录。当前没有验证码等待请求，邀请接受、取包、TF内容解密及回传仍未完成。
+
+
+### 已确认账号认证接口，尚未建立 Store 会话
+
+[诊断公共构建 42678311930](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42678311930) 通过隐私/状态检查及19项 CTest，缓存对应的新程序，没有执行账号步骤。[42678760191](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42678760191) 在新 runner 命中该缓存并重新通过19项 CTest，签名及 GSA 认证成功，无验证码回调；固定请求形状将最后HTTP200明确定位到 store_authentication。
+
+随后仍发生未分类处理错误，没有建立 Store 会话。“Mac Store authentication rejected”固定类别没有匹配，所以不能断言具体服务器拒绝信息或解析原因。下一步应先补充受限的响应格式/字段结构及明确解析错误类别，再开展新的账号控制；不公开原始正文或错误文字，不放宽签名、plist和会话校验，不继续盲目重复登录。
+
+本轮解决了调度阻塞与跨运行重新编译耗尽令牌的问题，实际证明可在剩余221秒时恢复保存令牌；还未完成 Store/TF 会话、邀请接受、测试包获取与解密回传。目前没有验证码等待请求。最新独立状态仍只保留一天的 age 密文，原账号 Secrets、模型、授权计数和部署未改动。
