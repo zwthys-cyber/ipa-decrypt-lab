@@ -35,6 +35,16 @@ def main():
                 info,bundle,identifier=target(root)
                 catalog=json.loads((root/"catalog.json").read_bytes())
                 receipt["inspection"]=summarize(info,catalog)
+                if (root/"accept-response.json").is_file():
+                    receipt["accept_response_inspection"]=summarize(json.loads((root/"accept-response.json").read_bytes()),[])
+                nodes=list(objects(catalog))
+                fields={"apps","appId","appAdamId","bundleId","bundleIdentifier","id","data","platform","platforms","ios","macos","availableApps","unavailableApps"}
+                receipt["catalog_shape"]={"root_kind":"object" if type(catalog) is dict else "array" if type(catalog) is list else "other",
+                    "root_fields":sorted(set(catalog)&fields) if type(catalog) is dict else [],
+                    "app_id_nodes":sum(1 for item in nodes if "appId" in item),
+                    "bundle_nodes":sum(1 for item in nodes if "bundleId" in item or "bundleIdentifier" in item),
+                    "object_count":min(20000,len(nodes)),
+                    "fields_present":sorted(set().union(*(set(item)&fields for item in nodes)) if nodes else set())}
                 found=predicates(catalog,bundle,identifier);receipt["binding_predicates"]=found
                 receipt["invitation_accepted"]=found["specific_id_combined"]>0 or found["generic_id_combined"]>0
                 receipt["status"]="membership_verified" if receipt["invitation_accepted"] else "membership_not_verified"
