@@ -12,6 +12,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[2]/"tools"))
 from capacity import MAX_IPA_BYTES,MIN_FREE_BYTES
 from private_export import export_original,ExportError
 from task_progress import WorkerProgress
+from telegram_queue import GitHub
 from tf_task_session import restore,RECIPIENT
 from tf_task_contract import fingerprint as worker_fingerprint
 from tf_task_ssh import fetch,rpc
@@ -85,6 +86,15 @@ def ensure_membership(state,path,package,request,env,receipt,runner=native,remot
         try:remote("finish",dict(args,nonce=permit["nonce"],outcome="membership_verified" if verified else "outcome_unknown"),env)
         except Exception:pass
 
+def finish_inspection(progress,env):
+    # Complete only this process's own check; never call an inspection artifact-ready.
+    if progress.check is None:return
+    try:
+        GitHub(env["GH_TOKEN"]).call("/check-runs/"+str(progress.check),
+            {"status":"completed","conclusion":"neutral","output":{"title":"TestFlight inspection complete",
+                "summary":"Read-only session and membership inspection; no download or file send."}},"PATCH")
+    except Exception:pass
+
 def main():
     env=dict(os.environ);os.umask(0o077)
     def stop(*args):raise InterruptedError()
@@ -128,6 +138,7 @@ def main():
     except Stop as error:receipt["status"]=str(error)
     except Exception:pass
     success=receipt["status"] in {"testflight_inspection_complete","encrypted_artifact_ready"}
+    if success and env.get("TF_TASK_MODE")=="inspect":finish_inspection(progress,env)
     if not success:
         shutil.rmtree("delivery-out",ignore_errors=True);progress.advance("failed")
     Path("tf-worker-result.json").write_text(json.dumps(receipt,sort_keys=True))

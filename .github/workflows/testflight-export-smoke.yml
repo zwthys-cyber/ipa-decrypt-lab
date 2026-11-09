@@ -4,6 +4,9 @@ on:
     workflows: ["Build isolated CN live-auth client"]
     types: [completed]
     branches: [main]
+  push:
+    branches: [main]
+    paths: ['.github/ops/tf_task_contract.py', '.github/ops/tf_task_worker.py', '.github/workflows/testflight-export-smoke.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,8 +16,20 @@ concurrency:
   group: testflight-export-proof
   cancel-in-progress: false
 jobs:
+  public:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Validate TF acceptance, delivery binding and progress closure without secrets
+        run: |
+          python3 -m unittest discover -s .github/ops -p 'test_tf_task*.py' -v
+          node --test tests/progress_worker.test.cjs
   export:
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && contains(github.event.workflow_run.head_commit.message, '[tf-production-verify]')))
+    needs: public
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[tf-production-verify]')) || (github.event.workflow_run.conclusion == 'success' && contains(github.event.workflow_run.head_commit.message, '[tf-production-verify]')))
     uses: ./.github/workflows/testflight-private-delivery.yml
     with:
       mode: export

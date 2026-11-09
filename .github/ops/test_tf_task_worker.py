@@ -78,3 +78,16 @@ class TFWorkerContracts(unittest.TestCase):
             runner=Mock(return_value=(0,result));remote=Mock()
             with self.assertRaises(Stop):ensure_membership(root,root/"request",root,REQUEST,{}, {},runner,remote)
             remote.assert_not_called()
+
+    def test_successful_inspection_closes_only_its_own_check_neutrally(self):
+        from tf_task_worker import finish_inspection
+        progress=Mock(check=123)
+        with patch("tf_task_worker.GitHub") as factory:
+            finish_inspection(progress,{"GH_TOKEN":"SYNTHETIC"})
+            args=factory.return_value.call.call_args.args
+            self.assertEqual(args[0],"/check-runs/123")
+            self.assertEqual(args[1]["status"],"completed")
+            self.assertEqual(args[1]["conclusion"],"neutral")
+            self.assertNotIn("artifact_ready",json.dumps(args[1]))
+        with patch("tf_task_worker.GitHub") as factory:
+            finish_inspection(Mock(check=None),{});factory.assert_not_called()
