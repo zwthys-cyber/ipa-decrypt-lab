@@ -8,11 +8,14 @@ import subprocess
 import tempfile
 import unittest
 import zipfile
-from cn_download_probe import probe,check_metadata,CNDownloadError,TARGET
+from cn_download_probe import probe,check_metadata,CNDownloadError,TARGET,safe_failure
 import test_cn_session
 
 class CNDownloadContracts(unittest.TestCase):
     def metadata(self):return {'resultCount':1,'results':[{'trackId':int(TARGET),'wrapperType':'software','kind':'software','price':0,'currency':'CNY','bundleId':'example.fixture','fileSizeBytes':'2048'}]}
+    def test_proof_failure_diagnostic_hides_private_error_details(self):
+        value=safe_failure(subprocess.CompletedProcess([],1,'IPA_LAB_STAGE:acquire_free_license','The operation failed. (StoreAMD error 4.) PRIVATE_TOKEN'))
+        self.assertTrue(value['store_device_proof_failed']);self.assertNotIn('PRIVATE',json.dumps(value))
     def test_paid_wrong_region_and_oversized_sample_rejected(self):
         for key,value in [('price',1),('currency','EUR'),('trackId',1),('fileSizeBytes',str(201*1024*1024)),('bundleId','bad/../path')]:
             raw=self.metadata();raw['results'][0][key]=value

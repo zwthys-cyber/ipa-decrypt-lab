@@ -40,6 +40,15 @@ def metadata():
     require(len(raw)<=2*1024*1024,'cn_metadata_oversized')
     return check_metadata(json.loads(raw))
 
+def safe_failure(result):
+    text=((result.stdout or '')+'\n'+(result.stderr or '')).lower()
+    diagnostic=download_diagnostics(result)
+    diagnostic['store_device_proof_failed']='storeamd' in text
+    diagnostic['terms_confirmation_required']='terms' in text
+    diagnostic['verification_required']='verification' in text and 'code' in text
+    diagnostic['token_expired']='token' in text and 'expired' in text
+    return diagnostic
+
 def probe(binary,env,info,execute=None):
     require(info.get('app_id')==TARGET and isinstance(info.get('bundle_id'),str) and re.fullmatch(r'[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+',info['bundle_id']),'cn_sample_invalid')
     value,_=decode(env)
@@ -60,7 +69,7 @@ def probe(binary,env,info,execute=None):
                 'verification_code_used':False,'machine_authorization_attempted':False,'deauthorization_attempted':False,
                 'downloaded':False,'decryption_proven':False,'plaintext_retained':False}
             if result.returncode:
-                report.update(status=classify_download(result),diagnostic=download_diagnostics(result));return report
+                report.update(status=classify_download(result),diagnostic=safe_failure(result));return report
             require(ipa.is_file() and not ipa.is_symlink() and 0<ipa.stat().st_size<=LIMIT,'cn_ipa_invalid')
             with zipfile.ZipFile(ipa) as z:
                 entries=z.infolist();require(0<len(entries)<=100000 and sum(x.file_size for x in entries)<=2*1024**3,'cn_ipa_inventory')
