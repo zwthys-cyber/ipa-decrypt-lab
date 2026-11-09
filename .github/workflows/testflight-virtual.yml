@@ -78,21 +78,19 @@ jobs:
         with:
           path: tf-sdk-build
           key: ${{ steps.native-cache.outputs.cache-primary-key }}
-      - name: Download the verified joined beta and inspect its encryption boundary
+      - name: Inspect the fixed encrypted download failure offline
         if: ${{ inputs.run_control || (github.event_name == 'push' && contains(github.event.head_commit.message, '[tf-virtual-control-once]')) }}
         env:
-          TF_VIRTUAL_RESTORE_RUN: '42694923538'
+          TF_VIRTUAL_RESTORE_RUN: '42696261040'
           DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
           GH_TOKEN: ${{ github.token }}
-        run: python3 .github/ops/tf_virtual_beta_download.py
+        run: python3 .github/ops/tf_virtual_download_failure.py
       - name: Retain only encrypted state and a closed receipt
         if: ${{ always() && hashFiles('tf-beta-receipt.json') != '' && (inputs.run_control || (github.event_name == 'push' && contains(github.event.head_commit.message, '[tf-virtual-control-once]'))) }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: tf-beta-download-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          name: tf-beta-inspect-${{ github.run_id }}-attempt-${{ github.run_attempt }}
           path: |
-            tf-beta-package.age
-            tf-accept-state.age
             tf-beta-receipt.json
           retention-days: 1
           if-no-files-found: error
