@@ -117,3 +117,14 @@
 源码 `637da0b6683f0f3e2115d7fafaaf821cc54f659b` 已把显式完整认证调整为同一 Client 内先准备 Mac SAP、后执行密码/SRP，并把诊断 transport 传入 TF 客户端。这一新的完整顺序尚未实际运行验证，不能拿此前签名控制的成功替代完整认证证据。
 
 [42672190788](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42672190788) 与确认无执行后的一次有界重试 [42672595272](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42672595272) 均没有生成 job/runner，注释明确为 GitHub `Internal server error`。第二次源码为 `610e5ccc95ee1b07dbc0cbd1a26e6c7d75f29df1`。未执行私有步骤、密码认证或验证码投递；当前没有有效验证码等待请求，聊天旧码不会使用。调度恢复后继续显式独立维护，不根据服务器内部错误连续盲目提交重试。TF 会话、邀请接受、beta 获取、内容解密及交付仍未验证，原 Secrets、FairPlay 计数和 VPS 未改动。
+
+
+## 2026-11-09：调度恢复、缓存验证与 Store 响应定位
+
+[42675996429](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42675996429) 已正常启动并取得新 GSA 令牌，没有验证码要求；Store 阶段返回429，并实际记录 Retry-After18秒。随后无密码恢复 [42676403958](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42676403958) 因重新编译耗时，开始私有步骤时 PET 已过期24秒，本地门禁停止，未发送 Apple 请求。
+
+为避免继续耗尽五分钟窗口，公共构建 [42677280328](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42677280328) 保存了账号输入之前的已验证构建缓存。缓存严格匹配源码/SDK、Mac平台/架构、Xcode和依赖版本；只保存 tf-sdk-build，账号状态仍在独立临时目录和一天有效的 age 密文中。每次复用重新运行全部19项 CTest，Python/Node检查照常执行；改变构建命令/选项须升级缓存版本。
+
+[新 runner 42677692634](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42677692634) 实际命中缓存、跳过编译并通过19项 CTest，再次取得 GSA 令牌；Store 返回429/Retry-After17秒。新的恢复载体及摘要已固定到恢复器，保留原虚拟身份绑定。
+
+[无密码恢复 42677924391](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42677924391) 遵守冷却时间，令牌绑定有效且还剩221秒，已实际进入 Store 步骤。最后响应是HTTP200，随后发生未分类错误；仍没有 Store/TF 会话。旧报告只给出 other_apple，尚不能断定最后响应来自 SAP准备还是账号认证，也不能认定限流已完全解除。后续补充固定阶段和错误类别，只做公共验证；不公开原始响应、不自动重试账号登录。当前没有验证码等待请求，邀请接受、取包、TF内容解密及回传仍未完成。

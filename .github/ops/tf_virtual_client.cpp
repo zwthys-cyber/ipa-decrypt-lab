@@ -35,6 +35,12 @@ std::string request_stage(const HttpRequest& request) {
     if(request.url.find("startMachineProvisioning")!=std::string::npos)return "mid_start";
     if(request.url.find("finishMachineProvisioning")!=std::string::npos)return "mid_finish";
     if(request.url.find("/grandslam/GsService2/lookup")!=std::string::npos)return "gsa_lookup";
+    if(request.method=="POST") {
+        const std::string body(request.body.begin(),request.body.end());
+        if(body.find("<key>credentialSource</key>")!=std::string::npos &&
+           body.find("<key>appleId</key>")!=std::string::npos)return "store_authentication";
+        if(body.find("<key>sign-sap-setup-buffer</key>")!=std::string::npos)return "store_sap_setup";
+    }
     if(request.method=="POST" && request.url.find("/grandslam/GsService2")!=std::string::npos) {
         const std::string body(request.body.begin(),request.body.end());
         if(body.find("<string>init</string>")!=std::string::npos)return "gsa_srp_init";
@@ -54,6 +60,11 @@ void classify(const std::exception& error,Json& report) {
         report["apple_error_code"]=std::stoi(match[1]);
     std::string category="unclassified_exception";
     for(const auto& item:std::vector<std::pair<std::string,std::string>>{
+        {"Mac Store authentication rejected","mac_store_authentication_rejected"},
+        {"Missing Mac anisette header","mac_store_header_missing"},
+        {"Mac PET has expired","mac_pet_expired"},
+        {"Invalid Store DSID","store_dsid_invalid"},
+        {"SAP certificate","store_signing_failed"},
         {"Apple did not confirm the 2FA code","verification_response_unconfirmed"},
         {"Apple requested verification again after 2FA","verification_repeated"},
         {"SrpHandshake server proof is invalid","server_proof_invalid"},
@@ -108,6 +119,9 @@ int self_test() {
     classify(std::runtime_error("Apple authentication rejected (code -22406)"),diagnostic);
     require(diagnostic["apple_error_code"]==-22406 &&
             diagnostic["failure_category"]=="apple_authentication_rejected");
+    classify(std::runtime_error("Mac Store authentication rejected PRIVATE_ACCOUNT"),diagnostic);
+    require(diagnostic["failure_category"]=="mac_store_authentication_rejected" &&
+            diagnostic.dump().find("PRIVATE_ACCOUNT")==std::string::npos);
     return 0;
 }
 }
