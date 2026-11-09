@@ -6,7 +6,7 @@
 #include <iostream>
 #include <regex>
 #include <ctime>
-namespace apple_auth { APPLE_AUTH_CLIENT_EXPORT Transport lab_tf_curl_transport(); }
+namespace apple_auth { APPLE_AUTH_CLIENT_EXPORT Transport lab_tf_curl_transport(); APPLE_AUTH_CLIENT_EXPORT int lab_tf_auth_contract(); }
 #include <sys/stat.h>
 using namespace apple_auth;
 using Json=nlohmann::json;
@@ -50,6 +50,9 @@ void classify(const std::exception& error,Json& report) {
         report["apple_error_code"]=std::stoi(match[1]);
     std::string category="unclassified_exception";
     for(const auto& item:std::vector<std::pair<std::string,std::string>>{
+        {"Apple did not confirm the 2FA code","verification_response_unconfirmed"},
+        {"Apple requested verification again after 2FA","verification_repeated"},
+        {"SrpHandshake server proof is invalid","server_proof_invalid"},
         {"Apple authentication rejected","apple_authentication_rejected"},
         {"GrandSlam session rejected","account_session_rejected"},
         {"usable account token","account_token_missing"},
@@ -111,6 +114,7 @@ int main(int argc,char **argv) {
         {"http_status",0},{"sdk_error_code",0},{"apple_error_code",0},{"failure_category","none"},{"last_request_stage","none"}};
     try {
         if(argc==2 && std::string(argv[1])=="--self-test")return self_test();
+        if(argc==2 && std::string(argv[1])=="--auth-self-test")return lab_tf_auth_contract();
         require(argc==3 && (std::string(argv[1])=="--authenticate" || std::string(argv[1])=="--prepare-lookup" || std::string(argv[1])=="--lookup"));
         const char *actions=std::getenv("GITHUB_ACTIONS");
         require(actions && std::string(actions)=="true");

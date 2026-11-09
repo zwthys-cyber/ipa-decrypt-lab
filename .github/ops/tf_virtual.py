@@ -35,7 +35,7 @@ def validate(value):
     if value["failure_category"] not in {"none","unclassified_exception","nonstandard_exception",
         "apple_authentication_rejected","account_session_rejected","account_token_missing",
         "response_schema_invalid","transport_timeout","transport_error","http_response_error",
-        "verification_required"}:raise ValueError()
+        "verification_required","verification_response_unconfirmed","verification_repeated","server_proof_invalid"}:raise ValueError()
     if value["last_request_stage"] not in {"none","other_apple","gsa_lookup","gsa_service","gsa_srp_init","gsa_srp_complete"}:raise ValueError()
     return value
 
@@ -95,8 +95,9 @@ def main():
                 else:
                     result=subprocess.run([binary,"--authenticate",str(root)],input=(email+"\n"+password+"\n").encode(),
                         stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=240,env=child)
-                from tf_virtual_transport_diagnostics import observations
+                from tf_virtual_transport_diagnostics import observations, verification_observations
                 receipt["transport_observations"]=observations(result.stderr or b"")
+                receipt["verification_observations"]=verification_observations(result.stderr or b"")
                 if len(result.stdout)>4096:raise ValueError()
                 value=validate(json.loads(result.stdout))
                 receipt["result"]=value

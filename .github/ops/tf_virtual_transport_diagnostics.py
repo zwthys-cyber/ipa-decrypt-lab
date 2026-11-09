@@ -19,3 +19,18 @@ def observations(raw):
         result.append(value)
         if len(result)==16:break
     return result
+
+def verification_observations(raw):
+    result=[]
+    keys={"envelope","object","ec_present","ec_integer","ec_in_range","ec_code"}
+    for line in raw.splitlines():
+        if not line.startswith(b"TF_VERIFY:") or len(line)>1024:continue
+        try:value=json.loads(line[10:])
+        except (ValueError,UnicodeError):continue
+        if type(value) is not dict or set(value)!=keys:continue
+        if type(value["envelope"]) is not str or value["envelope"] not in {"response","status","top"}:continue
+        if any(type(value[k]) is not bool for k in ("object","ec_present","ec_integer","ec_in_range")):continue
+        if type(value["ec_code"]) is not int or not -99999999<=value["ec_code"]<=99999999:continue
+        result.append(value)
+        if len(result)==4:break
+    return result

@@ -44,9 +44,11 @@ jobs:
       - name: Compile isolated client without Apple inputs
         run: |
           python3 .github/ops/tf_virtual_transport_patch.py native-source/apple-auth/src/client/transport.cpp
+          python3 .github/ops/tf_virtual_auth_patch.py native-source/apple-auth/src/client/authentication.cpp
           cp .github/ops/tf_sdk_contract.cpp native-source/apple-auth/tf_sdk_contract.cpp
           cp .github/ops/tf_virtual_client.cpp native-source/apple-auth/tf_virtual_client.cpp
           cp .github/ops/tf_virtual_transport_bridge.cpp native-source/apple-auth/lab_tf_transport_bridge.cpp
+          cp .github/ops/tf_virtual_auth_contract.cpp native-source/apple-auth/lab_tf_auth_contract.cpp
           cat .github/ops/tf_sdk_contract.cmake >> native-source/apple-auth/CMakeLists.txt
           cat .github/ops/tf_virtual_client.cmake >> native-source/apple-auth/CMakeLists.txt
           cat .github/ops/tf_sdk_compat.cmake >> native-source/apple-auth/CMakeLists.txt
@@ -78,3 +80,5 @@ jobs:
           if-no-files-found: error
 
 # One fresh-connection control; no raw wire data or automatic login retry.
+
+# Reuse one anisette/CPD set per SRP exchange and require an explicit integer zero OTP result.
