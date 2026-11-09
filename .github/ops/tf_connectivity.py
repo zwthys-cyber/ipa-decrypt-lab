@@ -23,7 +23,9 @@ def main():
     trust=Path("tf-public-ca.pem");trust.write_text(bundle)
     backends={"system":"/usr/bin/curl","sdk_curl":str(Path(curl_prefix)/"bin/curl")}
     endpoints={"gsa_lookup":"https://gsa.apple.com/grandslam/GsService2/lookup",
-               "public_bag":"https://init.itunes.apple.com/bag.xml?ix=6"}
+               "public_bag":"https://init.itunes.apple.com/bag.xml?ix=6",
+               "gsa_service":"https://gsa.apple.com/grandslam/GsService2",
+               "gsas_service":"https://gsas.apple.com/grandslam/GsService2"}
     results=[]
     for backend,binary in backends.items():
         for endpoint,url in endpoints.items():

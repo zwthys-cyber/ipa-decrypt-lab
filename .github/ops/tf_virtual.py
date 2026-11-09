@@ -11,7 +11,7 @@ import tempfile
 
 KEYS={"schema","stage","status","virtual_identity","account_login_attempted","gsa_authenticated",
       "mac_store_authenticated","tf_authenticated","catalog_received","verification_requested",
-      "http_status","sdk_error_code","apple_error_code","failure_category"}
+      "http_status","sdk_error_code","apple_error_code","failure_category","last_request_stage"}
 STAGES={"initialization","grandslam_provisioning","grandslam_login","mac_store_login",
         "testflight_session","testflight_catalog","gsa_lookup"}
 def validate(value):
@@ -36,6 +36,7 @@ def validate(value):
         "apple_authentication_rejected","account_session_rejected","account_token_missing",
         "response_schema_invalid","transport_timeout","transport_error","http_response_error",
         "verification_required"}:raise ValueError()
+    if value["last_request_stage"] not in {"none","other_apple","gsa_lookup","gsa_service","gsa_srp_init","gsa_srp_complete"}:raise ValueError()
     return value
 
 def public_env(env):

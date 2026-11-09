@@ -30,6 +30,16 @@ Bytes hardware(const Json& profile) {
         result.push_back(static_cast<std::uint8_t>(std::stoul(text.substr(i,2),nullptr,16)));
     return result;
 }
+std::string request_stage(const HttpRequest& request) {
+    if(request.url.find("/grandslam/GsService2/lookup")!=std::string::npos)return "gsa_lookup";
+    if(request.method=="POST" && request.url.find("/grandslam/GsService2")!=std::string::npos) {
+        const std::string body(request.body.begin(),request.body.end());
+        if(body.find("<string>init</string>")!=std::string::npos)return "gsa_srp_init";
+        if(body.find("<string>complete</string>")!=std::string::npos)return "gsa_srp_complete";
+        return "gsa_service";
+    }
+    return "other_apple";
+}
 void classify(const std::exception& error,Json& report) {
     const std::string text=error.what();
     if(text.size()>32768) { report["failure_category"]="unclassified_exception";return; }
@@ -79,6 +89,10 @@ int self_test() {
     try { Client mismatch(ByteView(state),other); }
     catch(const std::exception&) { rejected=true; }
     require(rejected && calls==0);
+    const std::string synthetic="<plist><key>o</key><string>init</string></plist>";
+    require(request_stage({"https://gsa.apple.com/grandslam/GsService2","POST",{},
+            Bytes(synthetic.begin(),synthetic.end())})=="gsa_srp_init");
+    require(request_stage({"https://gsa.apple.com/grandslam/GsService2/lookup","GET",{}, {}})=="gsa_lookup");
     Json diagnostic={{"http_status",0},{"apple_error_code",0}};
     classify(std::runtime_error("GrandSlam HTTP 503 PRIVATE_ACCOUNT"),diagnostic);
     require(diagnostic["http_status"]==503 && diagnostic["failure_category"]=="http_response_error" &&
@@ -94,7 +108,7 @@ int main(int argc,char **argv) {
         {"status","failed"},{"virtual_identity",true},{"account_login_attempted",false},
         {"gsa_authenticated",false},{"mac_store_authenticated",false},
         {"tf_authenticated",false},{"catalog_received",false},{"verification_requested",false},
-        {"http_status",0},{"sdk_error_code",0},{"apple_error_code",0},{"failure_category","none"}};
+        {"http_status",0},{"sdk_error_code",0},{"apple_error_code",0},{"failure_category","none"},{"last_request_stage","none"}};
     try {
         if(argc==2 && std::string(argv[1])=="--self-test")return self_test();
         require(argc==3 && (std::string(argv[1])=="--authenticate" || std::string(argv[1])=="--prepare-lookup" || std::string(argv[1])=="--lookup"));
@@ -104,6 +118,15 @@ int main(int argc,char **argv) {
         const auto profile=read_profile(root);
         const auto hw=hardware(profile);
         ClientOptions options;options.device_platform=DevicePlatform::mac;
+        auto base=lab_tf_curl_transport();
+        options.transport=[base,&report](const HttpRequest& request) -> HttpResponse {
+            const auto stage=request_stage(request);
+            report["last_request_stage"]=stage;report["http_status"]=0;
+            if(stage=="gsa_srp_init" || stage=="gsa_srp_complete" || stage=="gsa_service")
+                report["account_login_attempted"]=true;
+            const auto response=base(request);report["http_status"]=response.status;
+            return response;
+        };
         Client client(root/"sdk",options);
         report["stage"]="grandslam_provisioning";
         client.provision();
@@ -122,7 +145,7 @@ int main(int argc,char **argv) {
                 file<<Json(headers).dump();file.close();require(bool(file));
                 report["stage"]="gsa_lookup";report["status"]="lookup_prepared";
             } else {
-                report["stage"]="gsa_lookup";
+                report["stage"]="gsa_lookup";report["last_request_stage"]="gsa_lookup";
                 auto transport=lab_tf_curl_transport();
                 const auto response=transport({"https://gsa.apple.com/grandslam/GsService2/lookup","GET",headers,{}});
                 report["http_status"]=response.status;report["status"]="lookup_response_received";
@@ -133,7 +156,7 @@ int main(int argc,char **argv) {
         std::string email,password;
         require(bool(std::getline(std::cin,email)) && bool(std::getline(std::cin,password)) &&
                 !email.empty() && !password.empty() && email.size()<320 && password.size()<2048);
-        report["stage"]="grandslam_login";report["account_login_attempted"]=true;
+        report["stage"]="grandslam_login";
         const auto account=client.login(email,password,[]() -> std::string {
             throw VerificationNeeded{};
         });
