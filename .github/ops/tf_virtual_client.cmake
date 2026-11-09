@@ -11,3 +11,5 @@ add_test(NAME tf_virtual_srp_contract COMMAND tf_virtual_client --auth-self-test
 
 target_sources(apple_auth_client PRIVATE lab_tf_pet_contract.cpp)
 add_test(NAME tf_virtual_pet_contract COMMAND tf_virtual_client --pet-self-test)
+
+add_test(NAME tf_virtual_cookie_contract COMMAND tf_virtual_client --cookie-self-test)

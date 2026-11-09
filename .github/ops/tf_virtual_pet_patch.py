@@ -30,7 +30,66 @@ def patch_store(raw):
     new="void StoreClient::provision() {\n    impl_->provision();\n    if (impl_->protocol == StoreProtocol::macos_accounts) impl_->prepare_sap();\n}"
     source=raw.decode()
     if source.count(old)!=1:raise ValueError("tf_store_anchor_invalid")
-    return source.replace(old,new)
+    source=source.replace(old,new)
+    end=source.rindex("\n} // namespace apple_auth")
+    helper=r"""
+namespace {
+Json lab_cookie_flags(const Json& cookies) {
+    Json flags={{"count",cookies.size()},{"name_bad",0},{"value_bad",0},{"domain_bad",0},
+        {"path_bad",0},{"expiry_kind_bad",0},{"host_flag_kind_bad",0}};
+    for(const auto& c:cookies) {
+        const auto name=c.at("name").get<std::string>(),value=c.at("value").get<std::string>();
+        const auto domain=c.at("domain").get<std::string>(),path=c.at("path").get<std::string>();
+        if(name.empty() || name.find_first_of("=; ,")!=std::string::npos)flags["name_bad"]=flags["name_bad"].get<int>()+1;
+        if(value.find(';')!=std::string::npos)flags["value_bad"]=flags["value_bad"].get<int>()+1;
+        if(domain!="apple.com" && !domain.ends_with(".apple.com"))flags["domain_bad"]=flags["domain_bad"].get<int>()+1;
+        if(!path.starts_with('/'))flags["path_bad"]=flags["path_bad"].get<int>()+1;
+        if(!c.at("expires").is_number_integer())flags["expiry_kind_bad"]=flags["expiry_kind_bad"].get<int>()+1;
+        if(!c.at("host_only").is_boolean())flags["host_flag_kind_bad"]=flags["host_flag_kind_bad"].get<int>()+1;
+    }
+    return flags;
+}
+}
+APPLE_AUTH_CLIENT_EXPORT int lab_tf_cookie_contract() {
+    try {
+        const Json cookies=Json::array({Json{{"name","fixture"},{"value","SYNTHETIC"},{"domain","apple.com"},
+            {"path","/"},{"expires",std::int64_t(1800000000)},{"host_only",false}}});
+        const auto after=parse_plist(encode_plist(cookies));
+        require(lab_cookie_flags(cookies)==lab_cookie_flags(after),"Cookie roundtrip changed types");
+        const Json state={{"kind","apple-auth-store"},{"version",1},{"protocol","macos-accounts"},
+            {"account",{{"dsPersonId","12345"},{"passwordToken","SYNTHETIC_TOKEN"}}},
+            {"storefront","143441-1,29"},{"guid","AABBCCDDEEFF"},{"cookies",cookies}};
+        const auto accepted=StoreSession::from_plist(encode_plist(state));
+        require(accepted.account_id()=="12345","Cookie fixture account mismatch");
+        auto bad=state;bad["cookies"][0]["domain"]="invalid.example";
+        bool rejected=false;
+        try{(void)StoreSession::from_plist(encode_plist(bad));}catch(const std::exception&){rejected=true;}
+        require(rejected,"Cookie foreign-domain guard missing");
+        return 0;
+    }catch(...){return 2;}
+}
+APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_cookie_inspect(const Path& root) {
+    const auto meta=Json::parse(read_file(root/"store-auth-meta.json",128*1024));
+    const auto raw=read_file(root/"store-auth-response.bin",16u<<20);
+    const auto response=HttpResponse{meta.at("status").get<int>(),raw,meta.at("response_headers").get<Headers>()};
+    const auto requestHeaders=meta.at("request_headers").get<Headers>();
+    const auto url=meta.at("url").get<std::string>();
+    const auto result=decode_store(raw);
+    require(response.status==200 && result.value("status",Json())==0 &&
+        scalar(result.at("dsPersonId"))==header({200,{},requestHeaders},"x-dsid") &&
+        result.at("passwordToken").is_string(),"Captured Store response binding failed");
+    Json cookies=Json::array();
+    cookies_update(cookies,url,response,1794252273);
+    const auto after=parse_plist(encode_plist(cookies));
+    const auto failure=str(read_file(root/"failure.txt",32768));
+    return Json{{"schema","tf-cookie-inspection-v1"},{"before",lab_cookie_flags(cookies)},
+        {"after",lab_cookie_flags(after)},{"original_failure",
+            failure=="Invalid saved Store cookie" ? "invalid_saved_cookie" :
+            failure=="Invalid Store cookies" ? "invalid_cookie_container" : "other"},
+        {"response_binding",true},{"network_requests",0}}.dump();
+}
+"""
+    return source[:end]+"\n"+helper+"\n"+source[end:]
 def patch_client(raw):
     if hashlib.sha1(b"blob "+str(len(raw)).encode()+b"\0"+raw).hexdigest()!="0487dcad3a8e0e8d9e80a393f5495d030245b594":
         raise ValueError("tf_client_source_mismatch")

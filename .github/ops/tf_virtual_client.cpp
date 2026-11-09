@@ -6,7 +6,7 @@
 #include <iostream>
 #include <regex>
 #include <ctime>
-namespace apple_auth { APPLE_AUTH_CLIENT_EXPORT Transport lab_tf_curl_transport(); APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_store_shape(const HttpResponse&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_pet_contract(); APPLE_AUTH_CLIENT_EXPORT AccountSession lab_tf_refresh_pet(Client&,const AccountSession&,const Transport&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_auth_contract(); APPLE_AUTH_CLIENT_EXPORT bool lab_tf_account_session_valid(const AccountSession&,std::int64_t); APPLE_AUTH_CLIENT_EXPORT std::int64_t lab_tf_retry_after(const HttpResponse&,std::int64_t); }
+namespace apple_auth { APPLE_AUTH_CLIENT_EXPORT Transport lab_tf_curl_transport(); APPLE_AUTH_CLIENT_EXPORT int lab_tf_cookie_contract(); APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_cookie_inspect(const std::filesystem::path&); APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_store_shape(const HttpResponse&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_pet_contract(); APPLE_AUTH_CLIENT_EXPORT AccountSession lab_tf_refresh_pet(Client&,const AccountSession&,const Transport&); APPLE_AUTH_CLIENT_EXPORT int lab_tf_auth_contract(); APPLE_AUTH_CLIENT_EXPORT bool lab_tf_account_session_valid(const AccountSession&,std::int64_t); APPLE_AUTH_CLIENT_EXPORT std::int64_t lab_tf_retry_after(const HttpResponse&,std::int64_t); }
 #include <sys/stat.h>
 using namespace apple_auth;
 using Json=nlohmann::json;
@@ -164,6 +164,12 @@ int main(int argc,char **argv) {
         if(argc==2 && std::string(argv[1])=="--self-test")return self_test();
         if(argc==2 && std::string(argv[1])=="--auth-self-test")return lab_tf_auth_contract();
         if(argc==2 && std::string(argv[1])=="--pet-self-test")return lab_tf_pet_contract();
+        if(argc==2 && std::string(argv[1])=="--cookie-self-test")return lab_tf_cookie_contract();
+        if(argc==3 && std::string(argv[1])=="--cookie-inspect") {
+            require(std::getenv("GITHUB_ACTIONS") && std::string(std::getenv("GITHUB_ACTIONS"))=="true");
+            (void)read_profile(argv[2]);
+            std::cout<<lab_tf_cookie_inspect(argv[2])<<std::endl;return 0;
+        }
         require(argc==3 && (std::string(argv[1])=="--authenticate" || std::string(argv[1])=="--prepare-lookup" || std::string(argv[1])=="--lookup" || std::string(argv[1])=="--resume-store" || std::string(argv[1])=="--store-preflight" || std::string(argv[1])=="--refresh-pet-store"));
         const char *actions=std::getenv("GITHUB_ACTIONS");
         require(actions && std::string(actions)=="true");
