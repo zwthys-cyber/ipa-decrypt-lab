@@ -100,7 +100,7 @@ def probe(binary,env,info,execute=None,resume=False,seal=None):
 
 def main():
     os.umask(0o077)
-    p=argparse.ArgumentParser();p.add_argument('--metadata',action='store_true');p.add_argument('--binary');p.add_argument('--resume',action='store_true');p.add_argument('--app-id',choices=(TARGET,'6599842047'),default=TARGET);args=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--metadata',action='store_true');p.add_argument('--binary');p.add_argument('--resume',action='store_true');p.add_argument('--app-id',choices=(TARGET,'6599842047','1661733229'),default=TARGET);args=p.parse_args()
     try:
         require(os.environ.get('GITHUB_ACTIONS')=='true','requires_github_actions')
         if args.metadata:

@@ -11,8 +11,8 @@ on:
       app_id:
         description: Fixed free CN model sample; both are preflighted before credentials
         type: choice
-        default: '6599842047'
-        options: ['6599842047', '1530340312']
+        default: '1661733229'
+        options: ['1661733229', '6599842047', '1530340312']
 permissions:
   contents: read
   actions: read
@@ -37,7 +37,7 @@ jobs:
           node --test .github/ops/cn_action.test.cjs
       - name: Check fixed free CN sample before any account access
         env:
-          CN_SAMPLE_APP_ID: ${{ inputs.app_id || '6599842047' }}
+          CN_SAMPLE_APP_ID: ${{ inputs.app_id || '1661733229' }}
         run: python3 .github/ops/cn_download_probe.py --metadata --app-id "$CN_SAMPLE_APP_ID"
       - name: Fetch verified public CN client and independent model support
         env:

@@ -17,6 +17,7 @@ from cn_live_auth import seal_session,live
 from telegram_queue import failure_kind
 from china_auth import failure_diagnostic
 from cn_download_probe import TARGET,LIMIT
+from cn_license_profile import profile as license_profile
 from machine_enrollment import clean,COMMERCE_READY,stop_private_group
 from fairplay_state_observer import collect
 from model_bootstrap import candidate_app,input_profile,state_ready,setup_summary,recovery_diagnostics,recover_checkpoint
@@ -110,7 +111,7 @@ def trial(runtime,env,mode,report):
     if mode=='replay':checkpoint.validate(checkpoint.decode_bytes(env.get('FAIRPLAY_CN_STATE_B64',''),checkpoint.LIMIT))
     report['checkpoint_preflight']=checkpoint_preflight()
     value,_=decode(env);info=json.loads(Path('cn-sample-metadata.json').read_text())
-    require(info.get('app_id') in (TARGET,'6599842047'),'cn_sample_binding')
+    require(info.get('app_id') in (TARGET,'6599842047','1661733229'),'cn_sample_binding')
     report['app_id']=info['app_id']
     binary=str(runtime/'ApplePackageTool');engine=str(runtime/'offline-engine');sealer=str(runtime/'cn-model-seal')
     child={k:env[k] for k in ('HOME','PATH','LANG','LAB_KBSYNC_HELPER') if k in env};child['GITHUB_ACTIONS']='true'
@@ -144,6 +145,7 @@ def trial(runtime,env,mode,report):
             report['downloaded']=True;report['ipa_bytes']=ipa.stat().st_size
             app=candidate_app(ipa,root/'candidate');profile=input_profile(engine,ipa);report['input_profile']=profile
             require(profile.get('ready') is True,'cn_input_profile_not_ready')
+            report['license_profile']=license_profile(app,account['directoryServicesIdentifier'],env.get('FAIRPLAY_CN_STATE_B64',''),guid)
             if mode=='trial':
                 prepared_path=root/'prepared.json'
                 fixed=json.dumps({'guid':guid,'user_agent':UA}).encode()
@@ -169,7 +171,10 @@ def trial(runtime,env,mode,report):
                 guid_file=root/'guid.txt';guid_file.write_text(guid);guid_file.chmod(0o600);seal_file(sealer,guid_file,'guid',env)
                 current['account']=account_at(path,value);seal_session(str(runtime/'cn-session-seal'),current,env)
                 report['session_secret_prepared']=True;report['guid_secret_prepared']=True
-            else:report['existing_checkpoint_validated']=True
+            else:
+                report['existing_checkpoint_validated']=True
+                current['account']=account_at(path,value)
+                seal_session(str(runtime/'cn-session-seal'),current,env);report['session_secret_prepared']=True
             report['stage']='model_recovery'
             models=root/'models'
             if mode=='trial':models.mkdir(mode=0o700)
@@ -183,7 +188,7 @@ def trial(runtime,env,mode,report):
                     'TMPDIR='+str(root),'SUDO_UID='+str(os.getuid()),'SUDO_GID='+str(os.getgid()),engine,'setup','--app',str(app),'--ipa',str(ipa),'--model-dir',str(models)]
                 code,out,err=private(argv,model_env,timeout=300)
             if code:
-                report.update(status='cn_checkpoint_ready_model_recovery_pending' if report['checkpoint_saved'] else 'cn_model_recovery_rejected',recovery_diagnostics=recovery_diagnostics(out+err));return
+                report.update(status='cn_checkpoint_ready_model_recovery_pending' if report['checkpoint_saved'] else 'cn_replay_session_saved_recovery_pending',recovery_diagnostics=recovery_diagnostics(out+err));return
             model,setup=setup_summary(out,models,**({'schema':'unfairplay-enrollment-recovery-v1','model_key':'enrollment_model'} if mode=='replay' else {}))
             report.update(setup,model_recovered=True)
             os.environ['FAIRPLAY_MODEL_B64']=base64.b64encode(model.read_bytes()).decode()
@@ -249,5 +254,5 @@ def main():
     report.update(run_id=os.environ.get('GITHUB_RUN_ID'),source_commit=os.environ.get('GITHUB_SHA'))
     Path('cn-model-receipt.json').write_text(json.dumps(report));print(json.dumps(report),flush=True)
     # A preserved authenticated checkpoint is a completed stage, never a claim of recovered model.
-    return 0 if report.get('status')=='cn_native_preflight_ready' or report.get('model_secret_prepared') is True or report.get('checkpoint_saved') is True and report.get('session_secret_prepared') is True and report.get('guid_secret_prepared') is True else 2
+    return 0 if report.get('existing_checkpoint_validated') is True and report.get('session_secret_prepared') is True or report.get('status')=='cn_native_preflight_ready' or report.get('model_secret_prepared') is True or report.get('checkpoint_saved') is True and report.get('session_secret_prepared') is True and report.get('guid_secret_prepared') is True else 2
 if __name__=='__main__':raise SystemExit(main())
