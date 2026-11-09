@@ -39,7 +39,8 @@ static NSDictionary *profile(NSMutableDictionary *report) {
     id raw=object0(device,@"uniqueDeviceIdentifier");
     NSString *identity=hex20(raw);
     report[@"native_identifier_length"]=@([raw isKindOfClass:NSString.class] ? MIN([raw length],128) : 0);
-    report[@"native_udid_20"]=@(identity!=nil);
+    BOOL identityValid=(identity!=nil);
+    report[@"native_udid_20"]=@(identityValid);
     report[@"hardware_source"]=identity ? @"authkit_unique_identifier" : @"unavailable";
     stage("model");
     char modelBuffer[256]={0};size_t length=sizeof(modelBuffer);
