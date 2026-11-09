@@ -58,12 +58,11 @@ jobs:
           cmake -S native-source/apple-auth -B tf-sdk-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$tf_prefix" -DAPPLE_AUTH_WITH_TESTFLIGHT=ON -DAPPLE_AUTH_BUILD_EXAMPLES=ON
           cmake --build tf-sdk-build --parallel 4
           ctest --test-dir tf-sdk-build --output-on-failure --no-tests=error --timeout 180
-      - name: Prewarm Store signing then refresh the saved short-lived PET once
+      - name: Prewarm the explicit Mac Store signing client without account credentials
         if: ${{ inputs.run_control || (github.event_name == 'push' && contains(github.event.head_commit.message, '[tf-virtual-control-once]')) }}
         env:
           TF_VIRTUAL_RESTORE_RUN: '42662277216'
-          TF_VIRTUAL_REFRESH_PET_STORE: '1'
-          APPLE_CN_ID: ${{ secrets.APPLE_CN_ID }}
+          TF_VIRTUAL_STORE_PREFLIGHT: '1'
           TF_VIRTUAL_NOT_BEFORE: '1794245200'
           DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
           GH_TOKEN: ${{ github.token }}
