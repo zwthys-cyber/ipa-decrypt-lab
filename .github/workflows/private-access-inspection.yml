@@ -1,0 +1,75 @@
+name: Inspect private access and delivery ownership
+run-name: Private-access-inspection
+on:
+  workflow_dispatch:
+    inputs:
+      request_nonce:
+        description: Opaque nonce matching the temporary private request Secret
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: private-access-inspection
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Check sanitized read-only inspection with synthetic private fixtures
+        run: python3 -m unittest discover -s .github/ops -p 'test_*.py' -v
+      - name: Install SSH transport on GitHub only
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends sshpass
+      - name: Inspect existing private runtime without deployment or messages
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          SSHPASS: ${{ secrets.VPS_SSH_PASSWORD }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          TELEGRAM_OWNER_ID: ${{ secrets.TELEGRAM_OWNER_ID }}
+          PRIVATE_REQUEST_B64: ${{ secrets.IPAZAKE_PRIVATE_INSPECTION }}
+          REQUEST_NONCE: ${{ inputs.request_nonce }}
+        run: |
+          set -euo pipefail
+          umask 077
+          export INSPECTION_TEMP
+          INSPECTION_TEMP=$(mktemp -d)
+          remote_dir="/root/ipazake-inspect-$GITHUB_RUN_ID"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$INSPECTION_TEMP/known_hosts"
+          transport=(-o "UserKnownHostsFile=$INSPECTION_TEMP/known_hosts" -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o LogLevel=ERROR)
+          cleanup() {
+            sshpass -e ssh "${transport[@]}" "root@$VPS_HOST" "rm -rf -- '$remote_dir'" >/dev/null 2>&1 || true
+            rm -rf -- "$INSPECTION_TEMP"
+          }
+          trap cleanup EXIT
+          python3 - <<'PY'
+          import base64,json,os,re,time
+          from pathlib import Path
+          encoded=os.environ['PRIVATE_REQUEST_B64']
+          if not 0<len(encoded)<=4096:raise SystemExit('invalid_private_request')
+          try:
+              value=json.loads(base64.b64decode(encoded,validate=True))
+              assert set(value)=={'uid','nonce','expires','expected_request'}
+              assert type(value['uid']) is int and 0<value['uid']<2**63
+              assert re.fullmatch(r'[a-f0-9]{32}',value['nonce']) and value['nonce']==os.environ['REQUEST_NONCE']
+              assert type(value['expires']) is int and time.time()<=value['expires']<=time.time()+1800
+              assert isinstance(value['expected_request'],str) and (not value['expected_request'] or re.fullmatch(r'[a-f0-9]{32}',value['expected_request']))
+              value['admin']=int(os.environ['TELEGRAM_OWNER_ID'])
+          except Exception:raise SystemExit('invalid_private_request')
+          print('::add-mask::'+str(value['uid']))
+          (Path(os.environ['INSPECTION_TEMP'])/'request.json').write_text(json.dumps(value))
+          PY
+          sshpass -e ssh "${transport[@]}" "root@$VPS_HOST" "umask 077; mkdir -m 0700 '$remote_dir'"
+          sshpass -e scp -q "${transport[@]}" .github/ops/access_inspect.py "$INSPECTION_TEMP/request.json" "root@$VPS_HOST:$remote_dir/"
+          sshpass -e ssh "${transport[@]}" "root@$VPS_HOST" "sh -s -- '$remote_dir' '$REQUEST_NONCE'" <<'SH'
+          set -eu
+          directory=$1
+          nonce=$2
+          trap 'rm -rf -- "$directory"' EXIT
+          systemctl is-active --quiet ipazake.service
+          python3 "$directory/access_inspect.py" "$directory/request.json" "$nonce"
+          SH
