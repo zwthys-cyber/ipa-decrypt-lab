@@ -26,8 +26,8 @@ def capture_shape(root):
             "body_present":(root/names[2]).is_file(),"response_headers_kind":"other",
             "request_headers_kind":"other","id_header_present":False,"id_matches":False,
             "status_zero":False,"cookie_header_count":0,"original_failure":"other"}
-    if not all((root/n).is_file() for n in names):return result
-    text=(root/names[0]).read_text()
+    if not all((root/n).is_file() for n in names[1:]):return result
+    text=(root/names[0]).read_text() if (root/names[0]).is_file() else ""
     result["original_failure"]="invalid_saved_cookie" if text=="Invalid saved Store cookie" else "invalid_cookie_container" if text=="Invalid Store cookies" else "other"
     meta=json.loads((root/names[1]).read_bytes())
     response=meta.get("response_headers");request=meta.get("request_headers")
@@ -59,6 +59,8 @@ def main():
             restore(root,env)
             receipt["stage"]="capture_shape"
             receipt["capture_shape"]=capture_shape(root)
+            # The legacy capture lacks an optional exception note; preserve that absence in capture_shape.
+            if not (root/"failure.txt").exists():(root/"failure.txt").write_text("legacy_failure_note_unavailable")
             receipt["stage"]="native_inspection"
             result=subprocess.run([str(Path("tf-sdk-build/tf_virtual_client").resolve()),"--cookie-inspect",str(root)],
                 capture_output=True,timeout=30,env=public_env(env))
