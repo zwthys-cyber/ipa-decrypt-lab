@@ -19,7 +19,9 @@ def patch_auth(source):
     copied=copied.replace('require(expiry >= 0 && (!expiry || clock() < expiry / 1000), "Developer Session has expired");',
         'require(expiry > 0 && clock() + 5 < expiry / 1000, "Refreshed PET has expired");')
     copied=copied.replace("Developer Session HTTP ","PET refresh HTTP ")
-    if copied.count('constexpr const char* application = "com.apple.gs.idms.pet";')!=1 or 'Refreshed PET has expired' not in copied or 'apply_xcode_headers(headers);' in copied:\n        raise ValueError("tf_pet_patch_incomplete")\n    return source[:end]+"\n\n"+copied+"\n"+source[end:]
+    if copied.count('constexpr const char* application = "com.apple.gs.idms.pet";')!=1 or 'Refreshed PET has expired' not in copied or 'apply_xcode_headers(headers);' in copied:
+        raise ValueError("tf_pet_patch_incomplete")
+    return source[:end]+"\n\n"+copied+"\n"+source[end:]
 
 def patch_store(raw):
     if hashlib.sha1(b"blob "+str(len(raw)).encode()+b"\0"+raw).hexdigest()!=STORE_BLOB:
