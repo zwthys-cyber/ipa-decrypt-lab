@@ -1,0 +1,53 @@
+name: Public CN native platform prerequisites
+run-name: CN-public-platform-preflight
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: cn-public-platform-preflight
+  cancel-in-progress: false
+jobs:
+  preflight:
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        pool: [macos-15, macos-26-intel]
+    runs-on: ${{ matrix.pool }}
+    timeout-minutes: 12
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Lakr233/ApplePackage
+          ref: 391bfe6ee6598d73e4f94b88b38b50bd6f6ec67b
+          path: public-source
+          persist-credentials: false
+      - name: Verify public contracts without any account secrets
+        run: |
+          python3 -m compileall -q .github/ops
+          python3 -m unittest discover -s .github/ops -p 'test_*.py' -v
+          node --test .github/ops/cn_action.test.cjs
+      - name: Compile and check native prerequisites with synthetic inputs
+        run: |
+          mkdir public-native
+          clang -dynamiclib -Wall -Wextra tools/NativeImportIO.c -install_name @rpath/libNativeImportIO.dylib -o public-native/libNativeImportIO.dylib
+          clang -fobjc-arc -DLAB_IMPORT_IO -framework Foundation tools/NativeMachineEnrollment.m -Lpublic-native -lNativeImportIO -Wl,-rpath,@executable_path -o public-native/native-machine-enrollment
+          public-native/native-machine-enrollment --io-contract
+          public-native/native-machine-enrollment --response-contract
+          swiftc public-source/Sources/ApplePackage/Configuration/DeviceIdentifier.swift tools/NativeDeviceIdentity.swift -o public-native/native-device-identity
+      - name: Compare constructor and checkpoint readiness without account access
+        env:
+          CN_PUBLIC_POOL: ${{ matrix.pool }}
+        run: python3 .github/ops/cn_platform_preflight.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: cn-public-platform-${{ matrix.pool }}-${{ github.run_id }}
+          path: cn-public-platform.json
+          retention-days: 1
+          if-no-files-found: error
