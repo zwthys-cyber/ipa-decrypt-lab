@@ -178,3 +178,5 @@ jobs:
 # TF document filenames include the English Beta marker.
 
 # User-requested alpha.5 public attachment refresh uses a build-only producer.
+
+# Persist the account profile in historical-version views before CN promotion.

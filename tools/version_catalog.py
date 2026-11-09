@@ -289,7 +289,7 @@ class VersionBrowser:
 
     def open(self,app,rid,entry,profile="default"):
         require(profile_for_request(rid)==profile,"catalog_account_profile_mismatch")
-        self.state["view"]={"rid":rid,"app":app,"at":int(time.time()),"rows":entry["rows"],
+        self.state["view"]={"rid":rid,"app":app,"profile":profile,"at":int(time.time()),"rows":entry["rows"],
                             "total":entry["total"],"message_id":0,"used":[],
                             "next_before":entry.get("next_before",""),"cache_at":entry["at"]}
         self.save()
