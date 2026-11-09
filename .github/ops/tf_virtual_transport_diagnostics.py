@@ -34,3 +34,20 @@ def verification_observations(raw):
         result.append(value)
         if len(result)==4:break
     return result
+
+def session_observations(raw):
+    result=[]
+    keys={"parsed","id_matches","pet_matches","expiry_kind","remaining_seconds",
+          "has_root_key","has_root_challenge","has_idms_token"}
+    for line in raw.splitlines():
+        if not line.startswith(b"TF_SESSION:") or len(line)>1024:continue
+        try:value=json.loads(line[11:])
+        except (ValueError,UnicodeError):continue
+        if type(value) is not dict or set(value)!=keys:continue
+        if any(type(value[k]) is not bool for k in ("parsed","id_matches","pet_matches",
+            "has_root_key","has_root_challenge","has_idms_token")):continue
+        if type(value["expiry_kind"]) is not str or value["expiry_kind"] not in {"absent","integer","floating","string","other"}:continue
+        if type(value["remaining_seconds"]) is not int or not -86400<=value["remaining_seconds"]<=86400:continue
+        result.append(value)
+        if len(result)==4:break
+    return result

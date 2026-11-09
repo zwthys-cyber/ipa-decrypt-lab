@@ -115,11 +115,11 @@ int main(int argc,char **argv) {
         {"status","failed"},{"virtual_identity",true},{"account_login_attempted",false},
         {"gsa_authenticated",false},{"mac_store_authenticated",false},
         {"tf_authenticated",false},{"catalog_received",false},{"verification_requested",false},
-        {"http_status",0},{"sdk_error_code",0},{"apple_error_code",0},{"failure_category","none"},{"last_request_stage","none"},{"gsa_session_reused",false},{"retry_after_known",false},{"retry_after_seconds",0}};
+        {"http_status",0},{"sdk_error_code",0},{"apple_error_code",0},{"failure_category","none"},{"last_request_stage","none"},{"store_profile_ready",false},{"gsa_session_reused",false},{"retry_after_known",false},{"retry_after_seconds",0}};
     try {
         if(argc==2 && std::string(argv[1])=="--self-test")return self_test();
         if(argc==2 && std::string(argv[1])=="--auth-self-test")return lab_tf_auth_contract();
-        require(argc==3 && (std::string(argv[1])=="--authenticate" || std::string(argv[1])=="--prepare-lookup" || std::string(argv[1])=="--lookup" || std::string(argv[1])=="--resume-store"));
+        require(argc==3 && (std::string(argv[1])=="--authenticate" || std::string(argv[1])=="--prepare-lookup" || std::string(argv[1])=="--lookup" || std::string(argv[1])=="--resume-store" || std::string(argv[1])=="--store-preflight"));
         const char *actions=std::getenv("GITHUB_ACTIONS");
         require(actions && std::string(actions)=="true");
         const std::filesystem::path root=argv[2];
@@ -140,7 +140,7 @@ int main(int argc,char **argv) {
         };
         Client client(root/"sdk",options);
         const std::string command=argv[1];
-        if(command!="--resume-store") {
+        if(command!="--resume-store" && command!="--store-preflight") {
             report["stage"]="grandslam_provisioning";
             client.provision();
         }
@@ -163,6 +163,15 @@ int main(int argc,char **argv) {
                 const auto response=transport({"https://gsa.apple.com/grandslam/GsService2/lookup","GET",headers,{}});
                 report["http_status"]=response.status;report["status"]="lookup_response_received";
             }
+            std::cout<<report.dump()<<'\n';
+            return 0;
+        }
+        if(command=="--store-preflight") {
+            const auto saved=AccountSession::load(root/"account.plist");
+            (void)lab_tf_account_session_valid(saved,std::time(nullptr));
+            report["stage"]="store_provisioning";
+            client.provision_store();
+            report["store_profile_ready"]=true;report["status"]="store_profile_ready";
             std::cout<<report.dump()<<'\n';
             return 0;
         }
@@ -194,7 +203,7 @@ int main(int argc,char **argv) {
         }
         report["stage"]="mac_store_login";
         const auto store=client.login_store_with_pet(email,account);
-        report["mac_store_authenticated"]=true;
+        report["mac_store_authenticated"]=true;report["store_profile_ready"]=true;
         store.save(root/"mac-store.plist");
         client.set_session_data(store.plist(),SessionKind::store);
         const auto model=client.mac_device().model;

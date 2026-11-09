@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       run_control:
-        description: Resume a verified GSA session after cooldown without a password login
+        description: Inspect the saved session and preflight Store device provisioning without account login
         type: boolean
         default: false
 permissions:
@@ -56,12 +56,11 @@ jobs:
           cmake -S native-source/apple-auth -B tf-sdk-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$tf_prefix" -DAPPLE_AUTH_WITH_TESTFLIGHT=ON -DAPPLE_AUTH_BUILD_EXAMPLES=ON
           cmake --build tf-sdk-build --parallel 4
           ctest --test-dir tf-sdk-build --output-on-failure --no-tests=error --timeout 180
-      - name: Resume saved verified GSA session after cooldown
+      - name: Inspect saved session and provision Store device without account requests
         if: ${{ inputs.run_control || (github.event_name == 'push' && contains(github.event.head_commit.message, '[tf-virtual-control-once]')) }}
         env:
-          APPLE_CN_ID: ${{ secrets.APPLE_CN_ID }}
           TF_VIRTUAL_RESTORE_RUN: '42662277216'
-          TF_VIRTUAL_RESUME_STORE: '1'
+          TF_VIRTUAL_STORE_PREFLIGHT: '1'
           TF_VIRTUAL_NOT_BEFORE: '1794245200'
           DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
           GH_TOKEN: ${{ github.token }}
@@ -80,4 +79,4 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-# One resume after a local 600-second fallback cooldown; no password or GSA relogin.
+# Store device preflight is independent of PET expiry and sends no Apple ID, password or PET.
