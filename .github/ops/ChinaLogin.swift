@@ -25,3 +25,26 @@ struct ChinaLogin: AsyncParsableCommand, Sendable {
         print("IPA_CN_AUTH:authenticated")
     }
 }
+
+// Refresh only the saved CN account, carrying its authenticated cookies. No code prompt or retry.
+struct ChinaResume: AsyncParsableCommand, Sendable {
+    static let configuration = CommandConfiguration(commandName: "resume-cn", abstract: "Refresh the saved CN account once with its cookies")
+    @OptionGroup var globalOptions: GlobalOptions
+    @Argument var email: String
+    func run() async throws {
+        globalOptions.apply()
+        let address = email
+        try await Configuration.withAccount(email: address) { account in
+            guard account.store == "143465", account.email.lowercased() == address.lowercased() else {
+                throw ValidationError("CN session binding failed")
+            }
+            let session = try await Authenticator(cookies: account.cookie)
+            let updated = try await session.authenticate(email: address, password: account.password)
+            guard updated.store == "143465", updated.email.lowercased() == address.lowercased() else {
+                throw ValidationError("CN refreshed session binding failed")
+            }
+            account = updated
+        }
+        print("IPA_CN_RESUME:authenticated")
+    }
+}

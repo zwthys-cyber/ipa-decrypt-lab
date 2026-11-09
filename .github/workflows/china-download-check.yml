@@ -7,7 +7,7 @@ on:
         description: Validate a small free CN sample, or download it privately using the saved session
         type: choice
         default: preflight
-        options: [preflight, download]
+        options: [preflight, download, resume-download]
 permissions:
   contents: read
   actions: read
@@ -32,12 +32,12 @@ jobs:
       - name: Check small free CN sample before account secrets
         run: python3 .github/ops/cn_download_probe.py --metadata
       - name: Fetch verified public CN runtime before account secrets
-        if: inputs.mode == 'download'
+        if: inputs.mode != 'preflight'
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 .github/ops/cn_runtime.py fetch cn-runtime
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        if: inputs.mode == 'download'
+        if: inputs.mode != 'preflight'
         with:
           path: |
             ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/AppleMediaServices
@@ -46,10 +46,10 @@ jobs:
             ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/CoreFP.icxs
           key: apple-public-assets-d9c0247-26A434-arm64-v1
       - name: Verify public helper resources
-        if: inputs.mode == 'download'
+        if: inputs.mode != 'preflight'
         run: cn-runtime/lab-kbsync --prewarm
-      - name: Download one original without login or machine enrollment
-        if: inputs.mode == 'download'
+      - name: Download one original with bounded saved-session authentication
+        if: inputs.mode != 'preflight'
         env:
           APPLE_CN_ID: ${{ secrets.APPLE_CN_ID }}
           APPLE_CN_GUID: ${{ secrets.APPLE_CN_GUID }}
@@ -57,12 +57,14 @@ jobs:
           LAB_KBSYNC_HELPER: ${{ github.workspace }}/cn-runtime/lab-kbsync
         run: |
           ulimit -c 0
-          python3 .github/ops/cn_download_probe.py --binary cn-runtime/ApplePackageTool
+          python3 .github/ops/cn_download_probe.py --binary cn-runtime/ApplePackageTool ${{ inputs.mode == 'resume-download' && '--resume' || '' }}
       - name: Publish only a sanitized receipt
-        if: always() && inputs.mode == 'download'
+        if: always() && inputs.mode != 'preflight'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: cn-download-receipt-${{ github.run_id }}
-          path: cn-download-receipt.json
+          path: |
+            cn-download-receipt.json
+            cn-session-secret-relay.json
           retention-days: 1
           if-no-files-found: ignore

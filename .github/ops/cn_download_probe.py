@@ -14,6 +14,9 @@ import urllib.request
 import zipfile
 from cn_session import decode
 from native_store import classify_download,download_diagnostics
+from china_auth import failure_diagnostic
+from cn_live_auth import seal_session
+import time
 
 TARGET='1530340312'
 LIMIT=200*1024*1024
@@ -49,7 +52,7 @@ def safe_failure(result):
     diagnostic['token_expired']='token' in text and 'expired' in text
     return diagnostic
 
-def probe(binary,env,info,execute=None):
+def probe(binary,env,info,execute=None,resume=False,seal=None):
     require(info.get('app_id')==TARGET and isinstance(info.get('bundle_id'),str) and re.fullmatch(r'[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+',info['bundle_id']),'cn_sample_invalid')
     value,_=decode(env)
     home=Path(env['HOME']);base=home/'.ipatool';folder=base/hashlib.md5(value['email'].lower().encode()).hexdigest()
@@ -61,11 +64,19 @@ def probe(binary,env,info,execute=None):
     try:
         fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
         with os.fdopen(fd,'w') as stream:json.dump(value['account'],stream)
+        if resume:
+            refreshed=execute([binary,'resume-cn',value['email'],'--guid',value['guid']],env=child,
+                stdin=subprocess.DEVNULL,capture_output=True,text=True,timeout=120)
+            if refreshed.returncode:
+                return {'schema':'cn-download-session-v1','app_id':TARGET,'country_bound':'cn','status':'cn_cookie_refresh_rejected',
+                    'downloaded':False,'login_attempted':True,'cookie_refresh_attempted':True,'verification_code_used':False,
+                    'machine_authorization_attempted':False,'deauthorization_attempted':False,'plaintext_retained':False,
+                    'diagnostic':failure_diagnostic(refreshed)}
         with tempfile.TemporaryDirectory(prefix='cn-original-private-') as directory:
             root=Path(directory);root.chmod(0o700);ipa=root/'original.ipa'
             result=execute([binary,'download',value['email'],info['bundle_id'],'--guid',value['guid'],'--output',str(ipa)],
                 env=child,stdin=subprocess.DEVNULL,capture_output=True,text=True,timeout=300)
-            report={'schema':'cn-download-session-v1','app_id':TARGET,'country_bound':'cn','login_attempted':False,
+            report={'schema':'cn-download-session-v1','app_id':TARGET,'country_bound':'cn','login_attempted':resume,'cookie_refresh_attempted':resume,
                 'verification_code_used':False,'machine_authorization_attempted':False,'deauthorization_attempted':False,
                 'downloaded':False,'decryption_proven':False,'plaintext_retained':False}
             if result.returncode:
@@ -77,22 +88,28 @@ def probe(binary,env,info,execute=None):
                 plists=[x for x in entries if re.fullmatch(r'Payload/[^/]+[.]app/Info[.]plist',x.filename)]
                 require(len(plists)==1 and 0<plists[0].file_size<=1024*1024,'cn_ipa_metadata')
                 app=plistlib.loads(z.read(plists[0]));require(app.get('CFBundleIdentifier')==info['bundle_id'],'cn_ipa_bundle')
+            if resume:
+                account=json.loads(path.read_bytes())
+                require(account.get('store')=='143465' and str(account.get('email','')).casefold()==value['email'].casefold(),'cn_refreshed_account_binding')
+                updated=dict(value,account=account,created=int(time.time()))
+                (seal or seal_session)(str(Path(binary).with_name('cn-session-seal')),updated,env)
+                report['session_secret_prepared']=True
             report.update(status='cn_original_downloaded_with_saved_session',downloaded=True,session_reused=True,ipa_bytes=ipa.stat().st_size)
             return report
     finally:shutil.rmtree(folder)
 
 def main():
     os.umask(0o077)
-    p=argparse.ArgumentParser();p.add_argument('--metadata',action='store_true');p.add_argument('--binary');args=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--metadata',action='store_true');p.add_argument('--binary');p.add_argument('--resume',action='store_true');args=p.parse_args()
     try:
         require(os.environ.get('GITHUB_ACTIONS')=='true','requires_github_actions')
         if args.metadata:
             value=metadata();Path('cn-sample-metadata.json').write_text(json.dumps(value));print(json.dumps({'schema':'cn-sample-v1','status':'eligible','app_id':TARGET}));return 0
         info=json.loads(Path('cn-sample-metadata.json').read_text())
-        value=probe(str(Path(args.binary).resolve()),dict(os.environ),info)
+        value=probe(str(Path(args.binary).resolve()),dict(os.environ),info,resume=args.resume)
     except Exception as exc:
         known={'cn_sample_unavailable','cn_sample_ineligible','cn_sample_too_large','cn_cache_not_empty','cn_ipa_invalid','cn_ipa_inventory','cn_ipa_metadata','cn_ipa_bundle'}
-        value={'schema':'cn-download-session-v1','status':str(exc) if isinstance(exc,CNDownloadError) and str(exc) in known else 'cn_download_probe_failed','downloaded':False,'login_attempted':False,'plaintext_retained':False}
+        value={'schema':'cn-download-session-v1','status':str(exc) if isinstance(exc,CNDownloadError) and str(exc) in known else 'cn_download_probe_failed','downloaded':False,'login_attempted':bool(args.resume),'plaintext_retained':False}
     Path('cn-download-receipt.json').write_text(json.dumps(value));print(json.dumps(value),flush=True)
     return 0 if value.get('downloaded') is True else 2
 if __name__=='__main__':raise SystemExit(main())

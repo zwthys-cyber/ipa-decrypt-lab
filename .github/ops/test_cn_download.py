@@ -38,6 +38,31 @@ class CNDownloadContracts(unittest.TestCase):
             self.assertTrue(result['downloaded']);self.assertFalse(result['login_attempted']);self.assertEqual(seen,['download'])
             self.assertFalse(self.output.exists());self.assertEqual(list((Path(directory)/'.ipatool').iterdir()),[])
             self.assertNotIn('PRIVATE',json.dumps(result))
+    def test_cookie_refresh_rejection_never_prompts_or_downloads(self):
+        fixture=test_cn_session.CNSavedSessionContracts();fixture.setUp()
+        with tempfile.TemporaryDirectory() as directory:
+            calls=[]
+            def execute(argv,**kwargs):
+                calls.append(argv[1]);return subprocess.CompletedProcess(argv,1,'','apple_auth_ambiguous_bad_login PRIVATE_PASSWORD')
+            result=probe('/verified/client',dict(fixture.env(),HOME=directory),check_metadata(self.metadata()),execute,resume=True)
+            self.assertEqual(calls,['resume-cn']);self.assertEqual(result['status'],'cn_cookie_refresh_rejected')
+            self.assertTrue(result['login_attempted']);self.assertFalse(result['verification_code_used'])
+            self.assertNotIn('PRIVATE',json.dumps(result));self.assertEqual(list((Path(directory)/'.ipatool').iterdir()),[])
+    def test_refreshed_session_is_sealed_only_after_valid_download(self):
+        fixture=test_cn_session.CNSavedSessionContracts();fixture.setUp()
+        with tempfile.TemporaryDirectory() as directory:
+            calls=[];sealed=[]
+            def execute(argv,**kwargs):
+                calls.append(argv[1])
+                if argv[1]=='resume-cn':return subprocess.CompletedProcess(argv,0,'IPA_CN_RESUME:authenticated','')
+                output=Path(argv[argv.index('--output')+1])
+                with zipfile.ZipFile(output,'w') as z:z.writestr('Payload/Sample.app/Info.plist',plistlib.dumps({'CFBundleIdentifier':'example.fixture'}))
+                return subprocess.CompletedProcess(argv,0,'','')
+            def seal(binary,value,env):
+                self.assertEqual(binary,'/verified/cn-session-seal');self.assertEqual(value['store'],'143465');sealed.append(True)
+            result=probe('/verified/client',dict(fixture.env(),HOME=directory),check_metadata(self.metadata()),execute,resume=True,seal=seal)
+            self.assertEqual(calls,['resume-cn','download']);self.assertEqual(sealed,[True]);self.assertTrue(result['session_secret_prepared'])
+            self.assertTrue(result['downloaded']);self.assertEqual(list((Path(directory)/'.ipatool').iterdir()),[])
     def test_refusal_cleans_cache_and_does_not_retry_login(self):
         fixture=test_cn_session.CNSavedSessionContracts();fixture.setUp()
         with tempfile.TemporaryDirectory() as directory:
