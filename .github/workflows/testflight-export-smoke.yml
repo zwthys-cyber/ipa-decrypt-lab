@@ -29,7 +29,7 @@ jobs:
           node --test tests/progress_worker.test.cjs
   export:
     needs: public
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[tf-production-verify]')) || (github.event.workflow_run.conclusion == 'success' && contains(github.event.workflow_run.head_commit.message, '[tf-production-verify]')))
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[tf-production-verify]') && !contains(github.event.head_commit.message, '[vps-deploy]')) || (github.event.workflow_run.conclusion == 'success' && contains(github.event.workflow_run.head_commit.message, '[tf-production-verify]')))
     uses: ./.github/workflows/testflight-private-delivery.yml
     with:
       mode: export

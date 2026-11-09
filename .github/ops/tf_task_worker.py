@@ -77,6 +77,8 @@ def ensure_membership(state,path,package,request,env,receipt,runner=native,remot
     try:
         # One POST only. Read back membership even when the POST response is ambiguous.
         try:runner("accept",state,path,package,env)
+        except Stop as error:
+            if str(error) in {"testflight_rate_limited","testflight_session_requires_maintenance"}:raise
         except Exception:pass
         code,value=runner("inspect",state,path,package,env)
         verified=code==0 and value["membership_verified"] and not value["agreement_required"] and target(state)==original_target

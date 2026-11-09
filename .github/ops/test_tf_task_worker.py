@@ -91,3 +91,18 @@ class TFWorkerContracts(unittest.TestCase):
             self.assertNotIn("artifact_ready",json.dumps(args[1]))
         with patch("tf_task_worker.GitHub") as factory:
             finish_inspection(Mock(check=None),{});factory.assert_not_called()
+
+    def test_rate_limit_stops_before_an_automatic_readback(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);self.state(root);events=[]
+            def remote(op,value,env):
+                events.append(op)
+                if op=="claim":return self.permit()
+                self.assertEqual(value["outcome"],"outcome_unknown");return {}
+            def runner(mode,*args):
+                events.append(mode)
+                if mode=="accept":raise Stop("testflight_rate_limited")
+                return 0,evidence()
+            with self.assertRaisesRegex(Stop,"testflight_rate_limited"):
+                ensure_membership(root,root/"request",root,REQUEST,{}, {},runner,remote)
+            self.assertEqual(events,["inspect","claim","accept","finish"])

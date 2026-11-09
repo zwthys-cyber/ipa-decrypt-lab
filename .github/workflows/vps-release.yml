@@ -167,3 +167,5 @@ jobs:
           done
           echo persistent_service_readiness_unconfirmed
           exit 2
+
+# Include the TF receiver regression before a source-bound production promotion.

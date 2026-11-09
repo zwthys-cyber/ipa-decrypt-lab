@@ -18,7 +18,7 @@ from version_request import selector, resolved_marker, verify_version
 from telegram_api import NoRedirect, APIError
 from app_preflight import check_app, MESSAGES, STEP_NAMES
 from ipa_audit import audit
-from delivery_scheduler import matches, retryable, alternate, MAX_RUNS, PRIMARY_RUNNER, version_from_run
+from delivery_scheduler import matches, retryable, alternate, MAX_RUNS, PRIMARY_RUNNER, version_from_run, app_from_run
 
 REPOSITORY = "zwthys-cyber/ipa-decrypt-lab"
 WORKFLOW = "private-delivery.yml"
