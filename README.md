@@ -14,7 +14,7 @@
 
 当前成品版本为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。里面有 Linux amd64 服务器端，以及 macOS 26 / 15 Intel 运行包；用途、配置和校验方法见 [发布说明](docs/RELEASES.md)。
 
-这些包需要配合仓库工作流和自己的私有配置使用。当前公开 alpha.5 附件尚不包含本轮 TF 自动化；现有机器人的部署已更新到主分支验证版本。Apple 账号、授权模型、Telegram 凭据和应用 IPA 都不随发布包提供。
+这些包需要配合仓库工作流和自己的私有配置使用。alpha.5 本次重打包纳入 TF 自动任务与 Beta 文件命名；包的准确源码和构建来源以附件 `BUILDINFO.json` 为准，原标签保留。Apple 账号、授权模型、Telegram 凭据和应用 IPA 都不随发布包提供。
 
 ## 现在能做什么
 
@@ -44,7 +44,13 @@ My BVF 的最新一次 GitHub 导出实测约 59 秒，此前预编译版样本�
 
 X 的后续加速对比已通过：删除账号元数据时直接复制保留项的压缩数据，完整校验仍保留。复核从约 40.4 秒降到 13.8 秒，GitHub 原生作业从 128 秒降到 103 秒；成品包约增大 3%。这是单次后台对比，完整 Telegram 交付仍受排队与网络影响。[实测与边界](docs/PROJECT-STATUS.md)
 
-## 已经验证到哪一步
+## 已经验证到哪一步（2026-11-09）
+
+TestFlight 主人自动任务已部署，持久会话恢复、资格检查、测试包下载和严格明文校验均已通过。真实新请求 [CapyPlayer 导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42714371079) 验证了46个加密镜像、17,724页；用户提供的 Telegram 截图确认已收到 `CapyPlayer_1.1.7.ipa`。该请求已有成员资格，没有新接受邀请或电脑授权。
+
+后续 [Beta 命名部署](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42714903713) 已通过双平台运行包、CN客户端和 [真实无重复发送导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42716962584) 门禁及服务健康检查。新的 TF 文件使用 `名称_Beta_版本.ipa`。这不代表应用安装运行或所有 TF 应用/模型兼容性已验证。完整范围见 [TestFlight 记录](docs/TESTFLIGHT.md)。
+
+此前的 App Store 验证如下：
 
 2026-11-08 已恢复 Apple 新原生认证与 Store AMD 设备验证。X（App ID `333903271`）已通过正式运行包完成登录、下载、解密和完整性校验：32 个加密切片、86,704 页，清理后 IPA 为 271,261,630 字节。[完整验证记录](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)。本次记录不包含新的 Telegram 文件发送或安装运行测试。
 

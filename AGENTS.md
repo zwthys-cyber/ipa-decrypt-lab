@@ -16,6 +16,12 @@
 
 - Telegram integration resumed on 2026-11-04. Implement bounded GitHub-hosted bot sessions and verified private delivery; the later explicit authorization permits finished-service execution on the VPS, but never permanent Actions hosting.
 
+## Current operational snapshot (2026-11-09)
+- Live VPS controller: d53f7defdc65fb11e5b3c04ac3e612990ed6430c / deployment42714903713, healthy. TF owner-only; App Store CN/foreign routes and ordinary white-list users retained. New TF files have Beta in filename.
+- Fresh CapyPlayer request42714371079 proved46 images/17724 pages; user screenshot confirms private file receipt. No installation/runtime or universal model compatibility proof. CN-exclusive Douyin license issue remains unresolved.
+- Public alpha.5 attachment refresh is explicitly requested and in progress; retain original source tag and use new BUILDINFO/SOURCE_COMMIT for attachment provenance. Publication does not deploy or send an IPA.
+- The following dated milestones are chronological evidence. Their 'current/latest/not yet' statements apply only at that checkpoint and are superseded by later dated evidence; preserve durable intent/state protection and all active constraints above.
+
 ## Verified research milestone (2026-11-04)
 
 - GitHub-only initial model recovery is now verified for App ID 6599842047. Successful runs: bootstrap 41846142942, saved-model reuse 41846974302, saved-state replay 41847775765. All verified 62 encrypted slices and 12,524 pages. See docs/PROJECT-STATUS.md and the current-status section of OFFLINE-BACKEND.md.
@@ -395,4 +401,10 @@ Checks 不是 fine-grained PAT 的必填权限。遇到 Checks 权限拒绝时�
 - User requested English testing marker. Source d53f7defdc65fb11e5b3c04ac3e612990ed6430c adds optional testflight=True filename component and applies it only in actual TF delivery: CapyPlayer_Beta_1.1.7.ipa. App Store default and IPA payload are unchanged. Do not resend an old IPA to demonstrate naming.
 - Deployment42714903713 succeeded with persistent_service_ready_verified. Base42714903141 passed both pools after retrying a mac15 diagnostic subprocess timing failure; matching CN42716424114 and real no-send export42716962584 passed; TF native producer42704626527 reused with matching contract. Live controller source now d53. Docs-only updates do not change runtime fingerprint. Preserve all prior private journals/state and authorization boundaries.
 
-- Documentation consistency follow-up: README, Telegram guide, deployment guide and index now reflect Beta filenames/latest deployment and distinguish public alpha.5 attachments. Repository tree inspection found no obvious checked-in temporary packages/caches; historical research tools/tests/workflows are retained, not presumed unrelated or safely deletable.
+
+## User-requested alpha.5 attachment refresh (2026-11-09)
+- User explicitly requests republishing alpha.5 with current TF integration/Beta naming, overriding the normal preference for a new version number. Preserve existing source tag48ad5b75eb61a6cc5f01ffb539f06a33055adc9a; updated attachment provenance must record the actual current build source, not claim the historical tag contains new code.
+- Publication workflow supports marker-gated successful build-only vps workflow_run and manual inputs. It verifies source/manifest/digests before clobbering existing alpha.5 attachments; TF state helper is part of the checked server inventory. No deployment/private Apple task/file-send is part of republishing. Use existing matching dual-platform producer42714903141; actual source fingerprint remains checked. CN/TF native packages stay independent Actions-loaded runtimes.
+- README validation section was stale at November8 and is corrected to November9 with run42714371079/user screenshot and42714903713 deployment. Do not equate either with installation/runtime or universal app compatibility.
+
+- Full documentation audit covers all25 Markdown files. Historical archive prefaces no longer advertise alpha.2 as current, alpha.2–4 release notes explicitly identify historical scope, downloader/auth/multi-user/recovery/VPS docs cover owner-only TF and encrypted state exceptions. Publication itself validates every local Markdown file target and exact package inventory before release mutation.

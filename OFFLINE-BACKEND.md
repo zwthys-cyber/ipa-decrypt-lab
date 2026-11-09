@@ -1,7 +1,7 @@
 # Offline decryption backend
 
 
-> Current-state update — 2026-11-08: This is a chronological research archive. Current production uses saved-model reuse, restored native Store AMD/SP authentication, persistent Debian Telegram control, and verified encrypted export. The 2026-11-08 X export passed 32 encrypted images and 86,704 pages. Later operational policy supersedes historical pauses and blockers; installation/runtime and this run’s Telegram transmission remain unverified. Current packages: [v0.1.0-alpha.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.2). Evidence: [verified X export](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2). Operational documentation: [documentation index](docs/DOCUMENTATION.md).
+> Documentation review — 2026-11-09: This document preserves historical experiments and their original results. Current App Store and owner-only TestFlight automation, the CapyPlayer plaintext proof/user receipt, and Beta filename deployment are recorded in [project status](docs/PROJECT-STATUS.md). Current packages and exact build provenance are listed in [release documentation](docs/RELEASES.md); see the [documentation index](docs/DOCUMENTATION.md) for operations. Historical failures do not supersede later verified results. Installation/runtime and universal app compatibility remain unverified.
 
 
 This document contains the detailed research history. For the current workflow and results, see [Project status and usage](docs/PROJECT-STATUS.md). The sections below retain the conclusions available at each stage; later sections may supersede earlier blockers.

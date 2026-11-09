@@ -1,7 +1,7 @@
 # 原生下载流程修正
 
 
-> 2026-11-08 文档复核：保留首次 Swift 下载修正的历史原因；当前版本另已补齐 Store AMD/SP、公共 bag 上下文和区域字段兼容。 当前成品为 [v0.1.0-alpha.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.2)；[X 完整导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)已通过 32 个加密切片和 86,704 页校验。操作入口见[文档索引](DOCUMENTATION.md)，安装运行仍须另测。
+> 2026-11-09 文档复核：本文保留早期实验及其原始结果，不作为当前功能或下载入口。App Store 与主人专用 TF 自动任务、CapyPlayer 实际导出/用户收件截图和 Beta 命名部署见 [项目状态](PROJECT-STATUS.md)；当前成品与准确来源见 [发布文档](RELEASES.md)，操作入口见 [文档索引](DOCUMENTATION.md)。安装运行及全部应用兼容性仍未验证。
 
 
 这是在首次 Swift 登录成功后，对下载流程的修正记录。

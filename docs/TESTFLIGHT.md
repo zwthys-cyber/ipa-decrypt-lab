@@ -11,8 +11,8 @@
 | 持久会话 | [42703942768](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42703942768) 保存原 SDK 身份与 TF 上下文的私有 age 密文，零 Apple 请求、零新身份 |
 | 新链路只读资格验证 | [42705631442](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42705631442) HTTP200、成员资格通过，没有接受、下载或发文件 |
 | 通用 worker 实际导出 | [42712411043](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42712411043) 完整明文验证；没有新接受邀请、电脑授权或文件发送 |
-| 修正版控制器部署 | [42710092658](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42710092658) 交付绑定回归和部署健康检查通过 |
-| 真实私人文件回传 | [42701908536](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42701908536) 前一轮一次性回传已获主人私聊403,501字节确认；本轮没有重复发送 |
+| 最新控制器部署 | [42714903713](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42714903713) Beta 命名、运行包/真实导出门禁和部署健康检查通过 |
+| 真实新用户请求 | [42714371079](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42714371079) CapyPlayer 46镜像/17,724页通过，用户截图确认收到文件 |
 
 用户提供的 Telegram 截图已确认一条真实新请求收到 `CapyPlayer_1.1.7.ipa`。对应 [42714371079](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42714371079) 的请求 `tf_8e5cbf63015f20a321641f38f42833bc` 完成46个加密镜像、17,724页的严格明文验证；已有成员资格，没有新接受邀请或电脑授权。截图是文件接收证据，worker 的 `delivered=false` 仅表示它本身不负责 Telegram 发送。
 

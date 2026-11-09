@@ -2,7 +2,7 @@
 
 当前版本为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。2026-11-08 的[正式 X 导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)已验证原生登录、下载及完整解密恢复；不要再把历史 204/403/SP 失败写成当前运行状态。
 
-## 当前生产链路
+## 当前 App Store 生产链路
 
 客户端以固定提交的 ApplePackage 为基础，由仓库构建补丁接入本机 AppleMediaServices。使用 Configurator 2.21，保留 Apple 配置返回的原生认证路径和查询参数，不强制改写为 `/fast/`；仍对实际请求体生成 SAP 签名。
 
@@ -36,3 +36,7 @@ GitHub Actions 的 `store-login-diagnostic.yml` 只执行有界登录及清理�
 ## 国区单应用许可失败的边界
 
 抖音任务 [42566676227](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42566676227) 的国区登录已经成功，失败发生在免费许可请求，不能将其当作验证码失效、密码错误或模型解密失败。出口 US 与地区不可用响应支持网络/地区兼容排查，但仍缺大陆出口对照。诊断标记不应进入原生错误启发式分类；固定响应类别和验证边界见 [当前国区限制](CHINA-ACCOUNT.md)。
+
+## TF 使用独立保存会话（2026-11-09）
+
+TF 普通任务恢复原独立虚拟 Mac 会话，不能把 App Store Cookie 当作已经验证的 TF 会话。Apple 明文仅在 GitHub worker 临时解封，VPS 状态助手保存会话密文及持久接受意图。普通任务不走密码/GSA登录，不重建身份、不使用聊天旧验证码、不新增 FairPlay 授权。会话拒绝或限流后明确停止，不能以自动重登、换身份或重复接受来掩盖失败。独立会话、实际取包与明文/交付证据见 [TF 记录](TESTFLIGHT.md)。

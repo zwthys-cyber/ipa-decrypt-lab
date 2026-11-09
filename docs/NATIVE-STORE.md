@@ -1,7 +1,7 @@
 # 独立 Swift 认证对照
 
 
-> 2026-11-08 文档复核：正文中的固定运行器、当时未修改端点与早期测试数量属于历史对照；当前生产增加了原生路径保留、设备证明与系统注册。 当前成品为 [v0.1.0-alpha.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.2)；[X 完整导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)已通过 32 个加密切片和 86,704 页校验。操作入口见[文档索引](DOCUMENTATION.md)，安装运行仍须另测。
+> 2026-11-09 文档复核：本文保留早期实验及其原始结果，不作为当前功能或下载入口。App Store 与主人专用 TF 自动任务、CapyPlayer 实际导出/用户收件截图和 Beta 命名部署见 [项目状态](PROJECT-STATUS.md)；当前成品与准确来源见 [发布文档](RELEASES.md)，操作入口见 [文档索引](DOCUMENTATION.md)。安装运行及全部应用兼容性仍未验证。
 
 
 > 历史阶段记录：本文描述早期认证与下载对照。后续已经完成真实 IPA 下载、模型恢复和跨运行器解密校验，当前结果及操作入口见 [项目状态与使用说明](PROJECT-STATUS.md)。

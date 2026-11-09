@@ -1,6 +1,6 @@
 # 项目文档索引
 
-本文档于 2026-11-09 更新，当前成品版本为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。Apple 新原生认证与 Store AMD/SP 设备注册已恢复，正式 X 导出通过 32 个加密切片、86,704 页完整验证。安装运行仍未验证。TF 已接入主人自动任务，CapyPlayer 新请求的实际解密与用户收件截图均已记录；最新部署为新 TF 文件添加 `Beta` 命名标识。公开 alpha.5 附件尚未重新发布，详见 [TF 记录](TESTFLIGHT.md)。
+本文档于 2026-11-09 更新，当前成品版本为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。Apple 新原生认证与 Store AMD/SP 设备注册已恢复，正式 X 导出通过 32 个加密切片、86,704 页完整验证。安装运行仍未验证。TF 已接入主人自动任务，CapyPlayer 新请求的实际解密与用户收件截图均已记录；最新部署为新 TF 文件添加 `Beta` 命名标识。本次 alpha.5 附件更新纳入该功能，新包来源以 `BUILDINFO.json` 为准，原标签保留，详见 [TF 记录](TESTFLIGHT.md)。
 
 ## 使用、部署与发布
 
@@ -9,7 +9,7 @@
 | [README](../README.md) | 项目能力、运行架构与已验证范围 |
 | [项目状态](PROJECT-STATUS.md) | 当前事实、运行证据、边界与待办 |
 | [成品包与发布](RELEASES.md) | 平台选择、附件、摘要、来源与发布工作流 |
-| [新版发布说明](releases/v0.1.0-alpha.5.md) | 链接地区识别、国区独立账号与发布范围 |
+| [新版发布说明](releases/v0.1.0-alpha.5.md) | TF/Beta 命名、地区识别、独立账号与重打包来源 |
 | [多用户白名单](MULTI-USER.md) | 管理员授权、用户隔离与限制 |
 | [进度与加速版](releases/v0.1.0-alpha.3.md) | alpha.3 的进度与提速快照 |
 | [登录修复版](releases/v0.1.0-alpha.2.md) | alpha.2 的兼容修复快照 |

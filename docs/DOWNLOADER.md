@@ -1,8 +1,8 @@
 # 原始 IPA 下载与当前生产入口
 
-当前下载组件随 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5) 发布。正式入口是 Telegram 管理员与白名单私聊，以及 GitHub 的 `private-delivery.yml`（外区）和 `china-private-delivery.yml`（中国区）；历史列表使用 `version-catalog.yml`。2026-11-08 [X 完整导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)已验证下载与解密恢复。
+当前下载组件随 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5) 发布。正式入口是 Telegram 管理员与白名单私聊，以及 GitHub 的 `private-delivery.yml`（外区）、`china-private-delivery.yml`（中国区）和主人专用 `testflight-private-delivery.yml`；历史列表使用 `version-catalog.yml`。2026-11-08 [X 完整导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)已验证下载与解密恢复。
 
-## 处理流程
+## App Store 处理流程
 
 1. 依据链接选择账号；国区检查中国区元数据及 CNY 免费价格，外区保留原美区预检，并核对容量。
 2. 取得精确源码指纹和 macOS Intel 平台匹配的 CI 运行包。
@@ -29,3 +29,9 @@ Apple Secrets 使用 `APPLE_ID`、`APPLE_PASSWORD`，需要时配置短期 `APPL
 ## 中国区账号的独立接入状态（2026-11-09）
 
 中国区独立模型、跨运行器复用与保存状态重放均通过完整明文验证。`tools/cn_private_export.py` 使用专用会话、GUID、检查点和模型，以非交互 Cookie 刷新取得当前设备证明，再复用公共导出校验/清理/加密流程。`/cn/` 链接自动选择该固定工作流，中国区先支持最新版，其他链接仍使用原账号。普通国区任务不挂载外区凭据，不收验证码，不进行模型恢复或电脑授权；会话失效由管理员走独立维护流程。原德国区凭据、模型和安全设置保持原样。详见 [中国区接入说明](CHINA-ACCOUNT.md)。
+
+## TestFlight 独立处理流程（2026-11-09）
+
+TF 邀请由主人私聊提交，使用 `tf_` 请求与独立持久会话；先检查实际成员资格，必要时先记录接受意图、最多接受一次，再取得可用 iOS 构建。它不使用 App Store 免费许可或正式版作为替代。任务加载独立源码/ABI匹配的 TF SDK 与既有 CN 模型，严格验证全部加密页面并清理账号数据，最后通过原交付器发送 `名称_Beta_版本.ipa`。
+
+[CapyPlayer 实际导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42714371079) 验证46个镜像、17,724页，用户截图确认收件。已有资格不重复接受；普通任务不密码重登、不初始化模型或新增授权。额外协议、会话失效、限流和明文校验失败时停止。详见 [TF 证据与限制](TESTFLIGHT.md)。

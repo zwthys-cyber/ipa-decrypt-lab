@@ -1,7 +1,7 @@
 # Native download investigation — 2026-11-03
 
 
-> Current-state update — 2026-11-08: The “latest” result inside this dated investigation means latest at that historical stage. Current production acquisition and complete model-based decryption are verified by the 2026-11-08 X export, with 32 encrypted images and 86,704 validated pages. Current packages: [v0.1.0-alpha.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.2). Evidence: [verified X export](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2). Operational documentation: [documentation index](docs/DOCUMENTATION.md).
+> Documentation review — 2026-11-09: This document preserves historical experiments and their original results. Current App Store and owner-only TestFlight automation, the CapyPlayer plaintext proof/user receipt, and Beta filename deployment are recorded in [project status](docs/PROJECT-STATUS.md). Current packages and exact build provenance are listed in [release documentation](docs/RELEASES.md); see the [documentation index](docs/DOCUMENTATION.md) for operations. Historical failures do not supersede later verified results. Installation/runtime and universal app compatibility remain unverified.
 
 
 This document records the original download investigation. The later model-based decryption path is documented in [project status](docs/PROJECT-STATUS.md).

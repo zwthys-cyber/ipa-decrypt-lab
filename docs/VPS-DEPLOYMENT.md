@@ -25,7 +25,7 @@
 | `TELEGRAM_API_ID` / `TELEGRAM_API_HASH` | 本地 Bot API 所需应用凭据 |
 | `DELIVERY_AGE_IDENTITY` | 与仓库交付公钥匹配的私钥 |
 
-Apple 账号及模型仍由 GitHub 工作流读取，不复制到 VPS。现有交付私钥也不应为重试而重新生成，否则无法解开先前的交付产物。
+Apple 账号密码、明文会话、设备私有材料及 FairPlay 模型仍由 GitHub 工作流使用，不复制到 VPS；TF 的持久会话密文例外，见下文状态清单。现有交付私钥也不应为重试而重新生成，否则无法解开先前的交付产物。
 
 Checks 不是 fine-grained token 的必填权限。缺少 Checks 读取权限时，控制器改用 Actions 的任务与步骤状态，等工作流完成后再校验和交付。
 
@@ -93,7 +93,7 @@ main 新增流程步骤比例、真实下载字节计数和完整耗时。VPS �
 
 升级需要匹配的原生运行包，以及经过 Ubuntu/Debian 13 验证的新控制器部署；公开 alpha.2 包仍为此前版本快照。不要只更新 VPS 而让新源码缺少匹配原生包。实际文件发送结果不明的记录仍保持人工确认，不因进度升级重发。
 
-进度卡控制器已在 [42443436341](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443436341) 部署，服务源码为 `d59f3eb8ebd6f8ce0c98bfb0909817bc4345ac22`，健康检查通过。随后 [42443709848](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443709848) 用固定到 Node.js 24 的官方 Actions 重新通过服务器构建和 Ubuntu/Debian 13 检查；这次 build-only 没有再次重启服务。Node.js 24 是 GitHub Actions 的依赖运行时，不是新增的 VPS 安装要求。最新匹配原生包见 [42443706492](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443706492)，实际导出与数字计数见[项目状态](PROJECT-STATUS.md)。
+进度卡控制器已在 [42443436341](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443436341) 部署，服务源码为 `d59f3eb8ebd6f8ce0c98bfb0909817bc4345ac22`，健康检查通过。随后 [42443709848](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443709848) 用固定到 Node.js 24 的官方 Actions 重新通过服务器构建和 Ubuntu/Debian 13 检查；这次 build-only 没有再次重启服务。Node.js 24 是 GitHub Actions 的依赖运行时，不是新增的 VPS 安装要求。该阶段匹配原生包见 [42443706492](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443706492)，实际导出与数字计数见[项目状态](PROJECT-STATUS.md)。
 
 ## 后端导出提速（2026-11-08）
 
@@ -111,7 +111,7 @@ alpha.4 增加 `multi_user.py` 服务模块，现有六项凭据保持不变。�
 
 `private-access-inspection.yml` 用于管理员明确指定目标后的运行检查：工作流参数仅为随机 nonce，目标身份及预期请求经短时 `IPAZAKE_PRIVATE_INSPECTION` Secret 传递。不要把真实用户 ID 或私有记录放入公开输入、源码、运行标题或附件。
 
-`.github/ops` 中的诊断器先在 GitHub-hosted runner 运行合成测试，再通过固定主机密钥的 SSH 只读查询已验证服务源码、健康状态、授权及私有任务/进度记录；VPS 不运行测试套件或编译。输出限定为角色、额度、状态和布尔值，不回显用户、聊天、任务、消息 ID 或凭据。检查不调用 Telegram、不改变授权、不部署/重启服务。当前诊断器固定检查已部署的 b92dc157 源码，运行源码变动后需重新审查该限定。
+`.github/ops` 中的诊断器先在 GitHub-hosted runner 运行合成测试，再通过固定主机密钥的 SSH 只读查询已验证服务源码、健康状态、授权及私有任务/进度记录；VPS 不运行测试套件或编译。输出限定为角色、额度、状态和布尔值，不回显用户、聊天、任务、消息 ID 或凭据。检查不调用 Telegram、不改变授权、不部署/重启服务。该历史诊断器固定检查当时的 b92dc157 源码，不适用于当前 d53f7def 部署；再次使用前必须重新审查限定并通过 GitHub 验证。
 
 [42544535030](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42544535030) 已确认一个真实普通用户的 delivered、独立作用域和最终进度 done。检查结束清理远端/runner 私有临时文件，并删除临时诊断 Secret。该操作工具不进入运行包或原生运行源码指纹，不需要为只读检查重发 Release。
 
@@ -119,7 +119,7 @@ alpha.4 增加 `multi_user.py` 服务模块，现有六项凭据保持不变。�
 
 控制器包新增 `account_profile.py`，按 `/cn/` 链接选择固定中国区工作流，数字 ID 与其他地区链接仍使用原外区工作流。普通国区任务只在 GitHub macOS 26 Intel 使用独立 CN 运行包。上线前需要新的双平台默认运行包和匹配 CN 运行包均成功，避免缺包影响任务。
 
-VPS 的六项凭据及私有 SQLite 原样保留；不要向服务器复制 Apple 账号、会话、GUID、检查点或模型。CN Secrets 只配置在 GitHub，见 [中国区说明](CHINA-ACCOUNT.md)。既有白名单、全局配额和单轮询进程约束继续适用。
+VPS 的六项凭据及私有 SQLite 原样保留；不要向服务器复制 Apple 账号密码、明文会话、GUID、检查点或模型；后续 TF 会话密文的持久保存见下节。CN Secrets 只配置在 GitHub，见 [中国区说明](CHINA-ACCOUNT.md)。既有白名单、全局配额和单轮询进程约束继续适用。
 
 [alpha.5 部署 42566050391](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42566050391) 已完成安装和实际 ready 健康检查，运行源码 `48ad5b75eb61a6cc5f01ffb539f06a33055adc9a`。构建/部署在 GitHub 完成 Ubuntu/Debian 13 各 480 项 Python、Node/Go/systemd 与包检查；服务器只安装运行成品，原 SQLite、白名单和六项凭据保留。
 

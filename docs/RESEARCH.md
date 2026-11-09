@@ -1,7 +1,7 @@
 # 第二阶段验证记录
 
 
-> 2026-11-08 文档复核：保留无授权合成样本和原生 remap 的原始结论；当前成功路径是已验证的模型复用，不是这些早期 syscall 实验。 当前成品为 [v0.1.0-alpha.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.2)；[X 完整导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)已通过 32 个加密切片和 86,704 页校验。操作入口见[文档索引](DOCUMENTATION.md)，安装运行仍须另测。
+> 2026-11-09 文档复核：本文保留早期实验及其原始结果，不作为当前功能或下载入口。App Store 与主人专用 TF 自动任务、CapyPlayer 实际导出/用户收件截图和 Beta 命名部署见 [项目状态](PROJECT-STATUS.md)；当前成品与准确来源见 [发布文档](RELEASES.md)，操作入口见 [文档索引](DOCUMENTATION.md)。安装运行及全部应用兼容性仍未验证。
 
 
 > 在这里保留早期原生接口和合成样本的实验记录。后续模型恢复与真实 IPA 校验已经通过，最新进展见 [项目状态与使用说明](PROJECT-STATUS.md)；本文保留原始失败证据。

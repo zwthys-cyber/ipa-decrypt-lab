@@ -1,7 +1,7 @@
 # Account-authorized ent/download trial
 
 
-> Current-state update — 2026-11-08: The production ent/download path now supplies native Store AMD proofs and preserves the full storefront. The 2026-11-08 X export verified original acquisition and all 32 encrypted images / 86,704 pages. The original trial below retains its own narrower scope. Current packages: [v0.1.0-alpha.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.2). Evidence: [verified X export](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2). Operational documentation: [documentation index](docs/DOCUMENTATION.md).
+> Documentation review — 2026-11-09: This document preserves historical experiments and their original results. Current App Store and owner-only TestFlight automation, the CapyPlayer plaintext proof/user receipt, and Beta filename deployment are recorded in [project status](docs/PROJECT-STATUS.md). Current packages and exact build provenance are listed in [release documentation](docs/RELEASES.md); see the [documentation index](docs/DOCUMENTATION.md) for operations. Historical failures do not supersede later verified results. Installation/runtime and universal app compatibility remain unverified.
 
 
 This note covers the initial download investigation. For the working pipeline and current limits, see [project status](docs/PROJECT-STATUS.md).
