@@ -13,12 +13,12 @@ import zipfile
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/"tools"))
 from telegram_queue import GitHub
 
-RUN=42688988859
+RUN=42689737849
 ORIGIN_RUN=42650873653
 ORIGIN_SOURCE="19244adbe73f71156a91a5c1cb20965925928054"
-SOURCE="a3bea18007b49f806ac26b9d24b3b7c3f3a4cd18"
-ARCHIVE_DIGEST="sha256:960018a236b5b8cf8f6823898117bbbaf0cf3b982b3339bbe9fa19c6837f6177"
-CIPHER_DIGEST="879a35b27e7f923818fbf10aabd56c2e2f3c8e8c7005ce5483fe92d389861c92"
+SOURCE="2fe7b05a0775d424c0e1722208b72e81c5c62154"
+ARCHIVE_DIGEST="sha256:0af4eb00fed037612744c41a5a50b9ec159e51d8484eb0ddf2138b0d2e7b13c0"
+CIPHER_DIGEST="8fcfb2a1d71f998b5e96db2df7bc3ddc506f2edcc71d5fc574f5a57a193b8c47"
 
 def require(value):
     if not value:raise ValueError("tf_virtual_restore_invalid")
@@ -79,11 +79,11 @@ def restore(root,env):
                 and receipt.get("run_id")==str(RUN) and receipt.get("sealed_state_sha256")==CIPHER_DIGEST
                 and receipt.get("result",{}).get("gsa_authenticated") is True
                 and receipt.get("result",{}).get("tf_authenticated") is True
-                and receipt.get("result",{}).get("catalog_received") is True)
+                and receipt.get("result",{}).get("status")=="invitation_inspected")
         identity=work/"identity.txt"
         identity.write_text(env["DELIVERY_AGE_IDENTITY"]);identity.chmod(0o600)
         child={k:env[k] for k in ("HOME","PATH","LANG") if k in env}
         result=subprocess.run(["age","-d","-i",str(identity)],input=cipher,capture_output=True,timeout=30,env=child)
         require(result.returncode==0)
         unpack_private(result.stdout,root)
-        require((root/"account.plist").is_file() and (root/"tf-session.json").is_file())
+        require((root/"account.plist").is_file() and (root/"tf-session.json").is_file() and (root/"invitation.json").is_file())
