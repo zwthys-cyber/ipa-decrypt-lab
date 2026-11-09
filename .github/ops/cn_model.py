@@ -55,8 +55,11 @@ def payload(value,account,guid):
     require(isinstance(guid,str) and re.fullmatch(r'[A-F0-9]{12}',guid),'cn_native_guid_invalid')
     require(account.get('store')=='143465' and str(account.get('email','')).casefold()==value['email'].casefold()
         and account.get('directoryServicesIdentifier')==value['account'].get('directoryServicesIdentifier'),'cn_account_binding_failed')
+    front=account.get('labStoreFront') or '143465-1'
+    require(isinstance(front,str) and 8<=len(front)<=256 and front.startswith('143465-')
+        and all(32<=ord(c)<=126 for c in front),'cn_storefront_context_invalid')
     return {'dsid':account['directoryServicesIdentifier'],'token':account['passwordToken'],'guid':guid,
-        'cookies':account['cookie'],'client_context':'login_agent','user_agent':UA,'backend':'commerce','apple_id':value['email']}
+        'cookies':account['cookie'],'storefront':front,'client_context':'login_agent','user_agent':UA,'backend':'commerce','apple_id':value['email']}
 
 def gate(count,profile,prepared,observation):
     require(count.get('session_reused') is True and count.get('http_status')==200
@@ -162,6 +165,7 @@ def trial(runtime,env,mode,report,reference_enrollment=False):
                 before=collect();gate(count,profile,prepared,before)
                 if reference_enrollment:allow_reference(env)
                 native_report=root/'enrollment.json';native_input=json.dumps(payload(value,account,guid)).encode()
+                report['cn_storefront_context_supplied']=True
                 report['stage']='authorizing'
                 report['authorization_outcome_uncertain']=True
                 code,_,_=private([str(runtime/'native-machine-enrollment'),str(native_report)],child,data=native_input,timeout=80)

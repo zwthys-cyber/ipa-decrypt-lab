@@ -28,6 +28,12 @@ class CNModelBoundaries(unittest.TestCase):
         for key,value in [('store','143443'),('email','other@example.invalid'),('directoryServicesIdentifier','999')]:
             account=copy.deepcopy(self.value['account']);account[key]=value
             with self.assertRaises(CNModelError):payload(self.value,account,'001122AABBCC')
+    def test_cn_enrollment_preserves_authenticated_storefront_and_rejects_foreign_or_injected_context(self):
+        account=copy.deepcopy(self.value['account']);account['labStoreFront']='143465-19,32 t:music31'
+        self.assertEqual(payload(self.value,account,'001122AABBCC')['storefront'],account['labStoreFront'])
+        for bad in ('143443-1','143441-1','143465-','143465-19,32\nInjected: value',True,'143465-'+'1'*300):
+            account['labStoreFront']=bad
+            with self.assertRaises(CNModelError):payload(self.value,account,'001122AABBCC')
     def test_private_cache_identity_permissions_and_symlinks_are_enforced(self):
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/'account.json';path.write_text(json.dumps(self.value['account']));path.chmod(0o600)
