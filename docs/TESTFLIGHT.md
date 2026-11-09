@@ -61,3 +61,19 @@
 `.github/ops/tf_invitation.py` 新增离线请求计划与 SQLite 接受意图记录：严格限定 Apple join 链接与固定 API 地址；POST 前持久化意图，重启/任务号变化后不自动重复接受；2xx 仅标记需要校验，绝不当作已加入或已下载。4 项邀请测试覆盖伪装域名、路径/查询注入、响应分类及跨连接重启恢复。实现未接机器人、未签名或发送真实邀请请求，未复用抓包会话头。
 
 当前 GitHub 原生路径仍缺可验证的 TF hardware20 与独立 Mac Store 会话。SDK 文档公开支持虚拟设备身份，但项目当前约束要求原生身份；在这项约束改变前，不将虚拟配置伪称成原生设备，也不挂载账号去运行该替代路线。两条路线的认证、邀请、取包、解密与交付仍需分别提供真实证据。没有修改既有账号 Secrets、模型、授权数或 VPS 部署。
+
+## 2026-11-09：独立虚拟 Mac 路线与真实验证码要求
+
+用户确认继续评估 SDK 的虚拟身份路线。此路线使用明确标注的独立虚拟配置，不代表恢复了真实硬件标识，也不使用个人手机作后端。
+
+- 公共预检 [42650011477](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42650011477) 通过 10 项 Python 与 17 项 CTest，包含虚拟状态加密恢复、错误密钥拒绝和平台绑定检查。
+- 初次认证 [42650873653](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42650873653) 完成 GSA 设备预配，登录失败；独立状态只保留为固定既有收件人的 age 密文。
+- [42652233101](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42652233101) 校验原运行、源码、ZIP 摘要及密文摘要后成功恢复同一身份，实际错误分类为 transport_timeout。没有新建替代身份。
+- 无账号网络对照 [42653392877](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42653392877) 中，系统及 SDK curl 的 GSA lookup 都迅速返回 HTTP 401，公开 bag 返回 200；未观察到 HTTP/1.1、IPv4 或两种 curl 的差异。
+- 机器头只读对照 [42654419361](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42654419361) 复用相同虚拟身份，命令行 curl 与 SDK lookup 都返回 200，未挂载 Apple 账号或密码、未发送账号登录请求。它证明该查询可用，不证明账号或完整 Anisette 已认证。
+- 分阶段认证 [42655279948](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42655279948) 实际进入 verification_required，HTTP 200。该版本检测到要求后退出，未保持可提交验证码的进程；之后收到的聊天验证码没有提交，也没有写入公开记录。
+- 保持进程等待的实现已通过 19 项 Python、2 项 Node 中继控制以及 17 项 CTest；[42656943897](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42656943897) 的真实尝试则在 gsa_srp_complete 超时，尚未产生等待请求。后续尝试同样必须以真实等待请求为准，不能盲目使用聊天中的旧验证码。
+
+`tf_virtual_live.py` 复用现有维护中继的运行/源码/nonce/五分钟有效期协议。只有 SDK 的实际验证码回调才能发布等待请求；同一进程保持 stdin 等待，最多接收一次验证码。新的中继密文仅能投递到该请求对应的临时 `tf-virtual-code-<run>-<nonce>` 分支 `relay.json`，内容为 age 密文和非秘密绑定信息；runner 解密并校验后才写入原进程。原始验证码不得进入源码、工作流输入、公共 artifact 或日志，使用后清理中继文件。
+
+截至这些证据，尚未取得 GSA 账号令牌、Mac Store/TestFlight 会话；没有接受 yoNuHexZ 邀请、下载 beta、证明 TF 内容解密或交付文件。原 DE/CN Secrets、FairPlay 模型、授权计数与 VPS 成品部署未改动。独立状态密文 artifact 保留一天；缺失/过期时必须显式失败，不能暗中新建身份冒充恢复。
