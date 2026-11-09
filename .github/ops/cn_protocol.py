@@ -47,7 +47,7 @@ def artifact_bytes(api,item,member,max_bytes=32768):
 def waiting_request(api,run_id,nonce,commit):
     require(isinstance(run_id,str) and re.fullmatch(r'[1-9][0-9]{0,19}',run_id) and isinstance(nonce,str) and re.fullmatch(r'[a-f0-9]{32}',nonce) and re.fullmatch(r'[a-f0-9]{40}',commit or ''),'invalid_cn_identity')
     run=api.call('/actions/runs/'+str(run_id))
-    trusted_titles={AUTH:{'China-account-authenticate'},'.github/workflows/china-model-bootstrap.yml':{'CN-model-trial','CN-model-replay'},'.github/workflows/china-relay-probe.yml':{'CN-relay-synthetic-probe'},'.github/workflows/cn-arm-model-bootstrap.yml':{'CN-arm-model-replay'}}
+    trusted_titles={AUTH:{'China-account-authenticate'},'.github/workflows/china-model-bootstrap.yml':{'CN-model-trial','CN-model-replay'},'.github/workflows/china-relay-probe.yml':{'CN-relay-synthetic-probe'},'.github/workflows/cn-arm-model-bootstrap.yml':{'CN-arm-model-replay'},'.github/workflows/china-saved-model-check.yml':{'CN-saved-model-verify'}}
     title=run.get('display_title','')
     arm_trial=run.get('path')=='.github/workflows/cn-arm-model-bootstrap.yml' and isinstance(title,str) and re.fullmatch('CN-arm-model-trial-[a-f0-9]{32}',title) is not None
     require(run.get('path') in trusted_titles and run.get('head_branch')=='main' and run.get('event')=='workflow_dispatch'

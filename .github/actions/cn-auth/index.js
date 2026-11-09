@@ -45,6 +45,7 @@ async function main() {
       model_replay:'exec python3 .github/ops/cn_model.py --runtime cn-runtime --mode replay',
       arm_model_trial:'exec python3 .github/ops/cn_arm_model.py --mode trial',
       arm_model_replay:'exec python3 .github/ops/cn_arm_model.py --mode replay',
+      verify_cn_saved_model:'exec python3 .github/ops/cn_saved_model.py --runtime cn-runtime',
       relay_probe:'exec python3 .github/ops/cn_live_relay_probe.py --crypt cn-relay-crypto/delivery-crypt'};
     const role=env.CN_LIVE_TASK||'auth';if(!Object.hasOwn(commands,role))throw Error();
     worker=spawn('bash',['-e','-c','ulimit -c 0\n'+commands[role]],{

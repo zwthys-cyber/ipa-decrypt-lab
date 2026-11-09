@@ -53,6 +53,14 @@ class LiveProtocolContracts(unittest.TestCase):
                 else:
                     with self.assertRaises(Exception):p.waiting_request(api,'12','b'*32,'a'*40)
                     self.assertEqual(api.call.call_count,1)
+    def test_only_active_saved_model_verification_can_receive_live_code(self):
+        waiting=self.waiting()
+        for title in ('CN-saved-model-verify','CN-saved-model-preflight'):
+            api=Mock();api.call.side_effect=[{'path':'.github/workflows/china-saved-model-check.yml','head_branch':'main','event':'workflow_dispatch','display_title':title,'status':'in_progress','head_sha':'a'*40},{'artifacts':[{'name':'cn-auth-request-12-'+'b'*32}]}]
+            with patch.object(p,'artifact_bytes',return_value=json.dumps(waiting).encode()):
+                if title=='CN-saved-model-verify':self.assertEqual(p.waiting_request(api,'12','b'*32,'a'*40),waiting)
+                else:
+                    with self.assertRaises(Exception):p.waiting_request(api,'12','b'*32,'a'*40)
     def test_artifact_digest_and_inventory_must_match(self):
         api=Mock();out=io.BytesIO()
         with zipfile.ZipFile(out,'w') as z:z.writestr('request.json',json.dumps(self.waiting()))
