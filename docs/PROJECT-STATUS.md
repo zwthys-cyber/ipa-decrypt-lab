@@ -262,3 +262,8 @@ IPA 审计采用分块临时文件和只读映射，避免把大程序整体读�
 - [最新真实诊断 42431580087](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42431580087)：已发起原生 POST，程序进入只由 `X-Apple-AMD-Action: SP` 触发的分支，系统注册处理返回失败（固定标记 `store_device_provisioning_failed`），没有可用证明或账号会话。该响应在原有 parseResponse 日志之前处理，因此 HTTP trace 缺少 POST 状态，不能解读成没有收到响应或确定网络中断。
 
 后续需核实原生 Store SP 注册的 bag 配置、异步错误及响应对象约定，在相同 GitHub 运行器上取得有效的 AMD 证明，再分别验证登录、原应用下载、解密和私人交付。现有证据不能确定密码错误、账号受限或出口 IP 被封。源码与运行包已更新，机器人自动使用匹配运行包；没有重新部署 VPS 控制器，没有额外发送 Telegram 消息或 IPA。
+
+
+## 2026-11-09 中国区账号接入进行中
+
+现有德国区账号和 alpha.4 服务保持原样。中国区实时验证码流程已实现同一原生会话等待、加密验证码中继和 GitHub 公钥会话封装。无账号测试 [42547323101](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42547323101) 通过 18 项 Python 与 2 项 Node 检查；独立客户端构建尚待核实。用户暂缓更新验证码，因此未启动新的实时认证。中国区真实登录、会话复用、下载和独立模型尚未验证，不能称为完整接入。操作和隐私边界见 [CHINA-ACCOUNT.md](CHINA-ACCOUNT.md)。
