@@ -150,3 +150,12 @@ Store 会话重建通过后，最初 TF 创建返回401；新鲜登录也验证�
 [实际成功42688988859](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42688988859) 在源码 `a3bea18007b49f806ac26b9d24b3b7c3f3a4cd18` 命中精确公共缓存并通过36+4项 Python、2项 Node、20项 CTest。此前 Store429 要求的16秒等待已过；恢复时 PET 绑定有效且剩208秒，无密码重登或验证码。本次完成真实 Store 登录、TF会话创建和账号目录查询，HTTP200。多个条件共同改变，暂不单独归因于某一项修复。
 
 新的恢复器固定成功运行、源码、ZIP和密文摘要，并额外要求 TF与目录证明；保留原独立虚拟身份。下一控制仅查询 `yoNuHexZ` 邀请，不挂载账号密码，不接受邀请；新增原生测试限定 GET、空请求体、固定 Apple 地址及既有会话签名。邀请接受、实际 beta、内容解密及文件回传仍未证明，原 Secrets、FairPlay授权数和 VPS部署保持不变。
+
+
+## 2026-11-09：邀请 OPEN 与一次性接受请求
+
+[邀请 GET42689737849](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42689737849) 返回200；[离线检查42690498519](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42690498519) 确认状态OPEN、名称匹配A.I.，当时尚无可匹配目录记录。接受适配器参考 [AutoJoinTF 的直接实现](https://github.com/Yuheng0101/X/blob/main/Tasks/AutoJoinTF.js)，只使用其空请求体 POST 路径，未使用抓包凭据、第三方认证/解密服务或其重复轮询加入逻辑。
+
+[一次性工作流42692803345](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42692803345) 通过公共验证及22项原生检查；先发布绑定运行/源码/nonce/有效期的 age 意图包，再由代理校验实际等待运行及摘要，在仓库中创建持久密文记录，之后同一 attempt1 才能发送一次接受请求。记录只含不可逆绑定和运行元数据，不含原始账号、凭据或TF会话；失败或结果不明时不可删除/覆盖它来自动重发。私有SQLite意图也先于POST提交。
+
+该唯一的接受POST返回200，响应目标为A.I.，但最初的目录匹配未通过，所以回执仍为“加入结果未确认”，没有重复POST。随后只读检查显示：v4目录只给出7个应用概览ID，不含Bundle字段，不能据此直接断言未加入。下一步沿用SDK的appDetails元数据查询，把目录概览与接受回执中的Bundle ID/应用编号绑定；这是读元数据的请求，不是再次接受邀请。实际构建、测试包、完整解密和回传仍待验证。
