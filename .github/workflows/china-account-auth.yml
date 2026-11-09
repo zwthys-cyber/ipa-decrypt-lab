@@ -1,0 +1,62 @@
+name: Isolated China account authentication
+run-name: China-account-${{ inputs.mode }}
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Contract tests only, or one isolated CN login without download/enrollment
+        type: choice
+        default: test
+        options: [test, authenticate]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: china-account-onboarding
+  cancel-in-progress: false
+jobs:
+  contracts:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Test isolated credentials, region binding and sanitized failures without secrets
+        run: python3 -m unittest discover -s .github/ops -p 'test_*.py' -v
+  authenticate:
+    if: inputs.mode == 'authenticate' && github.ref == 'refs/heads/main'
+    needs: contracts
+    runs-on: macos-26-intel
+    timeout-minutes: 10
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Load exact-source verified runtime without account credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/native_runtime.py fetch --output runtime
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/AppleMediaServices
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/commerce
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/CoreFP
+            ~/Library/Caches/ipatool/sap/apple-assets-macos-27-26A434-arm64-v1/CoreFP.icxs
+          key: apple-public-assets-d9c0247-26A434-arm64-v1
+      - name: Verify fixed public resources without account access
+        run: runtime/lab-kbsync --prewarm
+      - name: Authenticate CN account once without touching the legacy account
+        env:
+          APPLE_CN_ID: ${{ secrets.APPLE_CN_ID }}
+          APPLE_CN_PASSWORD: ${{ secrets.APPLE_CN_PASSWORD }}
+          APPLE_CN_2FA_CODE: ${{ secrets.APPLE_CN_2FA_CODE }}
+          APPLE_CN_GUID: ${{ secrets.APPLE_CN_GUID }}
+          LEGACY_APPLE_ID: ${{ secrets.APPLE_ID }}
+        run: |
+          ulimit -c 0
+          python3 .github/ops/china_auth.py runtime/ApplePackageTool
