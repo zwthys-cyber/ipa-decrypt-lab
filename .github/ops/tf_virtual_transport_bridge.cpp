@@ -192,3 +192,57 @@ APPLE_AUTH_CLIENT_EXPORT int lab_tf_invitation_contract() {
     }catch(...){return 2;}
 }
 }
+
+namespace apple_auth {
+namespace {
+netdetail::Json lab_bound_tf_context(const std::filesystem::path& root) {
+    using netdetail::Json;
+    const auto context=Json::parse(netdetail::read_file(root/"tf-session.json",1024*1024));
+    const auto profile=Json::parse(netdetail::read_file(root/"profile.json",4096));
+    const auto account=netdetail::parse_plist(netdetail::read_file(root/"account.plist",1024*1024));
+    const auto& id=account.at("DsPrsId");
+    netdetail::require(context.at("udid")==profile.at("hardware20") &&
+        context.at("dsid")==(id.is_string()?id.get<std::string>():id.dump()),"Saved TestFlight binding mismatch");
+    return context;
+}
+}
+APPLE_AUTH_CLIENT_EXPORT void lab_tf_invitation_refresh(const std::filesystem::path& root,const Transport& transport) {
+    const auto context=lab_bound_tf_context(root);
+    tfdetail::Engine engine(context,transport);
+    netdetail::write_private(root/"invitation.json",netdetail::bytes(engine.invitation_info().dump(2)));
+    netdetail::write_private(root/"catalog.json",netdetail::bytes(engine.catalog().dump(2)));
+}
+APPLE_AUTH_CLIENT_EXPORT void lab_tf_invitation_accept(const std::filesystem::path& root,const Transport& transport) {
+    using netdetail::Json;
+    const auto proof=Json::parse(netdetail::read_file(root/"invitation-intent-approved.json",8192));
+    const auto run=std::getenv("GITHUB_RUN_ID"),source=std::getenv("GITHUB_SHA"),attempt=std::getenv("GITHUB_RUN_ATTEMPT");
+    netdetail::require(run && source && attempt && std::string(attempt)=="1" &&
+        proof.at("schema")=="tf-invite-approved-v1" && proof.at("approved")==true &&
+        proof.at("worker_run")==run && proof.at("source_commit")==source && proof.at("invite")=="yoNuHexZ" &&
+        proof.at("expires").is_number_integer() && proof.at("expires").get<std::int64_t>()>std::time(nullptr),
+        "Invitation intent binding failed");
+    tfdetail::Engine engine(lab_bound_tf_context(root),transport);
+    netdetail::write_private(root/"accept-response.json",netdetail::bytes(engine.invitation_accept().dump(2)));
+}
+APPLE_AUTH_CLIENT_EXPORT int lab_tf_invitation_post_contract() {
+    using netdetail::Json;
+    try {
+        Json context={{"accountId","PUBLIC_FIXTURE"},{"sessionId","SYNTHETIC"},{"dsid","12345"},
+            {"udid",std::string(40,'a')},{"deviceModel","Mac14,7"},
+            {"headers",{{"X-Apple-AMD-M","SYNTHETIC"},{"X-Apple-Store-Front","143441-1,29"}}}};
+        unsigned calls=0;bool fail=false;
+        Transport fixture=[&](const HttpRequest& request)->HttpResponse {
+            ++calls;
+            netdetail::require(request.method=="POST" && request.body.empty() &&
+                request.url=="https://testflight.apple.com/v3/accounts/PUBLIC_FIXTURE/ru/yoNuHexZ/accept" &&
+                request.headers.at("X-Session-Id")=="SYNTHETIC","Fixed invitation POST contract failed");
+            return {fail?503:200,netdetail::bytes("{\"data\":{\"fixture\":true}}"),{}};
+        };
+        tfdetail::Engine engine(context,fixture);
+        netdetail::require(engine.invitation_accept().at("fixture")==true && calls==1,"POST response contract failed");
+        fail=true;calls=0;bool rejected=false;
+        try{(void)engine.invitation_accept();}catch(const std::exception&){rejected=true;}
+        return rejected && calls==1 ? 0 : 2;
+    }catch(...){return 2;}
+}
+}

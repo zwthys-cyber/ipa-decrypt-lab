@@ -13,12 +13,12 @@ KEYS={"schema","stage","status","virtual_identity","account_login_attempted","gs
       "mac_store_authenticated","tf_authenticated","catalog_received","verification_requested",
       "http_status","sdk_error_code","apple_error_code","failure_category","last_request_stage","gsa_session_reused","retry_after_known","retry_after_seconds","store_profile_ready"}
 STAGES={"initialization","grandslam_provisioning","grandslam_login","mac_store_login",
-        "testflight_session","testflight_catalog","gsa_lookup","store_provisioning","gsa_token_refresh","mac_store_replay","testflight_invitation"}
+        "testflight_session","testflight_catalog","gsa_lookup","store_provisioning","gsa_token_refresh","mac_store_replay","testflight_invitation","testflight_invitation_accept"}
 def validate(value):
     if type(value) is not dict or set(value)!=KEYS:raise ValueError()
     if value["schema"]!="testflight-virtual-auth-v1" or value["stage"] not in STAGES:
         raise ValueError()
-    if value["status"] not in {"failed","verification_required","catalog_verified","lookup_prepared","lookup_response_received","rate_limited","saved_session_invalid","store_profile_ready","invitation_inspected"}:raise ValueError()
+    if value["status"] not in {"failed","verification_required","catalog_verified","lookup_prepared","lookup_response_received","rate_limited","saved_session_invalid","store_profile_ready","invitation_inspected","acceptance_response_received"}:raise ValueError()
     for key in ("virtual_identity","account_login_attempted","gsa_authenticated","mac_store_authenticated",
                 "tf_authenticated","catalog_received","verification_requested","gsa_session_reused","retry_after_known","store_profile_ready"):
         if type(value[key]) is not bool:raise ValueError()
@@ -32,7 +32,7 @@ def validate(value):
     if any(flags[i] and not flags[i-1] for i in range(2,len(flags))):raise ValueError()
     if value["status"]=="store_profile_ready" and not value["store_profile_ready"]:raise ValueError()
     if value["status"]=="catalog_verified" and not all(flags[1:]):raise ValueError()
-    if value["status"]=="invitation_inspected" and not value["tf_authenticated"]:raise ValueError()
+    if value["status"] in {"invitation_inspected","acceptance_response_received"} and not value["tf_authenticated"]:raise ValueError()
     if value["status"].startswith("lookup_") and any(flags):raise ValueError()
     if value["status"]=="verification_required" and not value["verification_requested"]:raise ValueError()
     if type(value["apple_error_code"]) is not int or not -99999999<=value["apple_error_code"]<=99999999:raise ValueError()
