@@ -10,7 +10,11 @@
 
 [会话持久化 42703942768](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42703942768) 沿用原独立虚拟 Mac 身份，VPS 只保存会话/SDK身份的私有 age 密文，Apple 明文只在 GitHub 任务中解封，原有模型仍在 GitHub。普通任务只加载验证过的成品，不重新编译或密码重登。异常、额外协议、限流、取消及未知接受结果都不会触发自动重复接受。
 
-之前的真实私人回传仍是 [42701908536](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42701908536)：主人私聊确认403,501字节。新部署与后台验证不代表另一次真实 Telegram 用户发链到文件确认的现场记录，也不代表安装运行、全部 TF 应用兼容或到期限制处理已验证。详见 [TF 记录](TESTFLIGHT.md)。
+用户提供的 Telegram 截图已确认一条真实新请求收到 `CapyPlayer_1.1.7.ipa`。对应 [42714371079](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42714371079) 的请求 `tf_8e5cbf63015f20a321641f38f42833bc` 完成46个加密镜像、17,724页的严格明文验证；已有成员资格，没有新接受邀请或电脑授权。截图是文件接收证据，worker 的 `delivered=false` 仅表示它本身不负责 Telegram 发送。
+
+TF 文件名现包含英文 `Beta`，例如 `CapyPlayer_Beta_1.1.7.ipa`；只改变未来 Telegram 文件名称，不修改应用包内容，App Store 命名保持原样。[部署42714903713](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42714903713) 在源码 `d53f7defdc65fb11e5b3c04ac3e612990ed6430c` 通过两套 Mac 运行包、CN运行包及 [无重复发送导出42716962584](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42716962584) 门禁，服务健康检查通过。本次没有重发此前IPA。
+
+安装运行、全部 TF 应用兼容或到期限制处理尚未验证。详见 [TF 记录](TESTFLIGHT.md)。
 
 ## 当前限制：国区专属应用的地区许可响应
 
