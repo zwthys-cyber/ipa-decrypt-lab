@@ -42,6 +42,7 @@ def validate(value):
 def public_env(env):
     result={k:env[k] for k in ("HOME","PATH","LANG","RUNNER_TEMP") if k in env}
     result["GITHUB_ACTIONS"]="true"
+    if env.get("TF_CURL_FRESH_GSA")=="1":result["TF_CURL_FRESH_GSA"]="1"
     return result
 
 def pack_private(root):
@@ -94,6 +95,8 @@ def main():
                 else:
                     result=subprocess.run([binary,"--authenticate",str(root)],input=(email+"\n"+password+"\n").encode(),
                         stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=240,env=child)
+                from tf_virtual_transport_diagnostics import observations
+                receipt["transport_observations"]=observations(result.stderr or b"")
                 if len(result.stdout)>4096:raise ValueError()
                 value=validate(json.loads(result.stdout))
                 receipt["result"]=value

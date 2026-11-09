@@ -43,6 +43,7 @@ jobs:
           node --test .github/ops/cn_action.test.cjs
       - name: Compile isolated client without Apple inputs
         run: |
+          python3 .github/ops/tf_virtual_transport_patch.py native-source/apple-auth/src/client/transport.cpp
           cp .github/ops/tf_sdk_contract.cpp native-source/apple-auth/tf_sdk_contract.cpp
           cp .github/ops/tf_virtual_client.cpp native-source/apple-auth/tf_virtual_client.cpp
           cp .github/ops/tf_virtual_transport_bridge.cpp native-source/apple-auth/lab_tf_transport_bridge.cpp
@@ -63,6 +64,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CN_LIVE_TASK: tf_virtual_auth
           TF_VIRTUAL_LIVE_OTP: '1'
+          TF_CURL_FRESH_GSA: '1'
         uses: ./.github/actions/cn-auth
       - name: Retain only encrypted state and a closed receipt
         if: ${{ always() && (inputs.run_control || (github.event_name == 'push' && contains(github.event.head_commit.message, '[tf-virtual-control-once]'))) }}
@@ -75,13 +77,4 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-# One source-bound authentication control after preflight 42650011477.
-
-# Diagnostic control reuses the fixed encrypted identity from run 42650873653.
-
-
-# One GSA stage trace after successful machine-only lookup 42654419361.
-
-# Keep the source/run/nonce-bound verification process waiting for up to five minutes.
-
-# A transient SRP-complete timeout requires a fresh live session, never a stale OTP.
+# One fresh-connection control; no raw wire data or automatic login retry.

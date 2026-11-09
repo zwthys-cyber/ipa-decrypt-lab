@@ -96,7 +96,7 @@ def live(binary,root,env,email,password):
         for name,stream in (("stdout",process.stdout),("stderr",process.stderr)):
             buffers[name].extend(stream.read(65537-len(buffers[name])))
             if len(buffers[name])>65536:raise ValueError()
-        return subprocess.CompletedProcess([binary],process.returncode,bytes(buffers["stdout"]),b"")
+        return subprocess.CompletedProcess([binary],process.returncode,bytes(buffers["stdout"]),bytes(buffers["stderr"]))
     finally:
         selector.close()
         if process.poll() is None:process.kill();process.wait()
