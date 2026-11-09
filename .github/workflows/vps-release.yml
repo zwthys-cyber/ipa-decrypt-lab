@@ -1,10 +1,17 @@
 name: Build and deploy verified VPS controller
-run-name: VPS-controller-${{ inputs.deploy && 'deploy' || 'build' }}
+run-name: VPS-controller-${{ (inputs.deploy || contains(github.event.head_commit.message, '[vps-deploy]')) && 'deploy' || 'build' }}
 on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/vps-release.yml']
   workflow_dispatch:
     inputs:
       deploy:
         description: Install the tested release on the configured VPS
+        type: boolean
+        default: false
+      verify_testflight:
+        description: Require the matching TF runtime and real no-send export proof before deployment
         type: boolean
         default: false
 permissions:
@@ -17,7 +24,7 @@ jobs:
   release:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -70,7 +77,7 @@ jobs:
       - name: Assemble public runtime bundle
         run: |
           cp dist/telegram-bot-api package/bin/
-          for module in account_profile version_catalog app_presentation version_request app_preflight capacity telegram_daemon multi_user persistent_journal telegram_controller telegram_runtime telegram_api telegram_menu telegram_queue task_progress delivery_scheduler ipa_audit; do
+          for module in testflight_state account_profile version_catalog app_presentation version_request app_preflight capacity telegram_daemon multi_user persistent_journal telegram_controller telegram_runtime telegram_api telegram_menu telegram_queue task_progress delivery_scheduler ipa_audit; do
             cp "tools/$module.py" package/tools/
           done
           cp deploy/ipazake.service deploy/install.sh deploy/prune_releases.py package/deploy/
@@ -99,11 +106,16 @@ jobs:
             vps-controller.sha256
           retention-days: 7
           if-no-files-found: error
+      - name: Verify matching TF and CN runtimes and the real no-send export before production promotion
+        if: inputs.verify_testflight || contains(github.event.head_commit.message, '[tf-production-verify]')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/ops/tf_deploy_gate.py
       - name: Install SSH transport on GitHub runner only
-        if: inputs.deploy
+        if: inputs.deploy || contains(github.event.head_commit.message, '[vps-deploy]')
         run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends sshpass
       - name: Deploy prebuilt controller and private credentials
-        if: inputs.deploy
+        if: inputs.deploy || contains(github.event.head_commit.message, '[vps-deploy]')
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           SSHPASS: ${{ secrets.VPS_SSH_PASSWORD }}

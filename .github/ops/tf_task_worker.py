@@ -13,6 +13,7 @@ from capacity import MAX_IPA_BYTES,MIN_FREE_BYTES
 from private_export import export_original,ExportError
 from task_progress import WorkerProgress
 from tf_task_session import restore,RECIPIENT
+from tf_task_contract import fingerprint as worker_fingerprint
 from tf_task_ssh import fetch,rpc
 from tf_virtual_zip_directories import canonicalize
 from tf_virtual_beta_download import archive_binding
@@ -91,6 +92,7 @@ def main():
     receipt={"schema":"tf-worker-result-v1","status":"testflight_worker_failed","request_id":env.get("DELIVERY_REQUEST_ID"),
         "run_id":env.get("GITHUB_RUN_ID"),"source_commit":env.get("GITHUB_SHA"),"acceptance_attempted":False,
         "invitation_accepted":False,"downloaded":False,"decryption_proven":False,"delivered":False,"new_authorization":False}
+    receipt["worker_fingerprint"]=worker_fingerprint()
     progress=WorkerProgress(env.get("DELIVERY_REQUEST_ID",""))
     try:
         request=runtime(env);mode=env["TF_TASK_MODE"]

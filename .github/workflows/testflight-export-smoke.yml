@@ -1,0 +1,42 @@
+name: Verify the generic TestFlight export without another file send
+on:
+  workflow_run:
+    workflows: ["Build isolated CN live-auth client"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  checks: write
+concurrency:
+  group: testflight-export-proof
+  cancel-in-progress: false
+jobs:
+  export:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && contains(github.event.workflow_run.head_commit.message, '[tf-production-verify]')))
+    uses: ./.github/workflows/testflight-private-delivery.yml
+    with:
+      mode: export
+      invite: yoNuHexZ
+      request_id: tf_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+    secrets: inherit
+  proof:
+    needs: export
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Validate the complete source-bound export without Apple secrets
+        id: proof
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/ops/tf_task_export_proof.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: ${{ steps.proof.outputs.artifact }}
+          path: tf-export-proof.json
+          retention-days: 1
+          if-no-files-found: error

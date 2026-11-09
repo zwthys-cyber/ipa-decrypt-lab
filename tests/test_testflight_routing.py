@@ -91,3 +91,12 @@ class TestFlightDurability(unittest.TestCase):
             self.assertEqual(state.status(root)["sha256"],first["sha256"])
             value.update(ciphertext_b64=base64.b64encode(b"PLAINTEXT_PRIVATE").decode(),sha256=hashlib.sha256(b"PLAINTEXT_PRIVATE").hexdigest())
             with self.assertRaises(ValueError):state.install_cipher(root,value)
+
+class TFPresentation(unittest.TestCase):
+    def test_invitation_is_not_presented_as_appstore_identifier(self):
+        from task_progress import ProgressCard
+        card=ProgressCard(Mock(),OWNER,RID,INVITE)
+        text=card.render("queued")
+        self.assertIn("邀请码："+INVITE,text)
+        self.assertIn("下载路线：TestFlight",text)
+        self.assertNotIn("App ID："+INVITE,text)

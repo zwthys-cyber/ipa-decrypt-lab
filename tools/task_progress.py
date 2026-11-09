@@ -216,7 +216,7 @@ class ProgressCard:
         percent=complete*100//len(STEPS)
         filled=percent//10
         lines=["【进度演示，不执行下载】" if self.demo else "IPA 任务进度"]
-        if self.app: lines.append("App ID："+self.app)
+        if self.app: lines.append(("邀请码：" if self.rid.startswith("tf_") else "App ID：")+self.app)
         lines.append("下载路线："+("TestFlight" if self.rid.startswith("tf_") else "中国区" if self.rid.startswith("cn_") else "外区"))
         lines.extend(["流程进度："+"█"*filled+"░"*(10-filled)+f" {percent}%",
                       f"已完成：{complete}/{len(STEPS)} 步（按步骤，非剩余时间估算）",

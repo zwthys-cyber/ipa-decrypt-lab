@@ -39,6 +39,7 @@ if [ -n "$previous" ] && [ -d "$previous" ] && [ "$previous" != "$destination" ]
 fi
 ln -sfn "$destination" /opt/ipazake/current.next
 mv -Tf /opt/ipazake/current.next /opt/ipazake/current
+install -m 0444 "$destination/tools/testflight_state.py" /opt/ipazake/testflight-state.py
 install -m 0644 "$destination/deploy/ipazake.service" /etc/systemd/system/ipazake.service
 systemctl daemon-reload
 systemctl enable ipazake.service
