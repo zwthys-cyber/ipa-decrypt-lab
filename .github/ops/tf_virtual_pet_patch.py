@@ -30,7 +30,7 @@ def patch_store(raw):
     new="void StoreClient::provision() {\n    impl_->provision();\n    if (impl_->protocol == StoreProtocol::macos_accounts) impl_->prepare_sap();\n}"
     source=raw.decode()
     if source.count(old)!=1:raise ValueError("tf_store_anchor_invalid")
-    source=source.replace(old,new)
+    source="#include <cstdio>\n"+source.replace(old,new)
     end=source.rindex("\n} // namespace apple_auth")
     helper=r"""
 namespace {
@@ -59,6 +59,9 @@ APPLE_AUTH_CLIENT_EXPORT int lab_tf_cookie_contract() {
         const Json state={{"kind","apple-auth-store"},{"version",1},{"protocol","macos-accounts"},
             {"account",{{"dsPersonId","12345"},{"passwordToken","SYNTHETIC_TOKEN"}}},
             {"storefront","143441-1,29"},{"guid","AABBCCDDEEFF"},{"cookies",cookies}};
+        const auto normalized=parse_plist(encode_plist(state));
+        const auto fixture=normalized.dump();
+        std::fprintf(stderr,"TF_COOKIE_PUBLIC_FIXTURE:%s\\n",fixture.c_str());
         const auto accepted=StoreSession::from_plist(encode_plist(state));
         require(accepted.account_id()=="12345","Cookie fixture account mismatch");
         auto bad=state;bad["cookies"][0]["domain"]="invalid.example";
@@ -66,6 +69,8 @@ APPLE_AUTH_CLIENT_EXPORT int lab_tf_cookie_contract() {
         try{(void)StoreSession::from_plist(encode_plist(bad));}catch(const std::exception&){rejected=true;}
         require(rejected,"Cookie foreign-domain guard missing");
         return 0;
+    }catch(const std::exception& error) {
+        std::fprintf(stderr,"TF_COOKIE_PUBLIC_FIXTURE_ERROR:%s\\n",error.what());return 2;
     }catch(...){return 2;}
 }
 APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_cookie_inspect(const Path& root) {
