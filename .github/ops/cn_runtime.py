@@ -17,7 +17,7 @@ from telegram_queue import GitHub
 WORKFLOW='.github/workflows/cn-auth-runtime.yml'
 def fingerprint(root=Path('.')):
     root=Path(root);h=hashlib.sha256(bytes.fromhex(base_fingerprint(root)))
-    for name in [WORKFLOW,'.github/ops/ChinaLogin.swift','.github/ops/LabCNLoginFlow.swift','.github/ops/LabCNLoginFlowTests.swift','.github/ops/patch_cn_login.py']:
+    for name in [WORKFLOW,'.github/ops/ChinaLogin.swift','.github/ops/LabCNLoginFlow.swift','.github/ops/LabCNLoginFlowTests.swift','.github/ops/patch_cn_login.py','.github/ops/cn_session_seal.go','.github/ops/cn_session_seal_test.go']:
         h.update(name.encode()+b'\0');h.update(bytes.fromhex(digest(root/name)))
     return h.hexdigest()
 
@@ -64,6 +64,21 @@ def fetch(destination):
                 with zipped.open(entries[0]) as src,packed.open('xb') as dst:shutil.copyfileobj(src,dst,1024*1024)
             result=unpack(packed,destination,stamp,'macos-26-intel',run['head_sha'],run['id'])
             if result.get('profile')!='cn-auth-session-v1':raise ValueError('CN profile binding')
+        sealer_name='cn-session-sealer-macos-26-intel-'+stamp
+        sealers=client.call('/actions/runs/'+str(run['id'])+'/artifacts?per_page=100').get('artifacts',[])
+        sealers=[x for x in sealers if x.get('name')==sealer_name and x.get('expired') is False]
+        require_sealer=len(sealers)==1
+        if not require_sealer:raise ValueError('CN session sealer missing')
+        sealer=sealers[0]
+        if not re.fullmatch('sha256:[a-f0-9]{64}',sealer.get('digest','')) or not 0<sealer.get('size_in_bytes',0)<=32*1024*1024:raise ValueError('CN sealer bounds')
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'sealer.zip';client.archive(sealer['id'],path,max_bytes=32*1024*1024)
+            if 'sha256:'+digest(path)!=sealer['digest']:raise ValueError('CN sealer digest')
+            with zipfile.ZipFile(path) as zipped:
+                entries=zipped.infolist()
+                if len(entries)!=1 or entries[0].filename!='cn-session-seal' or not 0<entries[0].file_size<=32*1024*1024:raise ValueError('CN sealer inventory')
+                with zipped.open(entries[0]) as src,(Path(destination)/'cn-session-seal').open('xb') as dst:shutil.copyfileobj(src,dst,1024*1024)
+                (Path(destination)/'cn-session-seal').chmod(0o755)
         print(json.dumps({'schema':'cn-auth-runtime-fetch-v1','producer':run['id'],'fingerprint':stamp}));return
     raise ValueError('validated_CN_runtime_missing')
 
