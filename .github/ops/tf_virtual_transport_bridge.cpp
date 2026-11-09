@@ -276,7 +276,12 @@ APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_beta_download(const std::filesystem:
     auto base=lab_tf_curl_transport();
     Transport transport=[&](const HttpRequest& request)->HttpResponse {
         report["http_status"]=0;
-        const auto response=base(request);report["http_status"]=response.status;return response;
+        const auto response=base(request);report["http_status"]=response.status;
+        if(request.url.rfind("https://testflight.apple.com/v2/accounts/",0)==0 &&
+            request.url.size()>=8 && request.url.substr(request.url.size()-8)=="/install" &&
+            request.method=="POST" && response.body.size()<=16*1024*1024)
+            netdetail::write_private(root/"tf-install-response.json",response.body);
+        return response;
     };
     try {
         lab_tf_invitation_bind(root,transport);

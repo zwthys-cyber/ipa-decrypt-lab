@@ -34,7 +34,7 @@ def unpack_private(raw,root):
             require(not path.is_absolute() and all(part not in ("",".","..") for part in path.parts))
             require(member.name==str(path) and member.isfile() and not member.mode&0o077)
             require(member.name not in files and 0<=member.size<=16*1024*1024)
-            require(member.name in {"profile.json","account.plist","mac-store.plist","tf-session.json","catalog.json","failure.txt","store-auth-response.bin","store-auth-meta.json","tf-auth-response.bin","tf-auth-meta.json","invitation.json","accept-response.json","invitation-intents.sqlite","invitation-intent-approved.json","tf-install-metadata.json","download-failure.txt"}
+            require(member.name in {"profile.json","account.plist","mac-store.plist","tf-session.json","catalog.json","failure.txt","store-auth-response.bin","store-auth-meta.json","tf-auth-response.bin","tf-auth-meta.json","invitation.json","accept-response.json","invitation-intents.sqlite","invitation-intent-approved.json","tf-install-metadata.json","download-failure.txt","tf-install-response.json"}
                     or len(path.parts)>=2 and path.parts[0]=="sdk"
                     and all(re.fullmatch(r"[A-Za-z0-9_.-]{1,128}",part) is not None for part in path.parts[1:]))
             total+=member.size;require(total<=32*1024*1024)

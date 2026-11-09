@@ -51,6 +51,29 @@ def archive_binding(path,bundle):
         if infos[0].rsplit("/",1)[0]+"/"+executable not in names:raise ValueError()
         if archive.testzip() is not None:raise ValueError()
         return len(entries)
+FIELDS={"url","dpInfo","sinf","data","status","error","messages","message","code","success","installUrl","installURL",
+"downloadUrl","downloadURL","assetURL","assetData","assets","installMetadata","manifest","build","platform",
+"installParameters","result","downloadInfo","softwareVersionExternalIdentifier","softwareVersionBundleId",
+"softwareVersionBundleID","storefrontId","hasAcceptedTerms","termsAndConditions","isCompatible","compatible","reason"}
+def response_shape(path):
+    if not path.is_file() or path.stat().st_size>16*1024*1024:return {"present":False}
+    try:root=json.loads(path.read_bytes())
+    except Exception:return {"present":True,"parsed":False}
+    nodes=[]
+    def walk(value,depth=0):
+        if depth>16 or len(nodes)>=64:return
+        if type(value) is dict:
+            nodes.append({"fields":{key:("null" if item is None else "bool" if type(item) is bool else
+                "string_nonempty" if type(item) is str and item else "string_empty" if type(item) is str else
+                "integer" if type(item) is int else "object" if type(item) is dict else "array" if type(item) is list else "other")
+                for key,item in value.items() if key in FIELDS},"other_fields":min(100,len(set(value)-FIELDS))})
+            for key,item in value.items():
+                if key in FIELDS and type(item) in (dict,list):walk(item,depth+1)
+        elif type(value) is list:
+            for item in value[:16]:walk(item,depth+1)
+    walk(root)
+    return {"present":True,"parsed":True,"root_kind":"object" if type(root) is dict else "array" if type(root) is list else "other","nodes":nodes}
+
 def main():
     os.umask(0o077);env=dict(os.environ)
     receipt={"schema":"tf-beta-export-v1","status":"export_failed","run_id":env.get("GITHUB_RUN_ID"),
@@ -70,6 +93,7 @@ def main():
                     capture_output=True,timeout=1500,env=public_env(env))
                 if len(result.stdout)>4096:raise ValueError()
                 native=validate(json.loads(result.stdout));receipt["result"]=native
+                receipt["install_response_shape"]=response_shape(root/"tf-install-response.json")
                 for metadata in output.glob(".testflight-download-*/install-metadata.json"):
                     if metadata.is_file() and not metadata.is_symlink() and metadata.stat().st_size<=16*1024*1024:
                         shutil.copyfile(metadata,root/"tf-install-metadata.json");(root/"tf-install-metadata.json").chmod(0o600)
