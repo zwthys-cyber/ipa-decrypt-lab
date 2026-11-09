@@ -79,6 +79,7 @@ def ensure_membership(state,path,package,request,env,receipt,runner=native,remot
         try:runner("accept",state,path,package,env)
         except Stop as error:
             if str(error) in {"testflight_rate_limited","testflight_session_requires_maintenance"}:raise
+        except (InterruptedError,KeyboardInterrupt):raise
         except Exception:pass
         code,value=runner("inspect",state,path,package,env)
         verified=code==0 and value["membership_verified"] and not value["agreement_required"] and target(state)==original_target

@@ -106,3 +106,18 @@ class TFWorkerContracts(unittest.TestCase):
             with self.assertRaisesRegex(Stop,"testflight_rate_limited"):
                 ensure_membership(root,root/"request",root,REQUEST,{}, {},runner,remote)
             self.assertEqual(events,["inspect","claim","accept","finish"])
+
+    def test_cancellation_during_acceptance_does_not_start_another_request(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);self.state(root);events=[]
+            def remote(op,value,env):
+                events.append(op)
+                if op=="claim":return self.permit()
+                self.assertEqual(value["outcome"],"outcome_unknown");return {}
+            def runner(mode,*args):
+                events.append(mode)
+                if mode=="accept":raise InterruptedError()
+                return 0,evidence()
+            with self.assertRaises(InterruptedError):
+                ensure_membership(root,root/"request",root,REQUEST,{}, {},runner,remote)
+            self.assertEqual(events,["inspect","claim","accept","finish"])
