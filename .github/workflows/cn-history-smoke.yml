@@ -105,3 +105,5 @@ jobs:
           path: cn-history-proof/proof.json
           retention-days: 30
           if-no-files-found: error
+
+# Source comparison uses a separate read-only Contents API, not the bot Actions allowlist.

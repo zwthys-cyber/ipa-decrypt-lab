@@ -1,5 +1,5 @@
 """Bounded CN history verification; public metadata/ciphertext only, never send an IPA."""
-import hashlib,json,os,re,sys,tempfile,time,zipfile
+import hashlib,json,os,re,subprocess,sys,tempfile,time,zipfile
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/"tools"))
 from telegram_queue import GitHub,validate_receipt
@@ -58,7 +58,7 @@ def main(mode):
         for name in ("catalog / native","select","export / native"):
             assert any(job.get("name")==name and job.get("conclusion")=="success" for job in jobs),"unverified_export_origin"
         assert any(job.get("name")=="proof" and job.get("conclusion")=="failure" for job in jobs),"unexpected_origin_failure"
-        comparison=client.call("/compare/"+origin_sha+"..."+sha)
+        comparison=json.loads(subprocess.check_output(["gh","api","repos/"+os.environ["GITHUB_REPOSITORY"]+"/compare/"+origin_sha+"..."+sha],text=True))
         assert comparison.get("status")=="ahead" and 0<comparison.get("total_commits",0)<=10
         files=comparison.get("files",[])
         approved={".github/ops/cn_history_proof.py",".github/workflows/cn-history-smoke.yml",
