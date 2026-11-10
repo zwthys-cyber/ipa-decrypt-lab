@@ -19,7 +19,8 @@ permissions:
   actions: write
 concurrency:
   group: vps-release
-  cancel-in-progress: false
+  # Explicit marker only after confirming the superseded run is still before SSH deployment.
+  cancel-in-progress: ${{ contains(github.event.head_commit.message, '[replace-preflight-deploy]') }}
 jobs:
   release:
     if: github.ref == 'refs/heads/main'
