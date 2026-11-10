@@ -180,3 +180,5 @@ jobs:
 # User-requested alpha.5 public attachment refresh uses a build-only producer.
 
 # Persist the account profile in historical-version views before CN promotion.
+
+# Keep bot help aligned with CN historical-version command support.
