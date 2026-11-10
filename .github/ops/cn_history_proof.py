@@ -47,6 +47,23 @@ def choose(payload,run,sha):
 
 def main(mode):
     client=GitHub(os.environ["GH_TOKEN"]);sha=os.environ["GITHUB_SHA"];run=os.environ["GITHUB_RUN_ID"]
+    origin_run=os.environ.get("CN_HISTORY_EXPORT_RUN",run)
+    origin_sha=os.environ.get("CN_HISTORY_EXPORT_SHA",sha)
+    if origin_run!=run or origin_sha!=sha:
+        assert mode=="record" and origin_run=="42726551974" and origin_sha=="44c95de909cd2e9568b3844f83be045f5c894516","invalid_repair_origin"
+        original=client.call("/actions/runs/"+origin_run)
+        assert original.get("path")==WORKFLOW and original.get("head_sha")==origin_sha and original.get("head_branch")=="main"
+        assert original.get("event")=="workflow_run" and original.get("status")=="completed" and original.get("conclusion")=="failure"
+        jobs=client.call("/actions/runs/"+origin_run+"/jobs?per_page=100").get("jobs",[])
+        for name in ("catalog / native","select","export / native"):
+            assert any(job.get("name")==name and job.get("conclusion")=="success" for job in jobs),"unverified_export_origin"
+        assert any(job.get("name")=="proof" and job.get("conclusion")=="failure" for job in jobs),"unexpected_origin_failure"
+        comparison=client.call("/compare/"+origin_sha+"..."+sha)
+        assert comparison.get("status")=="ahead" and 0<comparison.get("total_commits",0)<=10
+        files=comparison.get("files",[])
+        approved={".github/ops/cn_history_proof.py",".github/workflows/cn-history-smoke.yml",
+                  ".github/workflows/vps-release.yml","AGENTS.md"}
+        assert 0<len(files)<300 and all(f.get("filename") in approved and f.get("status")=="modified" for f in files),"export_sources_changed"
     if mode=="choose":
         payload=artifact(client,run,"versions-"+CATALOG_RID,131072)
         row=choose(payload,run,sha)
@@ -54,24 +71,24 @@ def main(mode):
             stream.write("version_id="+row["id"]+"\nversion="+row["version"]+"\n")
         print(json.dumps({"status":"older_cn_version_selected","catalog_verified":True}))
     elif mode=="record":
-        payload=artifact(client,run,"versions-"+CATALOG_RID,131072)
-        row=choose(payload,run,sha)
-        receipt=artifact(client,run,"delivery-"+EXPORT_RID,256*1024*1024)
-        validate_receipt(receipt,EXPORT_RID,run,sha)
+        payload=artifact(client,origin_run,"versions-"+CATALOG_RID,131072)
+        row=choose(payload,origin_run,origin_sha)
+        receipt=artifact(client,origin_run,"delivery-"+EXPORT_RID,256*1024*1024)
+        validate_receipt(receipt,EXPORT_RID,origin_run,origin_sha)
         assert receipt.get("requested_version")==row["id"]==receipt.get("external_version_id"),"historical_id_mismatch"
         assert receipt.get("resolved_version")==row["version"],"historical_display_mismatch"
         assert receipt.get("app_id")==APP and receipt.get("encrypted_images",0)>0 and receipt.get("decrypted_pages",0)>0,"missing_plaintext_proof"
-        proof={"schema":"cn-history-proof-v1","source_commit":sha,"source_fingerprint":fingerprint(),
-            "run_id":run,"app_id":APP,"account_profile":"cn","catalog_verified":True,
+        proof={"schema":"cn-history-proof-v1","source_commit":sha,"source_fingerprint":fingerprint("."),
+            "run_id":run,"export_run_id":origin_run,"export_source_commit":origin_sha,"app_id":APP,"account_profile":"cn","catalog_verified":True,
             "older_than_current":True,"external_version_id":row["id"],"resolved_version":row["version"],
             "plaintext_verified":True,"delivered":False,"new_authorization":False}
         Path("cn-history-proof").mkdir()
         Path("cn-history-proof/proof.json").write_text(json.dumps(proof)+"\n")
         print(json.dumps({"status":"cn_history_plaintext_verified","delivered":False}))
     elif mode=="gate":
-        expected=fingerprint()
+        expected=fingerprint(".")
         for poll in range(60):
-            runs=client.call("/actions/workflows/cn-history-smoke.yml/runs?branch=main&event=workflow_run&per_page=20").get("workflow_runs",[])
+            runs=client.call("/actions/workflows/cn-history-smoke.yml/runs?branch=main&per_page=20").get("workflow_runs",[])
             for candidate in runs:
                 if (candidate.get("head_sha")==sha and candidate.get("conclusion")=="success"
                         and candidate.get("path")==WORKFLOW and candidate.get("head_branch")=="main"):
