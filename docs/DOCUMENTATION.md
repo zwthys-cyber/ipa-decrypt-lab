@@ -1,6 +1,8 @@
 # 项目文档索引
 
-本文档于 2026-11-09 更新，当前成品版本为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。Apple 新原生认证与 Store AMD/SP 设备注册已恢复，正式 X 导出通过 32 个加密切片、86,704 页完整验证。安装运行仍未验证。TF 已接入主人自动任务，CapyPlayer 新请求的实际解密与用户收件截图均已记录；最新部署为新 TF 文件添加 `Beta` 命名标识。本次 alpha.5 附件更新纳入该功能，新包来源以 `BUILDINFO.json` 为准，原标签保留，详见 [TF 记录](TESTFLIGHT.md)。
+本文档于 2026-11-10 更新，当前成品版本为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。Apple 新原生认证与 Store AMD/SP 设备注册已恢复，正式 X 导出通过 32 个加密切片、86,704 页完整验证。安装运行仍未验证。TF 已接入主人自动任务，CapyPlayer 新请求的实际解密与用户收件截图均已记录；最新部署为新 TF 文件添加 `Beta` 命名标识。本次 alpha.5 附件更新纳入该功能，新包来源以 `BUILDINFO.json` 为准，原标签保留，详见 [TF 记录](TESTFLIGHT.md)。
+
+主分支与线上控制器另接入国区历史版本，完整国区链接用于查询与指定下载；alpha.5 附件仍是此前发布快照。实测与部署证据见 [项目状态](PROJECT-STATUS.md)。
 
 ## 使用、部署与发布
 

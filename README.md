@@ -1,10 +1,10 @@
 # IPA Decrypt Lab
 
-这个项目将 App Store 和 TestFlight 应用的下载、解密校验和 Telegram 交付串成完整流程；外区 App Store 另支持历史版本选择。机器人在 Debian VPS 上常驻运行，下载和解密交给 GitHub-hosted macOS。
+这个项目将 App Store 和 TestFlight 应用的下载、解密校验和 Telegram 交付串成完整流程；中国区与原外区 App Store 均接入历史版本选择。机器人在 Debian VPS 上常驻运行，下载和解密交给 GitHub-hosted macOS。
 
 目前开放管理员和白名单用户私聊，可按链接处理中国区或原外区账号的免费应用，IPA 最大 **2000 MB**。每人任务、文件、进度和额度独立；收费和应用安装后的兼容性仍在待办里。
 
-中国区模型已恢复，并通过跨运行器复用、保存状态重放和真实导出，链接路由已[部署](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42566050391)。`/cn/` 商店链接自动使用中国区账号，其他地区链接及数字 App ID 使用原外区账号。中国区先支持最新版；外区历史版本保持可用。见 [中国区接入状态](docs/CHINA-ACCOUNT.md)。
+中国区模型已恢复，并通过跨运行器复用、保存状态重放和真实导出，链接路由已[部署](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42566050391)。`/cn/` 商店链接自动使用中国区账号，其他地区链接及数字 App ID 使用原外区账号。中国区与外区均支持免费应用最新版及可获取的历史版本。见 [中国区接入状态](docs/CHINA-ACCOUNT.md)。
 
 部分国区专属应用仍有许可兼容问题：抖音在 GitHub 境外出口下收到地区不可用相关提示，尚未修复，需大陆出口对照。样本成功不代表所有国区应用都能下载。见 [当前限制与证据](docs/CHINA-ACCOUNT.md)。
 
@@ -14,15 +14,15 @@
 
 当前成品版本为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。里面有 Linux amd64 服务器端，以及 macOS 26 / 15 Intel 运行包；用途、配置和校验方法见 [发布说明](docs/RELEASES.md)。
 
-这些包需要配合仓库工作流和自己的私有配置使用。alpha.5 本次重打包纳入 TF 自动任务与 Beta 文件命名；包的准确源码和构建来源以附件 `BUILDINFO.json` 为准，原标签保留。Apple 账号、授权模型、Telegram 凭据和应用 IPA 都不随发布包提供。
+这些包需要配合仓库工作流和自己的私有配置使用。alpha.5 本次重打包纳入 TF 自动任务与 Beta 文件命名；包的准确源码和构建来源以附件 `BUILDINFO.json` 为准，原标签保留。国区历史功能属于之后的主分支与线上更新，当前公开 alpha.5 附件尚不包含这项功能。Apple 账号、授权模型、Telegram 凭据和应用 IPA 都不随发布包提供。
 
 ## 现在能做什么
 
 - 发送 App Store 链接或 App ID，默认下载最新版；`/cn/` 自动使用中国区，其他地区或纯数字使用原外区账号。
 - 主人发送 TestFlight 邀请链接，自动处理可用的 iOS 测试构建；额外协议、失效会话或模型不兼容时明确停止。
 - 进度卡显示下载路线；任务恢复、取消和取文件始终绑定原账号。
-- 外区用 `/versions` 先查看最近一批历史版本，按需加载更早版本并直接点选。
-- 外区用 `/version` 指定版本号或 Apple 历史版本 ID。
+- 用 `/versions` 先查看最近一批历史版本，按需加载更早版本并直接点选。
+- 用 `/version` 指定版本号或 Apple 历史版本 ID；国区历史查询和下载必须提供 `/cn/` 链接，纯数字 ID 仍默认外区。
 - 已部署的进度卡在同一张 Telegram 消息中显示步骤进度条、真实下载字节比例、全程与阶段耗时；约 5 秒更新计时，重启后继续累计。
 - 收到带应用图标的 IPA：App Store 为 `名称_版本.ipa`，TestFlight 为 `名称_Beta_版本.ipa`。
 - 服务重启后继续跟踪任务；发送结果不明时保留记录，避免重复发文件。
@@ -44,7 +44,10 @@ My BVF 的最新一次 GitHub 导出实测约 59 秒，此前预编译版样本�
 
 X 的后续加速对比已通过：删除账号元数据时直接复制保留项的压缩数据，完整校验仍保留。复核从约 40.4 秒降到 13.8 秒，GitHub 原生作业从 128 秒降到 103 秒；成品包约增大 3%。这是单次后台对比，完整 Telegram 交付仍受排队与网络影响。[实测与边界](docs/PROJECT-STATUS.md)
 
-## 已经验证到哪一步（2026-11-09）
+## 已经验证到哪一步（2026-11-10）
+
+国区历史版本已完成真实验证并接入线上：保存会话查询到 LocalSend 的32条版本记录，首批读取10条；选择旧于当前版本的1.18.1（历史ID `889619746`），验证31个加密镜像、11,716页并完成加密导出。证明与部署记录见 [项目状态](docs/PROJECT-STATUS.md)。此轮没有发送样本文件、初始化模型或新增电脑授权。
+
 
 TestFlight 主人自动任务已部署，持久会话恢复、资格检查、测试包下载和严格明文校验均已通过。真实新请求 [CapyPlayer 导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42714371079) 验证了46个加密镜像、17,724页；用户提供的 Telegram 截图确认已收到 `CapyPlayer_1.1.7.ipa`。该请求已有成员资格，没有新接受邀请或电脑授权。
 

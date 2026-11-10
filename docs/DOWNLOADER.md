@@ -1,6 +1,6 @@
 # 原始 IPA 下载与当前生产入口
 
-当前下载组件随 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5) 发布。正式入口是 Telegram 管理员与白名单私聊，以及 GitHub 的 `private-delivery.yml`（外区）、`china-private-delivery.yml`（中国区）和主人专用 `testflight-private-delivery.yml`；历史列表使用 `version-catalog.yml`。2026-11-08 [X 完整导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)已验证下载与解密恢复。
+当前下载组件随 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5) 发布。正式入口是 Telegram 管理员与白名单私聊，以及 GitHub 的 `private-delivery.yml`（外区）、`china-private-delivery.yml`（中国区）和主人专用 `testflight-private-delivery.yml`；历史列表分别使用 `version-catalog.yml`（外区）与 `china-version-catalog.yml`（国区）。2026-11-08 [X 完整导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)已验证下载与解密恢复。
 
 ## App Store 处理流程
 
@@ -28,7 +28,7 @@ Apple Secrets 使用 `APPLE_ID`、`APPLE_PASSWORD`，需要时配置短期 `APPL
 
 ## 中国区账号的独立接入状态（2026-11-09）
 
-中国区独立模型、跨运行器复用与保存状态重放均通过完整明文验证。`tools/cn_private_export.py` 使用专用会话、GUID、检查点和模型，以非交互 Cookie 刷新取得当前设备证明，再复用公共导出校验/清理/加密流程。`/cn/` 链接自动选择该固定工作流，中国区先支持最新版，其他链接仍使用原账号。普通国区任务不挂载外区凭据，不收验证码，不进行模型恢复或电脑授权；会话失效由管理员走独立维护流程。原德国区凭据、模型和安全设置保持原样。详见 [中国区接入说明](CHINA-ACCOUNT.md)。
+中国区独立模型、跨运行器复用与保存状态重放均通过完整明文验证。`tools/cn_private_export.py` 使用专用会话、GUID、检查点和模型，以非交互 Cookie 刷新取得当前设备证明，再复用公共导出校验/清理/加密流程。`/cn/` 链接自动选择该固定工作流，中国区支持最新版及可获取的历史版本，其他链接仍使用原账号。普通国区任务不挂载外区凭据，不收验证码，不进行模型恢复或电脑授权；会话失效由管理员走独立维护流程。原德国区凭据、模型和安全设置保持原样。详见 [中国区接入说明](CHINA-ACCOUNT.md)。
 
 ## TestFlight 独立处理流程（2026-11-09）
 
