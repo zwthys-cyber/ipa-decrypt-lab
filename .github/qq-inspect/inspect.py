@@ -49,6 +49,14 @@ def metadata(path,work):
     # run on Linux without executing QQ or relying on macOS inspection tools.
     require(sha(path)=="60402733db43cb8b61ea818bd7dd98d2a3d7cf4d84236f3555ee9ab37c4495b0",
             "verified_main_digest_mismatch")
+    raw = path.read_bytes()
+    candidates = set()
+    for match in re.finditer(rb'https?://[\x21-\x7e]{8,512}', raw):
+        value = match.group().decode("ascii")
+        if re.search(r"device|onlinestatus|online_status|custom.*name", value, re.I):
+            candidates.add(value)
+    print("QQ_DEVICE_URL_CANDIDATES "+json.dumps(sorted(candidates)[:100]),flush=True)
+    del raw
     from objc_metadata import model_schemas, ui_properties
     print("QQ_UI_PROPERTIES "+json.dumps(ui_properties(path)),flush=True)
     print("QQ_MODEL_SCHEMAS "+json.dumps(model_schemas(path)),flush=True)
