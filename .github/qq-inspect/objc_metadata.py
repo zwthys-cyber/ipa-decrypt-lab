@@ -6,9 +6,9 @@ import mmap
 import re
 import struct
 
-SELECTED = re.compile(r".*(?:Recall|Revoke|NTAIOFloatEar|OCMsgRecord|KTIKernelMsgListener|QQNewSettings).*")
+SELECTED = re.compile(r".*(?:Recall|Revoke|NTAIOFloatEar|OCMsgRecord|OCMsgElement|OCTextElement|OCPicElement|OCFaceElement|OCGrayTipElement|OCVideoElement|OCPttElement|KTIKernelMsgListener|QQNewSettings|SWI.*(?:Msg|History)|QQLogin|QQAccount|QQNTKernel|NTKernelSession|LoginManager).*")
 
-SELECTOR = re.compile(r"recall|revoke|onMsgDelete|onMsgInfoList|onRecvMsg", re.I)
+SELECTOR = re.compile(r"recall|revoke|onMsgDelete|onMsgInfoList|onRecvMsg|current.*(?:uin|account|uid)|getAccount|loginUin|userUin", re.I)
 
 class MetadataError(ValueError):
     pass
