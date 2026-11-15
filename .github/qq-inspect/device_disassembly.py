@@ -31,4 +31,22 @@ def inspect_device(path):
                         except Exception: pass
                 out.append({"address":hex(ins.address),"instruction":ins.mnemonic+" "+ins.op_str,"strings":sorted(set(annotations))})
                 if ins.mnemonic in ("bl","blr"): regs={k:v for k,v in regs.items() if ins.reg_name(k).startswith("x") and int(ins.reg_name(k)[1:])>=19}
+            callees=[]
+            for ins in decoder.disasm(data[offset:offset+size],address):
+                if ins.mnemonic!="bl" or not ins.operands or ins.operands[0].type!=ARM64_OP_IMM: continue
+                target=ins.operands[0].imm
+                if not 0x10fa00000<=target<0x10fc00000: continue
+                try: off,_=image.location(target,16)
+                except Exception: continue
+                tracked={}; names=[]
+                for part in decoder.disasm(data[off:off+16],target):
+                    ps=part.operands
+                    if part.mnemonic=="adrp" and len(ps)==2: tracked[ps[0].reg]=ps[1].imm
+                    elif part.mnemonic=="ldr" and len(ps)==2 and ps[1].type==ARM64_OP_MEM and ps[1].mem.base in tracked:
+                        try:
+                            v=image.pointer(tracked[ps[1].mem.base]+ps[1].mem.disp)
+                            names.append(image.string(v))
+                        except Exception: pass
+                if names: callees.append({"target":hex(target),"selectors":names})
+            print("QQ_DEVICE_CALLEES "+json.dumps({"method":label,"callees":callees}),flush=True)
             print("QQ_DEVICE_DISASSEMBLY "+json.dumps({"method":label,"instructions":out}),flush=True)
