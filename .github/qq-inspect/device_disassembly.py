@@ -38,15 +38,25 @@ def inspect_device(path):
                 if not 0x10fa00000<=target<0x10fc00000: continue
                 try: off,_=image.location(target,16)
                 except Exception: continue
+                resolved=target
+                for _ in range(8):
+                    off,_=image.location(resolved,48)
+                    first=next(decoder.disasm(data[off:off+4],resolved),None)
+                    if not first or first.mnemonic!="b" or first.operands[0].type!=ARM64_OP_IMM: break
+                    resolved=first.operands[0].imm
                 tracked={}; names=[]
-                for part in decoder.disasm(data[off:off+16],target):
+                for part in decoder.disasm(data[off:off+48],resolved):
                     ps=part.operands
                     if part.mnemonic=="adrp" and len(ps)==2: tracked[ps[0].reg]=ps[1].imm
+                    elif part.mnemonic=="add" and len(ps)==3 and ps[2].type==ARM64_OP_IMM and ps[1].reg in tracked:
+                        tracked[ps[0].reg]=tracked[ps[1].reg]+ps[2].imm
+                        try: names.append(image.string(tracked[ps[0].reg]))
+                        except Exception: pass
                     elif part.mnemonic=="ldr" and len(ps)==2 and ps[1].type==ARM64_OP_MEM and ps[1].mem.base in tracked:
                         try:
                             v=image.pointer(tracked[ps[1].mem.base]+ps[1].mem.disp)
                             names.append(image.string(v))
                         except Exception: pass
-                callees.append({"target":hex(target),"selectors":names,"stub":[p.mnemonic+" "+p.op_str for p in decoder.disasm(data[off:off+48],target)]})
+                callees.append({"target":hex(target),"resolved":hex(resolved),"selectors":names,"stub":[p.mnemonic+" "+p.op_str for p in decoder.disasm(data[off:off+48],resolved)]})
             print("QQ_DEVICE_CALLEES "+json.dumps({"method":label,"callees":callees}),flush=True)
             print("QQ_DEVICE_DISASSEMBLY "+json.dumps({"method":label,"instructions":out}),flush=True)
