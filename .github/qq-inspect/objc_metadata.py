@@ -6,9 +6,9 @@ import mmap
 import re
 import struct
 
-SELECTED = re.compile(r".*(?:Recall|Revoke|OCMsgRecord|QQNTAIOMessageAvatarView|NTAIOChat|AIO.*(?:Cell|Bubble)|NTMsg.*Cell).*")
+SELECTED = re.compile(r".*(?:Flash|SnapPic|Burn|Recall|Revoke|OCMsgRecord|QQNTAIOMessageAvatarView|NTAIOChat|AIO.*(?:Cell|Bubble)|NTMsg.*Cell).*")
 
-SELECTOR = re.compile(r"recall|revoke|^(?:layoutSubviews|prepareForReuse|viewModel|cellViewModel|msgRecord|record|cellHeight|bubbleView|messageViewModel|tableView:heightForRowAtIndexPath:|tableView:estimatedHeightForRowAtIndexPath:)$", re.I)
+SELECTOR = re.compile(r"flash|burn|destroy|expire|recall|revoke|^(?:layoutSubviews|prepareForReuse|viewModel|cellViewModel|msgRecord|record|cellHeight|bubbleView|messageViewModel|tableView:heightForRowAtIndexPath:|tableView:estimatedHeightForRowAtIndexPath:)$", re.I)
 
 class MetadataError(ValueError):
     pass
@@ -256,7 +256,7 @@ def ui_properties(path):
                     continue
                 ro = image.pointer(cls + 32) & ~7
                 name = image.string(image.pointer(ro + 24))
-                if name not in wanted and name not in ("OCMsgRecord", "OCMsgElement", "OCTextElement"):
+                if name not in wanted and name not in ("OCMsgRecord", "OCMsgElement", "OCTextElement", "OCPicElement") and not re.search(r"flash|snapPic|burn", name, re.I):
                     continue
                 props = image.pointer(ro + 64)
                 if not props:
