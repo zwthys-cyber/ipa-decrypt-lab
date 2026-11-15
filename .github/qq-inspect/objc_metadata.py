@@ -8,6 +8,8 @@ import struct
 
 SELECTED = re.compile(r".*(?:Recall|Revoke|NTAIOFloatEar|OCMsgRecord|KTIKernelMsgListener|QQNewSettings).*")
 
+SELECTOR = re.compile(r"recall|revoke|onMsgDelete|onMsgInfoList|onRecvMsg", re.I)
+
 class MetadataError(ValueError):
     pass
 
@@ -133,6 +135,8 @@ class Image:
             else:
                 name, types, imp = self.pointer(p), self.pointer(p + 8), self.pointer(p + 16)
             selector = self.string(name)
+            if not SELECTED.fullmatch(class_name) and not SELECTOR.search(selector):
+                continue
             encoding = self.string(types)
             output.append({"class": class_name, "class_method": is_meta,
                            "selector": selector, "types": encoding, "imp": hex(imp)})
@@ -150,13 +154,28 @@ class Image:
                     continue
                 ro = self.pointer(cls + 32) & ~7
                 name = self.string(self.pointer(ro + 24))
-                if not SELECTED.fullmatch(name):
-                    continue
                 result.extend(self.methods(self.pointer(ro + 32), name, False))
                 meta = self.pointer(cls)
                 if meta:
                     meta_ro = self.pointer(meta + 32) & ~7
                     result.extend(self.methods(self.pointer(meta_ro + 32), name, True))
+        for section, address, size in self.sections:
+            if section != "__objc_catlist":
+                continue
+            self.require(size % 8 == 0, "invalid category list")
+            for position in range(address, address + size, 8):
+                cat = self.pointer(position)
+                cls = self.pointer(cat + 8)
+                if not cls:
+                    continue  # category on an external class cannot be resolved here
+                ro = self.pointer(cls + 32) & ~7
+                name = self.string(self.pointer(ro + 24))
+                category = self.string(self.pointer(cat))
+                for is_meta, offset in ((False, 16), (True, 24)):
+                    entries = self.methods(self.pointer(cat + offset), name, is_meta)
+                    for entry in entries:
+                        entry["category"] = category
+                    result.extend(entries)
         return result
 
 def inspect(path):
