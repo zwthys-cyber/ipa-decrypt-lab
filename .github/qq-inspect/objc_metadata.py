@@ -239,3 +239,33 @@ def inspect(path):
 def model_schemas(path):
     with open(path, "rb") as stream, mmap.mmap(stream.fileno(), 0, access=mmap.ACCESS_READ) as data:
         return Image(data).model_schemas()
+
+
+def ui_properties(path):
+    wanted = {"QQNTAIOMessageAvatarView", "AIOBaseCellViewModel", "NTAIOCellView",
+              "_TtC6AIOLib7AIOCell", "_TtC9NTBaseAIO17NTAIOBaseCellView"}
+    result = []
+    with open(path, "rb") as stream, mmap.mmap(stream.fileno(), 0, access=mmap.ACCESS_READ) as data:
+        image = Image(data)
+        for section, address, size in image.sections:
+            if section != "__objc_classlist":
+                continue
+            for position in range(address, address + size, 8):
+                cls = image.pointer(position)
+                if not cls:
+                    continue
+                ro = image.pointer(cls + 32) & ~7
+                name = image.string(image.pointer(ro + 24))
+                if name not in wanted:
+                    continue
+                props = image.pointer(ro + 64)
+                if not props:
+                    continue
+                stride = image.integer(props, "<I")
+                count = image.integer(props + 4, "<I")
+                image.require(stride == 16 and count < 256, "invalid UI property list")
+                for i in range(count):
+                    item = props + 8 + i * stride
+                    result.append({"class": name, "property": image.string(image.pointer(item)),
+                                   "attributes": image.string(image.pointer(item + 8))})
+    return result
