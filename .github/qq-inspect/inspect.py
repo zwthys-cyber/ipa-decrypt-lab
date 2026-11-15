@@ -6,8 +6,8 @@ ARTIFACT=14162736529
 ARCHIVE_SHA="b64c645a1fb1caec309a295c1ab79e7815ee1beb7e95e8fbd1ab4aba997d5e31"
 SOURCE="3233fe33090467b29fa986f789e99ca1e25f5bc0"
 REQUEST="217b63c6381e1ce3a52cf9c75cac1691"
-AGE_URL="https://github.com/FiloSottile/age/releases/download/v1.3.2/age-v1.3.2-darwin-amd64.tar.gz"
-AGE_SHA="1d1e4bc66e1427edad7739ae7616157de0e79db8b6d2a1497d7d9925fb06a539"
+AGE_URL="https://github.com/FiloSottile/age/releases/download/v1.3.2/age-v1.3.2-linux-amd64.tar.gz"
+AGE_SHA="cbe24006683f8eb669266162894b9a522a1af52f2665fbc63a4bb032ed26ac10"
 MAGICS={bytes.fromhex(v) for v in ("cffaedfe","feedfacf","cefaedfe","feedface","cafebabe","bebafeca","cafebabf","bfbafeca")}
 HINT=re.compile(r"recall|revoke|OCMsgRecord|KTIKernelMsgListener|onMsgInfoListUpdate|onMsgDelete",re.I)
 CLASS=re.compile(r"(?:QQMessageRecallModule|OCMsgRecord|KTIKernelMsgListener|NTAIOFloatEarManager|NTAIOMenuRecallService|.*Recall.*Processor|.*Recall.*Model|.*Recall.*Msg)")
@@ -44,18 +44,17 @@ def run(args,**kwargs):
 
 def metadata(path,work):
     from objc_metadata import inspect
-    archs=run(["xcrun","lipo","-archs",str(path)],stdout=subprocess.PIPE).stdout.decode().split()
-    require("arm64" in archs,"qq_arm64_missing")
-    if len(archs)>1:
-        thin=work/"thin.macho"
-        run(["xcrun","lipo",str(path),"-thin","arm64","-output",str(thin)],stdout=subprocess.PIPE)
-        path=thin
+    # This exact main executable was already checked as unencrypted arm64 in
+    # run 43718304175. Binding its full digest lets this metadata-only expansion
+    # run on Linux without executing QQ or relying on macOS inspection tools.
+    require(sha(path)=="60402733db43cb8b61ea818bd7dd98d2a3d7cf4d84236f3555ee9ab37c4495b0",
+            "verified_main_digest_mismatch")
     return inspect(path)
 def main():
     require(os.environ.get("GITHUB_ACTIONS")=="true","actions_only")
     require(os.environ.get("DELIVERY_AGE_IDENTITY","").strip(),"delivery_identity_missing")
     require(os.environ.get("GH_TOKEN",""),"github_token_missing")
-    report={"schema":"qq-static-interfaces-v1","source_run":RUN,"runtime_verified":False,"hook_verified":False,"images":[]}
+    report={"schema":"qq-static-interfaces-v1","source_run":RUN,"runtime_verified":False,"hook_verified":False,"images_scope":"digest-bound main executable only","images":[]}
     with tempfile.TemporaryDirectory(prefix="qq-private-") as temp:
         work=Path(temp)
         headers={"Authorization":"Bearer "+os.environ["GH_TOKEN"],"Accept":"application/vnd.github+json","User-Agent":"qq-static-inspection"}
@@ -105,7 +104,7 @@ def main():
             report["bundle"]={k:info.get(k) for k in ("CFBundleIdentifier","CFBundleShortVersionString","CFBundleVersion","CFBundleExecutable","MinimumOSVersion")}
             main_seen=False
             for entry in z.infolist():
-                if entry.is_dir() or not entry.filename.startswith(root): continue
+                if entry.is_dir() or entry.filename != root + "QQ": continue
                 require(entry.file_size<1536*1024**2,"member_size_limit")
                 with z.open(entry) as src:
                     first=src.read(4)
@@ -114,12 +113,9 @@ def main():
                     with binary.open("wb") as out:
                         out.write(first)
                         for block in iter(lambda:src.read(1024*1024),b""): out.write(block)
-                load=run(["xcrun","otool","-arch","all","-l",str(binary)],stdout=subprocess.PIPE).stdout.decode(errors="replace")
-                cryptids=re.findall(r"^\s*cryptid\s+(\d+)\s*$",load,re.M)
-                nenc=len(re.findall(r"^\s*cmd LC_ENCRYPTION_INFO(?:_64)?\s*$",load,re.M))
-                require(nenc==len(cryptids) and all(x=="0" for x in cryptids),"encrypted_or_invalid_image")
+                cryptids=[]  # not re-inspected; prior main-image result is digest-bound above
                 relative=entry.filename[len(root):]
-                image={"path":relative,"sha256":sha(binary),"cryptids":cryptids,"interfaces":metadata(binary,work) if relative=="QQ" else []}
+                image={"path":relative,"sha256":sha(binary),"encryption_inspection_run":43718304175,"interfaces":metadata(binary,work) if relative=="QQ" else []}
                 report["images"].append(image)
                 print("QQ_INTERFACE_IMAGE "+json.dumps(image,ensure_ascii=True),flush=True)
                 if relative==info.get("CFBundleExecutable"): main_seen=True
