@@ -53,7 +53,31 @@ class MetadataTests(unittest.TestCase):
                         "imp": hex(BASE + 0x360),
                     }])
     def test_unselected_class_is_not_exported(self):
-        self.assertEqual(Image(fixture(name="UnrelatedClass")).inspect(), [])
+        data = fixture(name="UnrelatedClass")
+        selector = b"unrelatedAction:\0"
+        data[0x300:0x300+len(selector)] = selector
+        self.assertEqual(Image(data).inspect(), [])
+
+    def test_recall_selector_is_found_outside_selected_class_names(self):
+        methods = Image(fixture(name="MessageNotificationReceiver")).inspect()
+        self.assertEqual(methods[0]["class"], "MessageNotificationReceiver")
+        self.assertEqual(methods[0]["selector"], "recvSyntheticRecall:")
+
+    def test_category_methods_are_included(self):
+        data = fixture(name="MessageNotificationReceiver")
+        data.extend(b"\0" * 0x100)
+        struct.pack_into("<Q", data, 64, len(data))
+        struct.pack_into("<Q", data, 80, len(data))
+        data[104:120] = b"__objc_catlist\0\0\0"
+        struct.pack_into("<Q", data, 0x180, BASE + 0x400)
+        struct.pack_into("<QQQQ", data, 0x400, BASE + 0x440, BASE + 0x1a0, BASE + 0x240, 0)
+        name = b"RecallExtension\0"
+        data[0x440:0x440+len(name)] = name
+        methods = Image(data).inspect()
+        self.assertEqual(len(methods), 1)
+        self.assertEqual(methods[0]["category"], "RecallExtension")
+        self.assertEqual(methods[0]["class"], "MessageNotificationReceiver")
+        self.assertEqual(methods[0]["selector"], "recvSyntheticRecall:")
     def test_invalid_stride_is_rejected(self):
         data = fixture()
         struct.pack_into("<I", data, 0x240, 20)
