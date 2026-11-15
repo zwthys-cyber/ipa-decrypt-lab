@@ -49,6 +49,8 @@ def metadata(path,work):
     # run on Linux without executing QQ or relying on macOS inspection tools.
     require(sha(path)=="60402733db43cb8b61ea818bd7dd98d2a3d7cf4d84236f3555ee9ab37c4495b0",
             "verified_main_digest_mismatch")
+    from objc_metadata import model_schemas
+    print("QQ_MODEL_SCHEMAS "+json.dumps(model_schemas(path)),flush=True)
     return inspect(path)
 def main():
     require(os.environ.get("GITHUB_ACTIONS")=="true","actions_only")

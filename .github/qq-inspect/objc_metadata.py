@@ -113,7 +113,7 @@ class Image:
         self.require(result and all(32 <= ord(c) < 127 for c in result), "invalid metadata string")
         return result
 
-    def methods(self, address, class_name, is_meta):
+    def methods(self, address, class_name, is_meta, force=False):
         if not address:
             return []
         self.require(not address & 1, "relative list-of-lists unsupported")
@@ -135,7 +135,7 @@ class Image:
             else:
                 name, types, imp = self.pointer(p), self.pointer(p + 8), self.pointer(p + 16)
             selector = self.string(name)
-            if not SELECTED.fullmatch(class_name) and not SELECTOR.search(selector):
+            if not force and not SELECTED.fullmatch(class_name) and not SELECTOR.search(selector):
                 continue
             encoding = self.string(types)
             output.append({"class": class_name, "class_method": is_meta,
@@ -178,6 +178,64 @@ class Image:
                     result.extend(entries)
         return result
 
+    def model_schemas(self):
+        classes = {}
+        for section, address, size in self.sections:
+            if section != "__objc_classlist":
+                continue
+            for position in range(address, address + size, 8):
+                cls = self.pointer(position)
+                if not cls:
+                    continue
+                ro = self.pointer(cls + 32) & ~7
+                name = self.string(self.pointer(ro + 24))
+                if name.startswith("OC"):
+                    classes[name] = ro
+        roots = ["OCMsgRecord", "OCMsgElement", "OCTextElement", "OCPicElement",
+                 "OCFaceElement", "OCPttElement", "OCVideoElement", "OCGrayTipElement"]
+        todo = list(roots)
+        result = {}
+        while todo:
+            name = todo.pop()
+            if name in result or name not in classes:
+                continue
+            self.require(len(result) < 256, "schema class bound")
+            ro = classes[name]
+            methods = self.methods(self.pointer(ro + 32), name, False, force=True)
+            by_name = {m["selector"]: m for m in methods}
+            properties = self.pointer(ro + 64)
+            fields = []
+            if properties:
+                stride = self.integer(properties, "<I")
+                count = self.integer(properties + 4, "<I")
+                self.require(stride == 16 and count < 256, "invalid property list")
+                for i in range(count):
+                    position = properties + 8 + i * stride
+                    prop = self.string(self.pointer(position))
+                    attrs = self.string(self.pointer(position + 8))
+                    getter = by_name.get(prop)
+                    setter = by_name.get("set" + prop[0].upper() + prop[1:] + ":")
+                    codec = "setKt_" + prop + "FromCodec:"
+                    if not getter or not setter or codec not in by_name or ",V" not in attrs:
+                        continue
+                    if not re.fullmatch(r"[qQiIBfdcsSlL@]16@0:8", getter["types"]):
+                        continue
+                    kind = getter["types"][0]
+                    fields.append({"name": prop, "type": kind,
+                                   "getter_types": getter["types"], "setter_types": setter["types"]})
+                    child = re.match(r'T@"(OC[^"]+)"', attrs)
+                    if child and child.group(1) not in result:
+                        todo.append(child.group(1))
+            if fields and by_name.get("init", {}).get("types") == "@16@0:8":
+                result[name] = fields
+            else:
+                result[name] = []
+        return {k: v for k, v in result.items() if v}
+
 def inspect(path):
     with open(path, "rb") as stream, mmap.mmap(stream.fileno(), 0, access=mmap.ACCESS_READ) as data:
         return Image(data).inspect()
+
+def model_schemas(path):
+    with open(path, "rb") as stream, mmap.mmap(stream.fileno(), 0, access=mmap.ACCESS_READ) as data:
+        return Image(data).model_schemas()
