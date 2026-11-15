@@ -20,6 +20,8 @@ jobs:
           persist-credentials: false
       - name: Test metadata reader against synthetic layouts
         run: python3 -m unittest discover -s .github/qq-inspect -p 'test_metadata.py' -v
+      - name: Install pinned static instruction decoder
+        run: python3 -m pip install capstone==5.0.3
       - name: Inspect only fixed QQ delivery without executing QQ
         env:
           GH_TOKEN: ${{ github.token }}

@@ -49,6 +49,8 @@ def metadata(path,work):
     # run on Linux without executing QQ or relying on macOS inspection tools.
     require(sha(path)=="60402733db43cb8b61ea818bd7dd98d2a3d7cf4d84236f3555ee9ab37c4495b0",
             "verified_main_digest_mismatch")
+    from device_disassembly import inspect_device
+    inspect_device(path)
     raw = path.read_bytes()
     candidates = set()
     for match in re.finditer(rb'https?://[\x21-\x7e]{8,512}', raw):
