@@ -42,100 +42,15 @@ def run(args,**kwargs):
     require(p.returncode==0,"native_tool_rejected")
     return p
 
-class Resolver:
-    def __init__(self,path):
-        import mmap,struct
-        self.struct=struct
-        self.file=path.open("rb")
-        self.data=mmap.mmap(self.file.fileno(),0,access=mmap.ACCESS_READ)
-        require(self.data[:4]==b"\xcf\xfa\xed\xfe","metadata_requires_thin_little_64")
-        self.segments=[]; self.sections=[]; self.cache={}
-        p=32
-        for _ in range(struct.unpack_from("<I",self.data,16)[0]):
-            cmd,size=struct.unpack_from("<II",self.data,p)
-            require(size>=8 and p+size<=len(self.data),"bad_load_command")
-            if cmd==0x19:
-                vm,vs,fo,fs=struct.unpack_from("<QQQQ",self.data,p+24)
-                self.segments.append((vm,fs,fo))
-                count=struct.unpack_from("<I",self.data,p+64)[0]
-                require(72+count*80<=size,"bad_sections")
-                for k in range(count):
-                    q=p+72+k*80
-                    name=self.data[q:q+16].split(b"\0")[0].decode("ascii")
-                    address,length=struct.unpack_from("<QQ",self.data,q+32)
-                    self.sections.append((name,address,length))
-            p+=size
-    def close(self):
-        self.data.close(); self.file.close()
-    def offset(self,address):
-        for vm,length,fo in self.segments:
-            if vm<=address<vm+length: return fo+address-vm
-        return None
-    def string(self,address):
-        offset=self.offset(address)
-        if offset is None: return None
-        end=self.data.find(b"\0",offset,min(offset+2048,len(self.data)))
-        if end<0: return None
-        try: text=self.data[offset:end].decode("ascii")
-        except UnicodeError: return None
-        return text if text and all(32<=ord(x)<127 for x in text) else None
-    def resolve(self,value):
-        if value in self.cache: return self.cache[value]
-        match=re.fullmatch(r"\(0x([0-9a-fA-F]+) extends past end of file\)",value)
-        if not match: return value
-        address=int(match[1],16)
-        offset=self.offset(address)
-        result=None
-        # Small relative method entries reference a selector-reference pointer.
-        if offset is not None and any(n=="__objc_selrefs" and a<=address<a+s for n,a,s in self.sections):
-            pointer=self.struct.unpack_from("<Q",self.data,offset)[0]
-            result=self.string(pointer)
-        else: result=self.string(address)
-        self.cache[value]=result or value
-        return self.cache[value]
-
 def metadata(path,work):
-    import threading
+    from objc_metadata import inspect
     archs=run(["xcrun","lipo","-archs",str(path)],stdout=subprocess.PIPE).stdout.decode().split()
-    if "arm64" not in archs: return []
+    require("arm64" in archs,"qq_arm64_missing")
     if len(archs)>1:
         thin=work/"thin.macho"
         run(["xcrun","lipo",str(path),"-thin","arm64","-output",str(thin)],stdout=subprocess.PIPE)
         path=thin
-    resolver=Resolver(path)
-    child={k:os.environ[k] for k in ("PATH","HOME","LANG","DEVELOPER_DIR") if k in os.environ}
-    records=[]
-    current_class=class_indent=last_name=None
-    selected=False
-    with subprocess.Popen(["xcrun","otool","-arch","all","-ov",str(path)],
-            env=child,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,text=True,errors="replace") as process:
-        timer=threading.Timer(240,process.kill)
-        timer.start()
-        try:
-            for line in process.stdout:
-                m=re.match(r"^(\s*)(name|types)\s+0x[0-9a-fA-F]+\s+(.*?)\s*$",line)
-                if not m: continue
-                indentation,field,value=len(m[1]),m[2],resolver.resolve(m[3])
-                if len(value)>1024: continue
-                if field=="name":
-                    if CLASS.fullmatch(value):
-                        current_class,class_indent=value,indentation
-                        records.append({"class":value})
-                    elif class_indent is not None and indentation<=class_indent:
-                        current_class=class_indent=None
-                    last_name=value
-                    selected=bool(current_class or HINT.search(value))
-                elif selected and last_name:
-                    records.append({"class":current_class,"selector":last_name,"types":value})
-                    selected=False
-                require(len(records)<=12000,"candidate_method_limit")
-            require(process.wait()==0,"metadata_tool_failed_or_timed_out")
-        finally:
-            timer.cancel()
-            if process.poll() is None: process.kill()
-            resolver.close()
-    return records
+    return inspect(path)
 def main():
     require(os.environ.get("GITHUB_ACTIONS")=="true","actions_only")
     require(os.environ.get("DELIVERY_AGE_IDENTITY","").strip(),"delivery_identity_missing")
