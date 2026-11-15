@@ -42,31 +42,38 @@ def run(args,**kwargs):
     require(p.returncode==0,"native_tool_rejected")
     return p
 def metadata(path,work):
-    raw=work/"objc.txt"
-    with raw.open("wb") as out: run(["xcrun","otool","-arch","all","-ov",str(path)],stdout=out)
-    require(raw.stat().st_size<512*1024**2,"metadata_limit")
+    import threading
+    child={k:os.environ[k] for k in ("PATH","HOME","LANG","DEVELOPER_DIR") if k in os.environ}
     records=[]
     current_class=class_indent=last_name=None
     selected=False
-    with raw.open(errors="replace") as src:
-        for line in src:
-            m=re.match(r"^(\s*)(name|types)\s+0x[0-9a-fA-F]+\s+(.*?)\s*$",line)
-            if not m: continue
-            indentation,field,value=len(m[1]),m[2],m[3]
-            if len(value)>1024: continue
-            if field=="name":
-                if CLASS.fullmatch(value):
-                    current_class,class_indent=value,indentation
-                    records.append({"class":value})
-                elif class_indent is not None and indentation<=class_indent:
-                    current_class=class_indent=None
-                last_name=value
-                selected=bool(current_class or HINT.search(value))
-            elif selected and last_name:
-                records.append({"class":current_class,"selector":last_name,"types":value})
-                selected=False
-            require(len(records)<=12000,"candidate_method_limit")
-    raw.unlink()
+    with subprocess.Popen(["xcrun","otool","-arch","all","-ov",str(path)],
+            env=child,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,text=True,errors="replace") as process:
+        timer=threading.Timer(240,process.kill)
+        timer.start()
+        try:
+            for line in process.stdout:
+                m=re.match(r"^(\s*)(name|types)\s+0x[0-9a-fA-F]+\s+(.*?)\s*$",line)
+                if not m: continue
+                indentation,field,value=len(m[1]),m[2],m[3]
+                if len(value)>1024: continue
+                if field=="name":
+                    if CLASS.fullmatch(value):
+                        current_class,class_indent=value,indentation
+                        records.append({"class":value})
+                    elif class_indent is not None and indentation<=class_indent:
+                        current_class=class_indent=None
+                    last_name=value
+                    selected=bool(current_class or HINT.search(value))
+                elif selected and last_name:
+                    records.append({"class":current_class,"selector":last_name,"types":value})
+                    selected=False
+                require(len(records)<=12000,"candidate_method_limit")
+            require(process.wait()==0,"metadata_tool_failed_or_timed_out")
+        finally:
+            timer.cancel()
+            if process.poll() is None: process.kill()
     return records
 def main():
     require(os.environ.get("GITHUB_ACTIONS")=="true","actions_only")
