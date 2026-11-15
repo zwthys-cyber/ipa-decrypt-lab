@@ -68,7 +68,7 @@ class MetadataTests(unittest.TestCase):
         data.extend(b"\0" * 0x100)
         struct.pack_into("<Q", data, 64, len(data))
         struct.pack_into("<Q", data, 80, len(data))
-        data[104:120] = b"__objc_catlist\0\0\0"
+        data[104:120] = b"__objc_catlist".ljust(16, b"\0")
         struct.pack_into("<Q", data, 0x180, BASE + 0x400)
         struct.pack_into("<QQQQ", data, 0x400, BASE + 0x440, BASE + 0x1a0, BASE + 0x240, 0)
         name = b"RecallExtension\0"
