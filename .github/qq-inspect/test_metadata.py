@@ -97,5 +97,41 @@ class MetadataTests(unittest.TestCase):
         with self.assertRaises(MetadataError):
             Image(data).inspect()
 
+    def test_generated_snapshot_schema_requires_codec_and_backing_property(self):
+        data = fixture(name="OCMsgRecord")
+        data.extend(b"\0" * (0x1000 - len(data)))
+        struct.pack_into("<Q", data, 64, len(data))
+        struct.pack_into("<Q", data, 80, len(data))
+        def ptr(offset, target):
+            struct.pack_into("<Q", data, offset, BASE + target)
+        def string(offset, value):
+            raw = value.encode() + b"\0"
+            data[offset:offset+len(raw)] = raw
+        ptr(0x200, 0x600)
+        ptr(0x220, 0x400)
+        struct.pack_into("<II", data, 0x400, 16, 1)
+        ptr(0x408, 0x500)
+        ptr(0x410, 0x520)
+        string(0x500, "recallTime")
+        string(0x520, "Tq,N,V_recallTime")
+        struct.pack_into("<II", data, 0x600, 24, 4)
+        methods = [("init", "@16@0:8"), ("recallTime", "q16@0:8"),
+                   ("setRecallTime:", "v24@0:8q16"),
+                   ("setKt_recallTimeFromCodec:", "v24@0:8@16")]
+        for i, (selector, types) in enumerate(methods):
+            name_at, type_at = 0x800 + i * 64, 0xa00 + i * 64
+            string(name_at, selector)
+            string(type_at, types)
+            ptr(0x608 + i * 24, name_at)
+            ptr(0x610 + i * 24, type_at)
+            ptr(0x618 + i * 24, 0x360)
+        schema = Image(data).model_schemas()
+        self.assertEqual(schema["OCMsgRecord"], [{
+            "name": "recallTime", "type": "q",
+            "getter_types": "q16@0:8", "setter_types": "v24@0:8q16"
+        }])
+        string(0x520, "Tq,N")
+        self.assertEqual(Image(data).model_schemas(), {})
+
 if __name__ == "__main__":
     unittest.main()
