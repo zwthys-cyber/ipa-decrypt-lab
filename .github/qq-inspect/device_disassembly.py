@@ -47,6 +47,6 @@ def inspect_device(path):
                             v=image.pointer(tracked[ps[1].mem.base]+ps[1].mem.disp)
                             names.append(image.string(v))
                         except Exception: pass
-                if names: callees.append({"target":hex(target),"selectors":names})
+                callees.append({"target":hex(target),"selectors":names,"stub":[p.mnemonic+" "+p.op_str for p in decoder.disasm(data[off:off+48],target)]})
             print("QQ_DEVICE_CALLEES "+json.dumps({"method":label,"callees":callees}),flush=True)
             print("QQ_DEVICE_DISASSEMBLY "+json.dumps({"method":label,"instructions":out}),flush=True)
