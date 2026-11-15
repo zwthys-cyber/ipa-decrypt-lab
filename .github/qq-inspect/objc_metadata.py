@@ -6,7 +6,7 @@ import mmap
 import re
 import struct
 
-SELECTED = re.compile(r".*(?:Recall|Revoke|OCMsgRecord|NTAIOChat|AIO.*(?:Cell|Bubble)|NTMsg.*Cell).*")
+SELECTED = re.compile(r".*(?:Recall|Revoke|OCMsgRecord|QQNTAIOMessageAvatarView|NTAIOChat|AIO.*(?:Cell|Bubble)|NTMsg.*Cell).*")
 
 SELECTOR = re.compile(r"recall|revoke|^(?:layoutSubviews|prepareForReuse|viewModel|cellViewModel|msgRecord|record|cellHeight|bubbleView|messageViewModel)$", re.I)
 
