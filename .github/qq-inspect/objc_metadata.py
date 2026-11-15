@@ -6,7 +6,7 @@ import mmap
 import re
 import struct
 
-SELECTED = re.compile(r".*(?:Recall|Revoke|OCMsgRecord|KTIKernelMsgListener|QQNewSettings).*")
+SELECTED = re.compile(r".*(?:Recall|Revoke|NTAIOFloatEar|OCMsgRecord|KTIKernelMsgListener|QQNewSettings).*")
 
 class MetadataError(ValueError):
     pass
