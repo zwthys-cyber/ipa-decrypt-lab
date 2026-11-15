@@ -25,6 +25,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
         run: python3 .github/qq-inspect/inspect.py
+      - name: Inspect public custom device page without account credentials
+        run: python3 .github/qq-inspect/device_page.py
       - name: Retain interface metadata only
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
