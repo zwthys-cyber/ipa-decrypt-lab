@@ -142,4 +142,6 @@ def main():
 if __name__=="__main__":
     try: main()
     except Rejected as e: raise SystemExit("QQ_INSPECTION_REJECTED "+str(e)) from None
-    except Exception as e: raise SystemExit("QQ_INSPECTION_FAILED "+type(e).__name__) from None
+    except Exception as e:
+        reason = str(e) if type(e).__name__ == "MetadataError" else ""
+        raise SystemExit("QQ_INSPECTION_FAILED "+type(e).__name__+" "+reason) from None
