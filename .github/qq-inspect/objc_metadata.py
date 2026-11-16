@@ -6,7 +6,7 @@ import mmap
 import re
 import struct
 
-SELECTED = re.compile(r".*(?:Vote|Praise|Profile|Visitor|Like|Zan|QQSetting|NTSetting|SettingViewController|DeviceName|DeviceModel|OnlineStatus|Flash|SnapPic|Burn|Recall|Revoke|OCMsgRecord|QQNTAIOMessageAvatarView|NTAIOChat|AIO.*(?:Cell|Bubble)|NTMsg.*Cell).*")
+SELECTED = re.compile(r".*(?:CardInfoEngine|UserSummaryHeaderComponent|UserSummaryServiceImpl|Vote|Praise|Profile|Visitor|Like|Zan|QQSetting|NTSetting|SettingViewController|DeviceName|DeviceModel|OnlineStatus|Flash|SnapPic|Burn|Recall|Revoke|OCMsgRecord|QQNTAIOMessageAvatarView|NTAIOChat|AIO.*(?:Cell|Bubble)|NTMsg.*Cell).*")
 
 SELECTOR = re.compile(r"vote|praise|profileLike|likeCount|sendLike|customDevice|deviceName|deviceModel|machineName|flash|burn|destroy|expire|recall|revoke|^(?:layoutSubviews|prepareForReuse|viewModel|cellViewModel|msgRecord|record|cellHeight|bubbleView|messageViewModel|tableView:heightForRowAtIndexPath:|tableView:estimatedHeightForRowAtIndexPath:)$", re.I)
 

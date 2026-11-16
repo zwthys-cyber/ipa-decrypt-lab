@@ -1,4 +1,4 @@
-"""Bounded static disassembly of two inspected QQ methods; no execution."""
+"""Bounded static inspection of profile-like entry and response methods; no execution."""
 import json,mmap
 from capstone import Cs,CS_ARCH_ARM64,CS_MODE_ARM
 from capstone.arm64 import ARM64_OP_IMM,ARM64_OP_REG,ARM64_OP_MEM
@@ -6,7 +6,7 @@ from objc_metadata import Image
 def inspect_device(path):
     with open(path,"rb") as stream,mmap.mmap(stream.fileno(),0,access=mmap.ACCESS_READ) as data:
         image=Image(data); decoder=Cs(CS_ARCH_ARM64,CS_MODE_ARM);decoder.detail=True
-        for label,address,size in [("NTSettingService.getDeviceName",0x109e78e58,0xec),("OnlineStatusModule.openCustomDeviceNameWeb",0x10fa115d4,0x144)]:
+        for label,address,size in [("UserSummaryHeaderComponent.validVoteCountNotZeroForZanClickForGuest",0x10f829c98,0x59c),("UserSummaryServiceImpl.respVote",0x10f8ba33c,0x300),("ZTPQQBridge.validVoteCountNotZeroForZanClickForGuest",0x11542b168,0x300),("UserSummaryProfileAPIService.onZanCountUpdate",0x10f89daa0,0x200)]:
             offset,_=image.location(address,size); regs={}; out=[]
             for ins in decoder.disasm(data[offset:offset+size],address):
                 ops=ins.operands; annotations=[]
@@ -35,7 +35,7 @@ def inspect_device(path):
             for ins in decoder.disasm(data[offset:offset+size],address):
                 if ins.mnemonic!="bl" or not ins.operands or ins.operands[0].type!=ARM64_OP_IMM: continue
                 target=ins.operands[0].imm
-                if not 0x10fa00000<=target<0x10fc00000: continue
+                if not 0x100000000<=target<0x120000000: continue
                 try: off,_=image.location(target,16)
                 except Exception: continue
                 resolved=target
@@ -58,5 +58,5 @@ def inspect_device(path):
                             names.append(image.string(v))
                         except Exception: pass
                 callees.append({"target":hex(target),"resolved":hex(resolved),"selectors":names,"stub":[p.mnemonic+" "+p.op_str for p in decoder.disasm(data[off:off+48],resolved)]})
-            print("QQ_DEVICE_CALLEES "+json.dumps({"method":label,"callees":callees}),flush=True)
-            print("QQ_DEVICE_DISASSEMBLY "+json.dumps({"method":label,"instructions":out}),flush=True)
+            print("QQ_LIKES_CALLEES "+json.dumps({"method":label,"callees":callees}),flush=True)
+            print("QQ_LIKES_DISASSEMBLY "+json.dumps({"method":label,"instructions":out}),flush=True)
