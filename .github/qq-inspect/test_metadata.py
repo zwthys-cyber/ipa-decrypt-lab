@@ -133,5 +133,15 @@ class MetadataTests(unittest.TestCase):
         string(0x520, "Tq,N")
         self.assertEqual(Image(data).model_schemas(), {})
 
+    def test_long_struct_encoding_has_separate_bounded_reader(self):
+        data = fixture()
+        data.extend(b"\0" * (0x6000 - len(data)))
+        struct.pack_into("<Q", data, 64, len(data))
+        struct.pack_into("<Q", data, 80, len(data))
+        encoding = b"v24@0:8{Large=" + b"q" * 2500 + b"}16"
+        struct.pack_into("<Q", data, 0x250, BASE + 0x800)
+        data[0x800:0x800+len(encoding)+1] = encoding + b"\0"
+        self.assertEqual(Image(data).inspect()[0]["types"], encoding.decode("ascii"))
+
 if __name__ == "__main__":
     unittest.main()

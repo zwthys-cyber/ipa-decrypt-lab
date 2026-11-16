@@ -100,10 +100,10 @@ class Image:
             return target + (self.base if form in (9, 12) else 0)
         raise MetadataError("unsupported chained pointer format")
 
-    def string(self, address):
+    def string(self, address, maximum=2048):
         offset, segment = self.location(address)
         vm, fs, fo = self.segments[segment]
-        limit = min(offset + 2048, fo + fs)
+        limit = min(offset + maximum, fo + fs)
         end = self.data.find(b"\0", offset, limit)
         self.require(end >= offset, "unterminated metadata string")
         try:
@@ -137,7 +137,7 @@ class Image:
             selector = self.string(name)
             if not force and not SELECTED.fullmatch(class_name) and not SELECTOR.search(selector):
                 continue
-            encoding = self.string(types)
+            encoding = self.string(types, maximum=16384)
             output.append({"class": class_name, "class_method": is_meta,
                            "selector": selector, "types": encoding, "imp": hex(imp)})
         return output
