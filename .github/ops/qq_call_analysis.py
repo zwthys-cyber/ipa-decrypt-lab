@@ -2,12 +2,13 @@ import capstone, json, re, bisect
 def analyze(binary, meta):
     data=binary.read_bytes(); im=meta.Image(data)
     meta.SELECTED=re.compile(r"(?:QQAVTinyVideoRecorder|QAVRecordPanel|QQAVMorePanelViewModel|QQRTC.*Record.*|QQAVRecordBar|QQAVRecordCircleButton)")
-    meta.SELECTOR=re.compile(r"record|captur",re.I)
+    meta.SELECTOR=re.compile(r"record|captur|^playAudio:andLoopTime:$",re.I)
     methods=im.inspect()
     selectors={m["selector"] for m in methods}
     labels={int(m["imp"],16):m["class"]+" "+m["selector"] for m in methods}
     chosen=[m for m in methods if re.search(r"record|captur",m["selector"],re.I) and re.search(r"send|notify|notice|remind",m["selector"],re.I)]
-    focused=[m for m in methods if re.fullmatch(r"QQRTC.*Record.*|QQAVRecordBar|QQAVRecordCircleButton|QAVRecordPanel",m["class"])]
+    focused=[m for m in methods if m["class"] in ("QQAVTinyVideoRecorder","QQRTCP2PRecordPart") or m["selector"]=="playAudio:andLoopTime:"]
+    focused.append({"class":"bounded_helper","selector":"recordAudioHelper","types":"disassembly_only","imp":"0x1106a30b4"})
     output=[]
     dis=capstone.Cs(capstone.CS_ARCH_ARM64,capstone.CS_MODE_ARM)
     def stub(target,depth=0):
