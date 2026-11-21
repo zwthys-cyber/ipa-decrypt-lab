@@ -16,8 +16,8 @@ try:
     identity=root/"identity"; identity.write_text(os.environ["DELIVERY_AGE_IDENTITY"]+"\n"); identity.chmod(0o600)
     ipa=root/"package.ipa"
     subprocess.run(["age","--decrypt","-i",str(identity),"-o",str(ipa),str(cipher)],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-    meta.SELECTED=re.compile(r"(?!)")
-    meta.SELECTOR=re.compile(r"screen.*(?:record|captur)|(?:record|captur).*screen|recording|recordState|recordStatus",re.I)
+    meta.SELECTED=re.compile(r"(?:QQAV|QAV).*")
+    meta.SELECTOR=re.compile(r"(?!)")
     results=[]
     with zipfile.ZipFile(ipa) as z:
         infos=[n for n in z.namelist() if re.fullmatch(r"Payload/[^/]+\.app/Info.plist",n)]
@@ -35,7 +35,7 @@ try:
                 import shutil
                 shutil.copyfileobj(f,out)
             try:
-                methods=meta.inspect(binary)
+                methods=[m for m in meta.inspect(binary) if re.search(r"record|captur|screen|notify|send",m["selector"],re.I)]
             except meta.MetadataError:
                 continue
             if methods:
