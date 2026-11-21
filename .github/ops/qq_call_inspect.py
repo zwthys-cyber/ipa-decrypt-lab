@@ -41,7 +41,7 @@ try:
                     Path("qq-call-analysis.json").write_text(json.dumps(analysis,indent=2))
                     print(json.dumps({"notification_candidates":analysis["notification_candidates"]}))
                     for item in analysis["analysis"]:
-                        if item["method"]["selector"] in ("startRecordWithMultiSound:","completeRecordingSessionReason:recordTime:Completion:","startRecord","recordVideoClick") or re.search("send|notify|notice",item["method"]["selector"],re.I):
+                        if item["method"]["class"]=="QQRTCP2PRecordPart":
                             print(json.dumps(item))
                 methods=[]
             except meta.MetadataError as error:
