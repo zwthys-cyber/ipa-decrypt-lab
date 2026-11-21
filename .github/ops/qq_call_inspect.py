@@ -44,8 +44,9 @@ try:
                         if item["method"]["selector"] in ("startRecordWithMultiSound:","completeRecordingSessionReason:recordTime:Completion:","startRecord","recordVideoClick") or re.search("send|notify|notice",item["method"]["selector"],re.I):
                             print(json.dumps(item))
                 methods=[]
-            except meta.MetadataError:
-                continue
+            except meta.MetadataError as error:
+                print("metadata_rejected:",str(error))
+                raise
             if methods:
                 results.append({"image":entry.filename.split(".app/",1)[-1],"sha256":hashlib.sha256(binary.read_bytes()).hexdigest(),"methods":methods})
     Path("qq-call-metadata.json").write_text(json.dumps({"version":version,"images":results},indent=2))

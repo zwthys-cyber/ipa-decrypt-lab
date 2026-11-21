@@ -1,7 +1,8 @@
 import capstone, json, re, bisect
 def analyze(binary, meta):
     data=binary.read_bytes(); im=meta.Image(data)
-    meta.SELECTED=re.compile(r".*")
+    meta.SELECTED=re.compile(r"(?:QQAVTinyVideoRecorder|QAVRecordPanel|QQAVMorePanelViewModel)")
+    meta.SELECTOR=re.compile(r"record|captur",re.I)
     methods=im.inspect()
     selectors={m["selector"] for m in methods}
     labels={int(m["imp"],16):m["class"]+" "+m["selector"] for m in methods}

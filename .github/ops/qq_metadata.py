@@ -137,7 +137,10 @@ class Image:
             selector = self.string(name)
             if not force and not SELECTED.fullmatch(class_name) and not SELECTOR.search(selector):
                 continue
-            encoding = self.string(types)
+            try:
+                encoding = self.string(types)
+            except MetadataError:
+                continue
             output.append({"class": class_name, "class_method": is_meta,
                            "selector": selector, "types": encoding, "imp": hex(imp)})
         return output
