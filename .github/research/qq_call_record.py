@@ -131,6 +131,20 @@ try:
                   methods.extend(im.methods(im.pointer(mro+32),name,True))
               except MetadataError as exc:
                 metadata_errors.append(str(exc))
+          for sec,address,length in im.sections:
+            if sec!="__objc_catlist":continue
+            for position in range(address,address+length,8):
+              try:
+                cat=im.pointer(position);cls=im.pointer(cat+8)
+                if not cls:continue
+                ro=im.pointer(cls+32)&~7
+                name=im.string(im.pointer(ro+24))
+                category=im.string(im.pointer(cat))
+                for is_meta,off in ((False,16),(True,24)):
+                  entries=im.methods(im.pointer(cat+off),name,is_meta)
+                  for entry in entries:entry["category"]=category
+                  methods.extend(entries)
+              except MetadataError as exc:metadata_errors.append(str(exc))
           record["metadata_error_counts"]={x:metadata_errors.count(x) for x in set(metadata_errors)}
           record["focused_strings"]=[]
           for match in re.finditer(rb"[\x20-\x7e]{5,600}",data):
@@ -164,21 +178,53 @@ try:
             try:s=data[left:right].decode("utf-8")
             except UnicodeError:continue
             if valid_text(s):record["chinese_strings"].append({"text":s,"file_offset":hex(left)})
-        chosen=[m for m in methods if re.search(r"record|replay|capture",m["selector"],re.I) and re.search(r"QAV|QQAV|AVChat|QQCall|QCall|VideoChat|VideoCall|ScreenRecord|CallRecord",m["class"],re.I)]
-        chosen.sort(key=lambda m: (0 if re.search(r"QAVVideoRecordModel|QQAVReplayKit|QQAVTinyVideo",m["class"]) else 1,0 if re.search(r"start|stop|init|audio|buffer|sample",m["selector"],re.I) else 1))
-        chosen=chosen[:55]
+        hot=re.compile(r"notifyPeerRecord|handlePeerRecord|setPeerRecordState|onRecordStart|recordAVTinyVideoFinished|onRecordStopReason|notify.*record|record.*notify",re.I)
+        recorder_hot=re.compile(r"^(?:init|setUpWriter|startRecord|startMultiSoundRecord|startRecordWithMultiSound:|writeAudioData|roomAudioData:|doAudioReceiveData:type:|addAudioData:|stopRecordingWithStopReason:recordTime:Completion:)$")
+        chosen=[m for m in methods if hot.search(m["selector"]) or (m["class"]=="QQAVTinyVideoRecorder" and recorder_hot.search(m["selector"])) or (m["class"]=="QAVRecordPanel" and re.search(r"^(?:startRecord|stopRecord)$",m["selector"]))]
+        chosen=chosen[:70]
+        report["chosen_methods_count"]=len(chosen)
+        def stub_selector(address):
+          try:
+            off,_=im.location(address,12)
+            a,b=struct.unpack_from("<II",data,off)
+            if a&0x9f000000!=0x90000000:return None
+            imm=((a>>29)&3)|(((a>>5)&0x7ffff)<<2)
+            if imm&(1<<20):imm-=1<<21
+            page=(address&~4095)+(imm<<12)
+            if b&0xffc00000!=0xf9400000 or (b&31)!=1 or ((b>>5)&31)!=(a&31):return None
+            ref=page+((b>>10)&0xfff)*8
+            return im.string(im.pointer(ref))
+          except (MetadataError,struct.error):return None
         # GNU mode honors address bounds for Mach-O; public output is restricted
         # to selected function instructions, not arbitrary resource strings.
         for m in chosen:
           start=int(m["imp"],16)
-          args=["llvm-objdump","--disassemble","--no-show-raw-insn","--start-address="+hex(start),"--stop-address="+hex(start+640),str(image)]
+          args=["llvm-objdump","--disassemble","--no-show-raw-insn","--start-address="+hex(start),"--stop-address="+hex(start+2048),str(image)]
           p=run(args)
           if p.returncode==0:
             text=p.stdout.decode("utf-8","replace")
-            record["disassembly"].append({"method":m,"text":text[:18000]})
+            calls={}
+            for target in re.findall(r"\b(?:bl|b)\s+(0x[0-9a-f]+)",text):
+              selector=stub_selector(int(target,16))
+              if selector:calls[target]=selector
+            record["disassembly"].append({"method":m,"text":text[:50000],"objc_calls":calls})
           else:
             record["disassembler_error"]=p.stderr.decode("utf-8","replace")[:500];break
         # Resolve method selector and CFString references for later cross-reference work.
+        record["constant_strings"]=[]
+        for sec,addr,size in im.sections:
+          if sec!="__cfstring":continue
+          for pos in range(addr,addr+size,32):
+            try:
+              flags=im.integer(pos+8,"<Q")
+              pointer=im.pointer(pos+16);length=im.integer(pos+24,"<Q")
+              if not 0<length<=500:continue
+              unicode=bool(flags&0x10)
+              offset,_=im.location(pointer,length*(2 if unicode else 1))
+              value=data[offset:offset+length*(2 if unicode else 1)].decode("utf-16-le" if unicode else "utf-8")
+              if re.search(r"录制|录屏|录音|record.{0,12}(?:call|screen)|(?:call|screen).{0,12}record",value,re.I) and valid_text(value):
+                record["constant_strings"].append({"address":hex(pos),"text":value,"file_offset":hex(offset)})
+            except (MetadataError,UnicodeError):pass
         record["selector_refs"]={}
         for sec,addr,size in im.sections:
           if sec!="__objc_selrefs":continue
