@@ -1,0 +1,36 @@
+name: Inspect QQ call recording
+on:
+  push:
+    branches: ['research/qq-call-record-44887720434']
+    paths: ['.github/research/**', '.github/workflows/qq-call-record.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Prepare static inspection tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq age llvm
+      - name: Inspect already decrypted QQ without executing app code
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
+        run: python3 .github/research/qq_call_record.py
+      - name: Retain bounded recording metadata only
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: qq-call-record-static-${{ github.run_id }}
+          path: ${{ runner.temp }}/qq-call-report/report.json
+          retention-days: 1
+          if-no-files-found: error
+      - name: Remove inspection output
+        if: always()
+        run: rm -rf -- "${RUNNER_TEMP}/qq-call-report"
