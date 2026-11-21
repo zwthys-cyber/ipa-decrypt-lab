@@ -10,11 +10,14 @@ def analyze(binary, meta):
     focused=[m for m in methods if m["class"] in ("QQAVTinyVideoRecorder","QAVRecordPanel","QQAVMorePanelViewModel","QQRTCP2PRecordPart") and re.search(r"record",m["selector"],re.I)]
     output=[]
     dis=capstone.Cs(capstone.CS_ARCH_ARM64,capstone.CS_MODE_ARM)
-    def stub(target):
+    def stub(target,depth=0):
+        if depth>3: return ""
         try:
             off,_=im.location(target,32); regs={}
             for ins in dis.disasm(data[off:off+32],target):
                 op=ins.op_str
+                if ins.address==target and ins.mnemonic=="b":
+                    return stub(int(op.lstrip("#"),16),depth+1)
                 ma=re.fullmatch(r"(x\d+), #?(0x[0-9a-f]+)",op)
                 if ins.mnemonic=="adrp" and ma: regs[ma[1]]=int(ma[2],16)
                 ml=re.fullmatch(r"x1, \[(x\d+)(?:, #(0x[0-9a-f]+|\d+))?\]",op)
