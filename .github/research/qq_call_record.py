@@ -14,9 +14,18 @@ def digest(p):
     with open(p,"rb") as f:
         for c in iter(lambda:f.read(1024*1024),b""): h.update(c)
     return h.hexdigest()
+class SafeRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self,req,fp,code,msg,headers,newurl):
+        redirected=super().redirect_request(req,fp,code,msg,headers,newurl)
+        import urllib.parse
+        require(urllib.parse.urlsplit(newurl).scheme=="https","non_https_redirect")
+        if urllib.parse.urlsplit(newurl).netloc!=urllib.parse.urlsplit(req.full_url).netloc:
+            redirected.remove_header("Authorization")
+        return redirected
 def api(path):
+    report["stage"]="artifact_metadata" if not path.endswith("/zip") else "artifact_download"
     req=urllib.request.Request("https://api.github.com/repos/"+REPO+path,headers={"Authorization":"Bearer "+os.environ["GH_TOKEN"],"Accept":"application/vnd.github+json"})
-    return urllib.request.urlopen(req,timeout=90)
+    return urllib.request.build_opener(SafeRedirects()).open(req,timeout=90)
 def run(args,**kw):
     env={k:os.environ[k] for k in ("PATH","HOME","LANG","TMPDIR") if k in os.environ}
     return subprocess.run(args,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=180,**kw)
@@ -161,6 +170,7 @@ try:
 except Exception as exc:
     report["status"]="failed"
     report["error"]=str(exc) if isinstance(exc,ValueError) else type(exc).__name__
+    if isinstance(exc,urllib.error.HTTPError):report["http_status"]=exc.code
 finally:
     (OUT/"report.json").write_text(json.dumps(report,ensure_ascii=False,indent=2))
     print(json.dumps({"status":report["status"],"version":report.get("version"),"image_count":len(report.get("images",[]))}))
