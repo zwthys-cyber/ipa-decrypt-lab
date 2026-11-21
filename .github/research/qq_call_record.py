@@ -114,7 +114,30 @@ try:
         om.SELECTED=re.compile(r".*(?:QQAV|QAV|AVChat|QQCall|QCall|VideoChat|VideoCall|AV.*Record|Record.*AV|ScreenRecord|CallRecord|TRTC).*",re.I)
         om.SELECTOR=re.compile(r"screenRecord|recordScreen|recordCall|callRecord|startRecord|stopRecord|recordAudio|audioRecord|recordVideo|videoRecord|replayKit|captureScreen",re.I)
         try:
-          methods=im.inspect()
+          methods=[]
+          metadata_errors=[]
+          for sec,address,length in im.sections:
+            if sec!="__objc_classlist":continue
+            for position in range(address,address+length,8):
+              try:
+                cls=im.pointer(position)
+                if not cls:continue
+                ro=im.pointer(cls+32)&~7
+                name=im.string(im.pointer(ro+24))
+                methods.extend(im.methods(im.pointer(ro+32),name,False))
+                meta=im.pointer(cls)
+                if meta:
+                  mro=im.pointer(meta+32)&~7
+                  methods.extend(im.methods(im.pointer(mro+32),name,True))
+              except MetadataError as exc:
+                metadata_errors.append(str(exc))
+          record["metadata_error_counts"]={x:metadata_errors.count(x) for x in set(metadata_errors)}
+          record["focused_strings"]=[]
+          for match in re.finditer(rb"[\x20-\x7e]{5,600}",data):
+            text=match.group().decode("ascii")
+            if re.search(r"AVVideoRecord|QAVVideoRecord|QQAVReplayKit|QQAVTinyVideo|IQQAVTinyVideo",text) and len(text)<=500:
+              record["focused_strings"].append(text)
+          record["focused_strings"]=list(dict.fromkeys(record["focused_strings"]))[:600]
           record["methods"]=methods[:14000]
           require(len(methods)<=14000,"method_report_bound")
         except Exception as exc:
@@ -142,12 +165,13 @@ try:
             except UnicodeError:continue
             if valid_text(s):record["chinese_strings"].append({"text":s,"file_offset":hex(left)})
         chosen=[m for m in methods if re.search(r"record|replay|capture",m["selector"],re.I) and re.search(r"QAV|QQAV|AVChat|QQCall|QCall|VideoChat|VideoCall|ScreenRecord|CallRecord",m["class"],re.I)]
-        chosen=chosen[:70]
+        chosen.sort(key=lambda m: (0 if re.search(r"QAVVideoRecordModel|QQAVReplayKit|QQAVTinyVideo",m["class"]) else 1,0 if re.search(r"start|stop|init|audio|buffer|sample",m["selector"],re.I) else 1))
+        chosen=chosen[:55]
         # GNU mode honors address bounds for Mach-O; public output is restricted
         # to selected function instructions, not arbitrary resource strings.
         for m in chosen:
           start=int(m["imp"],16)
-          args=["llvm-objdump","--disassemble","--no-show-raw-insn","--start-address="+hex(start),"--stop-address="+hex(start+384),str(image)]
+          args=["llvm-objdump","--disassemble","--no-show-raw-insn","--start-address="+hex(start),"--stop-address="+hex(start+640),str(image)]
           p=run(args)
           if p.returncode==0:
             text=p.stdout.decode("utf-8","replace")
