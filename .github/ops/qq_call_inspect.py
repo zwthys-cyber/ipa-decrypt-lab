@@ -39,9 +39,9 @@ try:
                     from qq_call_analysis import analyze
                     analysis=analyze(binary,meta)
                     Path("qq-call-analysis.json").write_text(json.dumps(analysis,indent=2))
-                    print(json.dumps({"stubs":analysis["stubs"]}))
+                    print(json.dumps({"peer_state_routes":analysis["peer_state_routes"],"methods":analysis["focused_methods"]}))
                     for item in analysis["analysis"]:
-                        if item["method"]["class"]=="QQRTCP2PRecordPart":
+                        if re.search(r"onPeerRecordBarShow|onPeerRecord|handlePeerRecord|setPeerRecordState|onRecordStop|click|tap|button|initWith",item["method"]["selector"],re.I):
                             print(json.dumps(item))
                 methods=[]
             except meta.MetadataError as error:
