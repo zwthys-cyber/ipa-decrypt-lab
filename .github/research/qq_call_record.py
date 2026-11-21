@@ -112,7 +112,7 @@ try:
         require(all(v==0 for v in cryptids),"image_encrypted")
         record["cryptids"]=cryptids
         om.SELECTED=re.compile(r".*(?:QQAV|QAV|AVChat|QQCall|QCall|VideoChat|VideoCall|AV.*Record|Record.*AV|ScreenRecord|CallRecord|TRTC).*",re.I)
-        om.SELECTOR=re.compile(r"screenRecord|recordScreen|recordCall|callRecord|startRecord|stopRecord|recordAudio|audioRecord|recordVideo|videoRecord|replayKit|captureScreen",re.I)
+        om.SELECTOR=re.compile(r"screenRecord|recordScreen|recordCall|callRecord|startRecord|stopRecord|recordAudio|audioRecord|recordVideo|videoRecord|replayKit|captureScreen|notifyPeerRecord|handlePeerRecord|setPeerRecordState|onRecordStart|recordAVTinyVideoFinished|onRecordStopReason|peerUin|peerUid|remoteUin|otherUin|oppositeUin",re.I)
         try:
           methods=[]
           metadata_errors=[]
