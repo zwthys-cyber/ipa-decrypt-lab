@@ -39,9 +39,9 @@ try:
                     from qq_call_analysis import analyze
                     analysis=analyze(binary,meta)
                     Path("qq-call-analysis.json").write_text(json.dumps(analysis,indent=2))
-                    print(json.dumps({"notification_candidates":analysis["notification_candidates"]}))
+                    print(json.dumps({"stubs":analysis["stubs"]}))
                     for item in analysis["analysis"]:
-                        if item["method"]["class"]=="QQRTCP2PRecordPart":
+                        if False:
                             print(json.dumps(item))
                 methods=[]
             except meta.MetadataError as error:

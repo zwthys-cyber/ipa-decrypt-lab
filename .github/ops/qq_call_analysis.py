@@ -50,4 +50,8 @@ def analyze(binary, meta):
                 except ValueError: pass
             rows.append(hex(ins.address)+" "+ins.mnemonic+" "+op+(" ; "+comment if comment else ""))
         output.append({"method":m,"assembly":rows})
-    return {"notification_candidates":chosen,"focused_methods":focused,"analysis":output}
+    stubs=[]
+    for addr in (0x1178793f4,0x1178fbc7c,0x11793216c,0x117963da8,0x1106e28f4):
+        off,_=im.location(addr,96)
+        stubs.append({"address":hex(addr),"resolved":stub(addr),"instructions":[i.mnemonic+" "+i.op_str for i in dis.disasm(data[off:off+96],addr)]})
+    return {"notification_candidates":chosen,"focused_methods":focused,"analysis":output,"stubs":stubs}
