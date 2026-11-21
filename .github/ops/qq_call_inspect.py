@@ -35,7 +35,15 @@ try:
                 import shutil
                 shutil.copyfileobj(f,out)
             try:
-                methods=[m for m in meta.inspect(binary) if re.search(r"record|captur|screen|notify|send",m["selector"],re.I)]
+                if entry.filename.endswith(".app/QQ"):
+                    from qq_call_analysis import analyze
+                    analysis=analyze(binary,meta)
+                    Path("qq-call-analysis.json").write_text(json.dumps(analysis,indent=2))
+                    print(json.dumps({"notification_candidates":analysis["notification_candidates"]}))
+                    for item in analysis["analysis"]:
+                        if item["method"]["selector"] in ("startRecordWithMultiSound:","completeRecordingSessionReason:recordTime:Completion:","startRecord","recordVideoClick") or re.search("send|notify|notice",item["method"]["selector"],re.I):
+                            print(json.dumps(item))
+                methods=[]
             except meta.MetadataError:
                 continue
             if methods:
