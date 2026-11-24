@@ -92,21 +92,25 @@ jobs:
               old=envelope(*call("api.cloudflare.com","GET",path,auth))
               dbid=inspect_bindings(old)
               require((old.get("compatibility_flags") or [])==[],"unexpected_compatibility_flags")
-              settings={
-                  "bindings":[{"type":"d1","name":"DB","database_id":dbid}]+[{"type":"plain_text","name":name,"text":"0"} for name in FLAGS],
-                  "compatibility_date":DATE,
-                  "observability":{"enabled":False,"logs":{"enabled":False,"invocation_logs":False,"persist":False},"traces":{"enabled":False,"persist":False}}
-              }
-              boundary="----ipazake-"+secrets.token_hex(16)
-              body=("--"+boundary+"\r\nContent-Disposition: form-data; name=\"settings\"\r\nContent-Type: application/json\r\n\r\n").encode()+json.dumps(settings,separators=(",",":")).encode()+("\r\n--"+boundary+"--\r\n").encode()
-              stage="settings_update"
-              envelope(*call("api.cloudflare.com","PATCH",path,{**auth,"Content-Type":"multipart/form-data; boundary="+boundary},body))
+              require(inspect_bindings(old,True)==dbid,"d1_binding_changed")
+              require(str(old.get("compatibility_date",""))[:10]==DATE,"compatibility_date_unconfirmed")
+              script_path=path.removesuffix("/settings")+"/script-settings"
+              def observability_disabled(value):
+                  obs=value.get("observability")
+                  return isinstance(obs,dict) and obs.get("enabled") is False and (obs.get("logs") or {}).get("enabled") is not True and (obs.get("traces") or {}).get("enabled") is not True
+              stage="observability_preflight"
+              script=envelope(*call("api.cloudflare.com","GET",script_path,auth))
+              if not observability_disabled(script):
+                  stage="observability_update"
+                  settings={"observability":{"enabled":False,"logs":{"enabled":False,"invocation_logs":False,"persist":False},"traces":{"enabled":False,"persist":False}}}
+                  envelope(*call("api.cloudflare.com","PATCH",script_path,{**auth,"Content-Type":"application/json"},json.dumps(settings,separators=(",",":")).encode()))
+              stage="observability_readback"
+              script=envelope(*call("api.cloudflare.com","GET",script_path,auth))
+              require(observability_disabled(script),"observability_unconfirmed")
               stage="settings_readback"
               new=envelope(*call("api.cloudflare.com","GET",path,auth))
               require(inspect_bindings(new,True)==dbid,"d1_binding_changed")
               require(str(new.get("compatibility_date",""))[:10]==DATE,"compatibility_date_unconfirmed")
-              obs=new.get("observability")
-              require(isinstance(obs,dict) and obs.get("enabled") is False and (obs.get("logs") or {}).get("enabled") is not True and (obs.get("traces") or {}).get("enabled") is not True,"observability_unconfirmed")
               stage="endpoint_readback"
               check_endpoint()
               print("pilot_settings_verified: d1_unchanged=true; both_switches_disabled=true; compatibility_date=2026-07-30; observability_disabled=true; endpoint_verified=true")
