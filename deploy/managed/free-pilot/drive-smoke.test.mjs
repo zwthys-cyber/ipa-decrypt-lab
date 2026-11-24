@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {smokeTransfer,NAME,SIZE} from "./drive-smoke.mjs";
+import {smokeTransfer,quotaStatus,NAME,SIZE} from "./drive-smoke.mjs";
 import {SCOPE} from "./drive-auth.mjs";
 const env={PILOT_ENABLED:"0",PILOT_LINK_ENABLED:"0",PILOT_DRIVE_CLIENT_ID:"synthetic-client-123.apps.googleusercontent.com",
  PILOT_DRIVE_CLIENT_SECRET:"synthetic-test-only-secret",PILOT_DRIVE_REFRESH_TOKEN:"synthetic-test-only-refresh",PILOT_DRIVE_RECIPIENT_EMAIL:"owner@example.invalid"};
@@ -11,7 +11,11 @@ function fake(opts={}){
    calls.push([url,init.method||"GET"]);assert.equal(init.redirect,"manual");assert.ok(init.signal instanceof AbortSignal);
    if(url==="https://oauth2.googleapis.com/token")return Response.json({access_token:"synthetic-issued-access-token",token_type:"Bearer",expires_in:3600,scope:SCOPE});
    assert.equal(new URL(url).origin,"https://www.googleapis.com");
-   if(url.includes("/about?"))return Response.json({user:{emailAddress:env.PILOT_DRIVE_RECIPIENT_EMAIL},storageQuota:{limit:String(15*1024**3),usage:String(opts.usage||0)}});
+   if(url.includes("/about?")){
+     assert.equal(init.method,"GET");assert.equal(new URL(url).searchParams.get("fields"),"user(emailAddress),storageQuota(limit,usage)");
+     if(opts.aboutStatus)return Response.json({error:{message:"synthetic provider error"}},{status:opts.aboutStatus});
+     return Response.json({user:{emailAddress:opts.email||env.PILOT_DRIVE_RECIPIENT_EMAIL},storageQuota:opts.noQuota?{}:{limit:String(opts.limit??15*1024**3),usage:String(opts.usage||0)}});
+   }
    if(url.includes("/files?")&&url.includes("q="))return Response.json({files:[]});
    if(url.includes("/generateIds?"))return Response.json({ids:[id]});
    if(url.includes("uploadType=resumable")){
@@ -36,8 +40,30 @@ test("no provider call if active switches or incomplete auth",async()=>{
  const f=fake();assert.equal((await smokeTransfer({...env,PILOT_ENABLED:"1"},f.send)).ok,false);assert.equal(f.calls.length,0);
 });
 test("quota, untrusted session, interrupted upload, public ACL and corrupt media fail closed",async()=>{
- for(const [opts,stage,mayExist] of [[{usage:15*1024**3},"quota",false],[{badSession:true},"upload_start",false],[{badUpload:true},"upload",true],[{public:true},"acl",true],[{corrupt:true},"download",true]]){
+ for(const [opts,stage,mayExist] of [[{usage:15*1024**3},"quota_insufficient",false],[{badSession:true},"upload_start",false],[{badUpload:true},"upload",true],[{public:true},"acl",true],[{corrupt:true},"download",true]]){
    const f=fake(opts),r=await smokeTransfer(env,f.send);assert.deepEqual(r,{ok:false,stage,upload_may_exist:mayExist});
    assert.ok(f.calls.filter(([u,m])=>m==="PUT").length<=1);
  }
+});
+
+test("read-only eligibility failures are distinct and never proceed to file creation",async()=>{
+ for(const [opts,stage] of [
+   [{aboutStatus:403},"quota_api_forbidden"],[{aboutStatus:401},"quota_api_unauthorized"],
+   [{aboutStatus:429},"quota_api_limited"],[{aboutStatus:500},"quota_api_unavailable"],
+   [{email:"different@example.invalid"},"account_mismatch"],[{noQuota:true},"quota_unavailable"],
+   [{limit:16*1024**3},"quota_not_free_compatible"],[{usage:15*1024**3},"quota_insufficient"]
+ ]){
+   const f=fake(opts);
+   assert.deepEqual(await smokeTransfer(env,f.send),{ok:false,stage,upload_may_exist:false});
+   assert.equal(f.calls.length,2);
+ }
+});
+test("free quota boundary is exact and malformed values fail closed",()=>{
+ const email="owner@example.invalid",limit=15*1024**3;
+ const val=usage=>({user:{emailAddress:email},storageQuota:{limit:String(limit),usage:String(usage)}});
+ assert.equal(quotaStatus(val(limit-1000000000-SIZE),email),"ok");
+ assert.equal(quotaStatus(val(limit-1000000000-SIZE+1),email),"quota_insufficient");
+ assert.equal(quotaStatus(val(limit+1),email),"quota_unavailable");
+ assert.equal(quotaStatus(val(-1),email),"quota_unavailable");
+ assert.equal(quotaStatus(null,email),"account_mismatch");
 });

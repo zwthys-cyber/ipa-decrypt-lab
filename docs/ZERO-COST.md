@@ -156,3 +156,18 @@ Official references:
 Live read-only probe 45412582043 confirmed OAuth refresh, account match, D1 schema and available capacity for a 10,000,000,000-byte file with reserve. The transport-fix artifact was deployed in 45415199977. The initial deployment failed artifact-digest verification and was corrected without bypassing that check. Both activation switches remain disabled. Synthetic transfer contracts passed in 45414991034; the actual one-file verification stopped before upload in 45415372611 and 45415585730, with the latter reporting Google invalid_grant. No smoke file was created, and the original isolated deployment was restored. This is not a verified transfer. A fresh owner-authorized grant is required; the exact cause of the invalidation is unknown.
 
 The operator uploader and cleanup tool now optionally use a process-local short-lived token cache with explicit scope/type/expiry validation. They refuse incomplete OAuth configuration and latch invalid_grant for the current process. No automatic replay of writes, credential export, CI live upload, production dispatch or change to cleanup authorization is introduced. Actual operator execution still requires a trusted host. The no-VM production runtime constraint remains unresolved.
+
+
+## Phase 14: eligibility regression and stop conditions
+
+The later personal-mode configuration was checked in run 45421278281: all four binding types were secret_text; OAuth succeeded, but the transfer stopped at quota verification before creating any file. The original isolated disabled deployment was restored. The owner subsequently reported updating the recipient email. A further live test was not authorized by the available execution interface, so this newer configuration remains unverified. No production bot, native worker, billing setting, existing file, or user data was changed.
+
+This source-only revision separates eligibility errors (account mismatch, malformed/unavailable quota, incompatible capacity, insufficient storage and HTTP status categories) without disclosing raw provider data. Tests use synthetic responses and assert that every failed preflight prevents file creation. The encoded Drive about query and explicit GET are covered by the regression. The revision does not install a live diagnostic endpoint, execute a real OAuth request or change the existing deployed Worker. Actual end-to-end transfer is still pending.
+
+Free-runtime review (2026-11-24): Workers Free has 10 ms CPU / 128 MB memory; OCI Always Free A1 is a Linux ARM VM, not a native macOS serverless environment, and may be reclaimed if idle. Cloud Run is metered; free usage allowances do not establish a hard zero-charge guarantee. GitHub Actions remains a development/test/deployment service, not a substitute for a production processing or file distribution service. The existing native limit is 2,000,000,000 bytes; the 10,000,000,000-byte link limit does not change that. No eligible native runtime or production cutover is certified.
+
+References:
+- https://developers.cloudflare.com/workers/platform/limits/
+- https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm
+- https://docs.cloud.google.com/run/docs/configuring/billing-settings
+- https://docs.github.com/en/site-policy/github-terms/github-terms-for-additional-products-and-features

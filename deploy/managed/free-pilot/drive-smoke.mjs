@@ -26,12 +26,17 @@ async function json(response){
 async function sha(bytes){
   return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",bytes)),n=>n.toString(16).padStart(2,"0")).join("");
 }
-function quota(v,email){
+export function quotaStatus(v,email){
+  if(typeof email!=="string"||typeof v?.user?.emailAddress!=="string"||
+    v.user.emailAddress.toLowerCase()!==email.toLowerCase())return "account_mismatch";
   const q=v.storageQuota;
-  need(typeof v.user?.emailAddress==="string"&&v.user.emailAddress.toLowerCase()===email.toLowerCase(),"account");
-  need(q&&typeof q.limit==="string"&&typeof q.usage==="string"&&/^\d{1,16}$/.test(q.limit)&&/^\d{1,16}$/.test(q.usage),"quota");
+  if(!q||typeof q.limit!=="string"||typeof q.usage!=="string"||
+    !/^\d{1,16}$/.test(q.limit)||!/^\d{1,16}$/.test(q.usage))return "quota_unavailable";
   const limit=Number(q.limit),used=Number(q.usage);
-  need(Number.isSafeInteger(limit)&&Number.isSafeInteger(used)&&limit>0&&limit<=15*1024**3&&limit-used>=SIZE+1000000000,"quota");
+  if(!Number.isSafeInteger(limit)||!Number.isSafeInteger(used)||limit<=0||used>limit)return "quota_unavailable";
+  if(limit>15*1024**3)return "quota_not_free_compatible";
+  if(limit-used<SIZE+1000000000)return "quota_insufficient";
+  return "ok";
 }
 function validSession(value){
   const url=new URL(value);
@@ -46,7 +51,17 @@ export async function smokeTransfer(env,send=googleFetch){
     const email=env.PILOT_DRIVE_RECIPIENT_EMAIL;
     const request=(url,init={})=>send(url,{...init,redirect:"manual",signal:AbortSignal.timeout(15000),
       headers:{Authorization:"Bearer "+token,Accept:"application/json",...(init.headers||{})}});
-    stage="quota";quota(await json(await request(ROOT+"/drive/v3/about?fields=user(emailAddress),storageQuota(limit,usage)")),email);
+    stage="quota_request";
+    const about=await request(ROOT+"/drive/v3/about?fields=user%28emailAddress%29%2CstorageQuota%28limit%2Cusage%29",{method:"GET"});
+    if(about.status!==200){
+      stage=about.status===403?"quota_api_forbidden":about.status===401?"quota_api_unauthorized":
+        about.status===429?"quota_api_limited":"quota_api_unavailable";
+      if(about.body)await about.body.cancel();
+      throw Error("quota_api_unavailable");
+    }
+    stage="quota_response";
+    const quota=quotaStatus(await json(about),email);
+    if(quota!=="ok"){stage=quota;throw Error("quota_validation_failed");}
     const digest=await sha(FIXTURE);
     stage="existing_fixture";
     const search=new URLSearchParams({q:"trashed = false and name = '"+NAME+"' and appProperties has { key='pilot_fixture' and value='"+MARKER+"' }",fields:"nextPageToken,files(id)",pageSize:"10"});
