@@ -191,3 +191,18 @@ Phase 16 succeeded in run 45426356157, including a complete read of the 10,000,0
 ## Phase 18: preserve standalone CLI failure status
 
 Run 45426964681 verified the exact 10 GB synthetic archive on both Linux architectures: x86_64 11.528 s, 28,044 KiB peak RSS; aarch64 12.547 s, 27,048 KiB peak RSS. Both relocated read-only verifier checks passed. Both uploader packages failed the CLI exit-status assertion, so no standalone uploader artifact from those matrix jobs is certified. The standard zipapp -m entrypoint calls main without propagating its return value; this revision writes an explicit SystemExit entrypoint and retains the existing refusal-of-live-CI-upload check. No upload guard is relaxed. Existing synthetic transport tests, native constraints, and disabled live pilot are unchanged. Certification requires the corrected matrix to pass.
+
+## Phase 19: corrected dual-architecture packaging evidence
+
+Managed runtime contracts run [45427781144](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45427781144) completed successfully for source head `cdb8e9e503b21273041dafdafabcd6ff83c3c353`. Both Ubuntu matrix jobs completed the exact 10,000,000,000-byte sparse synthetic ZIP64 full-read CRC and independent SHA-256 tests, oversize rejection, relocated archive tool check, packaged uploader refusal of live CI execution, 19 fake-transport uploader regression tests, and artifact checksum generation. The local workerd contracts and disabled-by-default deployment bundle also passed; the optional image job was skipped.
+
+| Verified Linux host | Full-read verification | Peak RSS | Build artifact ID |
+| --- | ---: | ---: | ---: |
+| x86_64 | 11.636 s | 28,132 KiB | 14938575447 |
+| aarch64 | 12.489 s | 27,044 KiB | 14938175552 |
+
+The artifacts contain public software tools, BUILDINFO and checksums, not actual IPA files or account credentials. The reported measurements use a sparse stored synthetic archive, not realistic compressed data or a live provider transfer. The CI artifact names carry the checked-out PR merge revision; the source head is recorded separately. The corrected CLI failure status is certified for these two jobs, not for untested platforms.
+
+The separate [native feasibility run 45427781233](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45427781233) reported no native symbol on Linux. Its two virtualized macOS jobs reported native symbol availability, but neither account authorization nor actual decryption was established. Passing synthetic native tests must not be described as successful real decryption.
+
+Remaining hard gates: an eligible zero-cost, non-VM processing runtime; current private Google OAuth and storage eligibility; a permitted real upload/download check of authorized input; and actual integration with the existing bot. Do not enable live switches, change billing, migrate the production bot, or use CI as a permanent processing service. The production limits remain unchanged. No live account or service operation was performed to record this evidence.
