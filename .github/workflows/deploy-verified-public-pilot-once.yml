@@ -159,3 +159,5 @@ jobs:
               print("stopped_stage="+stage+"; operation_unconfirmed",file=sys.stderr)
               sys.exit(2)
           PY
+
+# Owner confirmed correcting the binding types; repeat the strict preflight before deployment.
