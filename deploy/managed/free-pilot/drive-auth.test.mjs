@@ -23,7 +23,8 @@ test("official refresh request uses only fake credentials in tests",async()=>{
     calls++;
     assert.equal(url,"https://oauth2.googleapis.com/token");
     assert.equal(init.method,"POST");
-    assert.equal(init.redirect,"error");
+    assert.equal(init.redirect,"manual");
+    assert.ok(init.signal instanceof AbortSignal);
     assert.equal(new URLSearchParams(init.body).get("grant_type"),"refresh_token");
     return Response.json(answer);
   });
@@ -54,4 +55,13 @@ test("one request-local token verifies both file and ACL; no refresh for invalid
   assert.equal(refresh,0);
   assert.equal(await verifyDrive(record,mock,send),"https://drive.google.com/file/d/"+record.file_id+"/view");
   assert.deepEqual([refresh,api],[1,2]);
+});
+
+test("OAuth redirect is rejected without following Location or retrying",async()=>{
+  let calls=0;
+  await assert.rejects(accessForRequest(mock,async(url,init)=>{
+    calls++;assert.equal(init.redirect,"manual");
+    return new Response(null,{status:302,headers:{Location:"https://example.invalid/blocked"}});
+  }),/drive_authorization_unavailable/);
+  assert.equal(calls,1);
 });

@@ -1,6 +1,6 @@
 // Restricted Drive link pilot for files already deposited by an authorized operator.
 // No file uploads, public shares, billing APIs or arbitrary origins.
-import {authMode,accessForRequest} from "./drive-auth.mjs";
+import {authMode,accessForRequest,googleFetch} from "./drive-auth.mjs";
 const FILE=/^[A-Za-z0-9_-]{10,160}$/;
 const JOB=/^pilot_[a-f0-9]{32}$/;
 const HASH=/^[a-f0-9]{64}$/;
@@ -35,10 +35,10 @@ export function configured(env){
 }
 async function api(path,accessToken,send){
   const reply=await send("https://www.googleapis.com/drive/v3/"+path,{
-    method:"GET",redirect:"error",cache:"no-store",headers:{
+    method:"GET",redirect:"manual",signal:AbortSignal.timeout(10000),headers:{
       Authorization:"Bearer "+accessToken,Accept:"application/json"
     }});
-  need(reply.status===200);
+  if(reply.status!==200){if(reply.body)await reply.body.cancel();throw Error("private_link_unavailable");}
   const reader=reply.body?.getReader();
   need(reader);
   let size=0;const parts=[];
@@ -51,7 +51,7 @@ async function api(path,accessToken,send){
   const value=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(bytes));
   need(value&&typeof value==="object"&&!Array.isArray(value));return value;
 }
-export async function verifyDrive(value,env,send=fetch){
+export async function verifyDrive(value,env,send=googleFetch){
   try{
     need(configured(env));
     const record=metadata(value);
@@ -78,7 +78,7 @@ export async function verifyDrive(value,env,send=fetch){
     return "https://drive.google.com/file/d/"+record.file_id+"/view";
   }catch{throw Error("private_link_unavailable");}
 }
-export async function registerLink(db,owner,value,env,now,send=fetch){
+export async function registerLink(db,owner,value,env,now,send=googleFetch){
   need(value&&Object.keys(value).sort().join(",")==="bytes,file_id,filename,job_id,sha256"&&JOB.test(value.job_id));
   const record=metadata(value);
   // No readiness assertion until provider metadata and restricted ACL are checked.
@@ -87,7 +87,7 @@ export async function registerLink(db,owner,value,env,now,send=fetch){
   need(result.success===true&&[0,1].includes(result.meta?.changes));
   return result.meta.changes===1;
 }
-export async function getLink(db,owner,id,env,now,send=fetch){
+export async function getLink(db,owner,id,env,now,send=googleFetch){
   need(JOB.test(id)&&configured(env));
   const row=await db.prepare(LINK_SQL.lookup).bind(id,owner,now).first();
   if(!row)return null;

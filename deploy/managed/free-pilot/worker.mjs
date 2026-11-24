@@ -1,5 +1,6 @@
 // Free control-plane pilot: no external task dispatch, uploads or billing APIs.
 import {configured as linksConfigured,registerLink,getLink,retireLink} from "./private-link.mjs";
+import {googleFetch} from "./drive-auth.mjs";
 const SECRET=/^[A-Za-z0-9_-]{43,128}$/;
 const OWNER=/^[1-9][0-9]{0,15}$/;
 const APP=/^[1-9][0-9]{4,19}$/;
@@ -73,7 +74,7 @@ function actor(update,owner,now){
   return {id:m.from.id,text:m.text.trim(),update:update.update_id,date:m.date};
 }
 const HELP="免费控制层试验版：仅登记任务，不自动下载。发送 App Store 链接或数字 App ID；/status 查看最近任务；/cancel 任务编号 取消；/get 任务编号 领取已核对的私有网盘链接（需配置）。每天最多登记 3 次，最多 30 个等待任务。不支持 TestFlight。";
-export async function handle(request,env,now=Math.floor(Date.now()/1000),send=fetch){
+export async function handle(request,env,now=Math.floor(Date.now()/1000),send=googleFetch){
   const url=new URL(request.url);
   if(request.method!=="POST"||!["/telegram","/v1/link-register","/v1/link-retire"].includes(url.pathname)||url.search)return response(404,{ok:false});
   if(env.PILOT_ENABLED!=="1"||!OWNER.test(env.PILOT_OWNER_ID||"")||

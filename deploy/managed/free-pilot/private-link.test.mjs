@@ -13,7 +13,7 @@ function mockDrive(f=file,p=permissions){
   const send=async(url,init)=>{
     calls.push(url);
     assert.equal(new URL(url).origin,"https://www.googleapis.com");
-    assert.equal(init.method,"GET");assert.equal(init.redirect,"error");
+    assert.equal(init.method,"GET");assert.equal(init.redirect,"manual");assert.ok(init.signal instanceof AbortSignal);
     const result=url.includes("/permissions?")?{permissions:p}:f;
     return Response.json(result);
   };

@@ -28,13 +28,14 @@ async function jsonBounded(response){
   for(const chunk of chunks){data.set(chunk,at);at+=chunk.byteLength;}
   return JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(data));
 }
-export async function accessForRequest(env,send=fetch){
+export const googleFetch=(url,init)=>fetch(url,init);
+export async function accessForRequest(env,send=googleFetch){
   try{
     const mode=authMode(env);
     if(mode==="manual")return env.PILOT_DRIVE_ACCESS_TOKEN;
     if(mode!=="refresh")throw Error("drive_authorization_unavailable");
     const response=await send("https://oauth2.googleapis.com/token",{
-      method:"POST",redirect:"error",
+      method:"POST",redirect:"manual",signal:AbortSignal.timeout(10000),
       headers:{"Content-Type":"application/x-www-form-urlencoded",Accept:"application/json"},
       body:new URLSearchParams({
         grant_type:"refresh_token",
@@ -43,6 +44,7 @@ export async function accessForRequest(env,send=fetch){
         refresh_token:env.PILOT_DRIVE_REFRESH_TOKEN
       }).toString()
     });
+    if(response.status!==200){if(response.body)await response.body.cancel();throw Error("drive_authorization_unavailable");}
     const token=await jsonBounded(response);
     if(!token||!valid(token.access_token,ACCESS)||
        typeof token.token_type!=="string"||token.token_type.toLowerCase()!=="bearer"||
