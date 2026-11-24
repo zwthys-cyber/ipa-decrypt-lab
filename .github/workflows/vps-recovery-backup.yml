@@ -48,6 +48,7 @@ jobs:
           }
           trap restore EXIT
           trap 'exit 71' HUP INT TERM
+          python3 -c 'import json,time; h=json.load(open("/var/lib/ipazake/health.json")); assert h.get("task_active") is False and 0 <= time.time()-int(h["at"]) < 120, "service_busy_or_health_stale"'
           systemctl stop ipazake.service >/dev/null 2>&1
           tar -czf - -C / etc/ipazake var/lib/ipazake
           SH
