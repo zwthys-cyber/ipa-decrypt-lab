@@ -1,0 +1,161 @@
+name: Deploy verified public pilot bundle
+on:
+  push:
+    branches: ['ops/configure-free-pilot-20261124']
+    paths: ['.github/workflows/deploy-verified-public-pilot-once.yml']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: configure-existing-free-pilot-once
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.repository == 'zwthys-cyber/ipa-decrypt-lab' && github.ref == 'refs/heads/ops/configure-free-pilot-20261124' && github.event_name == 'push' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Obtain and verify exact public CI bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -eu
+          umask 077
+          gh api repos/zwthys-cyber/ipa-decrypt-lab/actions/artifacts/14924549399/zip > "$RUNNER_TEMP/pilot-public.zip"
+          python3 - <<'PY'
+          import hashlib, os, zipfile
+          from pathlib import Path
+          root=Path(os.environ["RUNNER_TEMP"])
+          archive=root/"pilot-public.zip"
+          if archive.stat().st_size>131072 or hashlib.sha256(archive.read_bytes()).hexdigest()!="64417dbdbfcc94dc3e49db8b6637a6fea8d53a6c3b3ad2b8913d2f6e9c4a4285":
+              raise SystemExit("public_artifact_digest_unconfirmed")
+          with zipfile.ZipFile(archive) as z:
+              for name in ("BUILDINFO","worker.mjs","SHA256SUMS"):
+                  assert z.namelist().count(name)==1 and z.getinfo(name).file_size<131072
+              assert z.read("BUILDINFO").decode().splitlines()==[
+                  "source_head=3ed1761087279ed7d816b1410b9fb5d02b5cdd63",
+                  "checked_out_commit=6a661dad673aa0fbe4f3abd5e3de6ed44358d0a4"]
+              code=z.read("worker.mjs")
+              expected=[x.split()[0] for x in z.read("SHA256SUMS").decode().splitlines() if len(x.split())==2 and x.split()[1]=="worker.mjs"]
+              assert expected==[hashlib.sha256(code).hexdigest()]
+              (root/"pilot-public.mjs").write_bytes(code)
+          print("verified_public_bundle")
+          PY
+          node --check "$RUNNER_TEMP/pilot-public.mjs"
+      - name: Update public code while preserving existing bindings in place
+        env:
+          CF_PILOT_ACCOUNT_ID: ${{ secrets.CF_PILOT_ACCOUNT_ID }}
+          CF_PILOT_API_TOKEN: ${{ secrets.CF_PILOT_API_TOKEN }}
+        shell: bash
+        run: |
+          set -eu
+          umask 077
+          python3 - <<'PY'
+          import http.client,json,os,re,secrets,ssl,sys
+          from pathlib import Path
+          HOST="ipazake-free-control-pilot.hahayesadd.workers.dev"
+          WORKER="ipazake-free-control-pilot"
+          DATE="2026-07-30"
+          FLAGS={"PILOT_ENABLED","PILOT_LINK_ENABLED"}
+          EXPECTED={"PILOT_DRIVE_CLIENT_ID","PILOT_DRIVE_CLIENT_SECRET","PILOT_DRIVE_REFRESH_TOKEN","PILOT_DRIVE_RECIPIENT_EMAIL"}
+          stage="input"
+          class Stop(Exception):pass
+          def need(ok,code):
+              if not ok:raise Stop(code)
+          def call(host,method,path,headers=None,body=None):
+              conn=http.client.HTTPSConnection(host,443,timeout=20,context=ssl.create_default_context())
+              try:
+                  conn.request(method,path,body=body,headers=headers or {})
+                  r=conn.getresponse();raw=r.read(524289)
+                  need(len(raw)<=524288,"response_too_large")
+                  return r.status,raw
+              finally:conn.close()
+          def cf(method,path,body=None,content_type="application/json"):
+              status,raw=call("api.cloudflare.com",method,path,{"Authorization":"Bearer "+token,"Accept":"application/json","Content-Type":content_type},body)
+              if status not in (200,201):
+                  print("cloudflare_http_status="+str(status),flush=True)
+                  raise Stop("cloudflare_request_unconfirmed")
+              value=json.loads(raw)
+              need(isinstance(value,dict) and value.get("success") is True and isinstance(value.get("result"),dict),"cloudflare_request_unconfirmed")
+              return value["result"]
+          def uuid(value):
+              return isinstance(value,str) and re.fullmatch(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}",value)
+          def bindings(version):
+              r=version.get("resources",{})
+              rows=r.get("bindings")
+              need(isinstance(rows,list),"binding_metadata_unconfirmed")
+              names={}
+              for item in rows:
+                  need(isinstance(item,dict) and isinstance(item.get("name"),str),"binding_metadata_invalid")
+                  name=item["name"]
+                  need(name in {"DB"}|FLAGS|EXPECTED and name not in names,"unexpected_binding")
+                  names[name]=item
+              need(set(names)=={"DB"}|FLAGS|EXPECTED,"four_drive_bindings_not_confirmed")
+              for name in EXPECTED:need(names[name].get("type")=="secret_text","expected_secret_binding_type")
+              for name in FLAGS:need(names[name].get("type")=="plain_text" and names[name].get("text")=="0","pilot_not_disabled")
+              db=names["DB"]
+              dbid=db.get("id") or db.get("database_id")
+              need(db.get("type")=="d1" and uuid(dbid),"d1_binding_unconfirmed")
+              runtime=r.get("script_runtime",{})
+              need(runtime.get("compatibility_date")==DATE and not runtime.get("compatibility_flags"),"runtime_configuration_unexpected")
+              need(not runtime.get("migration_tag") and not runtime.get("exports"),"unexpected_runtime_resources")
+              return dbid
+          def active():
+              rows=cf("GET",root+"/deployments?per_page=1").get("deployments")
+              need(isinstance(rows,list) and rows,"active_deployment_missing")
+              versions=rows[0].get("versions")
+              need(isinstance(versions,list) and len(versions)==1 and versions[0].get("percentage")==100,"active_deployment_not_single")
+              vid=versions[0].get("version_id")
+              need(uuid(vid),"active_version_invalid")
+              return vid
+          def latest():
+              rows=cf("GET",root+"/versions?per_page=1").get("items")
+              need(isinstance(rows,list) and rows and uuid(rows[0].get("id")),"latest_version_missing")
+              return rows[0]["id"]
+          def probe():
+              for method,path,status in (("GET","/",404),("POST","/telegram",503)):
+                  code,raw=call(HOST,method,path,{"Content-Type":"application/json"} if method=="POST" else {},b"{}" if method=="POST" else None)
+                  need(code==status and json.loads(raw)=={"ok":False},"pilot_endpoint_unexpected")
+          try:
+              account=os.environ.get("CF_PILOT_ACCOUNT_ID","")
+              token=os.environ.get("CF_PILOT_API_TOKEN","")
+              need(re.fullmatch(r"[0-9a-fA-F]{32}",account) and re.fullmatch(r"[A-Za-z0-9_-]{20,256}",token),"cloudflare_credentials_unavailable")
+              root="/client/v4/accounts/"+account+"/workers/scripts/"+WORKER
+              stage="preflight"
+              probe()
+              old=active()
+              need(latest()==old,"undeployed_version_exists")
+              dbid=bindings(cf("GET",root+"/versions/"+old))
+              print("preflight_verified: four_binding_names_present=true; pilot_disabled=true",flush=True)
+              # Inherit bindings by name on the same existing Worker. No Google secret
+              # values are requested, copied, printed or sent to another service.
+              metadata={"main_module":"worker.mjs","compatibility_date":DATE,
+                  "bindings":[{"name":name,"type":"inherit","version_id":"latest"} for name in sorted({"DB"}|FLAGS|EXPECTED)],
+                  "annotations":{"workers/message":"Verified public OAuth refresh pilot (disabled)","workers/commit_sha":"3ed1761087279ed7d816b1410b9fb5d02b5cdd63"}}
+              code=(Path(os.environ["RUNNER_TEMP"])/"pilot-public.mjs").read_bytes()
+              boundary="----public-pilot-"+secrets.token_hex(16)
+              def part(name,typ,data,filename=None):
+                  disposition='Content-Disposition: form-data; name="'+name+'"'
+                  if filename:disposition+='; filename="'+filename+'"'
+                  return ("--"+boundary+"\r\n"+disposition+"\r\nContent-Type: "+typ+"\r\n\r\n").encode()+data+b"\r\n"
+              body=part("metadata","application/json",json.dumps(metadata,separators=(",",":")).encode())+part("worker.mjs","application/javascript+module",code,"worker.mjs")+("--"+boundary+"--\r\n").encode()
+              stage="upload_public_version"
+              new=cf("POST",root+"/versions?bindings_inherit=strict",body,"multipart/form-data; boundary="+boundary).get("id")
+              need(uuid(new),"version_upload_unconfirmed")
+              stage="verify_undeployed_version"
+              need(bindings(cf("GET",root+"/versions/"+new))==dbid,"binding_preservation_unconfirmed")
+              need(active()==old and latest()==new,"concurrent_deployment_detected")
+              stage="activate_verified_disabled_version"
+              cf("POST",root+"/deployments",json.dumps({"strategy":"percentage","versions":[{"version_id":new,"percentage":100}]}).encode())
+              stage="readback"
+              need(active()==new,"deployment_unconfirmed")
+              probe()
+              print("public_pilot_deployed_verified: inherited_bindings=true; d1_preserved=true; both_switches_disabled=true",flush=True)
+          except Stop as exc:
+              print("stopped_stage="+stage+"; reason="+str(exc),file=sys.stderr)
+              sys.exit(2)
+          except Exception:
+              print("stopped_stage="+stage+"; operation_unconfirmed",file=sys.stderr)
+              sys.exit(2)
+          PY
