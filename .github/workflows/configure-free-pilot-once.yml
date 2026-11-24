@@ -94,28 +94,20 @@ jobs:
               require((old.get("compatibility_flags") or [])==[],"unexpected_compatibility_flags")
               require(inspect_bindings(old,True)==dbid,"d1_binding_changed")
               require(str(old.get("compatibility_date",""))[:10]==DATE,"compatibility_date_unconfirmed")
+              stage="read_only_observability"
               script_path=path.removesuffix("/settings")+"/script-settings"
-              def observability_disabled(value):
+              script=envelope(*call("api.cloudflare.com","GET",script_path,auth))
+              def safe_obs(value):
                   obs=value.get("observability")
-                  return isinstance(obs,dict) and obs.get("enabled") is False and (obs.get("logs") or {}).get("enabled") is not True and (obs.get("traces") or {}).get("enabled") is not True
-              stage="observability_preflight"
-              script=envelope(*call("api.cloudflare.com","GET",script_path,auth))
-              if not observability_disabled(script):
-                  stage="observability_update"
-                  settings={"observability":{"enabled":False,"logs":{"enabled":False,"invocation_logs":False,"persist":False},"traces":{"enabled":False,"persist":False}}}
-                  envelope(*call("api.cloudflare.com","PATCH",script_path,{**auth,"Content-Type":"application/json"},json.dumps(settings,separators=(",",":")).encode()))
-              stage="observability_readback"
-              script=envelope(*call("api.cloudflare.com","GET",script_path,auth))
-              require(observability_disabled(script),"observability_unconfirmed")
-              stage="settings_readback"
-              new=envelope(*call("api.cloudflare.com","GET",path,auth))
-              require(inspect_bindings(new,True)==dbid,"d1_binding_changed")
-              require(str(new.get("compatibility_date",""))[:10]==DATE,"compatibility_date_unconfirmed")
+                  def flag(x):
+                      return x if isinstance(x,bool) else None
+                  if not isinstance(obs,dict):return {"present":False}
+                  return {"present":True,"enabled":flag(obs.get("enabled")),"logs_enabled":flag((obs.get("logs") or {}).get("enabled")),"invocation_logs":flag((obs.get("logs") or {}).get("invocation_logs")),"traces_enabled":flag((obs.get("traces") or {}).get("enabled"))}
+              print("version_observability="+json.dumps(safe_obs(old),sort_keys=True),flush=True)
+              print("script_observability="+json.dumps(safe_obs(script),sort_keys=True),flush=True)
               stage="endpoint_readback"
               check_endpoint()
-              print("pilot_settings_verified: d1_unchanged=true; both_switches_disabled=true; compatibility_date=2026-07-30; observability_disabled=true; endpoint_verified=true")
-              with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf8") as f:
-                  f.write("## Existing pilot configuration verified\n- Existing D1 binding preserved.\n- Both pilot switches are 0.\n- Compatibility date: 2026-07-30.\n- Observability disabled.\n- Unauthenticated endpoint checks passed.\n- No bot credentials, billing API, new resources or production service changes.\n")
+              print("pilot_core_settings_verified: d1_unchanged=true; both_switches_disabled=true; compatibility_date=2026-07-30; endpoint_verified=true",flush=True)
           except Stop as exc:
               print("stopped_stage="+stage+"; reason="+str(exc),file=sys.stderr)
               sys.exit(2)
