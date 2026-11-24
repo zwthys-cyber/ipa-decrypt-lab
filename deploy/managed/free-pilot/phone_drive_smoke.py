@@ -70,8 +70,8 @@ def smoke(u, root, drive):
         record = u.validate_file(stream, path.name)
         job = "pilot_" + record["sha256"][:32]
         with u.Journal(root / "journal", job) as journal:
-            # Use encoded fields for the read-only preflight; the upload module
-            # repeats its own quota and permission checks before writing.
+            # Read-only account/quota preflight; the existing upload module
+            # also checks capacity and verifies the completed file.
             drive.check_quota(SIZE)
             print("DRIVE_ACCOUNT_AND_QUOTA_OK", flush=True)
             receipt, state = u.upload(drive, stream, record, journal, job, source_stamp=stamp)
