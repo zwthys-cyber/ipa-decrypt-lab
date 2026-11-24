@@ -46,3 +46,10 @@ Worker 增加私有 Secret PILOT_LINK_ISSUER_TOKEN、PILOT_DRIVE_ACCESS_TOKEN、
 - https://developers.cloudflare.com/workers/platform/pricing/
 - https://core.telegram.org/bots/api#setwebhook
 - https://developers.google.com/workspace/drive/api/guides/api-specific-auth
+
+
+## 6. 可选：Google OAuth 自动刷新（新增 Worker 版本）
+
+本功能仅适用于升级后并通过 CI 验证的 Worker。保持 PILOT_ENABLED=0 和 PILOT_LINK_ENABLED=0，直到独立测试环境配置完毕。用户可以在自己的 Cloudflare Worker 的 Secrets 界面直接配置 PILOT_DRIVE_CLIENT_ID、PILOT_DRIVE_CLIENT_SECRET、PILOT_DRIVE_REFRESH_TOKEN 及已有的 PILOT_DRIVE_RECIPIENT_EMAIL。不要通过聊天、源码、URL 或跨平台自动复制传递凭证。三项 OAuth 配置不完整时，程序拒绝请求，不会退回旧访问令牌。
+
+仅在已获授权的链接登记或查询需要访问 Drive 时，Worker 才向 Google 官方 token 接口请求新的短期 Access Token，并检查返回的 Bearer 类型及明确的 drive.file 授权范围。访问令牌只在该次请求内使用，不写入 D1，也不记录到日志。没有扩大授权范围、后台定时刷新或自动重新授权。若 Google 不返回明确的范围，或令牌已撤销/过期，试验版会停止链接操作。Google 外部应用 Testing 状态的 Refresh Token 仍有七天限制；本功能不绕过该限制。操作员上传工具暂时仍需要短期 Access Token，未实现自动刷新。此阶段没有执行真实 OAuth 请求、改变线上机器人、迁移凭证或开启计费。

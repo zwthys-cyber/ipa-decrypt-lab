@@ -1,5 +1,6 @@
 // Restricted Drive link pilot for files already deposited by an authorized operator.
-// No file uploads, public shares, billing APIs, refresh tokens or arbitrary origins.
+// No file uploads, public shares, billing APIs or arbitrary origins.
+import {authMode,accessForRequest} from "./drive-auth.mjs";
 const FILE=/^[A-Za-z0-9_-]{10,160}$/;
 const JOB=/^pilot_[a-f0-9]{32}$/;
 const HASH=/^[a-f0-9]{64}$/;
@@ -29,14 +30,13 @@ export function metadata(value){
   return {file_id:value.file_id,filename:value.filename,bytes:value.bytes,sha256:value.sha256};
 }
 export function configured(env){
-  return env.PILOT_LINK_ENABLED==="1"&&typeof env.PILOT_DRIVE_ACCESS_TOKEN==="string"&&
-    /^[A-Za-z0-9._~-]{20,2048}$/.test(env.PILOT_DRIVE_ACCESS_TOKEN)&&
+  return env.PILOT_LINK_ENABLED==="1"&&authMode(env)!==null&&
     typeof env.PILOT_DRIVE_RECIPIENT_EMAIL==="string"&&EMAIL.test(env.PILOT_DRIVE_RECIPIENT_EMAIL);
 }
-async function api(path,env,send){
+async function api(path,accessToken,send){
   const reply=await send("https://www.googleapis.com/drive/v3/"+path,{
     method:"GET",redirect:"error",cache:"no-store",headers:{
-      Authorization:"Bearer "+env.PILOT_DRIVE_ACCESS_TOKEN,Accept:"application/json"
+      Authorization:"Bearer "+accessToken,Accept:"application/json"
     }});
   need(reply.status===200);
   const reader=reply.body?.getReader();
@@ -55,13 +55,14 @@ export async function verifyDrive(value,env,send=fetch){
   try{
     need(configured(env));
     const record=metadata(value);
+    const accessToken=await accessForRequest(env,send);
     const base="files/"+encodeURIComponent(record.file_id);
-    const file=await api(base+"?fields=id,name,size,sha256Checksum,trashed,ownedByMe,mimeType,resourceKey",env,send);
+    const file=await api(base+"?fields=id,name,size,sha256Checksum,trashed,ownedByMe,mimeType,resourceKey",accessToken,send);
     need(file.id===record.file_id&&file.name===record.filename&&file.size===String(record.bytes)&&
       file.sha256Checksum===record.sha256&&file.trashed===false&&file.ownedByMe===true&&
       typeof file.mimeType==="string"&&!file.mimeType.startsWith("application/vnd.google-apps.")&&
       !file.resourceKey);
-    const access=await api(base+"/permissions?pageSize=100&fields=nextPageToken,permissions(type,role,emailAddress,deleted,expirationTime)",env,send);
+    const access=await api(base+"/permissions?pageSize=100&fields=nextPageToken,permissions(type,role,emailAddress,deleted,expirationTime)",accessToken,send);
     need(!access.nextPageToken&&Array.isArray(access.permissions)&&access.permissions.length>=1&&access.permissions.length<=2);
     const email=env.PILOT_DRIVE_RECIPIENT_EMAIL.toLowerCase();
     let owners=0,recipient=0;

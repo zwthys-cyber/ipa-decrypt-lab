@@ -139,3 +139,13 @@ References:
 Phase 10 synthetic and workerd contracts passed in run 45391181658 (container job skipped). The new read-only CI packaging job runs after both contract jobs. It uses a pinned esbuild release to bundle the Worker into a single ES module, packages the exact migrations, fresh-database schema, disabled configuration, public operator utilities, source provenance and checksums. No Cloudflare account, OAuth credentials, Telegram token or paid resources are involved; this is a public software build artifact, not a file-delivery service.
 
 See [Chinese browser deployment guide](../deploy/managed/free-pilot/DEPLOY.zh-CN.md). The owner must establish the independent free Cloudflare account/database, separate test bot, and authorized Google OAuth setup before live verification. Do not use the production bot or the original account state. There is no approved, verified zero-cost native execution host yet; the upload operator still needs a trusted execution environment. Do not claim full production cutover.
+
+
+## Phase 12: request-local Drive OAuth refresh candidate
+
+The isolated Worker accepts optional owner-configured OAuth client ID, client secret and refresh token bindings. It uses Google's standard server-side token endpoint only when a permitted link operation needs Drive access; a single access token is used for the metadata and ACL checks. Returned Bearer type, expiry and explicit drive.file scope are required. Partial configuration, errors, expired or revoked grants, unexpected token rotation and broader or absent scopes fail closed, without fallback to the previous manual access token. No token persistence in D1, scheduled jobs, credential transfer automation or live OAuth calls are introduced. Tests use synthetic injected transports only. The original manual short-lived token mode remains available when no refresh settings are configured. The Python operator uploader still requires a valid short-lived access token. Google Testing mode retains its seven-day refresh-token expiry. A separately reviewed authorization and deployment are needed before enabling the pilot; no change to production or billing.
+
+Official references:
+- https://developers.google.com/identity/protocols/oauth2/web-server
+- https://developers.google.com/identity/protocols/oauth2#expiration
+- https://developers.google.com/workspace/drive/api/guides/api-specific-auth
