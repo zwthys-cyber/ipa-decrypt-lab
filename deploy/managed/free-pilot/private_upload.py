@@ -16,6 +16,7 @@ import stat
 import sys
 import tempfile
 from urllib.parse import urlsplit
+from zip_preflight import inspect as inspect_archive, ArchiveError
 
 MAX=10_000_000_000
 FREE_LIMIT=15*1024**3
@@ -66,9 +67,15 @@ def validate_file(stream,name):
     need(1<=len(name)<=160 and not name.startswith(".") and
          all(c.isalnum() or c in " ._()-" for c in name) and
          Path(name).suffix.lower() in {".ipa",".zip",".bin",".txt"},"filename_invalid")
+    if Path(name).suffix.lower() in {".zip",".ipa"}:
+        try:inspect_archive(stream)
+        except ArchiveError:raise Stop("archive_preflight_failed") from None
+    stream.seek(0)
     h=hashlib.sha256()
     for data in iter(lambda:stream.read(CHUNK),b""):h.update(data)
-    need(os.fstat(stream.fileno()).st_size==info.st_size,"input_changed")
+    after=os.fstat(stream.fileno())
+    need((after.st_size,after.st_mtime_ns,after.st_ctime_ns)==
+         (info.st_size,info.st_mtime_ns,info.st_ctime_ns),"input_changed")
     return {"filename":name,"bytes":info.st_size,"sha256":h.hexdigest()}
 
 def quota(value,email,size):
