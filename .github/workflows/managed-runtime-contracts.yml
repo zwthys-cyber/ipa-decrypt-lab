@@ -40,6 +40,7 @@ jobs:
           /usr/bin/python3 deploy/managed/free-pilot/test_link_sql.py -v
           /usr/bin/python3 deploy/managed/free-pilot/test_private_upload.py -v
           /usr/bin/python3 deploy/managed/free-pilot/test_zip_preflight.py -v
+          /usr/bin/python3 deploy/managed/free-pilot/test_archive_verify.py -v
           /usr/bin/python3 deploy/managed/free-pilot/test_private_cleanup.py -v
   workerd:
     needs: synthetic
@@ -109,6 +110,55 @@ jobs:
         with:
           name: free-pilot-deployment-${{ github.sha }}
           path: pilot-dist/
+          retention-days: 7
+          if-no-files-found: error
+  linux_archive_bundle:
+    needs: synthetic
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Build standalone read-only Linux verification tool
+        shell: bash
+        env:
+          SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          root=deploy/managed/free-pilot
+          mkdir -p linux-archive-dist "$RUNNER_TEMP/archive-src" "$RUNNER_TEMP/archive-smoke"
+          cp "$root/archive_verify.py" "$RUNNER_TEMP/archive-src/__main__.py"
+          cp "$root/zip_preflight.py" "$RUNNER_TEMP/archive-src/"
+          python3 -m zipapp "$RUNNER_TEMP/archive-src" -o linux-archive-dist/archive-verify.pyz
+          cp "$root/LINUX-ARCHIVE.zh-CN.md" linux-archive-dist/README.md
+          printf 'source_head=%s\nchecked_out_commit=%s\n' "$SOURCE_HEAD" "$(git rev-parse HEAD)" > linux-archive-dist/BUILDINFO
+          cp linux-archive-dist/archive-verify.pyz "$RUNNER_TEMP/archive-smoke/"
+          cd "$RUNNER_TEMP/archive-smoke"
+          python3 - <<'PY'
+          import hashlib, json, os, subprocess, sys, zipfile
+          with zipfile.ZipFile("Synthetic.ipa","w") as z:
+              z.writestr("Payload/Synthetic.app/Info.plist", b"synthetic layout only")
+              z.writestr("Payload/Synthetic.app/resource.bin", b"test")
+          os.chmod("Synthetic.ipa",0o600)
+          digest=hashlib.sha256(open("Synthetic.ipa","rb").read()).hexdigest()
+          args=[sys.executable,"archive-verify.pyz","Synthetic.ipa","--confirm-authorized-file","--expected-sha256",digest]
+          result=json.loads(subprocess.check_output(args))
+          assert result["all_member_crc_verified"] is True and result["sha256"]==digest
+          assert result["ipa_layout_present"] and result["expected_sha256_matched"]
+          assert result["authenticity_verified"] is False and result["drm_status_verified"] is False
+          args[-1]="0"*64
+          assert subprocess.run(args,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==2
+          print("relocated_archive_tool_verified")
+          PY
+          cd "$GITHUB_WORKSPACE/linux-archive-dist"
+          sha256sum archive-verify.pyz README.md BUILDINFO > SHA256SUMS
+          sha256sum -c SHA256SUMS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: linux-archive-tools-${{ github.sha }}
+          path: linux-archive-dist/
           retention-days: 7
           if-no-files-found: error
   images:

@@ -171,3 +171,8 @@ References:
 - https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm
 - https://docs.cloud.google.com/run/docs/configuring/billing-settings
 - https://docs.github.com/en/site-policy/github-terms/github-terms-for-additional-products-and-features
+
+
+## Phase 15: Linux read-only archive integrity tool
+
+A standalone zipapp is built from archive_verify.py and the existing bounded ZIP64 metadata preflight. It verifies CRCs of all logical members, declared sizes, a minimal IPA layout, the original archive SHA-256 and unchanged-file metadata; it can compare an independently trusted expected digest. The build and relocated smoke test use only synthetic data in GitHub-hosted Ubuntu CI. It cannot establish authenticity, installation compatibility or DRM status and does not alter archives. The 10 GB input bound remains distinct from actual full-size throughput. No production runtime or live transfer is introduced. See deploy/managed/free-pilot/LINUX-ARCHIVE.zh-CN.md.
