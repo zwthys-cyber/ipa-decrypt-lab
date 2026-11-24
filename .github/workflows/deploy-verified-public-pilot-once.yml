@@ -22,7 +22,7 @@ jobs:
         run: |
           set -eu
           umask 077
-          gh api repos/zwthys-cyber/ipa-decrypt-lab/actions/artifacts/14924549399/zip > "$RUNNER_TEMP/pilot-public.zip"
+          gh api repos/zwthys-cyber/ipa-decrypt-lab/actions/artifacts/14929635275/zip > "$RUNNER_TEMP/pilot-public.zip"
           python3 - <<'PY'
           import hashlib, os, zipfile
           from pathlib import Path
@@ -34,8 +34,8 @@ jobs:
               for name in ("BUILDINFO","worker.mjs","SHA256SUMS"):
                   assert z.namelist().count(name)==1 and z.getinfo(name).file_size<131072
               assert z.read("BUILDINFO").decode().splitlines()==[
-                  "source_head=3ed1761087279ed7d816b1410b9fb5d02b5cdd63",
-                  "checked_out_commit=6a661dad673aa0fbe4f3abd5e3de6ed44358d0a4"]
+                  "source_head=30ae2675e76a03bcdbd6ef07b9bb28a87a7309b3",
+                  "checked_out_commit=28fa6da6bb767fd4b51eb7664a33498ff80eed06"]
               code=z.read("worker.mjs")
               expected=[x.split()[0] for x in z.read("SHA256SUMS").decode().splitlines() if len(x.split())==2 and x.split()[1]=="worker.mjs"]
               assert expected==[hashlib.sha256(code).hexdigest()]
@@ -125,14 +125,29 @@ jobs:
               stage="preflight"
               probe()
               old=active()
-              need(latest()==old,"undeployed_version_exists")
               dbid=bindings(cf("GET",root+"/versions/"+old))
+              previous=latest()
+              if previous!=old:
+                  rows=cf("GET",root+"/versions?per_page=10").get("items")
+                  need(isinstance(rows,list) and rows and rows[0].get("id")==previous,"unexpected_version_history")
+                  prior=[]
+                  for row in rows:
+                      if row.get("id")==old:break
+                      prior.append(row)
+                  need(1<=len(prior)<=4 and len(rows)>len(prior) and rows[len(prior)].get("id")==old,"unexpected_intervening_versions")
+                  stamps=set()
+                  for row in prior:
+                      stamp=row.get("metadata",{}).get("created_on","")
+                      need(isinstance(stamp,str) and stamp[:16] in {"2026-11-24T13:54","2026-11-24T13:55","2026-11-24T14:17","2026-11-24T14:18"} and stamp[:16] not in stamps,"unexpected_intervening_version")
+                      stamps.add(stamp[:16])
+                      need(bindings(cf("GET",root+"/versions/"+row["id"]))==dbid,"previous_probe_bindings_changed")
+              need(active()==old and latest()==previous,"concurrent_deployment_detected")
               print("preflight_verified: four_binding_names_present=true; pilot_disabled=true",flush=True)
               # Inherit bindings by name on the same existing Worker. No Google secret
               # values are requested, copied, printed or sent to another service.
               metadata={"main_module":"worker.mjs","compatibility_date":DATE,
                   "bindings":[{"name":name,"type":"inherit","version_id":"latest"} for name in sorted({"DB"}|FLAGS|EXPECTED)],
-                  "annotations":{"workers/message":"Verified public OAuth refresh pilot (disabled)","workers/commit_sha":"3ed1761087279ed7d816b1410b9fb5d02b5cdd63"}}
+                  "annotations":{"workers/message":"Verified public Google HTTPS transport fix (disabled)","workers/commit_sha":"30ae2675e76a03bcdbd6ef07b9bb28a87a7309b3"}}
               code=(Path(os.environ["RUNNER_TEMP"])/"pilot-public.mjs").read_bytes()
               boundary="----public-pilot-"+secrets.token_hex(16)
               def part(name,typ,data,filename=None):
