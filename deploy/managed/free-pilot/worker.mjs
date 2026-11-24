@@ -116,7 +116,7 @@ export async function handle(request,env,now=Math.floor(Date.now()/1000),send=fe
       if(!link)return say(item.id,"暂无有效链接，或任务已取消、领取期限已过。");
       // Only the authorized private sender receives this link; disable link previews.
       return response(200,{method:"sendMessage",chat_id:item.id,
-        text:"私有文件链接（人工存入，网盘信息已核对）\n文件："+link.filename+"\n大小："+link.bytes+" 字节\nSHA-256："+link.sha256+"\n请登录指定 Google 账号访问。领取期限不等于网盘权限到期。",
+        text:"私有文件链接（已存入，网盘信息已核对）\n文件："+link.filename+"\n大小："+link.bytes+" 字节\nSHA-256："+link.sha256+"\n请登录指定 Google 账号访问。领取期限不等于网盘权限到期。",
         reply_markup:{inline_keyboard:[[{text:"打开私有下载链接",url:link.url}]]},
         link_preview_options:{is_disabled:true}});
     }

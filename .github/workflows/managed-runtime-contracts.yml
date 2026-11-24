@@ -38,6 +38,7 @@ jobs:
           node --test deploy/managed/cloudflare/worker.test.mjs deploy/managed/free-pilot/worker.test.mjs deploy/managed/free-pilot/private-link.test.mjs
           /usr/bin/python3 deploy/managed/free-pilot/test_sql.py -v
           /usr/bin/python3 deploy/managed/free-pilot/test_link_sql.py -v
+          /usr/bin/python3 deploy/managed/free-pilot/test_private_upload.py -v
   workerd:
     needs: synthetic
     runs-on: ubuntu-24.04

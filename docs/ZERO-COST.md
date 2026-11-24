@@ -79,3 +79,24 @@ Sources:
 - https://developers.google.com/workspace/drive/api/guides/manage-sharing
 - https://developers.cloudflare.com/r2/get-started/
 - https://www.backblaze.com/apidocs/b2-get-download-authorization
+
+
+## Phase 7: resumable private upload candidate
+
+The isolated operator CLI `deploy/managed/free-pilot/private_upload.py` uploads a pre-existing synthetic or rights-cleared private file to the operator's own Drive account; it does not acquire or decrypt third-party apps or change the production worker. It is not called from GitHub Actions, and live CLI execution on Actions is explicitly rejected. The same designated Google account must own the uploaded file and access the returned link. No public or external-reader permission is granted automatically. This deliberately keeps the first end-to-end pilot owner-only.
+
+Use an approved personal free account, a manually authorized short-lived access token with drive.file scope for the same OAuth app, and a private input file (0600). Do not attach billing, increase quotas, or use a paid account. The CLI asks for explicit free-account and authorized-file confirmation, checks the provider's reported shared storage limit (at most 15 GiB), total usage, and a 1 GB reserve before starting. A storage quota does not prove account billing status; the operator must verify that separately. Multiple unrelated writers to the same account are not coordinated, so keep the account isolated and stop on quota errors.
+
+It uses the official resumable create endpoint and bounded 8 MiB chunks. A private local journal binds job, filename, bytes, checksum and recipient account. The opaque resumable session stays in that journal, not in public output. Repeat the same command after an interrupted chunk to query the server-confirmed offset. A lost session, ambiguous create, or ambiguous registration stops; it does not create a replacement file or retry the link receipt blindly. Do not discard the journal to retry an unknown operation.
+
+After completion, verify provider size, SHA-256 metadata and owner-only access before recording a receipt. With the optional register flag, the CLI submits that receipt to the explicitly configured isolated Worker origin using its independent issuer token. It never sends Drive credentials to the Worker endpoint. The Worker independently rechecks metadata and ACL before /get. The 2-hour retrieval window is still not a provider ACL expiry. No automatic deletion, public share, or paid upgrade is performed. OAuth expiry, an unavailable free runtime, and provider or database quota errors remain explicit blockers.
+
+Operator usage (only after isolated pilot and free plan approval, and never with a live production bot): set PILOT_DRIVE_ACCESS_TOKEN and PILOT_DRIVE_RECIPIENT_EMAIL in a private environment; for registration also set PILOT_LINK_ORIGIN and PILOT_LINK_ISSUER_TOKEN. Run private_upload.py with --file, --job (an existing pilot job), --journal (an existing or new private directory), --confirm-free-account, --confirm-authorized-file and optionally --register. Never put secrets in arguments, chat, public source or logs. Keep the journal on an approved private persistent volume. CI runs only fake transports and synthetic local files, not the live CLI.
+
+References:
+- https://developers.google.com/workspace/drive/api/guides/manage-uploads
+- https://developers.google.com/workspace/drive/api/reference/rest/v3/about
+- https://developers.google.com/workspace/drive/api/reference/rest/v3/about/get
+- https://developers.google.com/workspace/drive/api/reference/rest/v3/files
+
+Remaining gate: establish a real isolated free account and permitted execution environment, deploy the separate test Worker and D1 migrations, authorize minimal credentials privately, test a synthetic upload and /get receipt, verify cleanup and real download. Existing production remains unchanged.

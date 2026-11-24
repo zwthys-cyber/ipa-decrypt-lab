@@ -1,0 +1,110 @@
+"""Synthetic fake HTTP tests; never use Google, Telegram, or production credentials."""
+import hashlib
+import json
+import os
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+import private_upload as u
+
+JOB="pilot_"+"a"*32
+SESSION=u.GOOGLE+"/upload/drive/v3/files?uploadType=resumable&upload_id=synthetic"
+FILE="syntheticFileID123"
+EMAIL="owner@example.invalid"
+TOKEN="synthetic-access-token-123456789"
+ORIGIN="https://pilot.example.invalid"
+class Fake:
+    def __init__(self,record):
+        self.record=record
+        self.offset=0;self.starts=0;self.interrupt=False;self.bad_hash=False
+        self.full=False;self.share=False;self.register_calls=0
+    def reply(self,value,status=200):return status,{},u.encode(value)
+    def __call__(self,method,url,headers,body):
+        if "/about?" in url:
+            return self.reply({"user":{"emailAddress":EMAIL},"storageQuota":{"limit":str(u.FREE_LIMIT),"usage":str(u.FREE_LIMIT if self.full else 0)}})
+        if method=="POST" and url.startswith(u.GOOGLE+"/upload/"):
+            self.starts+=1
+            return 200,{"location":SESSION},b""
+        if method=="PUT" and url==SESSION:
+            if headers["Content-Range"].startswith("bytes */"):
+                if self.offset==self.record["bytes"]:return self.reply({"id":FILE})
+                return 308,{"range":f"bytes=0-{self.offset-1}"} if self.offset else {},b""
+            start=self.offset
+            assert headers["Content-Range"]==f"bytes {start}-{start+len(body)-1}/{self.record['bytes']}"
+            self.offset+=len(body)
+            if self.interrupt:
+                self.interrupt=False
+                raise u.Stop("network_outcome_unknown")
+            if self.offset==self.record["bytes"]:return self.reply({"id":FILE},201)
+            return 308,{"range":f"bytes=0-{self.offset-1}"},b""
+        if "/permissions?" in url:
+            p=[{"type":"user","role":"owner","emailAddress":EMAIL}]
+            if self.share:p.append({"type":"anyone","role":"reader"})
+            return self.reply({"permissions":p})
+        if url.startswith(u.GOOGLE+"/drive/v3/files/"+FILE+"?"):
+            return self.reply({"id":FILE,"name":self.record["filename"],"size":str(self.record["bytes"]),
+                "sha256Checksum":"0"*64 if self.bad_hash else self.record["sha256"],"trashed":False,
+                "ownedByMe":True,"mimeType":"application/octet-stream"})
+        if method=="POST" and url==ORIGIN+"/v1/link-register":
+            self.register_calls+=1
+            assert headers["Authorization"]=="Bearer "+"I"*48
+            assert json.loads(body)["job_id"]==JOB
+            return self.reply({"ok":True},201)
+        raise AssertionError("unexpected transport")
+
+class Tests(unittest.TestCase):
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory()
+        self.root=Path(self.tmp.name)
+        self.file=self.root/"Example.bin"
+        self.file.write_bytes(b"a"*(256*1024)+b"b"*33)
+        self.file.chmod(0o600)
+        self.stream=self.file.open("rb")
+        self.record=u.validate_file(self.stream,self.file.name)
+        self.fake=Fake(self.record)
+        self.drive=u.Drive(TOKEN,EMAIL,self.fake)
+        self.journal=u.Journal(self.root/"journal",JOB)
+    def tearDown(self):self.stream.close();self.tmp.cleanup()
+    def run_upload(self):
+        with self.journal:
+            return u.upload(self.drive,self.stream,self.record,self.journal,JOB)
+    def test_upload_interruption_and_registration(self):
+        self.fake.interrupt=True
+        with patch.object(u,"CHUNK",256*1024):
+            with self.assertRaises(u.Stop):self.run_upload()
+            self.assertEqual(self.fake.offset,256*1024)
+            receipt,state=self.run_upload()
+            self.assertEqual(self.fake.starts,1)
+            self.assertEqual(receipt["sha256"],self.record["sha256"])
+            with self.journal:
+                u.register(receipt,state,self.journal,ORIGIN,"I"*48,self.fake)
+                u.register(receipt,self.journal.read(),self.journal,ORIGIN,"I"*48,self.fake)
+            self.assertEqual(self.fake.register_calls,1)
+    def test_free_capacity_guard(self):
+        self.fake.full=True
+        with self.assertRaisesRegex(u.Stop,"free_storage_insufficient"):self.run_upload()
+        self.assertEqual(self.fake.starts,0)
+        self.assertIsNone(self.journal.read())
+    def test_bad_hash_and_public_acl(self):
+        self.fake.bad_hash=True
+        with self.assertRaisesRegex(u.Stop,"file_integrity_unverified"):self.run_upload()
+        self.fake.bad_hash=False;self.fake.share=True
+        with self.assertRaisesRegex(u.Stop,"file_not_owner_only"):self.run_upload()
+        self.assertEqual(self.fake.starts,1)
+    def test_start_unknown_never_recreated(self):
+        self.journal.write({"job_id":JOB,"record":self.record,"owner":EMAIL,"stage":"start_intent"})
+        with self.assertRaisesRegex(u.Stop,"do_not_recreate"):self.run_upload()
+        self.assertEqual(self.fake.starts,0)
+    def test_registration_unknown_not_retried(self):
+        receipt,state=self.run_upload()
+        def fail(*args):raise u.Stop("network_outcome_unknown")
+        with self.journal:
+            with self.assertRaises(u.Stop):u.register(receipt,state,self.journal,ORIGIN,"I"*48,fail)
+            with self.assertRaisesRegex(u.Stop,"check_database"):u.register(receipt,self.journal.read(),self.journal,ORIGIN,"I"*48,self.fake)
+        self.assertEqual(self.fake.register_calls,0)
+    def test_invalid_session_and_quota(self):
+        for url in ("http://www.googleapis.com/upload/drive/v3/files?upload_id=x","https://evil.invalid/upload/drive/v3/files?upload_id=x"):
+            with self.assertRaises(u.Stop):u.session_url(url)
+        with self.assertRaises(u.Stop):u.quota({"user":{"emailAddress":EMAIL},"storageQuota":{"limit":str(u.FREE_LIMIT+1),"usage":"0"}},EMAIL,1)
+if __name__=="__main__":unittest.main()
