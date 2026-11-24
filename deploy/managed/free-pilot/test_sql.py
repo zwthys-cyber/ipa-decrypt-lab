@@ -5,8 +5,7 @@ import sqlite3
 import subprocess
 import unittest
 
-ROOT=Path(__file__).resolve().parents[1]
-PILOT=ROOT/"deploy/managed/free-pilot"
+PILOT=Path(__file__).resolve().parent
 
 class FreePilotSQLTests(unittest.TestCase):
     def setUp(self):

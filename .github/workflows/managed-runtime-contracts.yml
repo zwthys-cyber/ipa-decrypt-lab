@@ -9,7 +9,6 @@ on:
       - 'tools/tf_state_http.py'
       - 'tools/managed_migration.py'
       - 'tests/test_managed_migration.py'
-      - 'tests/test_free_pilot_sql.py'
       - 'tools/testflight_state.py'
       - '.github/ops/tf_task*.py'
       - '.github/workflows/testflight-private-delivery.yml'
@@ -37,7 +36,7 @@ jobs:
           /usr/bin/python3 -m unittest discover -s tests -p 'test_managed*.py' -v
           /usr/bin/python3 -m unittest discover -s .github/ops -p 'test_tf_task*.py' -v
           node --test deploy/managed/cloudflare/worker.test.mjs deploy/managed/free-pilot/worker.test.mjs
-          /usr/bin/python3 -m unittest discover -s tests -p 'test_free_pilot_sql.py' -v
+          /usr/bin/python3 deploy/managed/free-pilot/test_sql.py -v
   images:
     # Not part of the zero-cost control-plane pilot; never provision a host here.
     if: github.event_name == 'workflow_dispatch' && inputs.build_images
