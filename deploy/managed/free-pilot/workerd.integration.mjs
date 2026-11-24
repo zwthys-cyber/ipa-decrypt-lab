@@ -51,3 +51,37 @@ test("workerd D1: isolated auth, concurrent quota, deduplication, cancellation a
     assert.equal((await send(mf,24)).status,503);
   }finally{if(mf)await mf.dispose();await rm(folder,{recursive:true,force:true});}
 });
+
+test("workerd D1: 10 GB migration preserves old metadata and exact large integers",{timeout:60000},async()=>{
+  const mf=new Miniflare({modules:true,scriptPath:fileURLToPath(new URL("./worker.mjs",import.meta.url)),
+    compatibilityDate:config.compatibility_date,cf:false,host:"127.0.0.1",port:0,
+    d1Databases:{DB:"22222222-2222-4222-8222-222222222222"}});
+  try{
+    const db=await mf.getD1Database("DB");
+    async function migrate(name){
+      const raw=await readFile(new URL("./migrations/"+name,import.meta.url),"utf8");
+      const statements=raw.replace(/^--.*$/gm,"").split(";").map(s=>s.trim()).filter(Boolean);
+      const result=await db.batch(statements.map(s=>db.prepare(s)));
+      assert.ok(result.every(x=>x.success));
+    }
+    await migrate("0001_pilot.sql");await migrate("0002_links.sql");
+    const jobs=[1,2,3,4].map(n=>"pilot_"+String(n).padStart(32,"0"));
+    for(let i=0;i<jobs.length;i++){
+      await db.prepare("INSERT INTO pilot_jobs VALUES(?,?,?,?,?,?,?,?)")
+        .bind(jobs[i],String(owner),i,"123456","default",1,86400,"waiting_for_runtime").run();
+    }
+    const sql="INSERT INTO pilot_links VALUES(?,?,?,?,?,?,?)";
+    const row=(job,file,bytes)=>[job,String(owner),file,"Synthetic.zip",bytes,"a".repeat(64),stamp+7200];
+    await db.prepare(sql).bind(...row(jobs[0],"syntheticOriginal123",2000000000)).run();
+    await migrate("0003_links_10gb.sql");
+    const old=await db.prepare("SELECT * FROM pilot_links WHERE job_id=?").bind(jobs[0]).first();
+    assert.equal(old.bytes,2000000000);assert.equal(old.file_id,"syntheticOriginal123");
+    assert.equal(old.expires_at,stamp+7200);
+    await db.prepare(sql).bind(...row(jobs[1],"syntheticLarge123",4294967297)).run();
+    await db.prepare(sql).bind(...row(jobs[2],"syntheticMax123",10000000000)).run();
+    assert.equal((await db.prepare("SELECT bytes FROM pilot_links WHERE job_id=?").bind(jobs[1]).first()).bytes,4294967297);
+    assert.equal((await db.prepare("SELECT bytes FROM pilot_links WHERE job_id=?").bind(jobs[2]).first()).bytes,10000000000);
+    await assert.rejects(db.prepare(sql).bind(...row(jobs[3],"syntheticOver123",10000000001)).run());
+    assert.equal((await db.prepare("SELECT count(*) AS n FROM pilot_links").first()).n,3);
+  }finally{await mf.dispose();}
+});

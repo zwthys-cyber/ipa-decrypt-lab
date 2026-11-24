@@ -4,7 +4,7 @@ const FILE=/^[A-Za-z0-9_-]{10,160}$/;
 const JOB=/^pilot_[a-f0-9]{32}$/;
 const HASH=/^[a-f0-9]{64}$/;
 const EMAIL=/^[^\s@]{1,128}@[^\s@]{1,128}$/;
-const MAX=2_000_000_000;
+export const MAX=10_000_000_000;
 export const WINDOW=7200;
 export const LINK_SQL={
   register:`INSERT INTO pilot_links(job_id,owner_id,file_id,filename,bytes,sha256,expires_at)

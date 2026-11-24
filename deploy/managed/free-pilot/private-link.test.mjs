@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {handle} from "./worker.mjs";
-import {verifyDrive,LINK_SQL,WINDOW} from "./private-link.mjs";
+import {verifyDrive,metadata,LINK_SQL,WINDOW,MAX} from "./private-link.mjs";
 const now=1795510000, owner=12345, token="T".repeat(48),issuer="I".repeat(48);
-const id="pilot_"+"a".repeat(32),record={file_id:"syntheticFileID123",filename:"Example.zip",bytes:2000000000,sha256:"a".repeat(64)};
+const id="pilot_"+"a".repeat(32),record={file_id:"syntheticFileID123",filename:"Example.zip",bytes:10000000000,sha256:"a".repeat(64)};
 const env={PILOT_ENABLED:"1",PILOT_OWNER_ID:String(owner),TELEGRAM_WEBHOOK_SECRET:token,PILOT_LINK_ENABLED:"1",PILOT_LINK_ISSUER_TOKEN:issuer,
   PILOT_DRIVE_ACCESS_TOKEN:"synthetic-access-token-1234567890",PILOT_DRIVE_RECIPIENT_EMAIL:"reader@example.invalid"};
 const file={id:record.file_id,name:record.filename,size:String(record.bytes),sha256Checksum:record.sha256,trashed:false,ownedByMe:true,mimeType:"application/zip"};
@@ -42,7 +42,7 @@ test("reject public, mismatched and oversized files",async()=>{
   for(const p of [[...permissions,{type:"anyone",role:"reader"}],[permissions[0],{type:"user",role:"writer",emailAddress:env.PILOT_DRIVE_RECIPIENT_EMAIL}],[permissions[0]]]){
     await assert.rejects(verifyDrive(record,env,mockDrive(file,p).send));
   }
-  const none=mockDrive();await assert.rejects(verifyDrive({...record,bytes:2000000001},env,none.send));assert.equal(none.calls.length,0);
+  const none=mockDrive();await assert.rejects(verifyDrive({...record,bytes:10000000001},env,none.send));assert.equal(none.calls.length,0);
 });
 test("issuer auth, exact owner binding, no arbitrary URL",async()=>{
   const d=db(),m=mockDrive();
@@ -71,4 +71,12 @@ test("disabled, expired, cancelled or revoked link is never returned",async()=>{
   assert.equal(m.calls.length,0);
   const revoked=mockDrive(file,[permissions[0]]);
   assert.equal((await handle(get(),{...env,DB:db()},now,revoked.send)).status,503);
+});
+
+test("large metadata stays exact above 32-bit and rejects oversize or fractional bytes",()=>{
+  assert.equal(MAX,10000000000);
+  for(const bytes of [2000000001,4294967297,9999999999,MAX])
+    assert.equal(metadata({...record,bytes}).bytes,bytes);
+  for(const bytes of [0,-1,MAX+1,1.5,"10000000000",Number.MAX_SAFE_INTEGER])
+    assert.throws(()=>metadata({...record,bytes}));
 });

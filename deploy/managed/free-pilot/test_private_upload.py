@@ -107,4 +107,44 @@ class Tests(unittest.TestCase):
         for url in ("http://www.googleapis.com/upload/drive/v3/files?upload_id=x","https://evil.invalid/upload/drive/v3/files?upload_id=x"):
             with self.assertRaises(u.Stop):u.session_url(url)
         with self.assertRaises(u.Stop):u.quota({"user":{"emailAddress":EMAIL},"storageQuota":{"limit":str(u.FREE_LIMIT+1),"usage":"0"}},EMAIL,1)
+    def test_10gb_quota_boundary(self):
+        self.assertEqual(u.MAX,10_000_000_000)
+        exact=u.FREE_LIMIT-u.MAX-u.RESERVE
+        value={"user":{"emailAddress":EMAIL},"storageQuota":{"limit":str(u.FREE_LIMIT),"usage":str(exact)}}
+        u.quota(value,EMAIL,u.MAX)
+        value["storageQuota"]["usage"]=str(exact+1)
+        with self.assertRaisesRegex(u.Stop,"free_storage_insufficient"):u.quota(value,EMAIL,u.MAX)
+        value["storageQuota"]["usage"]="0"
+        for size in (0,1.5,u.MAX+1):
+            with self.assertRaisesRegex(u.Stop,"file_size_out_of_bounds"):u.quota(value,EMAIL,size)
+    def test_large_resume_offsets_and_last_chunk(self):
+        # No multi-GB allocation or upload. Model a stream at two large offsets.
+        class VirtualStream:
+            def seek(self,position):self.position=position
+            def read(self,count):
+                assert 0<count<=u.CHUNK
+                return b"x"*count
+        record={"filename":"Synthetic.bin","bytes":u.MAX,"sha256":"a"*64}
+        fake=Fake(record);drive=u.Drive(TOKEN,EMAIL,fake);stream=VirtualStream()
+        fake.offset=2**32
+        offset,file_id=drive.resume(SESSION,u.MAX)
+        self.assertEqual(offset,2**32);self.assertIsNone(file_id)
+        offset,file_id=drive.chunk(SESSION,stream,offset,u.MAX)
+        self.assertEqual(offset,2**32+u.CHUNK);self.assertIsNone(file_id)
+        fake.offset=(u.MAX//u.CHUNK)*u.CHUNK
+        offset,file_id=drive.resume(SESSION,u.MAX)
+        self.assertEqual(offset,fake.offset)
+        offset,file_id=drive.chunk(SESSION,stream,offset,u.MAX)
+        self.assertIsNone(offset);self.assertEqual(file_id,FILE)
+        self.assertEqual(fake.offset,u.MAX)
+        self.assertEqual(drive.verify(record,FILE)["bytes"],u.MAX)
+    def test_resume_stops_if_free_capacity_changes(self):
+        self.fake.interrupt=True
+        with patch.object(u,"CHUNK",256*1024):
+            with self.assertRaises(u.Stop):self.run_upload()
+            before=self.fake.offset
+            self.fake.full=True
+            with self.assertRaisesRegex(u.Stop,"free_storage_insufficient"):self.run_upload()
+            self.assertEqual(self.fake.offset,before)
+            self.assertEqual(self.fake.starts,1)
 if __name__=="__main__":unittest.main()

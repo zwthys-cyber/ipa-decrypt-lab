@@ -17,7 +17,7 @@ import sys
 import tempfile
 from urllib.parse import urlsplit
 
-MAX=2_000_000_000
+MAX=10_000_000_000
 FREE_LIMIT=15*1024**3
 RESERVE=1_000_000_000
 CHUNK=8*1024**2
@@ -72,6 +72,7 @@ def validate_file(stream,name):
     return {"filename":name,"bytes":info.st_size,"sha256":h.hexdigest()}
 
 def quota(value,email,size):
+    need(type(size) is int and 0<size<=MAX,"file_size_out_of_bounds")
     need(value.get("user",{}).get("emailAddress","").lower()==email.lower(),"account_mismatch")
     q=value.get("storageQuota",{})
     limit,usage=decimal(q.get("limit")),decimal(q.get("usage"))
@@ -186,6 +187,10 @@ def upload(drive,stream,record,journal,job):
         size=record["bytes"]
         session=state["session"]
         offset,file_id=drive.resume(session,size)
+        if file_id is None:
+            # Conservatively recheck the full reservation before resuming writes.
+            # The provider may not yet count uncommitted chunks in usage.
+            drive.check_quota(size)
         while file_id is None:
             need(0<=offset<size)
             offset,file_id=drive.chunk(session,stream,offset,size)
