@@ -1,0 +1,233 @@
+name: Verify one synthetic private Drive transfer
+on:
+  push:
+    branches: ['ops/configure-free-pilot-20261124']
+    paths: ['.github/workflows/check-drive-transfer-once.yml']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: configure-existing-free-pilot-once
+  cancel-in-progress: false
+jobs:
+  probe:
+    if: github.repository == 'zwthys-cyber/ipa-decrypt-lab' && github.ref == 'refs/heads/ops/configure-free-pilot-20261124' && github.event_name == 'push' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - name: Obtain only verified public program files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          umask 077
+          gh api repos/zwthys-cyber/ipa-decrypt-lab/actions/artifacts/14929635275/zip > "$RUNNER_TEMP/pilot-public.zip"
+          gh api 'repos/zwthys-cyber/ipa-decrypt-lab/contents/deploy/managed/free-pilot/drive-auth.mjs?ref=30ae2675e76a03bcdbd6ef07b9bb28a87a7309b3' > "$RUNNER_TEMP/public-auth.json"
+          gh api 'repos/zwthys-cyber/ipa-decrypt-lab/contents/deploy/managed/free-pilot/drive-smoke.mjs?ref=e85be1c576ccedc608fd852d015a1b559669428c' > "$RUNNER_TEMP/public-smoke.json"
+          python3 - <<'PY'
+          import base64,hashlib,json,os,zipfile
+          from pathlib import Path
+          root=Path(os.environ["RUNNER_TEMP"])
+          archive=root/"pilot-public.zip"
+          assert archive.stat().st_size<=131072 and hashlib.sha256(archive.read_bytes()).hexdigest()=="74a4603ce989605ca2bfb36527bcf1b7fa9d03785a633ccfba7c58012ca46f9b"
+          with zipfile.ZipFile(archive) as z:
+              assert z.read("BUILDINFO").decode().splitlines()==["source_head=30ae2675e76a03bcdbd6ef07b9bb28a87a7309b3","checked_out_commit=28fa6da6bb767fd4b51eb7664a33498ff80eed06"]
+              assert z.namelist().count("worker.mjs")==1 and z.getinfo("worker.mjs").file_size<131072
+              code=z.read("worker.mjs")
+              assert [x.split()[0] for x in z.read("SHA256SUMS").decode().splitlines() if len(x.split())==2 and x.split()[1]=="worker.mjs"]==[hashlib.sha256(code).hexdigest()]
+              (root/"worker.mjs").write_bytes(code)
+          meta=json.loads((root/"public-auth.json").read_text())
+          code=base64.b64decode(meta["content"])
+          assert hashlib.sha1(b"blob "+str(len(code)).encode()+b"\0"+code).hexdigest()=="539982a5366bdb83c88c467e8ef4383e1cfb61a9"
+          (root/"drive-auth.mjs").write_bytes(code)
+          meta=json.loads((root/"public-smoke.json").read_text())
+          code=base64.b64decode(meta["content"])
+          assert hashlib.sha1(b"blob "+str(len(code)).encode()+b"\0"+code).hexdigest()=="f3015ee47395f1337e367ec292d4ab67391c665e"
+          (root/"drive-smoke.mjs").write_bytes(code)
+          print("public_source_verified")
+          PY
+          node --check "$RUNNER_TEMP/worker.mjs"
+          node --check "$RUNNER_TEMP/drive-auth.mjs"
+          node --check "$RUNNER_TEMP/drive-smoke.mjs"
+      - name: One bounded synthetic transfer in existing isolated Worker
+        env:
+          CF_PILOT_ACCOUNT_ID: ${{ secrets.CF_PILOT_ACCOUNT_ID }}
+          CF_PILOT_API_TOKEN: ${{ secrets.CF_PILOT_API_TOKEN }}
+        run: |
+          set -eu
+          umask 077
+          python3 - <<'PY'
+          import hashlib,http.client,json,os,re,secrets,ssl,subprocess,sys,time
+          from pathlib import Path
+          HOST="ipazake-free-control-pilot.hahayesadd.workers.dev"
+          WORKER="ipazake-free-control-pilot"
+          DATE="2026-07-30"
+          FLAGS={"PILOT_ENABLED","PILOT_LINK_ENABLED"}
+          EXPECTED={"PILOT_DRIVE_CLIENT_ID","PILOT_DRIVE_CLIENT_SECRET","PILOT_DRIVE_REFRESH_TOKEN","PILOT_DRIVE_RECIPIENT_EMAIL"}
+          NAMES={"DB"}|FLAGS|EXPECTED
+          class Stop(Exception):pass
+          def need(ok,code):
+              if not ok:raise Stop(code)
+          def call(host,method,path,headers=None,body=None):
+              conn=http.client.HTTPSConnection(host,443,timeout=100,context=ssl.create_default_context())
+              try:
+                  conn.request(method,path,body=body,headers=headers or {})
+                  r=conn.getresponse();raw=r.read(524289)
+                  need(len(raw)<=524288,"response_too_large")
+                  return r.status,raw
+              finally:conn.close()
+          def cf(method,path,body=None,content_type="application/json"):
+              status,raw=call("api.cloudflare.com",method,path,{"Authorization":"Bearer "+token,"Accept":"application/json","Content-Type":content_type},body)
+              if status not in (200,201):
+                  print("cloudflare_http_status="+str(status),flush=True)
+                  raise Stop("cloudflare_request_unconfirmed")
+              value=json.loads(raw)
+              need(isinstance(value,dict) and value.get("success") is True and isinstance(value.get("result"),dict),"cloudflare_request_unconfirmed")
+              return value["result"]
+          def uuid(value):
+              return isinstance(value,str) and re.fullmatch(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}",value)
+          def bindings(version):
+              r=version.get("resources",{})
+              rows=r.get("bindings")
+              need(isinstance(rows,list),"binding_metadata_unconfirmed")
+              names={}
+              for item in rows:
+                  need(isinstance(item,dict) and isinstance(item.get("name"),str),"binding_metadata_invalid")
+                  name=item["name"]
+                  need(name in NAMES and name not in names,"unexpected_binding")
+                  names[name]=item
+              need(set(names)==NAMES,"binding_names_unconfirmed")
+              need(all(names[n].get("type")=="secret_text" for n in EXPECTED),"secret_binding_type_unconfirmed")
+              need(all(names[n].get("type")=="plain_text" and names[n].get("text")=="0" for n in FLAGS),"pilot_not_disabled")
+              db=names["DB"];dbid=db.get("id") or db.get("database_id")
+              need(db.get("type")=="d1" and uuid(dbid),"d1_binding_unconfirmed")
+              runtime=r.get("script_runtime",{})
+              need(runtime.get("compatibility_date")==DATE and not runtime.get("compatibility_flags"),"runtime_configuration_unexpected")
+              need(not runtime.get("migration_tag") and not runtime.get("exports"),"unexpected_runtime_resources")
+              return dbid
+          def active():
+              rows=cf("GET",root+"/deployments?per_page=1").get("deployments")
+              need(isinstance(rows,list) and rows,"deployment_missing")
+              versions=rows[0].get("versions")
+              need(isinstance(versions,list) and 1<=len(versions)<=2,"unexpected_deployment_shape")
+              result={}
+              for item in versions:
+                  vid=item.get("version_id");percent=item.get("percentage")
+                  need(uuid(vid) and isinstance(percent,(int,float)) and vid not in result,"invalid_deployment")
+                  result[vid]=percent
+              return result
+          def latest():
+              rows=cf("GET",root+"/versions?per_page=1").get("items")
+              need(isinstance(rows,list) and rows and uuid(rows[0].get("id")),"latest_version_missing")
+              return rows[0]["id"]
+          def deploy(versions):
+              cf("POST",root+"/deployments",json.dumps({"strategy":"percentage","versions":[{"version_id":v,"percentage":p} for v,p in versions.items()]}).encode())
+          def probe_disabled():
+              for method,path,status in (("GET","/",404),("POST","/telegram",503)):
+                  code,raw=call(HOST,method,path,{"Content-Type":"application/json"} if method=="POST" else {},b"{}" if method=="POST" else None)
+                  need(code==status and json.loads(raw)=={"ok":False},"pilot_endpoint_unexpected")
+          stage="input";old=None;new=None;attempted=False;success=False
+          try:
+              account=os.environ.get("CF_PILOT_ACCOUNT_ID","");token=os.environ.get("CF_PILOT_API_TOKEN","")
+              need(re.fullmatch(r"[0-9a-fA-F]{32}",account) and re.fullmatch(r"[A-Za-z0-9_-]{20,256}",token),"cloudflare_credentials_unavailable")
+              root="/client/v4/accounts/"+account+"/workers/scripts/"+WORKER
+              stage="preflight"
+              probe_disabled()
+              current=active()
+              need(len(current)==1 and list(current.values())==[100],"active_deployment_not_single")
+              old=next(iter(current))
+              dbid=bindings(cf("GET",root+"/versions/"+old))
+              need(latest()==old,"undeployed_version_exists")
+              # Fresh random challenge never persisted or logged; public code has only its hash.
+              challenge=secrets.token_hex(32);digest=hashlib.sha256(challenge.encode()).hexdigest()
+              expires=int(time.time())+240
+              public_probe=r'''
+          import base from "./worker.mjs";
+          import {smokeTransfer} from "./drive-smoke.mjs";
+          const expected="__HASH__";
+          const expires=__EXPIRY__;
+          const host="ipazake-free-control-pilot.hahayesadd.workers.dev";
+          function reply(status,obj){return Response.json(obj,{status,headers:{"Cache-Control":"no-store"}})}
+          function fail(stage){return reply(503,{probe:"drive-readonly-v1",ok:false,stage})}
+          export default {async fetch(request,env,ctx){
+            const u=new URL(request.url);
+            if(u.pathname!=="/__drive_readonly_probe")return base.fetch(request,env,ctx);
+            if(u.hostname!==host||u.search||!["GET","POST"].includes(request.method)||Date.now()/1000>=expires||
+               env.PILOT_ENABLED!=="0"||env.PILOT_LINK_ENABLED!=="0")return reply(404,{ok:false});
+            const candidate=request.headers.get("X-Pilot-Check")||"";
+            if(!/^[a-f0-9]{64}$/.test(candidate))return reply(404,{ok:false});
+            const actual=[...new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(candidate)))].map(x=>x.toString(16).padStart(2,"0")).join("");
+            let diff=0;for(let i=0;i<64;i++)diff|=actual.charCodeAt(i)^expected.charCodeAt(i);
+            if(diff)return reply(404,{ok:false});
+            if(request.method==="GET")return reply(200,{probe:"synthetic-transfer-v1",ready:true});
+            const result=await smokeTransfer(env);
+            return reply(result.ok?200:503,{probe:"synthetic-transfer-v1",...result});
+          }};
+          '''.replace("__HASH__",digest).replace("__EXPIRY__",str(expires)).encode()
+              files=Path(os.environ["RUNNER_TEMP"])
+              (files/"probe.mjs").write_bytes(public_probe)
+              subprocess.run(["node","--check",str(files/"probe.mjs")],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+              # Inherit existing Cloudflare bindings in place. No secret value is fetched or exported.
+              metadata={"main_module":"probe.mjs","compatibility_date":DATE,
+                        "bindings":[{"name":name,"type":"inherit","version_id":"latest"} for name in sorted(NAMES)],
+                        "annotations":{"workers/message":"Expiring one-file synthetic transfer verification; zero traffic"}}
+              boundary="----readonly-pilot-"+secrets.token_hex(16)
+              def part(name,typ,data,filename=None):
+                  disposition='Content-Disposition: form-data; name="'+name+'"'
+                  if filename:disposition+='; filename="'+filename+'"'
+                  return ("--"+boundary+"\r\n"+disposition+"\r\nContent-Type: "+typ+"\r\n\r\n").encode()+data+b"\r\n"
+              body=part("metadata","application/json",json.dumps(metadata,separators=(",",":")).encode())
+              for name in ("probe.mjs","worker.mjs","drive-auth.mjs","drive-smoke.mjs"):
+                  body+=part(name,"application/javascript+module",(files/name).read_bytes(),name)
+              body+=("--"+boundary+"--\r\n").encode()
+              stage="upload_probe_version"
+              new=cf("POST",root+"/versions?bindings_inherit=strict",body,"multipart/form-data; boundary="+boundary).get("id")
+              need(uuid(new),"probe_version_unconfirmed")
+              need(bindings(cf("GET",root+"/versions/"+new))==dbid,"binding_preservation_unconfirmed")
+              need(active()=={old:100} and latest()==new,"concurrent_deployment_detected")
+              stage="zero_traffic_probe"
+              attempted=True
+              deploy({old:100,new:0})
+              need(active()=={old:100,new:0},"zero_traffic_unconfirmed")
+              headers={"X-Pilot-Check":challenge,"Cloudflare-Workers-Version-Overrides":WORKER+'="'+new+'"',"Cache-Control":"no-store"}
+              ready=False
+              for _ in range(5):
+                  status,raw=call(HOST,"GET","/__drive_readonly_probe",headers)
+                  if status==404:
+                      time.sleep(2);continue
+                  value=json.loads(raw)
+                  need(status==200 and value=={"probe":"synthetic-transfer-v1","ready":True},"probe_readiness_unconfirmed")
+                  ready=True
+                  break
+              need(ready,"probe_routing_unconfirmed")
+              # Exactly one POST. Never retry an ambiguous write, and never delete any file.
+              stage="single_synthetic_transfer"
+              status,raw=call(HOST,"POST","/__drive_readonly_probe",headers,b"")
+              value=json.loads(raw)
+              need(value.get("probe")=="synthetic-transfer-v1","transfer_outcome_unconfirmed")
+              if status==503:
+                  failure=value.get("stage")
+                  if failure not in {"configuration","oauth","quota","existing_fixture","generate_id","upload_start","upload","metadata","acl","download"}:failure="unknown"
+                  print("synthetic_file_may_exist="+str(value.get("upload_may_exist") is True).lower(),flush=True)
+                  raise Stop("transfer_"+failure)
+              need(status==200 and value.get("ok") is True and value.get("owner_only") is True and value.get("bytes")==1024 and isinstance(value.get("sha256"),str) and re.fullmatch("[a-f0-9]{64}",value["sha256"]),"transfer_unconfirmed")
+              print("synthetic_transfer_verified: bytes=1024; owner_only=true; sha256_match=true; newly_created="+str(value.get("created") is True).lower(),flush=True)
+              success=True
+          except Stop as exc:
+              print("stopped_stage="+stage+"; reason="+str(exc),file=sys.stderr,flush=True)
+          except Exception:
+              print("stopped_stage="+stage+"; operation_unconfirmed",file=sys.stderr,flush=True)
+          finally:
+              if attempted:
+                  try:
+                      current=active()
+                      if current=={old:100,new:0}:deploy({old:100})
+                      else:need(current=={old:100},"concurrent_deployment_detected")
+                      need(active()=={old:100},"restore_unconfirmed")
+                      probe_disabled()
+                      print("original_deployment_restored: pilot_disabled=true",flush=True)
+                  except Exception:
+                      print("original_deployment_restore_unconfirmed; temporary probe expires automatically",file=sys.stderr,flush=True)
+                      success=False
+              if not success:sys.exit(2)
+          PY
