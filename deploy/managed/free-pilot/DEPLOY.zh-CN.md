@@ -60,3 +60,7 @@ Worker 增加私有 Secret PILOT_LINK_ISSUER_TOKEN、PILOT_DRIVE_ACCESS_TOKEN、
 新版 private_upload.py 与 private_cleanup.py 支持同一 OAuth 应用的三项环境配置 PILOT_DRIVE_CLIENT_ID、PILOT_DRIVE_CLIENT_SECRET、PILOT_DRIVE_REFRESH_TOKEN 和接收人邮箱。只在可信、已获授权的操作员执行环境配置，不从 Cloudflare 读取或导出 Secret。访问令牌保存在当前进程内，到期前刷新；无完整刷新配置时才允许旧的手动 Access Token 模式。不自动重试失败写入，使用原有私有 journal 恢复。invalid_grant 会停止操作，必须由用户重新授权。不得在 Actions 上执行真实上传或清理。
 
 Google OAuth Testing 模式的授权有效期有限。用户可在 Google Auth Platform 的 Audience 页面按官方要求决定是否发布应用，发布后重新授权；这不保证令牌永不失效。继续使用 drive.file 最小授权，不启用计费或扩大权限。
+
+## 8. Linux 上传前完整性门禁
+
+同一部署包中的 private_upload.py 依赖 archive_verify.py 与 zip_preflight.py；三个文件须保持同一 CI 来源。IPA/ZIP 默认执行完整成员 CRC、大小和原始 SHA-256 检查，验证失败时不发起上传；检查期间或分块传输时发现文件变化则停止，保留恢复状态。其他普通文件仍使用原有分块 SHA-256。仅在有权使用的可信执行环境进行真实上传，不使用 Actions 提供生产文件传输。

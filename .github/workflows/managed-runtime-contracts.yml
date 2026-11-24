@@ -80,7 +80,7 @@ jobs:
           mkdir -p pilot-dist/migrations
           "$root/node_modules/.bin/esbuild" "$root/worker.mjs" --bundle --platform=browser --format=esm --target=es2022 --outfile=pilot-dist/worker.mjs
           cp "$root"/migrations/000[1-4]_*.sql pilot-dist/migrations/
-          cp "$root/wrangler.example.json" "$root/private_upload.py" "$root/private_cleanup.py" "$root/zip_preflight.py" "$root/DEPLOY.zh-CN.md" pilot-dist/
+          cp "$root/wrangler.example.json" "$root/private_upload.py" "$root/private_cleanup.py" "$root/zip_preflight.py" "$root/archive_verify.py" "$root/DEPLOY.zh-CN.md" pilot-dist/
           cat pilot-dist/migrations/000[1-4]_*.sql > pilot-dist/schema-fresh.sql
           printf 'source_head=%s\nchecked_out_commit=%s\n' "$SOURCE_HEAD" "$(git rev-parse HEAD)" > pilot-dist/BUILDINFO
           node --check pilot-dist/worker.mjs
@@ -105,7 +105,7 @@ jobs:
           assert db.execute("PRAGMA foreign_key_check").fetchall()==[]
           db.close()
           PY
-          (cd pilot-dist && sha256sum worker.mjs schema-fresh.sql BUILDINFO DEPLOY.zh-CN.md wrangler.example.json private_upload.py private_cleanup.py zip_preflight.py migrations/*.sql > SHA256SUMS)
+          (cd pilot-dist && sha256sum worker.mjs schema-fresh.sql BUILDINFO DEPLOY.zh-CN.md wrangler.example.json private_upload.py private_cleanup.py zip_preflight.py archive_verify.py migrations/*.sql > SHA256SUMS)
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: free-pilot-deployment-${{ github.sha }}
@@ -115,11 +115,13 @@ jobs:
   linux_archive_bundle:
     needs: synthetic
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: Full-read exact 10 GB synthetic ZIP64 contract
+        run: timeout 240s python3 deploy/managed/free-pilot/test_archive_10gb.py
       - name: Build standalone read-only Linux verification tool
         shell: bash
         env:

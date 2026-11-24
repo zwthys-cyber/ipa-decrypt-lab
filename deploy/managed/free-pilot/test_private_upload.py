@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 import private_upload as u
 
@@ -205,5 +206,82 @@ class OAuthTests(unittest.TestCase):
         with self.assertRaisesRegex(u.Stop,"upload_start_unconfirmed"):
             d.start({"filename":"Example.bin","bytes":1},JOB)
         self.assertEqual(len(calls),2)
+
+
+class ArchiveUploadTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory()
+        self.root=Path(self.tmp.name)
+        self.path=self.root/"Synthetic.ipa"
+        with zipfile.ZipFile(self.path,"w",compression=zipfile.ZIP_STORED) as z:
+            z.writestr("Payload/Synthetic.app/Info.plist",b"synthetic layout")
+            z.writestr("Payload/Synthetic.app/content.bin",b"archive-data"*30000)
+        self.path.chmod(0o600)
+        self.raw=self.path.read_bytes()
+        self.journal=u.Journal(self.root/"journal",JOB)
+    def tearDown(self):
+        self.tmp.cleanup()
+    def test_verified_archive_resume_matches_original_bytes(self):
+        class Capture(Fake):
+            def __init__(self,record):
+                super().__init__(record);self.captured=bytearray()
+            def __call__(self,method,url,headers,body):
+                if method=="PUT" and url==SESSION and not headers["Content-Range"].startswith("bytes */"):
+                    self.captured.extend(body)
+                return super().__call__(method,url,headers,body)
+        with self.path.open("rb") as stream:
+            stamp=u.file_snapshot(stream)
+            record=u.validate_file(stream,self.path.name)
+            self.assertEqual(record["sha256"],hashlib.sha256(self.raw).hexdigest())
+            fake=Capture(record);fake.interrupt=True
+            drive=u.Drive(TOKEN,EMAIL,fake)
+            with self.journal,patch.object(u,"CHUNK",256*1024):
+                with self.assertRaisesRegex(u.Stop,"network_outcome_unknown"):
+                    u.upload(drive,stream,record,self.journal,JOB,source_stamp=stamp)
+                receipt,state=u.upload(drive,stream,record,self.journal,JOB,source_stamp=stamp)
+            self.assertEqual(fake.starts,1)
+            self.assertEqual(bytes(fake.captured),self.raw)
+            self.assertEqual(receipt["sha256"],record["sha256"])
+            self.assertEqual(state["stage"],"uploaded")
+        self.assertEqual(self.path.read_bytes(),self.raw)
+    def test_bad_crc_and_invalid_ipa_layout_are_refused(self):
+        raw=bytearray(self.raw);raw[raw.index(b"archive-data")]^=1
+        self.path.write_bytes(raw)
+        with self.path.open("rb") as stream:
+            with self.assertRaisesRegex(u.Stop,"archive_integrity_failed"):
+                u.validate_file(stream,self.path.name)
+        self.assertIsNone(self.journal.read())
+        with zipfile.ZipFile(self.path,"w") as z:z.writestr("file.txt",b"x")
+        with self.path.open("rb") as stream:
+            with self.assertRaisesRegex(u.Stop,"archive_integrity_failed"):
+                u.validate_file(stream,self.path.name)
+    def test_file_change_after_validation_blocks_upload(self):
+        with self.path.open("rb") as stream:
+            stamp=u.file_snapshot(stream)
+            record=u.validate_file(stream,self.path.name)
+            fake=Fake(record);drive=u.Drive(TOKEN,EMAIL,fake)
+            self.path.write_bytes(self.raw+b"x")
+            with self.journal:
+                with self.assertRaisesRegex(u.Stop,"input_changed"):
+                    u.upload(drive,stream,record,self.journal,JOB,source_stamp=stamp)
+            self.assertEqual(fake.starts,0)
+            self.assertIsNone(self.journal.read())
+    def test_file_change_during_transfer_stops_next_chunk(self):
+        path=self.path
+        class Mutating(Fake):
+            def __call__(self,method,url,headers,body):
+                result=super().__call__(method,url,headers,body)
+                if method=="PUT" and url==SESSION and not headers["Content-Range"].startswith("bytes */"):
+                    with path.open("r+b") as out:
+                        out.seek(0);out.write(b"X");out.flush();os.fsync(out.fileno())
+                return result
+        with self.path.open("rb") as stream:
+            stamp=u.file_snapshot(stream);record=u.validate_file(stream,self.path.name)
+            fake=Mutating(record);drive=u.Drive(TOKEN,EMAIL,fake)
+            with self.journal,patch.object(u,"CHUNK",256*1024):
+                with self.assertRaisesRegex(u.Stop,"input_changed"):
+                    u.upload(drive,stream,record,self.journal,JOB,source_stamp=stamp)
+            self.assertEqual(fake.offset,256*1024)
+            self.assertEqual(self.journal.read()["stage"],"uploading")
 
 if __name__=="__main__":unittest.main()

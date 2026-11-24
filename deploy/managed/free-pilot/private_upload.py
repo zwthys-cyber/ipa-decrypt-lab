@@ -17,7 +17,7 @@ import sys
 import tempfile
 import time
 from urllib.parse import urlsplit, urlencode
-from zip_preflight import inspect as inspect_archive, ArchiveError
+from archive_verify import verify as verify_archive, VerificationError
 
 MAX=10_000_000_000
 FREE_LIMIT=15*1024**3
@@ -65,23 +65,41 @@ def session_url(url):
     need(p.netloc in {"www.googleapis.com","www.googleapis.com:443"} and p.path=="/upload/drive/v3/files" and
          len(p.query)<=4096 and "upload_id=" in p.query and not any(c.isspace() for c in url),"invalid_upload_session")
     return url
-def validate_file(stream,name):
+def file_snapshot(stream):
     info=os.fstat(stream.fileno())
     need(stat.S_ISREG(info.st_mode) and info.st_uid==os.geteuid() and info.st_mode&0o077==0,"input_not_private")
     need(0<info.st_size<=MAX,"file_size_out_of_bounds")
+    return (info.st_dev,info.st_ino,info.st_size,info.st_mtime_ns,info.st_ctime_ns)
+
+def validate_file(stream,name):
+    initial=file_snapshot(stream)
+    suffix=Path(name).suffix.lower()
     need(1<=len(name)<=160 and not name.startswith(".") and
          all(c.isalnum() or c in " ._()-" for c in name) and
-         Path(name).suffix.lower() in {".ipa",".zip",".bin",".txt"},"filename_invalid")
-    if Path(name).suffix.lower() in {".zip",".ipa"}:
-        try:inspect_archive(stream)
-        except ArchiveError:raise Stop("archive_preflight_failed") from None
-    stream.seek(0)
-    h=hashlib.sha256()
-    for data in iter(lambda:stream.read(CHUNK),b""):h.update(data)
-    after=os.fstat(stream.fileno())
-    need((after.st_size,after.st_mtime_ns,after.st_ctime_ns)==
-         (info.st_size,info.st_mtime_ns,info.st_ctime_ns),"input_changed")
-    return {"filename":name,"bytes":info.st_size,"sha256":h.hexdigest()}
+         suffix in {".ipa",".zip",".bin",".txt"},"filename_invalid")
+    if suffix in {".zip",".ipa"}:
+        try:
+            result=verify_archive(stream,ipa=suffix==".ipa")
+        except VerificationError as exc:
+            code=str(exc)
+            if code=="input_changed":raise Stop("input_changed") from None
+            if code=="archive_structure_invalid":raise Stop("archive_preflight_failed") from None
+            raise Stop("archive_integrity_failed") from None
+        need(result["all_member_crc_verified"] is True and result["archive_bytes"]==initial[2],
+             "archive_integrity_failed")
+        digest=result["sha256"]
+    else:
+        stream.seek(0)
+        h=hashlib.sha256()
+        hashed=0
+        for data in iter(lambda:stream.read(CHUNK),b""):
+            hashed+=len(data)
+            need(hashed<=initial[2],"input_changed")
+            h.update(data)
+        need(hashed==initial[2],"input_changed")
+        digest=h.hexdigest()
+    need(file_snapshot(stream)==initial,"input_changed")
+    return {"filename":name,"bytes":initial[2],"sha256":digest}
 
 def quota(value,email,size):
     need(type(size) is int and 0<size<=MAX,"file_size_out_of_bounds")
@@ -189,10 +207,11 @@ class Drive:
         return session_url(headers.get("location",""))
     def resume(self,session,size):
         return ack(*self.call("PUT",session_url(session),b"",{"Content-Range":"bytes */"+str(size),"Content-Length":"0"}),size)
-    def chunk(self,session,stream,offset,size):
+    def chunk(self,session,stream,offset,size,*,check=None):
         stream.seek(offset)
         data=stream.read(min(CHUNK,size-offset))
         need(len(data)==min(CHUNK,size-offset),"input_changed")
+        if check is not None:check()
         end=offset+len(data)
         result=ack(*self.call("PUT",session_url(session),data,{"Content-Type":"application/octet-stream",
             "Content-Range":f"bytes {offset}-{end-1}/{size}","Content-Length":str(len(data))}),size)
@@ -250,11 +269,16 @@ class Journal:
             finally:os.close(d)
         finally:Path(tmp).unlink(missing_ok=True)
 
-def upload(drive,stream,record,journal,job):
+def upload(drive,stream,record,journal,job,*,source_stamp=None):
+    initial=file_snapshot(stream) if source_stamp is None else source_stamp
+    def unchanged():
+        need(file_snapshot(stream)==initial and initial[2]==record["bytes"],"input_changed")
+    unchanged()
     binding={"job_id":job,"record":record,"owner":drive.email.lower()}
     state=journal.read()
     if state is None:
         drive.check_quota(record["bytes"])
+        unchanged()
         state={**binding,"stage":"start_intent"}
         journal.write(state)
         state={**state,"stage":"uploading","session":drive.start(record,job)}
@@ -266,18 +290,24 @@ def upload(drive,stream,record,journal,job):
     if state.get("stage")=="uploading":
         size=record["bytes"]
         session=state["session"]
+        unchanged()
         offset,file_id=drive.resume(session,size)
+        unchanged()
         if file_id is None:
             # Conservatively recheck the full reservation before resuming writes.
             # The provider may not yet count uncommitted chunks in usage.
             drive.check_quota(size)
         while file_id is None:
             need(0<=offset<size)
-            offset,file_id=drive.chunk(session,stream,offset,size)
+            unchanged()
+            offset,file_id=drive.chunk(session,stream,offset,size,check=unchanged)
+            unchanged()
         state={**binding,"stage":"uploaded","file_id":file_id}
         journal.write(state)
     need(state.get("stage") in {"uploaded","registration_intent","registered"},"journal_stage_invalid")
+    unchanged()
     receipt=drive.verify(record,state["file_id"])
+    unchanged()
     return {**receipt,"job_id":job},state
 
 def register(receipt,state,journal,origin,token,send=request):
@@ -309,10 +339,11 @@ def main():
         need(args.confirm_free_account and args.confirm_authorized_file,"operator_confirmation_required")
         need(os.environ.get("GITHUB_ACTIONS")!="true","operator_only_no_live_ci_upload")
         drive=Drive.from_env(os.environ)
-        fd=os.open(args.file,os.O_RDONLY|os.O_NOFOLLOW)
+        fd=os.open(args.file,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
         with os.fdopen(fd,"rb") as stream,Journal(args.journal,args.job) as journal:
+            stamp=file_snapshot(stream)
             record=validate_file(stream,args.file.name)
-            receipt,state=upload(drive,stream,record,journal,args.job)
+            receipt,state=upload(drive,stream,record,journal,args.job,source_stamp=stamp)
             if args.register:
                 register(receipt,state,journal,os.environ.get("PILOT_LINK_ORIGIN",""),os.environ.get("PILOT_LINK_ISSUER_TOKEN",""))
         print("private_link_registered" if args.register else "private_upload_verified")

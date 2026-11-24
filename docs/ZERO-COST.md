@@ -176,3 +176,8 @@ References:
 ## Phase 15: Linux read-only archive integrity tool
 
 A standalone zipapp is built from archive_verify.py and the existing bounded ZIP64 metadata preflight. It verifies CRCs of all logical members, declared sizes, a minimal IPA layout, the original archive SHA-256 and unchanged-file metadata; it can compare an independently trusted expected digest. The build and relocated smoke test use only synthetic data in GitHub-hosted Ubuntu CI. It cannot establish authenticity, installation compatibility or DRM status and does not alter archives. The 10 GB input bound remains distinct from actual full-size throughput. No production runtime or live transfer is introduced. See deploy/managed/free-pilot/LINUX-ARCHIVE.zh-CN.md.
+
+
+## Phase 16: Linux pre-upload integrity gate and exact-size fixture
+
+The private operator uploader uses the existing full archive verifier for IPA/ZIP input, with no modification of source bytes. It keeps the original receipt and journal schema and checks input metadata before provider operations and around chunk reads. Malformed layout/CRC failures stop before uploads; changed input stops the current attempt without recreating the upload. Synthetic transport tests exercise interrupted upload and byte-for-byte recovery. The Linux bundle job additionally runs a sparse, exactly 10,000,000,000-byte ZIP64 fixture through complete CRC and independent reference SHA-256 verification, with an oversize rejection. Its measured CI result is evidence only after the job succeeds; the fixture is not published. No live upload, billing, credential operation, or deployment is introduced. Apple-specific processing and an eligible production host are still unresolved.
