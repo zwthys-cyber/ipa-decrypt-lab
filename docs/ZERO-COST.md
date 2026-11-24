@@ -149,3 +149,10 @@ Official references:
 - https://developers.google.com/identity/protocols/oauth2/web-server
 - https://developers.google.com/identity/protocols/oauth2#expiration
 - https://developers.google.com/workspace/drive/api/guides/api-specific-auth
+
+
+## Phase 13: live verification and operator refresh
+
+Live read-only probe 45412582043 confirmed OAuth refresh, account match, D1 schema and available capacity for a 10,000,000,000-byte file with reserve. The transport-fix artifact was deployed in 45415199977. The initial deployment failed artifact-digest verification and was corrected without bypassing that check. Both activation switches remain disabled. Synthetic transfer contracts passed in 45414991034; the actual one-file verification stopped before upload in 45415372611 and 45415585730, with the latter reporting Google invalid_grant. No smoke file was created, and the original isolated deployment was restored. This is not a verified transfer. A fresh owner-authorized grant is required; the exact cause of the invalidation is unknown.
+
+The operator uploader and cleanup tool now optionally use a process-local short-lived token cache with explicit scope/type/expiry validation. They refuse incomplete OAuth configuration and latch invalid_grant for the current process. No automatic replay of writes, credential export, CI live upload, production dispatch or change to cleanup authorization is introduced. Actual operator execution still requires a trusted host. The no-VM production runtime constraint remains unresolved.

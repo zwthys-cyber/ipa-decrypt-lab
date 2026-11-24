@@ -61,7 +61,7 @@ def main():
     os.umask(0o077)
     try:
         need(os.environ.get("GITHUB_ACTIONS")!="true" and args.confirm_free_account,"operator_confirmation_required")
-        drive=Drive(os.environ.get("PILOT_DRIVE_ACCESS_TOKEN",""),os.environ.get("PILOT_DRIVE_RECIPIENT_EMAIL",""))
+        drive=Drive.from_env(os.environ)
         with Journal(args.journal,args.job) as journal:
             result=cleanup(drive,journal,args.job,os.environ.get("PILOT_LINK_ORIGIN",""),
                 os.environ.get("PILOT_LINK_ISSUER_TOKEN",""),args.confirm_permanent_delete)

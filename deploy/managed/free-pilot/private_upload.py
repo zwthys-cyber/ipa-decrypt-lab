@@ -15,7 +15,8 @@ import ssl
 import stat
 import sys
 import tempfile
-from urllib.parse import urlsplit
+import time
+from urllib.parse import urlsplit, urlencode
 from zip_preflight import inspect as inspect_archive, ArchiveError
 
 MAX=10_000_000_000
@@ -26,7 +27,11 @@ GOOGLE="https://www.googleapis.com"
 FIELDS="id,name,size,sha256Checksum,trashed,ownedByMe,mimeType,resourceKey"
 JOB=re.compile(r"pilot_[a-f0-9]{32}")
 FILE=re.compile(r"[A-Za-z0-9_-]{10,160}")
-ACCESS=re.compile(r"[A-Za-z0-9._~-]{20,2048}")
+ACCESS=re.compile(r"[A-Za-z0-9._~+/=-]{20,2048}")
+CLIENT=re.compile(r"[A-Za-z0-9_-]{10,240}\.apps\.googleusercontent\.com")
+OPAQUE=re.compile(r"[\x21-\x7e]{12,2048}")
+SCOPE="https://www.googleapis.com/auth/drive.file"
+OAUTH_URL="https://oauth2.googleapis.com/token"
 ISSUER=re.compile(r"[A-Za-z0-9_-]{43,128}")
 EMAIL=re.compile(r"[^\s@]{1,128}@[^\s@]{1,128}")
 
@@ -95,14 +100,80 @@ def ack(status,headers,data,size):
     need(found and 0<int(found[1])+1<size,"invalid_upload_offset")
     return int(found[1])+1,None
 
+class OAuthSession:
+    """Process-local access-token cache; no token persistence or mutation retry."""
+    def __init__(self,client_id,client_secret,refresh_token,send=request,clock=time.monotonic):
+        need(all(isinstance(v,str) and p.fullmatch(v) for v,p in
+                 ((client_id,CLIENT),(client_secret,OPAQUE),(refresh_token,OPAQUE))),"invalid_drive_credentials")
+        self._client_id=client_id
+        self._secret=client_secret
+        self._refresh=refresh_token
+        self._send=send
+        self._clock=clock
+        self._token=None
+        self._until=0
+        self._blocked=False
+    def access(self):
+        need(not self._blocked,"drive_reauthorization_required")
+        now=self._clock()
+        if self._token and now<self._until:return self._token
+        self._token=None
+        try:
+            body=urlencode({"client_id":self._client_id,"client_secret":self._secret,
+                            "refresh_token":self._refresh,"grant_type":"refresh_token"}).encode("ascii")
+            status,_,raw=self._send("POST",OAUTH_URL,{"Content-Type":"application/x-www-form-urlencoded",
+                                    "Accept":"application/json"},body)
+            need(len(raw)<=16384,"drive_authorization_unavailable")
+            value=decode(raw)
+            if status==400 and value.get("error")=="invalid_grant":
+                self._blocked=True
+                raise Stop("drive_reauthorization_required")
+            if value.get("error")=="invalid_client":
+                self._blocked=True
+                raise Stop("drive_client_configuration_invalid")
+            need(status==200,"drive_authorization_unavailable")
+            token=value.get("access_token")
+            lifetime=value.get("expires_in")
+            need(isinstance(token,str) and ACCESS.fullmatch(token) and
+                 isinstance(value.get("token_type"),str) and value["token_type"].lower()=="bearer" and
+                 type(lifetime) is int and 120<=lifetime<=86400 and
+                 isinstance(value.get("scope"),str) and value["scope"].strip()==SCOPE and
+                 "refresh_token" not in value,"drive_authorization_unavailable")
+            self._until=now+lifetime-60
+            need(self._clock()<self._until,"drive_authorization_unavailable")
+            self._token=token
+            return token
+        except Stop:
+            raise
+        except Exception:
+            raise Stop("drive_authorization_unavailable") from None
+
 class Drive:
-    def __init__(self,token,email,send=request):
-        need(isinstance(token,str) and ACCESS.fullmatch(token) and isinstance(email,str) and EMAIL.fullmatch(email),"invalid_drive_credentials")
+    def __init__(self,token,email,send=request,*,oauth=None):
+        need(isinstance(email,str) and EMAIL.fullmatch(email),"invalid_drive_credentials")
+        need((oauth is None and isinstance(token,str) and ACCESS.fullmatch(token)) or
+             (isinstance(oauth,OAuthSession) and token is None),"invalid_drive_credentials")
         self.email=email
         self.send=send
-        self.headers={"Authorization":"Bearer "+token,"Accept":"application/json"}
+        self._token=token
+        self._oauth=oauth
+    @classmethod
+    def from_env(cls,env,send=request,clock=time.monotonic):
+        email=env.get("PILOT_DRIVE_RECIPIENT_EMAIL","")
+        values=[env.get(k,"") for k in ("PILOT_DRIVE_CLIENT_ID","PILOT_DRIVE_CLIENT_SECRET","PILOT_DRIVE_REFRESH_TOKEN")]
+        if any(values):
+            # Partial OAuth configuration never silently falls back to a stale manual token.
+            return cls(None,email,send,oauth=OAuthSession(*values,send=send,clock=clock))
+        return cls(env.get("PILOT_DRIVE_ACCESS_TOKEN",""),email,send)
     def call(self,method,url,body=None,headers=None):
-        return self.send(method,url,{**self.headers,**(headers or {})},body)
+        p=endpoint(url)
+        need(p.hostname=="www.googleapis.com" and p.netloc in {"www.googleapis.com","www.googleapis.com:443"} and
+             (p.path.startswith("/drive/v3/") or p.path=="/upload/drive/v3/files"),"invalid_drive_endpoint")
+        extra=headers or {}
+        need(not any(k.lower()=="authorization" for k in extra),"invalid_drive_headers")
+        token=self._oauth.access() if self._oauth else self._token
+        # Refresh before a provider call; never retry an ambiguous write or a 401 automatically.
+        return self.send(method,url,{"Authorization":"Bearer "+token,"Accept":"application/json",**extra},body)
     def get(self,path):
         status,_,data=self.call("GET",GOOGLE+"/drive/v3/"+path)
         need(status==200,"drive_metadata_unavailable");return decode(data)
@@ -237,7 +308,7 @@ def main():
     try:
         need(args.confirm_free_account and args.confirm_authorized_file,"operator_confirmation_required")
         need(os.environ.get("GITHUB_ACTIONS")!="true","operator_only_no_live_ci_upload")
-        drive=Drive(os.environ.get("PILOT_DRIVE_ACCESS_TOKEN",""),os.environ.get("PILOT_DRIVE_RECIPIENT_EMAIL",""))
+        drive=Drive.from_env(os.environ)
         fd=os.open(args.file,os.O_RDONLY|os.O_NOFOLLOW)
         with os.fdopen(fd,"rb") as stream,Journal(args.journal,args.job) as journal:
             record=validate_file(stream,args.file.name)

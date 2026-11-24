@@ -147,4 +147,63 @@ class Tests(unittest.TestCase):
             with self.assertRaisesRegex(u.Stop,"free_storage_insufficient"):self.run_upload()
             self.assertEqual(self.fake.offset,before)
             self.assertEqual(self.fake.starts,1)
+
+class OAuthTests(unittest.TestCase):
+    def setUp(self):
+        self.now=100
+        self.calls=[]
+        self.env={"PILOT_DRIVE_CLIENT_ID":"synthetic-client-123.apps.googleusercontent.com",
+                  "PILOT_DRIVE_CLIENT_SECRET":"synthetic-client-secret","PILOT_DRIVE_REFRESH_TOKEN":"synthetic-refresh-token",
+                  "PILOT_DRIVE_RECIPIENT_EMAIL":EMAIL,"PILOT_DRIVE_ACCESS_TOKEN":TOKEN}
+        self.response={"access_token":"synthetic-fresh-access-token","token_type":"Bearer","expires_in":3600,"scope":u.SCOPE}
+        self.status=200
+    def send(self,method,url,headers,body):
+        self.calls.append((method,url))
+        if url==u.OAUTH_URL:
+            self.assertEqual(method,"POST")
+            self.assertNotIn("Authorization",headers)
+            self.assertEqual(headers["Content-Type"],"application/x-www-form-urlencoded")
+            self.assertIn(b"grant_type=refresh_token",body)
+            return self.status,{},u.encode(self.response)
+        self.assertEqual(headers["Authorization"],"Bearer synthetic-fresh-access-token")
+        return 200,{},u.encode({})
+    def drive(self):return u.Drive.from_env(self.env,self.send,lambda:self.now)
+    def test_refresh_reuses_token_until_safety_margin(self):
+        d=self.drive();d.get("about");self.now=3639;d.get("about")
+        self.assertEqual(sum(url==u.OAUTH_URL for _,url in self.calls),1)
+        self.now=3640;d.get("about")
+        self.assertEqual(sum(url==u.OAUTH_URL for _,url in self.calls),2)
+    def test_invalid_grant_latches_and_no_manual_fallback(self):
+        self.status=400;self.response={"error":"invalid_grant"}
+        d=self.drive()
+        for _ in range(2):
+            with self.assertRaisesRegex(u.Stop,"drive_reauthorization_required"):d.get("about")
+        self.assertEqual(self.calls,[("POST",u.OAUTH_URL)])
+    def test_partial_configuration_fails_before_network(self):
+        del self.env["PILOT_DRIVE_REFRESH_TOKEN"]
+        with self.assertRaisesRegex(u.Stop,"invalid_drive_credentials"):self.drive()
+        self.assertEqual(self.calls,[])
+    def test_reject_redirect_wrong_scope_short_lifetime_and_rotation(self):
+        original=self.response.copy()
+        for changes,status in [({},302),({"scope":"https://www.googleapis.com/auth/drive"},200),
+            ({"expires_in":True},200),({"expires_in":60},200),({"refresh_token":"unexpected"},200),
+            ({"scope":None},200)]:
+            self.status=status;self.response={**original,**changes}
+            with self.assertRaises(u.Stop):self.drive().get("about")
+        self.assertTrue(all(url==u.OAUTH_URL for _,url in self.calls))
+    def test_untrusted_origin_rejected_before_refresh(self):
+        d=self.drive()
+        with self.assertRaisesRegex(u.Stop,"invalid_drive_endpoint"):d.call("GET","https://example.invalid/drive/v3/files")
+        self.assertEqual(self.calls,[])
+    def test_401_on_write_does_not_repeat(self):
+        calls=[]
+        def send(method,url,headers,body):
+            calls.append((method,url))
+            if url==u.OAUTH_URL:return 200,{},u.encode(self.response)
+            return 401,{},b"{}"
+        d=u.Drive.from_env(self.env,send,lambda:self.now)
+        with self.assertRaisesRegex(u.Stop,"upload_start_unconfirmed"):
+            d.start({"filename":"Example.bin","bytes":1},JOB)
+        self.assertEqual(len(calls),2)
+
 if __name__=="__main__":unittest.main()
