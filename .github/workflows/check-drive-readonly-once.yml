@@ -130,8 +130,14 @@ jobs:
               current=active()
               need(len(current)==1 and list(current.values())==[100],"active_deployment_not_single")
               old=next(iter(current))
-              need(latest()==old,"undeployed_version_exists")
               dbid=bindings(cf("GET",root+"/versions/"+old))
+              previous=latest()
+              if previous!=old:
+                  rows=cf("GET",root+"/versions?per_page=2").get("items")
+                  need(isinstance(rows,list) and len(rows)>=2 and rows[0].get("id")==previous and rows[1].get("id")==old,"unexpected_version_history")
+                  stamp=rows[0].get("metadata",{}).get("created_on","")
+                  need(isinstance(stamp,str) and stamp.startswith("2026-11-24T13:54:"),"unexpected_intervening_version")
+                  need(bindings(cf("GET",root+"/versions/"+previous))==dbid,"previous_probe_bindings_changed")
               # Fresh random challenge never persisted or logged; public code has only its hash.
               challenge=secrets.token_hex(32);digest=hashlib.sha256(challenge.encode()).hexdigest()
               expires=int(time.time())+240
@@ -155,8 +161,28 @@ jobs:
             if(diff)return reply(404,{ok:false});
             try{
               if(authMode(env)!=="refresh")return fail("oauth_configuration");
-              let access;
-              try{access=await accessForRequest(env)}catch{return fail("oauth_refresh")}
+              let access,reason="oauth_network";
+              // Diagnose only a closed error category. Never return provider JSON, credentials or tokens.
+              try{
+                access=await accessForRequest(env,async(url,init)=>{
+                  if(url!=="https://oauth2.googleapis.com/token")throw Error("unexpected_endpoint");
+                  const r=await fetch(url,init);
+                  reason="oauth_response";
+                  if(!r.body)throw Error("response");
+                  const reader=r.body.getReader(),parts=[];let n=0;
+                  try{for(;;){const {done,value}=await reader.read();if(done)break;n+=value.byteLength;if(n>16384){await reader.cancel();throw Error("response")}parts.push(value)}}
+                  finally{reader.releaseLock()}
+                  const bytes=new Uint8Array(n);let at=0;for(const p of parts){bytes.set(p,at);at+=p.byteLength}
+                  const v=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(bytes));
+                  if(r.status!==200){
+                    const known=["invalid_grant","invalid_client","unauthorized_client","invalid_scope","invalid_request","access_denied","admin_policy_enforced","temporarily_unavailable"];
+                    reason=known.includes(v?.error)?"google_"+v.error:"google_other_error";
+                  }else if(typeof v?.scope!=="string")reason="oauth_scope_missing";
+                  else if(v.scope.trim()!=="https://www.googleapis.com/auth/drive.file")reason="oauth_scope_mismatch";
+                  else reason="oauth_token_validation";
+                  return new Response(bytes,{status:r.status,headers:{"Content-Type":"application/json"}});
+                });
+              }catch{return fail(reason)}
               let info;
               try{
                 const r=await fetch("https://www.googleapis.com/drive/v3/about?fields=user%28emailAddress%29%2CstorageQuota%28limit%2Cusage%29",{
@@ -216,7 +242,7 @@ jobs:
                   need(value.get("probe")=="drive-readonly-v1","unexpected_probe_response")
                   if status==503:
                       failure=value.get("stage")
-                      if failure not in {"oauth_configuration","oauth_refresh","drive_about","account_match","quota","d1","read_only_check"}:failure="unknown"
+                      if failure not in {"oauth_configuration","oauth_network","oauth_response","oauth_scope_missing","oauth_scope_mismatch","oauth_token_validation","google_invalid_grant","google_invalid_client","google_unauthorized_client","google_invalid_scope","google_invalid_request","google_access_denied","google_admin_policy_enforced","google_temporarily_unavailable","google_other_error","drive_about","account_match","quota","d1","read_only_check"}:failure="unknown"
                       raise Stop("probe_"+failure)
                   need(status==200 and value.get("ok") is True and value.get("account_match") is True and value.get("free_quota_compatible") is True and value.get("d1_schema") is True,"probe_unconfirmed")
                   usable=value.get("usable_mb")
