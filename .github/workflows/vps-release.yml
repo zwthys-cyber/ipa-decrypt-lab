@@ -95,6 +95,14 @@ jobs:
               echo forbidden_vps_keygen; exit 1
             fi
           '
+      - name: Validate managed container packaging without credentials
+        run: |
+          docker build --platform linux/amd64 -f deploy/managed/Dockerfile -t ipazake-managed:ci package
+          docker run --rm --entrypoint /usr/bin/python3 ipazake-managed:ci -c 'import os,sys; sys.path.insert(0,"/opt/ipazake/tools"); from telegram_daemon import credential_mode; assert os.geteuid()==10001 and credential_mode()=="environment"'
+          docker run --rm --entrypoint /opt/ipazake/bin/telegram-bot-api ipazake-managed:ci --version
+          if docker run --rm ipazake-managed:ci; then
+            echo managed_missing_volume_not_rejected; exit 1
+          fi
       - name: Package verified public release
         run: |
           tar -czf vps-controller.tar.gz -C package .

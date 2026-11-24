@@ -131,9 +131,10 @@ def actor(update):
     return uid,None
 
 class MultiUserService:
-    def __init__(self,bot,github,admin,crypt,token,journal,limit,controller_factory):
+    def __init__(self,bot,github,admin,crypt,token,journal,limit,controller_factory,testflight_enabled=True):
         self.bot,self.github,self.admin,self.crypt,self.token=bot,github,admin,crypt,token
         self.journal,self.limit,self.factory=journal,limit,controller_factory
+        self.testflight_enabled=testflight_enabled
         self.access=AccessControl(journal,admin,limit)
         self.controllers={};self.configured={admin};self.denied={}
         self.sync()
@@ -153,7 +154,7 @@ class MultiUserService:
             controller=self.factory(self.bot,api,uid,self.crypt,self.token,journal=ledger,
                 submission_limit=profile["daily_limit"],admission=lambda kind:self.admit(uid,kind),
                 authorization=allowed,strict_ownership=True,retirement=lambda kind,rid,app:self.retire(uid,kind,rid,app))
-            controller.testflight_allowed=uid==self.admin
+            controller.testflight_allowed=self.testflight_enabled and uid==self.admin
             controller.started=time.time()-86400
             self.controllers[uid]=controller
         self.controllers[uid].submission_limit=profile["daily_limit"]

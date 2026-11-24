@@ -1,0 +1,24 @@
+name: Managed runtime contracts
+on:
+  pull_request:
+    paths:
+      - 'tools/telegram_daemon.py'
+      - 'tools/multi_user.py'
+      - 'tests/test_managed_runtime.py'
+      - 'deploy/managed/**'
+      - '.github/workflows/managed-runtime-contracts.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends python3-pil
+          /usr/bin/python3 -m unittest discover -s tests -p 'test_managed_runtime.py' -v
