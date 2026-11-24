@@ -137,7 +137,13 @@ jobs:
               need(len(current)==1 and list(current.values())==[100],"active_deployment_not_single")
               old=next(iter(current))
               dbid=bindings(cf("GET",root+"/versions/"+old))
-              need(latest()==old,"undeployed_version_exists")
+              previous=latest()
+              if previous!=old:
+                  rows=cf("GET",root+"/versions?per_page=2").get("items")
+                  need(isinstance(rows,list) and len(rows)>=2 and rows[0].get("id")==previous and rows[1].get("id")==old,"unexpected_version_history")
+                  stamp=rows[0].get("metadata",{}).get("created_on","")
+                  need(isinstance(stamp,str) and stamp.startswith("2026-11-24T14:33:"),"unexpected_intervening_version")
+                  need(bindings(cf("GET",root+"/versions/"+previous))==dbid,"previous_probe_bindings_changed")
               # Fresh random challenge never persisted or logged; public code has only its hash.
               challenge=secrets.token_hex(32);digest=hashlib.sha256(challenge.encode()).hexdigest()
               expires=int(time.time())+240
@@ -160,7 +166,42 @@ jobs:
             let diff=0;for(let i=0;i<64;i++)diff|=actual.charCodeAt(i)^expected.charCodeAt(i);
             if(diff)return reply(404,{ok:false});
             if(request.method==="GET")return reply(200,{probe:"synthetic-transfer-v1",ready:true});
-            const result=await smokeTransfer(env);
+            let reason="oauth_network";
+            const send=async(url,init)=>{
+              if(url!=="https://oauth2.googleapis.com/token"){
+                if(new URL(url).origin!=="https://www.googleapis.com")throw Error("unexpected_endpoint");
+                return fetch(url,init);
+              }
+              let r;
+              try{
+                r=await fetch(url,{...init,redirect:"manual",signal:AbortSignal.timeout(10000)});
+              }catch(e){
+                const msg=String(e?.message||"").toLowerCase();
+                reason=msg.includes("illegal invocation")?"oauth_illegal_invocation":
+                  msg.includes("timeout")||e?.name==="TimeoutError"||e?.name==="AbortError"?"oauth_timeout":
+                  msg.includes("dns")||msg.includes("resolve")?"oauth_dns":
+                  msg.includes("tls")||msg.includes("certificate")?"oauth_tls":
+                  msg.includes("network connection lost")?"oauth_connection_lost":"oauth_network";
+                throw Error("oauth_transport");
+              }
+              if(r.status>=300&&r.status<400){reason="oauth_redirect";if(r.body)await r.body.cancel();throw Error("oauth_redirect")}
+              reason="oauth_response";
+              if(!r.body)throw Error("response");
+              const reader=r.body.getReader(),parts=[];let n=0;
+              try{for(;;){const {done,value}=await reader.read();if(done)break;n+=value.byteLength;if(n>16384){await reader.cancel();throw Error("response")}parts.push(value)}}
+              finally{reader.releaseLock()}
+              const bytes=new Uint8Array(n);let at=0;for(const p of parts){bytes.set(p,at);at+=p.byteLength}
+              const v=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(bytes));
+              if(r.status!==200){
+                const known=["invalid_grant","invalid_client","unauthorized_client","invalid_scope","invalid_request","access_denied","admin_policy_enforced","temporarily_unavailable"];
+                reason=known.includes(v?.error)?"google_"+v.error:"google_other_error";
+              }else if(typeof v?.scope!=="string")reason="oauth_scope_missing";
+              else if(v.scope.trim()!=="https://www.googleapis.com/auth/drive.file")reason="oauth_scope_mismatch";
+              else reason="oauth_token_validation";
+              return new Response(bytes,{status:r.status,headers:{"Content-Type":"application/json"}});
+            };
+            const result=await smokeTransfer(env,send);
+            if(!result.ok&&result.stage==="oauth")result.stage=reason;
             return reply(result.ok?200:503,{probe:"synthetic-transfer-v1",...result});
           }};
           '''.replace("__HASH__",digest).replace("__EXPIRY__",str(expires)).encode()
@@ -207,7 +248,7 @@ jobs:
               need(value.get("probe")=="synthetic-transfer-v1","transfer_outcome_unconfirmed")
               if status==503:
                   failure=value.get("stage")
-                  if failure not in {"configuration","oauth","quota","existing_fixture","generate_id","upload_start","upload","metadata","acl","download"}:failure="unknown"
+                  if failure not in {"configuration","oauth","oauth_network","oauth_illegal_invocation","oauth_timeout","oauth_dns","oauth_tls","oauth_connection_lost","oauth_redirect","oauth_response","oauth_scope_missing","oauth_scope_mismatch","oauth_token_validation","google_invalid_grant","google_invalid_client","google_unauthorized_client","google_invalid_scope","google_invalid_request","google_access_denied","google_admin_policy_enforced","google_temporarily_unavailable","google_other_error","quota","existing_fixture","generate_id","upload_start","upload","metadata","acl","download"}:failure="unknown"
                   print("synthetic_file_may_exist="+str(value.get("upload_may_exist") is True).lower(),flush=True)
                   raise Stop("transfer_"+failure)
               need(status==200 and value.get("ok") is True and value.get("owner_only") is True and value.get("bytes")==1024 and isinstance(value.get("sha256"),str) and re.fullmatch("[a-f0-9]{64}",value["sha256"]),"transfer_unconfirmed")
