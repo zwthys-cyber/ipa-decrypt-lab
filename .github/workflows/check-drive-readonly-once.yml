@@ -1,4 +1,4 @@
-name: Diagnose Google connectivity without credentials
+name: Verify private Drive authorization in place
 on:
   push:
     branches: ['ops/configure-free-pilot-20261124']
@@ -43,7 +43,7 @@ jobs:
           PY
           node --check "$RUNNER_TEMP/worker.mjs"
           node --check "$RUNNER_TEMP/drive-auth.mjs"
-      - name: Public Google HTTPS connectivity probe at zero traffic
+      - name: Read-only Google account and quota probe at zero traffic
         env:
           CF_PILOT_ACCOUNT_ID: ${{ secrets.CF_PILOT_ACCOUNT_ID }}
           CF_PILOT_API_TOKEN: ${{ secrets.CF_PILOT_API_TOKEN }}
@@ -139,17 +139,17 @@ jobs:
                   for row in rows:
                       if row.get("id")==old:break
                       prior.append(row)
-                  need(1<=len(prior)<=2 and len(rows)>len(prior) and rows[len(prior)].get("id")==old,"unexpected_intervening_versions")
+                  need(1<=len(prior)<=3 and len(rows)>len(prior) and rows[len(prior)].get("id")==old,"unexpected_intervening_versions")
                   for row in prior:
                       stamp=row.get("metadata",{}).get("created_on","")
-                      need(isinstance(stamp,str) and stamp.startswith(("2026-11-24T13:54:","2026-11-24T13:55:")),"unexpected_intervening_version")
+                      need(isinstance(stamp,str) and stamp.startswith(("2026-11-24T13:54:","2026-11-24T13:55:","2026-11-24T14:17:")),"unexpected_intervening_version")
                       need(bindings(cf("GET",root+"/versions/"+row["id"]))==dbid,"previous_probe_bindings_changed")
               # Fresh random challenge never persisted or logged; public code has only its hash.
               challenge=secrets.token_hex(32);digest=hashlib.sha256(challenge.encode()).hexdigest()
               expires=int(time.time())+240
               public_probe=r'''
           import base from "./worker.mjs";
-          // No Google credentials are read or used by this diagnostic.
+          import {authMode,accessForRequest} from "./drive-auth.mjs";
           const expected="__HASH__";
           const expires=__EXPIRY__;
           const host="ipazake-free-control-pilot.hahayesadd.workers.dev";
@@ -165,34 +165,64 @@ jobs:
             const actual=[...new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(candidate)))].map(x=>x.toString(16).padStart(2,"0")).join("");
             let diff=0;for(let i=0;i<64;i++)diff|=actual.charCodeAt(i)^expected.charCodeAt(i);
             if(diff)return reply(404,{ok:false});
-            const tests=[
-              ["discovery","https://accounts.google.com/.well-known/openid-configuration",{method:"GET"}],
-              ["token_get","https://oauth2.googleapis.com/token",{method:"GET"}],
-              ["token_post","https://oauth2.googleapis.com/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"grant_type=refresh_token"}],
-              ["drive_get","https://www.googleapis.com/drive/v3/about?fields=kind",{method:"GET"}]
-            ];
-            const results={};
-            function classify(err){
-              const msg=String(err?.message||"").toLowerCase();
-              if(msg.includes("illegal invocation"))return "illegal_invocation";
-              if(msg.includes("timeout")||err?.name==="TimeoutError"||err?.name==="AbortError")return "timeout";
-              if(msg.includes("network connection lost"))return "connection_lost";
-              if(msg.includes("dns")||msg.includes("resolve"))return "dns";
-              if(msg.includes("tls")||msg.includes("certificate"))return "tls";
-              if(msg.includes("redirect"))return "redirect";
-              if(msg.includes("subrequest"))return "subrequest";
-              if(msg.includes("fetch failed")||msg.includes("network"))return "network";
-              if(msg.includes("not implemented")||msg.includes("unsupported"))return "unsupported";
-              return err?.name==="TypeError"?"type_error":"other_error";
-            }
-            for(const [key,url,init] of tests){
+            try{
+              if(authMode(env)!=="refresh")return fail("oauth_configuration");
+              let access,reason="oauth_network";
+              // Diagnose only a closed error category. Never return provider JSON, credentials or tokens.
               try{
-                const r=await fetch(url,{...init,redirect:"manual",signal:AbortSignal.timeout(5000)});
-                results[key]=r.status;
-                if(r.body)await r.body.cancel();
-              }catch(e){results[key]=classify(e)}
-            }
-            return reply(200,{probe:"public-network-v1",results});
+                access=await accessForRequest(env,async(url,init)=>{
+                  if(url!=="https://oauth2.googleapis.com/token")throw Error("unexpected_endpoint");
+                  let r;
+                  try{
+                    r=await fetch(url,{...init,redirect:"manual",signal:AbortSignal.timeout(10000)});
+                  }catch(e){
+                    const msg=String(e?.message||"").toLowerCase();
+                    reason=msg.includes("illegal invocation")?"oauth_illegal_invocation":
+                      msg.includes("timeout")||e?.name==="TimeoutError"||e?.name==="AbortError"?"oauth_timeout":
+                      msg.includes("dns")||msg.includes("resolve")?"oauth_dns":
+                      msg.includes("tls")||msg.includes("certificate")?"oauth_tls":
+                      msg.includes("network connection lost")?"oauth_connection_lost":"oauth_network";
+                    throw Error("oauth_transport");
+                  }
+                  if(r.status>=300&&r.status<400){reason="oauth_redirect";if(r.body)await r.body.cancel();throw Error("oauth_redirect")}
+                  reason="oauth_response";
+                  if(!r.body)throw Error("response");
+                  const reader=r.body.getReader(),parts=[];let n=0;
+                  try{for(;;){const {done,value}=await reader.read();if(done)break;n+=value.byteLength;if(n>16384){await reader.cancel();throw Error("response")}parts.push(value)}}
+                  finally{reader.releaseLock()}
+                  const bytes=new Uint8Array(n);let at=0;for(const p of parts){bytes.set(p,at);at+=p.byteLength}
+                  const v=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(bytes));
+                  if(r.status!==200){
+                    const known=["invalid_grant","invalid_client","unauthorized_client","invalid_scope","invalid_request","access_denied","admin_policy_enforced","temporarily_unavailable"];
+                    reason=known.includes(v?.error)?"google_"+v.error:"google_other_error";
+                  }else if(typeof v?.scope!=="string")reason="oauth_scope_missing";
+                  else if(v.scope.trim()!=="https://www.googleapis.com/auth/drive.file")reason="oauth_scope_mismatch";
+                  else reason="oauth_token_validation";
+                  return new Response(bytes,{status:r.status,headers:{"Content-Type":"application/json"}});
+                });
+              }catch{return fail(reason)}
+              let info;
+              try{
+                const r=await fetch("https://www.googleapis.com/drive/v3/about?fields=user%28emailAddress%29%2CstorageQuota%28limit%2Cusage%29",{
+                  method:"GET",redirect:"manual",signal:AbortSignal.timeout(10000),headers:{Authorization:"Bearer "+access,Accept:"application/json"}
+                });
+                if(r.status!==200||!r.body)return fail("drive_about");
+                const reader=r.body.getReader(),chunks=[];let n=0;
+                try{for(;;){const {done,value}=await reader.read();if(done)break;n+=value.byteLength;if(n>16384){await reader.cancel();return fail("drive_about")}chunks.push(value)}}
+                finally{reader.releaseLock()}
+                const bytes=new Uint8Array(n);let at=0;for(const c of chunks){bytes.set(c,at);at+=c.byteLength}
+                info=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(bytes));
+              }catch{return fail("drive_about")}
+              if(typeof info?.user?.emailAddress!=="string"||typeof env.PILOT_DRIVE_RECIPIENT_EMAIL!=="string"||
+                 info.user.emailAddress.toLowerCase()!==env.PILOT_DRIVE_RECIPIENT_EMAIL.toLowerCase())return fail("account_match");
+              const q=info.storageQuota;
+              if(!q||typeof q.limit!=="string"||typeof q.usage!=="string"||!/^\d{1,16}$/.test(q.limit)||!/^\d{1,16}$/.test(q.usage))return fail("quota");
+              const limit=Number(q.limit),used=Number(q.usage);
+              if(!Number.isSafeInteger(limit)||!Number.isSafeInteger(used)||limit<=0||limit>15*1024**3||used>limit)return fail("quota");
+              try{const r=await env.DB.prepare("SELECT bytes, retired_at FROM pilot_links LIMIT 0").all();if(!r.success)return fail("d1")}catch{return fail("d1")}
+              const available=Math.max(0,Math.min(10000000000,limit-used-1000000000));
+              return reply(200,{probe:"drive-readonly-v1",ok:true,account_match:true,free_quota_compatible:true,usable_mb:Math.floor(available/1000000),d1_schema:true});
+            }catch{return fail("read_only_check")}
           }};
           '''.replace("__HASH__",digest).replace("__EXPIRY__",str(expires)).encode()
               files=Path(os.environ["RUNNER_TEMP"])
@@ -201,14 +231,14 @@ jobs:
               # Inherit existing Cloudflare bindings in place. No secret value is fetched or exported.
               metadata={"main_module":"probe.mjs","compatibility_date":DATE,
                         "bindings":[{"name":name,"type":"inherit","version_id":"latest"} for name in sorted(NAMES)],
-                        "annotations":{"workers/message":"Expiring public HTTPS diagnostic; zero traffic"}}
+                        "annotations":{"workers/message":"Expiring read-only OAuth transport verification; zero traffic"}}
               boundary="----readonly-pilot-"+secrets.token_hex(16)
               def part(name,typ,data,filename=None):
                   disposition='Content-Disposition: form-data; name="'+name+'"'
                   if filename:disposition+='; filename="'+filename+'"'
                   return ("--"+boundary+"\r\n"+disposition+"\r\nContent-Type: "+typ+"\r\n\r\n").encode()+data+b"\r\n"
               body=part("metadata","application/json",json.dumps(metadata,separators=(",",":")).encode())
-              for name in ("probe.mjs","worker.mjs"):
+              for name in ("probe.mjs","worker.mjs","drive-auth.mjs"):
                   body+=part(name,"application/javascript+module",(files/name).read_bytes(),name)
               body+=("--"+boundary+"--\r\n").encode()
               stage="upload_probe_version"
@@ -227,15 +257,18 @@ jobs:
                   if status==404:
                       time.sleep(2);continue
                   value=json.loads(raw)
-                  need(status==200 and value.get("probe")=="public-network-v1","unexpected_probe_response")
-                  results=value.get("results")
-                  allowed={"illegal_invocation","timeout","connection_lost","dns","tls","redirect","subrequest","network","unsupported","type_error","other_error"}
-                  need(isinstance(results,dict) and set(results)=={"discovery","token_get","token_post","drive_get"},"invalid_network_results")
-                  need(all((type(v) is int and 100<=v<=599) or (isinstance(v,str) and v in allowed) for v in results.values()),"invalid_network_results")
-                  result=results
+                  need(value.get("probe")=="drive-readonly-v1","unexpected_probe_response")
+                  if status==503:
+                      failure=value.get("stage")
+                      if failure not in {"oauth_configuration","oauth_network","oauth_illegal_invocation","oauth_timeout","oauth_dns","oauth_tls","oauth_connection_lost","oauth_redirect","oauth_response","oauth_scope_missing","oauth_scope_mismatch","oauth_token_validation","google_invalid_grant","google_invalid_client","google_unauthorized_client","google_invalid_scope","google_invalid_request","google_access_denied","google_admin_policy_enforced","google_temporarily_unavailable","google_other_error","drive_about","account_match","quota","d1","read_only_check"}:failure="unknown"
+                      raise Stop("probe_"+failure)
+                  need(status==200 and value.get("ok") is True and value.get("account_match") is True and value.get("free_quota_compatible") is True and value.get("d1_schema") is True,"probe_unconfirmed")
+                  usable=value.get("usable_mb")
+                  need(type(usable) is int and 0<=usable<=10000,"probe_quota_invalid")
+                  result=usable
                   break
               need(result is not None,"probe_routing_unconfirmed")
-              print("google_public_https_results="+json.dumps(result,sort_keys=True),flush=True)
+              print("drive_readonly_verified: oauth_refresh=true; account_match=true; d1_schema=true; usable_file_mb="+str(result),flush=True)
               success=True
           except Stop as exc:
               print("stopped_stage="+stage+"; reason="+str(exc),file=sys.stderr,flush=True)
