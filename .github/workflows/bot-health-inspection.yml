@@ -1,0 +1,48 @@
+name: Inspect live bot service health
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: bot-health-inspection
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Install SSH client on GitHub runner
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends sshpass
+      - name: Read service health without changing runtime or polling Telegram
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          SSHPASS: ${{ secrets.VPS_SSH_PASSWORD }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          inspection_dir=$(mktemp -d)
+          trap 'rm -rf -- "$inspection_dir"' EXIT
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$inspection_dir/known_hosts"
+          sshpass -e ssh -o "UserKnownHostsFile=$inspection_dir/known_hosts" -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o LogLevel=ERROR "root@$VPS_HOST" 'python3 -' <<'PY'
+          import collections,json,pathlib,re,shutil,subprocess,time
+          props=subprocess.run(["systemctl","show","ipazake.service","--property=ActiveState,SubState,Result,NRestarts,ExecMainStatus"],capture_output=True,text=True,timeout=15)
+          allowed={"ActiveState","SubState","Result","NRestarts","ExecMainStatus"}
+          print(json.dumps({"service":{k:v for line in props.stdout.splitlines() if "=" in line for k,v in [line.split("=",1)] if k in allowed and re.fullmatch(r"[a-zA-Z0-9_-]{1,60}",v)}}))
+          p=pathlib.Path("/var/lib/ipazake/health.json")
+          try:
+              h=json.loads(p.read_text())
+              print(json.dumps({"health_state":h.get("state") if h.get("state") in ("starting","ready","github_unavailable","telegram_unavailable","stopped","failed") else "unknown","health_age_seconds":max(0,int(time.time())-int(h.get("at",0))),"task_active":h.get("task_active") is True}))
+          except Exception: print('{"health_readable":false}')
+          print(json.dumps({"disk_free_gib":round(shutil.disk_usage("/var/lib/ipazake").free/2**30,2)}))
+          logs=subprocess.run(["journalctl","-u","ipazake.service","--since","2 hours ago","-n","1000","--output=json","--no-pager"],capture_output=True,text=True,timeout=20)
+          codes=collections.Counter()
+          for line in logs.stdout.splitlines():
+              try:
+                  message=json.loads(line).get("MESSAGE","")
+                  value=json.loads(message)
+                  code=value.get("event",value.get("status",""))
+                  if isinstance(code,str) and re.fullmatch(r"[a-z_]{3,80}",code): codes[code]+=1
+              except Exception: pass
+          print(json.dumps({"sanitized_event_counts":dict(codes)}))
+          PY
