@@ -1,0 +1,121 @@
+name: Configure existing free pilot Worker
+on:
+  push:
+    branches: ['ops/configure-free-pilot-20261124']
+    paths: ['.github/workflows/configure-free-pilot-once.yml']
+permissions:
+  contents: read
+concurrency:
+  group: configure-existing-free-pilot-once
+  cancel-in-progress: false
+jobs:
+  configure:
+    if: github.repository == 'zwthys-cyber/ipa-decrypt-lab' && github.ref == 'refs/heads/ops/configure-free-pilot-20261124' && github.event_name == 'push' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check and configure only the already created pilot
+        env:
+          CF_PILOT_ACCOUNT_ID: ${{ secrets.CF_PILOT_ACCOUNT_ID }}
+          CF_PILOT_API_TOKEN: ${{ secrets.CF_PILOT_API_TOKEN }}
+        shell: bash
+        run: |
+          set -eu
+          umask 077
+          python3 - <<'PY'
+          import http.client
+          import json
+          import os
+          import re
+          import secrets
+          import ssl
+          import sys
+
+          WORKER = "ipazake-free-control-pilot"
+          HOST = "ipazake-free-control-pilot.hahayesadd.workers.dev"
+          DATE = "2026-07-30"
+          FLAGS = ("PILOT_ENABLED", "PILOT_LINK_ENABLED")
+          stage = "credentials"
+          class Stop(Exception): pass
+          def require(value, code):
+              if not value:
+                  raise Stop(code)
+          def call(host, method, path, headers=None, body=None):
+              conn = http.client.HTTPSConnection(host, 443, timeout=25, context=ssl.create_default_context())
+              try:
+                  conn.request(method, path, body=body, headers=headers or {})
+                  reply = conn.getresponse()
+                  data = reply.read(512*1024+1)
+                  require(len(data)<=512*1024, "response_too_large")
+                  return reply.status, data
+              finally:
+                  conn.close()
+          def envelope(status, raw):
+              if status != 200:
+                  print("cloudflare_http_status="+str(status), flush=True)
+                  raise Stop("cloudflare_request_not_confirmed")
+              value = json.loads(raw)
+              require(isinstance(value,dict) and value.get("success") is True and isinstance(value.get("result"),dict), "cloudflare_request_not_confirmed")
+              return value["result"]
+          def inspect_bindings(value, require_flags=False):
+              bindings = value.get("bindings")
+              require(isinstance(bindings,list), "bindings_missing")
+              mapped={}
+              for binding in bindings:
+                  require(isinstance(binding,dict) and isinstance(binding.get("name"),str), "binding_invalid")
+                  name=binding["name"]
+                  require(name in {"DB",*FLAGS} and name not in mapped, "unexpected_binding_stop_without_overwrite")
+                  mapped[name]=binding
+              db=mapped.get("DB",{})
+              dbid=db.get("database_id") or db.get("id")
+              require(db.get("type")=="d1" and isinstance(dbid,str) and re.fullmatch(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}",dbid), "expected_d1_binding_missing")
+              require(not db.get("id") or db["id"]==dbid, "database_binding_inconsistent")
+              for name in FLAGS:
+                  if name in mapped:
+                      require(mapped[name].get("type")=="plain_text" and mapped[name].get("text")=="0", "existing_switch_not_disabled")
+                  elif require_flags:
+                      raise Stop("switch_readback_missing")
+              return dbid
+          def check_endpoint():
+              for method,path,expected in (("GET","/",404),("POST","/telegram",503)):
+                  status,data=call(HOST,method,path,{"Content-Type":"application/json"} if method=="POST" else {},b"{}" if method=="POST" else None)
+                  require(status==expected and json.loads(data)=={"ok":False},"pilot_endpoint_unexpected")
+          try:
+              account=os.environ.get("CF_PILOT_ACCOUNT_ID","")
+              token=os.environ.get("CF_PILOT_API_TOKEN","")
+              require(re.fullmatch(r"[0-9a-fA-F]{32}",account) and re.fullmatch(r"[A-Za-z0-9_-]{20,256}",token),"missing_or_invalid_github_secrets")
+              path="/client/v4/accounts/"+account+"/workers/scripts/"+WORKER+"/settings"
+              auth={"Authorization":"Bearer "+token,"Accept":"application/json"}
+              stage="endpoint_preflight"
+              check_endpoint()
+              stage="settings_preflight"
+              old=envelope(*call("api.cloudflare.com","GET",path,auth))
+              dbid=inspect_bindings(old)
+              require((old.get("compatibility_flags") or [])==[],"unexpected_compatibility_flags")
+              settings={
+                  "bindings":[{"type":"d1","name":"DB","database_id":dbid}]+[{"type":"plain_text","name":name,"text":"0"} for name in FLAGS],
+                  "compatibility_date":DATE,
+                  "observability":{"enabled":False,"logs":{"enabled":False,"invocation_logs":False,"persist":False},"traces":{"enabled":False,"persist":False}}
+              }
+              boundary="----ipazake-"+secrets.token_hex(16)
+              body=("--"+boundary+"\r\nContent-Disposition: form-data; name=\"settings\"\r\nContent-Type: application/json\r\n\r\n").encode()+json.dumps(settings,separators=(",",":")).encode()+("\r\n--"+boundary+"--\r\n").encode()
+              stage="settings_update"
+              envelope(*call("api.cloudflare.com","PATCH",path,{**auth,"Content-Type":"multipart/form-data; boundary="+boundary},body))
+              stage="settings_readback"
+              new=envelope(*call("api.cloudflare.com","GET",path,auth))
+              require(inspect_bindings(new,True)==dbid,"d1_binding_changed")
+              require(str(new.get("compatibility_date",""))[:10]==DATE,"compatibility_date_unconfirmed")
+              obs=new.get("observability")
+              require(isinstance(obs,dict) and obs.get("enabled") is False and (obs.get("logs") or {}).get("enabled") is not True and (obs.get("traces") or {}).get("enabled") is not True,"observability_unconfirmed")
+              stage="endpoint_readback"
+              check_endpoint()
+              print("pilot_settings_verified: d1_unchanged=true; both_switches_disabled=true; compatibility_date=2026-07-30; observability_disabled=true; endpoint_verified=true")
+              with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf8") as f:
+                  f.write("## Existing pilot configuration verified\n- Existing D1 binding preserved.\n- Both pilot switches are 0.\n- Compatibility date: 2026-07-30.\n- Observability disabled.\n- Unauthenticated endpoint checks passed.\n- No bot credentials, billing API, new resources or production service changes.\n")
+          except Stop as exc:
+              print("stopped_stage="+stage+"; reason="+str(exc),file=sys.stderr)
+              sys.exit(2)
+          except Exception:
+              print("stopped_stage="+stage+"; response_or_network_unconfirmed",file=sys.stderr)
+              sys.exit(2)
+          PY
