@@ -37,3 +37,26 @@ The independent Worker and D1 schema are in deploy/managed/free-pilot. It is dis
 The provided wrangler.example.json is intentionally not directly deployable: replace its non-resolving database ID only in an isolated Workers Free account; manually verify the account's plan and billing status. Provision only the isolated free D1 database, apply its initial migration, configure an independent owner ID and random Telegram webhook secret as Worker Secrets, select an explicitly approved test endpoint, and enable PILOT_ENABLED only for a separate test bot. Never set a webhook on the live bot while it uses getUpdates or a Local Bot API server. No actual deployment or secret changes are done by CI. Telegram webhook replies are best effort and do not certify delivery.
 
 The synthetic contract workflow tests this Worker, its SQLite SQL semantics and the existing managed modules; container image compilation is opt-in manual build-only because it is not required for the free control-plane pilot. The previous image build failed restoring the pinned Bot API cache. No image availability is claimed. A future permitted zero-cost execution and private delivery environment remains mandatory for production migration.
+
+## Phase 5: free-platform feasibility and integration gate (2026-11-24)
+
+The previous free-pilot synthetic and native CI succeeded (runs 45388729857 and 45388729945). The new integration test runs the exact Worker in a pinned local Miniflare/workerd simulator, with simulated D1 and no external accounts or real credentials. It checks concurrent admission, replay protection, cancellation, database persistence across simulator restart, and fail-closed database errors. The compatibility date is pinned to the simulator release date. CI must pass before any pilot deployment. A successful local integration still does not prove hosted Free CPU limits or real Telegram receipt.
+
+Provider review:
+
+- Cloudflare Containers require Workers Paid ($5/month base plus metered usage); excluded.
+- Google Cloud e2-micro free allocation includes 1 GB monthly outbound transfer; unsuitable for a service retaining the 2 GB per-file capability and hard zero-charge requirement.
+- Oracle Cloud Always Free is a possible **free VM**, not a serverless substitute. Current official entitlement lists 1,500 A1 OCPU-hours and 9,000 GB-hours per month (2 OCPU / 12 GB continuous allocation), with up to 200 GB eligible block volume storage. Availability is regional and idle VMs may be reclaimed. Account signup requires payment-card verification; do not upgrade to Pay As You Go. The existing controller package is amd64, so ARM support would require separate validated builds. This VM cannot provide the existing macOS environment. Do not create any VM or account without owner approval.
+- GitHub Actions is for software development/testing and cannot be assumed available for production request processing or file distribution. No change to production workflows is authorized by this review.
+
+Thus the free-only, no-VM architecture remains incomplete. If no permitted zero-cost runtime can be verified, keep the isolated pilot and existing production untouched. Do not repeatedly add mock task processing or label waiting records as completed. For a useful next architecture decision, distinguish whether the owner accepts a free VM (still a server), or requires strictly serverless and accepts reduced capabilities. Neither option has been provisioned.
+
+Sources:
+- https://developers.cloudflare.com/containers/platform/pricing/
+- https://docs.cloud.google.com/free/docs/free-cloud-features
+- https://www.oracle.com/cloud/free/
+- https://www.oracle.com/cloud/free/faq/
+- https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm
+- https://docs.github.com/en/site-policy/github-terms/github-terms-for-additional-products-and-features
+- https://developers.cloudflare.com/workers/testing/miniflare/get-started/
+- https://developers.cloudflare.com/workers/testing/miniflare/storage/d1/

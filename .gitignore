@@ -13,3 +13,6 @@ credential*
 
 .wrangler/
 .dev.vars*
+
+/deploy/managed/free-pilot/node_modules/
+/deploy/managed/free-pilot/wrangler.json
