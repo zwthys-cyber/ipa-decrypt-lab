@@ -137,13 +137,7 @@ jobs:
               need(len(current)==1 and list(current.values())==[100],"active_deployment_not_single")
               old=next(iter(current))
               dbid=bindings(cf("GET",root+"/versions/"+old))
-              previous=latest()
-              if previous!=old:
-                  rows=cf("GET",root+"/versions?per_page=2").get("items")
-                  need(isinstance(rows,list) and len(rows)>=2 and rows[0].get("id")==previous and rows[1].get("id")==old,"unexpected_version_history")
-                  stamp=rows[0].get("metadata",{}).get("created_on","")
-                  need(isinstance(stamp,str) and stamp.startswith("2026-11-24T14:33:"),"unexpected_intervening_version")
-                  need(bindings(cf("GET",root+"/versions/"+previous))==dbid,"previous_probe_bindings_changed")
+              need(latest()==old,"undeployed_version_exists")
               # Fresh random challenge never persisted or logged; public code has only its hash.
               challenge=secrets.token_hex(32);digest=hashlib.sha256(challenge.encode()).hexdigest()
               expires=int(time.time())+240
@@ -272,3 +266,5 @@ jobs:
                       success=False
               if not success:sys.exit(2)
           PY
+
+# Fresh owner-authorized personal-mode configuration confirmed; retain the single-write guard.
