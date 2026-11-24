@@ -74,9 +74,12 @@ jobs:
           TF_TASK_MODE: ${{ inputs.mode }}
           DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
           FAIRPLAY_CN_MODEL_B64: ${{ inputs.mode == 'export' && secrets.FAIRPLAY_CN_MODEL_B64 || '' }}
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          SSHPASS: ${{ secrets.VPS_SSH_PASSWORD }}
-          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          TF_STATE_TRANSPORT: ${{ vars.TF_STATE_TRANSPORT || 'ssh' }}
+          TF_STATE_API_URL: ${{ vars.TF_STATE_TRANSPORT == 'https' && secrets.TF_STATE_API_URL || '' }}
+          TF_STATE_API_TOKEN: ${{ vars.TF_STATE_TRANSPORT == 'https' && secrets.TF_STATE_API_TOKEN || '' }}
+          VPS_HOST: ${{ vars.TF_STATE_TRANSPORT != 'https' && secrets.VPS_HOST || '' }}
+          SSHPASS: ${{ vars.TF_STATE_TRANSPORT != 'https' && secrets.VPS_SSH_PASSWORD || '' }}
+          VPS_KNOWN_HOSTS: ${{ vars.TF_STATE_TRANSPORT != 'https' && secrets.VPS_KNOWN_HOSTS || '' }}
           GH_TOKEN: ${{ github.token }}
         uses: ./.github/actions/export-progress
       - name: TestFlight session requires maintenance

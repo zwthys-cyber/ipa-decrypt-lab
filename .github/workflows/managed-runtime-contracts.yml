@@ -5,6 +5,11 @@ on:
       - 'tools/telegram_daemon.py'
       - 'tools/multi_user.py'
       - 'tests/test_managed_runtime.py'
+      - 'tests/test_managed_state_transport.py'
+      - 'tools/tf_state_http.py'
+      - 'tools/testflight_state.py'
+      - '.github/ops/tf_task*.py'
+      - '.github/workflows/testflight-private-delivery.yml'
       - 'deploy/managed/**'
       - '.github/workflows/managed-runtime-contracts.yml'
   workflow_dispatch:
@@ -21,4 +26,5 @@ jobs:
       - run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends python3-pil
-          /usr/bin/python3 -m unittest discover -s tests -p 'test_managed_runtime.py' -v
+          /usr/bin/python3 -m unittest discover -s tests -p 'test_managed*.py' -v
+          /usr/bin/python3 -m unittest discover -s .github/ops -p 'test_tf_task*.py' -v
