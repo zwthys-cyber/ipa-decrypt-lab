@@ -152,7 +152,10 @@ jobs:
           cp "$root/zip_preflight.py" "$RUNNER_TEMP/archive-src/"
           python3 -m zipapp "$RUNNER_TEMP/archive-src" -o linux-archive-dist/archive-verify.pyz
           cp "$root/private_upload.py" "$root/archive_verify.py" "$root/zip_preflight.py" "$RUNNER_TEMP/upload-src/"
-          python3 -m zipapp "$RUNNER_TEMP/upload-src" -m private_upload:main -o linux-archive-dist/private-upload.pyz
+          # zipapp -m calls main() without propagating its return value.
+          # Preserve the operator tool's fail-closed exit status in the executable.
+          printf 'from private_upload import main\nraise SystemExit(main())\n' > "$RUNNER_TEMP/upload-src/__main__.py"
+          python3 -m zipapp "$RUNNER_TEMP/upload-src" -o linux-archive-dist/private-upload.pyz
           cp "$root/LINUX-ARCHIVE.zh-CN.md" linux-archive-dist/README.md
           printf 'source_head=%s\nchecked_out_commit=%s\n' "$SOURCE_HEAD" "$(git rev-parse HEAD)" > linux-archive-dist/BUILDINFO
           printf 'validated_host=%s\npython_version=%s\n' "$(uname -m)" "$(python3 --version)" >> linux-archive-dist/BUILDINFO
