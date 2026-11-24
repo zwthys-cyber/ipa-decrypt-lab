@@ -96,6 +96,11 @@ jobs:
                   name=item["name"]
                   need(name in NAMES and name not in names,"unexpected_binding")
                   names[name]=item
+              # Report binding names and declared types only. Never print their values.
+              for name in sorted(EXPECTED):
+                  kind=names.get(name,{}).get("type","missing")
+                  if kind not in ("secret_text","plain_text","json","missing","secrets_store_secret"):kind="other"
+                  print("binding_type "+name+" "+kind,flush=True)
               need(set(names)==NAMES,"binding_names_unconfirmed")
               need(all(names[n].get("type")=="secret_text" for n in EXPECTED),"secret_binding_type_unconfirmed")
               need(all(names[n].get("type")=="plain_text" and names[n].get("text")=="0" for n in FLAGS),"pilot_not_disabled")
@@ -268,3 +273,5 @@ jobs:
           PY
 
 # Fresh owner-authorized personal-mode configuration confirmed; retain the single-write guard.
+
+# Recheck configuration after owner follow-up; no writes unless the strict preflight passes.
