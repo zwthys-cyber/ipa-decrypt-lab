@@ -132,3 +132,10 @@ References:
 - https://developers.google.com/workspace/drive/api/guides/delete
 - https://developers.google.com/workspace/drive/api/guides/properties
 - https://developers.google.com/workspace/drive/api/reference/rest/v3/files/delete
+
+
+## Phase 11: deployable free pilot bundle
+
+Phase 10 synthetic and workerd contracts passed in run 45391181658 (container job skipped). The new read-only CI packaging job runs after both contract jobs. It uses a pinned esbuild release to bundle the Worker into a single ES module, packages the exact migrations, fresh-database schema, disabled configuration, public operator utilities, source provenance and checksums. No Cloudflare account, OAuth credentials, Telegram token or paid resources are involved; this is a public software build artifact, not a file-delivery service.
+
+See [Chinese browser deployment guide](../deploy/managed/free-pilot/DEPLOY.zh-CN.md). The owner must establish the independent free Cloudflare account/database, separate test bot, and authorized Google OAuth setup before live verification. Do not use the production bot or the original account state. There is no approved, verified zero-cost native execution host yet; the upload operator still needs a trusted execution environment. Do not claim full production cutover.

@@ -58,6 +58,59 @@ jobs:
       - name: Verify actual local workerd D1 bindings
         working-directory: deploy/managed/free-pilot
         run: node --test workerd.integration.mjs
+  pilot_bundle:
+    needs: [synthetic, workerd]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install pinned public bundler only
+        working-directory: deploy/managed/free-pilot
+        run: npm install --no-save --package-lock=false --no-audit --no-fund esbuild@0.28.2
+      - name: Package a disabled-by-default browser deployment candidate
+        shell: bash
+        env:
+          SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          root=deploy/managed/free-pilot
+          mkdir -p pilot-dist/migrations
+          "$root/node_modules/.bin/esbuild" "$root/worker.mjs" --bundle --platform=browser --format=esm --target=es2022 --outfile=pilot-dist/worker.mjs
+          cp "$root"/migrations/000[1-4]_*.sql pilot-dist/migrations/
+          cp "$root/wrangler.example.json" "$root/private_upload.py" "$root/private_cleanup.py" "$root/zip_preflight.py" "$root/DEPLOY.zh-CN.md" pilot-dist/
+          cat pilot-dist/migrations/000[1-4]_*.sql > pilot-dist/schema-fresh.sql
+          printf 'source_head=%s\nchecked_out_commit=%s\n' "$SOURCE_HEAD" "$(git rev-parse HEAD)" > pilot-dist/BUILDINFO
+          node --check pilot-dist/worker.mjs
+          node --input-type=module - <<'JS'
+          import assert from "node:assert/strict";
+          import worker from "./pilot-dist/worker.mjs";
+          assert.equal((await worker.fetch(new Request("https://pilot.example.invalid/telegram",{method:"POST"}),{})).status,503);
+          assert.equal((await worker.fetch(new Request("https://pilot.example.invalid/telegram"),{})).status,404);
+          JS
+          python3 - <<'PY'
+          import json,sqlite3
+          from pathlib import Path
+          root=Path("pilot-dist")
+          config=json.loads((root/"wrangler.example.json").read_text())
+          assert config["workers_dev"] is False and config["preview_urls"] is False
+          assert config["vars"]=={"PILOT_ENABLED":"0","PILOT_LINK_ENABLED":"0"}
+          assert config["d1_databases"][0]["database_id"]=="REPLACE_WITH_ISOLATED_FREE_D1_ID"
+          db=sqlite3.connect(":memory:")
+          db.execute("PRAGMA foreign_keys=ON")
+          db.executescript((root/"schema-fresh.sql").read_text())
+          assert "retired_at" in {r[1] for r in db.execute("PRAGMA table_info(pilot_links)")}
+          assert db.execute("PRAGMA foreign_key_check").fetchall()==[]
+          db.close()
+          PY
+          (cd pilot-dist && sha256sum worker.mjs schema-fresh.sql BUILDINFO DEPLOY.zh-CN.md wrangler.example.json private_upload.py private_cleanup.py zip_preflight.py migrations/*.sql > SHA256SUMS)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: free-pilot-deployment-${{ github.sha }}
+          path: pilot-dist/
+          retention-days: 7
+          if-no-files-found: error
   images:
     # Not part of the zero-cost control-plane pilot; never provision a host here.
     if: github.event_name == 'workflow_dispatch' && inputs.build_images

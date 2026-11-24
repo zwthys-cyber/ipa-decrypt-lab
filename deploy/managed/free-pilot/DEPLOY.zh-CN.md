@@ -1,0 +1,48 @@
+# 零费用版：独立测试环境部署
+
+本指南用于当前 v0.2 免费控制层试验版，并不代表线上 IPA 服务已迁移。只测试自己有权处理的文件。原 VPS、线上机器人、Apple 账号、原任务数据库和密钥保持不变。
+
+## 1. 从 GitHub 获取部署包
+
+打开升级 PR 对应的 Managed runtime contracts 工作流。synthetic、workerd、pilot_bundle 都通过后，在 Artifacts 下载 free-pilot-deployment-*。校验 BUILDINFO 中的源码提交及 SHA256SUMS。不要使用历史失败构建或不匹配的源码包。
+
+部署包内容：
+
+- worker.mjs：已合并依赖的独立 ES module，可在 Worker 网页编辑器中使用。
+- schema-fresh.sql：仅供全新、独立、空的 D1 数据库一次初始化。
+- migrations/：已有测试库按顺序升级时使用，不得重复执行已应用迁移。
+- wrangler.example.json：CLI 配置示例，默认关闭入口、关闭链接功能、数据库 ID 为占位符。
+- private_upload.py、zip_preflight.py、private_cleanup.py：操作员工具，不在 Worker 或 GitHub Actions 上执行。
+
+## 2. 创建隔离的 Cloudflare Free 环境
+
+打开 https://dash.cloudflare.com/ ，确认使用 Workers Free 计划。不要绑定任何计费订阅，不启用 R2、Containers、付费 Workers 或自动升级。若页面要求付费或无法确认免费条件，停止部署。
+
+在 D1 SQL Database 中创建全新数据库 ipazake-free-pilot。打开 Console，执行 schema-fresh.sql，检查 pilot_jobs 和 pilot_links 已存在且数据为空。此脚本不能用于原生产数据库或已经初始化的测试库。若执行失败，不要在不清楚迁移状态时重复执行整个脚本。
+
+在 Workers & Pages 创建新的独立 Worker ipazake-free-control-pilot。将部署包内的 worker.mjs 完整复制到网页编辑器的 ES module 中，保存并部署。添加 D1 binding，变量名必须是 DB，选择刚创建的独立数据库。网页编辑器可能更适合桌面浏览器；不保证所有移动端编辑操作可用。
+
+在 Settings 的 Variables and Secrets 中设置普通变量 PILOT_ENABLED=0、PILOT_LINK_ENABLED=0。确认不启用 Version/Preview URL。需要测试时才启用独立 Worker 的 workers.dev 免费子域名，不需要购买域名。此时对 /telegram 的未授权 POST 应为 503，GET 应为 404。不要在生产机器人的 token 上设置 webhook。
+
+## 3. 独立测试机器人（未配置时保持关闭）
+
+使用 BotFather 创建新的测试机器人，不使用原机器人。生成至少 43 字符、仅由字母数字、下划线、短横线组成的随机 webhook 密钥。通过 Cloudflare 私有 Secret 输入 TELEGRAM_WEBHOOK_SECRET，另设 PILOT_OWNER_ID 为自己的 Telegram 数字 ID。不要把任何 token 放入 GitHub 提交、聊天记录、URL 或截图。PILOT_ENABLED=1 只在测试机器人、独立数据库及 Secret 均已确认时开启。
+
+测试机器人的 Telegram setWebhook 调用需要将 Worker 的 HTTPS /telegram 地址及同一个 secret_token 作为参数，allowed_updates 仅设 message。使用自己的可信终端或私有部署工具；不在浏览器地址栏拼接 token，不使用第三方在线调用器。检查 webhook 状态并在私聊测试 /start、数字 App ID、/status、/cancel。此阶段只登记任务，不触发真实下载。
+
+## 4. Google Drive 链接试验
+
+确认个人免费 15 GB 共享容量、无付费账单或自动升级。仍需同一 Google OAuth 应用的短期 drive.file access token；ChatGPT 的 Google Drive 连接不等于此应用获得该 token。不得向聊天发送 access token、refresh token、机器人 token 或账号密码。请先用独立的、自己拥有的合成小文件做试验。
+
+Worker 增加私有 Secret PILOT_LINK_ISSUER_TOKEN、PILOT_DRIVE_ACCESS_TOKEN、PILOT_DRIVE_RECIPIENT_EMAIL，并仅在已授权的小文件测试时开启 PILOT_LINK_ENABLED=1。操作员上传工具需要相同 Google 账号、短期 OAuth 授权和私有持久记录；它目前要求一个可信 Linux/macOS 执行环境，不能在 Worker 内运行，也不使用 GitHub Actions 作为生产计算服务。详见 docs/ZERO-COST.md 中 Phase 6 至 10。/get 只在文件元数据和访问权限核验后返回私有链接；两小时领取限制不代表网盘权限自动过期。
+
+## 5. 验收和停止条件
+
+必须取得实际测试机器人私聊回执、实际 D1 记录、授权合成文件上传和下载的 SHA-256 匹配，才可称链接交付已现场验证。真实 10 GB 传输、免费执行资源及原生处理仍未验证。账号未授权、免费计划不明、OAuth 过期、空间不足或测试失败时停止，不购买任何资源。原 VPS 不关停，不迁移原生产 token 或历史状态，不将此试验版合并部署到线上。
+
+参考：
+- https://developers.cloudflare.com/d1/get-started/
+- https://developers.cloudflare.com/d1/best-practices/remote-development/
+- https://developers.cloudflare.com/workers/platform/pricing/
+- https://core.telegram.org/bots/api#setwebhook
+- https://developers.google.com/workspace/drive/api/guides/api-specific-auth
