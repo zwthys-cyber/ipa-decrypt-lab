@@ -1,0 +1,51 @@
+name: Inspect pilot binding types only
+on:
+  push:
+    branches: ['ops/configure-free-pilot-20261124']
+    paths: ['.github/workflows/check-pilot-binding-types.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.repository == 'zwthys-cyber/ipa-decrypt-lab' && github.ref == 'refs/heads/ops/configure-free-pilot-20261124' && github.event_name == 'push' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Read binding name and type metadata only
+        env:
+          CF_PILOT_ACCOUNT_ID: ${{ secrets.CF_PILOT_ACCOUNT_ID }}
+          CF_PILOT_API_TOKEN: ${{ secrets.CF_PILOT_API_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import http.client,json,os,re,ssl,sys
+          expected=("PILOT_DRIVE_CLIENT_ID","PILOT_DRIVE_CLIENT_SECRET","PILOT_DRIVE_REFRESH_TOKEN","PILOT_DRIVE_RECIPIENT_EMAIL")
+          try:
+              account=os.environ["CF_PILOT_ACCOUNT_ID"];token=os.environ["CF_PILOT_API_TOKEN"]
+              assert re.fullmatch("[a-fA-F0-9]{32}",account) and token
+              root="/client/v4/accounts/"+account+"/workers/scripts/ipazake-free-control-pilot"
+              def get(path):
+                  c=http.client.HTTPSConnection("api.cloudflare.com",443,timeout=20,context=ssl.create_default_context())
+                  try:
+                      c.request("GET",path,headers={"Authorization":"Bearer "+token,"Accept":"application/json"})
+                      r=c.getresponse()
+                      if r.status!=200:raise ValueError()
+                      data=r.read(524289);assert len(data)<=524288
+                      v=json.loads(data);assert v.get("success") is True
+                      return v["result"]
+                  finally:c.close()
+              settings=get(root+"/settings")
+              current=get(root+"/deployments?per_page=1")["deployments"][0]["versions"]
+              assert len(current)==1 and current[0]["percentage"]==100
+              version=current[0]["version_id"];assert re.fullmatch("[a-fA-F0-9-]{36}",version)
+              detail=get(root+"/versions/"+version)
+              for label,rows in (("settings",settings["bindings"]),("active_version",detail["resources"]["bindings"])):
+                  assert isinstance(rows,list)
+                  for name in expected:
+                      matches=[r.get("type") for r in rows if r.get("name")==name]
+                      kind=matches[0] if len(matches)==1 else "missing_or_duplicate"
+                      if kind not in ("secret_text","plain_text","inherit","json","secret_key","secrets_store_secret","missing_or_duplicate"):kind="other"
+                      print(label+" "+name+" "+kind,flush=True)
+              print("inspection_complete_no_changes")
+          except Exception:
+              print("binding_type_inspection_unconfirmed",file=sys.stderr);sys.exit(2)
+          PY
