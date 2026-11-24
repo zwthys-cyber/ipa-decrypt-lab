@@ -1,0 +1,90 @@
+name: Preserve encrypted VPS recovery state
+run-name: Encrypted VPS recovery backup
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: vps-controller-deploy
+  cancel-in-progress: false
+jobs:
+  backup:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Install backup transport on GitHub runner only
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends sshpass age
+      - name: Quiesce existing service and encrypt recovery stream
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          SSHPASS: ${{ secrets.VPS_SSH_PASSWORD }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          recovery_temp=$(mktemp -d)
+          trap 'rm -rf -- "$recovery_temp"' EXIT
+          mkdir -p recovery-output
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$recovery_temp/known_hosts"
+          printf '%s\n' "$DELIVERY_AGE_IDENTITY" > "$recovery_temp/identity"
+          recipient=age1cp0tv9wcxjqpvcmwt6eh6yqxqg25a2msnelc3mxlj9xqcu6fz4cqekfq5d
+          test "$(age-keygen -y "$recovery_temp/identity")" = "$recipient"
+          ssh_options=(-o "UserKnownHostsFile=$recovery_temp/known_hosts" -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o LogLevel=ERROR)
+          sshpass -e ssh "${ssh_options[@]}" "root@$VPS_HOST" 'sh -s' <<'SH' | age -r "$recipient" -o recovery-output/recovery.tar.gz.age
+          set -eu
+          test -d /etc/ipazake
+          test -f /var/lib/ipazake/state.sqlite3
+          was_active=0
+          if systemctl is-active --quiet ipazake.service; then was_active=1; fi
+          restore() {
+            backup_result=$?
+            trap - EXIT HUP INT TERM
+            if [ "$was_active" = 1 ]; then
+              if ! systemctl start ipazake.service >/dev/null 2>&1; then exit 70; fi
+            fi
+            exit "$backup_result"
+          }
+          trap restore EXIT
+          trap 'exit 71' HUP INT TERM
+          systemctl stop ipazake.service >/dev/null 2>&1
+          tar -czf - -C / etc/ipazake var/lib/ipazake
+          SH
+          age -d -i "$recovery_temp/identity" recovery-output/recovery.tar.gz.age | gzip -t
+          age -d -i "$recovery_temp/identity" recovery-output/recovery.tar.gz.age | python3 -c '
+          import json,pathlib,sys,tarfile
+          required={"etc/ipazake/bot.json","var/lib/ipazake/state.sqlite3"}
+          found=set()
+          flags={"telegram_state":False,"testflight_session":False,"testflight_acceptance":False,"private_return_journal":False}
+          count=0
+          with tarfile.open(fileobj=sys.stdin.buffer,mode="r|gz") as archive:
+              for member in archive:
+                  name=member.name.rstrip("/")
+                  if name.startswith("/") or ".." in pathlib.PurePosixPath(name).parts:
+                      raise SystemExit("unsafe_backup_path")
+                  if not (name in ("etc/ipazake","var/lib/ipazake") or name.startswith(("etc/ipazake/","var/lib/ipazake/"))):
+                      raise SystemExit("unexpected_backup_scope")
+                  if name in required and member.isfile(): found.add(name)
+                  if name.startswith("var/lib/ipazake/telegram/"): flags["telegram_state"]=True
+                  if name=="var/lib/ipazake/testflight/session.age" and member.isfile(): flags["testflight_session"]=True
+                  if name=="var/lib/ipazake/testflight/acceptance.sqlite" and member.isfile(): flags["testflight_acceptance"]=True
+                  if name=="var/lib/ipazake/tf-private-return.sqlite" and member.isfile(): flags["private_return_journal"]=True
+                  count+=1
+              while sys.stdin.buffer.read(1048576): pass
+          if found!=required: raise SystemExit("required_recovery_files_missing")
+          receipt={"schema":"ipa-vps-recovery-backup-v1","archive_verified":True,"member_count":count,**flags}
+          pathlib.Path("recovery-output/receipt.json").write_text(json.dumps(receipt)+"\n")
+          print(json.dumps(receipt))
+          '
+          (cd recovery-output && sha256sum recovery.tar.gz.age > SHA256SUMS)
+      - name: Upload only authenticated ciphertext and sanitized receipt
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: encrypted-vps-recovery-${{ github.run_id }}
+          path: |
+            recovery-output/recovery.tar.gz.age
+            recovery-output/receipt.json
+            recovery-output/SHA256SUMS
+          retention-days: 1
+          if-no-files-found: error
