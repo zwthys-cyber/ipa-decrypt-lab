@@ -60,3 +60,22 @@ Sources:
 - https://docs.github.com/en/site-policy/github-terms/github-terms-for-additional-products-and-features
 - https://developers.cloudflare.com/workers/testing/miniflare/get-started/
 - https://developers.cloudflare.com/workers/testing/miniflare/storage/d1/
+
+
+## Phase 6: private link delivery pilot
+
+Owner approved replacing large Telegram file uploads with download links, while the hard zero-cost constraint remains. Google Drive personal accounts include 15 GB shared storage, and standard Drive API usage is currently free; Google has announced future charges for above-threshold API usage. Do not attach a Cloud billing account or increase quotas for this pilot. Verify the current free plan and billing status before enabling. R2 requires a subscription and B2 non-paying downloads are capped; neither is automatically provisioned.
+
+The pilot implements **retrieval of already uploaded, authorized files**, not automated uploads, native processing, or distribution of third-party apps. The isolated operator may register a synthetic or rights-cleared file already in a restricted Drive account. Apply both D1 migrations. Set PILOT_LINK_ENABLED=1 only after isolated configuration review. New independent Worker secrets: PILOT_LINK_ISSUER_TOKEN, PILOT_DRIVE_ACCESS_TOKEN (short-lived manually authorized OAuth token with minimal Drive read access to the selected file), and PILOT_DRIVE_RECIPIENT_EMAIL. Keep them out of logs, repository files, and chat. No refresh token is retained; expiration or failed verification makes the feature unavailable. The issuer calls POST /v1/link-register with Bearer issuer token and a JSON object containing job_id, file_id, filename, bytes and sha256. Use only synthetic test records until explicitly authorized for deployment. Do not use the live bot.
+
+Before registration and /get, the Worker verifies Drive file size, name, SHA-256 metadata, ownership, non-trashed status and a closed permission list (one owning account plus at most the designated user reader; no public/domain/group access). It only returns a standard Drive link privately to the configured Telegram owner. The file remains in Drive, not D1 or Telegram, and maximum registered size is 2,000,000,000 bytes. A 2-hour bot retrieval window is enforced by the D1 query; expiry or cancellation does not revoke previously issued Drive access. Free personal accounts do not generally support native expiration; revoke Drive ACL manually where needed. Links remain subject to account access, quota, download restrictions and provider policies. The feature does not assert download success. Do not mark a job completed based solely on receipt registration.
+
+No live account, provider permission change, upload, bot message, or billing change is performed by CI. Tests simulate Google metadata and ACL responses and run the actual SQL against SQLite. A real free storage account, isolated bot, permitted production execution environment, upload integration, cleanup/revocation and end-to-end tests still need to be established.
+
+Sources:
+- https://support.google.com/accounts/answer/6374270
+- https://developers.google.com/workspace/drive/api/guides/limits
+- https://support.google.com/drive/answer/7166529
+- https://developers.google.com/workspace/drive/api/guides/manage-sharing
+- https://developers.cloudflare.com/r2/get-started/
+- https://www.backblaze.com/apidocs/b2-get-download-authorization

@@ -1,4 +1,5 @@
-// Free control-plane pilot: no external task dispatch, files, credentials or billing APIs.
+// Free control-plane pilot: no external task dispatch, uploads or billing APIs.
+import {configured as linksConfigured,registerLink,getLink} from "./private-link.mjs";
 const SECRET=/^[A-Za-z0-9_-]{43,128}$/;
 const OWNER=/^[1-9][0-9]{0,15}$/;
 const APP=/^[1-9][0-9]{4,19}$/;
@@ -68,12 +69,24 @@ function actor(update,owner,now){
     !Number.isSafeInteger(m.date)||m.date<now-86400||m.date>now+60||typeof m.text!=="string"||m.text.length>1024)return null;
   return {id:m.from.id,text:m.text.trim(),update:update.update_id,date:m.date};
 }
-const HELP="免费控制层试验版：仅登记任务，暂不下载或交付文件。发送 App Store 链接或数字 App ID；/status 查看最近任务；/cancel 任务编号 取消。每天最多登记 3 次，最多 30 个等待任务。不支持 TestFlight。";
-export async function handle(request,env,now=Math.floor(Date.now()/1000)){
+const HELP="免费控制层试验版：仅登记任务，不自动下载。发送 App Store 链接或数字 App ID；/status 查看最近任务；/cancel 任务编号 取消；/get 任务编号 领取已核对的私有网盘链接（需配置）。每天最多登记 3 次，最多 30 个等待任务。不支持 TestFlight。";
+export async function handle(request,env,now=Math.floor(Date.now()/1000),send=fetch){
   const url=new URL(request.url);
-  if(request.method!=="POST"||url.pathname!=="/telegram"||url.search)return response(404,{ok:false});
+  if(request.method!=="POST"||!["/telegram","/v1/link-register"].includes(url.pathname)||url.search)return response(404,{ok:false});
   if(env.PILOT_ENABLED!=="1"||!OWNER.test(env.PILOT_OWNER_ID||"")||
      !SECRET.test(env.TELEGRAM_WEBHOOK_SECRET||"")||!env.DB?.prepare)return response(503,{ok:false});
+  if(url.pathname==="/v1/link-register"){
+    if(!linksConfigured(env)||!SECRET.test(env.PILOT_LINK_ISSUER_TOKEN||"")||
+       env.PILOT_LINK_ISSUER_TOKEN===env.TELEGRAM_WEBHOOK_SECRET)return response(503,{ok:false});
+    const supplied=request.headers.get("authorization")||"";
+    if(!/^Bearer [A-Za-z0-9_-]{43,128}$/.test(supplied)||!await sameSecret(supplied,"Bearer "+env.PILOT_LINK_ISSUER_TOKEN))return response(401,{ok:false});
+    if(request.headers.get("content-type")!=="application/json")return response(400,{ok:false});
+    try{
+      const value=await body(request);
+      const stored=await registerLink(env.DB,env.PILOT_OWNER_ID,value,env,now,send);
+      return response(stored?201:409,{ok:stored});
+    }catch{return response(409,{ok:false});}
+  }
   const supplied=request.headers.get("x-telegram-bot-api-secret-token")||"";
   if(!SECRET.test(supplied)||!await sameSecret(supplied,env.TELEGRAM_WEBHOOK_SECRET))return response(401,{ok:false});
   if(!/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(request.headers.get("content-type")||""))return response(400,{ok:false});
@@ -94,6 +107,18 @@ export async function handle(request,env,now=Math.floor(Date.now()/1000)){
         return row.job_id+" · "+row.app_id+" · "+(row.region==="cn"?"国区":"外区")+" · "+(row.state==="cancelled"?"已取消":"等待可用计算环境");
       });
       return say(item.id,"试验版最近任务（未实际下载）：\n"+(rows.join("\n")||"暂无"));
+    }
+    if(item.text.startsWith("/get ")){
+      const id=item.text.slice(5).trim();
+      if(!JOB.test(id))return say(item.id,"任务编号无效。");
+      if(!linksConfigured(env))return say(item.id,"私有网盘链接功能尚未配置。");
+      const link=await getLink(db,owner,id,env,now,send);
+      if(!link)return say(item.id,"暂无有效链接，或任务已取消、领取期限已过。");
+      // Only the authorized private sender receives this link; disable link previews.
+      return response(200,{method:"sendMessage",chat_id:item.id,
+        text:"私有文件链接（人工存入，网盘信息已核对）\n文件："+link.filename+"\n大小："+link.bytes+" 字节\nSHA-256："+link.sha256+"\n请登录指定 Google 账号访问。领取期限不等于网盘权限到期。",
+        reply_markup:{inline_keyboard:[[{text:"打开私有下载链接",url:link.url}]]},
+        link_preview_options:{is_disabled:true}});
     }
     if(item.text.startsWith("/cancel ")){
       const id=item.text.slice(8).trim();
