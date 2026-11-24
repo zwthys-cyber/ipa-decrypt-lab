@@ -1,0 +1,21 @@
+{
+  "name": "ipazake-free-control-pilot",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-11-24",
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": {
+    "enabled": false
+  },
+  "vars": {
+    "PILOT_ENABLED": "0"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ipazake-free-pilot",
+      "database_id": "REPLACE_WITH_ISOLATED_FREE_D1_ID",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

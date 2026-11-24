@@ -9,12 +9,18 @@ on:
       - 'tools/tf_state_http.py'
       - 'tools/managed_migration.py'
       - 'tests/test_managed_migration.py'
+      - 'tests/test_free_pilot_sql.py'
       - 'tools/testflight_state.py'
       - '.github/ops/tf_task*.py'
       - '.github/workflows/testflight-private-delivery.yml'
       - 'deploy/managed/**'
       - '.github/workflows/managed-runtime-contracts.yml'
   workflow_dispatch:
+    inputs:
+      build_images:
+        description: Optional container image build; requires the existing public Bot API cache
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -30,8 +36,11 @@ jobs:
           sudo apt-get install -y --no-install-recommends python3-pil
           /usr/bin/python3 -m unittest discover -s tests -p 'test_managed*.py' -v
           /usr/bin/python3 -m unittest discover -s .github/ops -p 'test_tf_task*.py' -v
-          node --test deploy/managed/cloudflare/worker.test.mjs
+          node --test deploy/managed/cloudflare/worker.test.mjs deploy/managed/free-pilot/worker.test.mjs
+          /usr/bin/python3 -m unittest discover -s tests -p 'test_free_pilot_sql.py' -v
   images:
+    # Not part of the zero-cost control-plane pilot; never provision a host here.
+    if: github.event_name == 'workflow_dispatch' && inputs.build_images
     needs: synthetic
     runs-on: ubuntu-24.04
     timeout-minutes: 40

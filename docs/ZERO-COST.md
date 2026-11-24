@@ -5,7 +5,7 @@ Owner requirement (2026-11-24): no paid VPS, no paid subscriptions or metered ov
 ## Available free control-plane candidates
 
 - Cloudflare Workers Free: suitable for small event-driven requests; currently 100,000 requests/day, 10 ms CPU per HTTP invocation and 128 MB memory. Not a native Linux container or macOS runtime.
-- D1 Free: candidate for transactional task records and small encrypted state, with free quota limits and errors rather than a plan upgrade. Its row size and database capacity are not suitable for storing large IPA archives. A SQLite-to-D1 migration must preserve identities, idempotency, unknown outcomes and history. Not yet implemented.
+- D1 Free: candidate for transactional task records and small encrypted state, with free quota limits and errors rather than a plan upgrade. Its row size and database capacity are not suitable for storing large IPA archives. A separate D1 pilot schema and authenticated Telegram webhook now exist. Production SQLite-to-D1 migration must preserve identities, idempotency, unknown outcomes and history; that migration is not implemented.
 - Queues Free: 10,000 operations/day and 24-hour retention. The database must remain authoritative for task recovery; do not assume the queue provides indefinite persistence.
 - R2 is not approved by default: its included free usage is followed by metered charges, and activation requires an R2 subscription. Do not enable a billable service unless a true zero-cost cap can be confirmed and the owner explicitly changes the constraint.
 - Render Free does not provide persistent disks or free background workers. The previous paid configuration is withdrawn.
@@ -28,3 +28,12 @@ The project has not established a fully free, no-server production path preservi
 - https://render.com/docs/free
 - https://core.telegram.org/bots/features#local-bot-api
 - https://docs.github.com/en/site-policy/github-terms/github-terms-for-additional-products-and-features
+
+
+## Free pilot (implementation candidate)
+
+The independent Worker and D1 schema are in deploy/managed/free-pilot. It is disabled by default, has no public route in the example configuration, and requires an isolated D1 database ID and a separate test bot. The owner-only private Telegram webhook supports /start, /help, /status, /cancel and registration of an App Store link or numeric ID. Each request is clearly labeled waiting_for_runtime; no native worker is invoked, no GitHub production workflow is dispatched, and no file is retrieved or sent. TestFlight is intentionally unsupported in this pilot. The database deduplicates Telegram update IDs and atomically enforces three registrations per UTC day and thirty outstanding records. Cancellation does not refund the daily cap. The code refuses unavailable D1 rather than automatically changing plans, and it logs no private inputs.
+
+The provided wrangler.example.json is intentionally not directly deployable: replace its non-resolving database ID only in an isolated Workers Free account; manually verify the account's plan and billing status. Provision only the isolated free D1 database, apply its initial migration, configure an independent owner ID and random Telegram webhook secret as Worker Secrets, select an explicitly approved test endpoint, and enable PILOT_ENABLED only for a separate test bot. Never set a webhook on the live bot while it uses getUpdates or a Local Bot API server. No actual deployment or secret changes are done by CI. Telegram webhook replies are best effort and do not certify delivery.
+
+The synthetic contract workflow tests this Worker, its SQLite SQL semantics and the existing managed modules; container image compilation is opt-in manual build-only because it is not required for the free control-plane pilot. The previous image build failed restoring the pinned Bot API cache. No image availability is claimed. A future permitted zero-cost execution and private delivery environment remains mandatory for production migration.

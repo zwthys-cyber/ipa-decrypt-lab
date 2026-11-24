@@ -51,3 +51,8 @@ An optional Cloudflare Worker in deploy/managed/cloudflare is an edge HTTPS rela
 Migration check: tools/managed_migration.py compares a frozen source snapshot with two independently prepared offline destination roots, verifying private file modes, SQLite quick_check, absence of database sidecars, no pending/sending task records, byte-identical controller DB, TF return ledger, acceptance ledger, ciphertext and persistent Telegram files. It prints only a fixed match/failure status. It does not copy data, generate secrets, or certify provider behavior. Do not run on live databases. First stop all relevant writers at an approved idle cutover, safely checkpoint and snapshot on the approved infrastructure, and preserve rollback data. Never reset or fabricate a ledger to satisfy this check; unresolved work requires explicit reconciliation. Keep the existing pilot TF gate until an end-to-end approved state migration and integration are proven.
 
 Official provider references: https://render.com/docs/blueprint-spec and https://render.com/docs/disks ; https://developers.cloudflare.com/workers/wrangler/configuration/ . Provider configuration is a candidate, not an operational deployment.
+
+
+## Phase 4: free-only control-plane pilot
+
+See [zero-cost constraints and pilot setup](ZERO-COST.md). The independent Worker/D1 pilot does not use the HTTPS state relay or managed container. Image compilation is now an explicit manual build-only option, not part of the free pilot's PR checks. The existing production controller, native worker, state, tokens, and Telegram polling mode remain unchanged.
