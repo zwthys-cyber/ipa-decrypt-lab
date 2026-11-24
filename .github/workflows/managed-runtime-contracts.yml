@@ -114,15 +114,32 @@ jobs:
           if-no-files-found: error
   linux_archive_bundle:
     needs: synthetic
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: Confirm Linux architecture and run local synthetic contracts
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          set -eu
+          test "$(uname -s)" = Linux
+          test "$(uname -m)" = "$EXPECTED_ARCH"
+          python3 deploy/managed/free-pilot/test_archive_verify.py -v
+          python3 deploy/managed/free-pilot/test_private_upload.py -v
       - name: Full-read exact 10 GB synthetic ZIP64 contract
         run: timeout 240s python3 deploy/managed/free-pilot/test_archive_10gb.py
-      - name: Build standalone read-only Linux verification tool
+      - name: Build standalone Linux verification and operator upload tools
         shell: bash
         env:
           SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -130,13 +147,17 @@ jobs:
           set -euo pipefail
           umask 077
           root=deploy/managed/free-pilot
-          mkdir -p linux-archive-dist "$RUNNER_TEMP/archive-src" "$RUNNER_TEMP/archive-smoke"
+          mkdir -p linux-archive-dist "$RUNNER_TEMP/archive-src" "$RUNNER_TEMP/archive-smoke" "$RUNNER_TEMP/upload-src"
           cp "$root/archive_verify.py" "$RUNNER_TEMP/archive-src/__main__.py"
           cp "$root/zip_preflight.py" "$RUNNER_TEMP/archive-src/"
           python3 -m zipapp "$RUNNER_TEMP/archive-src" -o linux-archive-dist/archive-verify.pyz
+          cp "$root/private_upload.py" "$root/archive_verify.py" "$root/zip_preflight.py" "$RUNNER_TEMP/upload-src/"
+          python3 -m zipapp "$RUNNER_TEMP/upload-src" -m private_upload:main -o linux-archive-dist/private-upload.pyz
           cp "$root/LINUX-ARCHIVE.zh-CN.md" linux-archive-dist/README.md
           printf 'source_head=%s\nchecked_out_commit=%s\n' "$SOURCE_HEAD" "$(git rev-parse HEAD)" > linux-archive-dist/BUILDINFO
-          cp linux-archive-dist/archive-verify.pyz "$RUNNER_TEMP/archive-smoke/"
+          printf 'validated_host=%s\npython_version=%s\n' "$(uname -m)" "$(python3 --version)" >> linux-archive-dist/BUILDINFO
+          cp linux-archive-dist/*.pyz "$RUNNER_TEMP/archive-smoke/"
+          cp "$root/test_private_upload.py" "$RUNNER_TEMP/archive-smoke/"
           cd "$RUNNER_TEMP/archive-smoke"
           python3 - <<'PY'
           import hashlib, json, os, subprocess, sys, zipfile
@@ -153,13 +174,23 @@ jobs:
           args[-1]="0"*64
           assert subprocess.run(args,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==2
           print("relocated_archive_tool_verified")
+          # Real CLI must refuse production uploads on Actions. No real credentials
+          # or real HTTP transport are used by the synthetic tests.
+          assert os.environ.get("GITHUB_ACTIONS")=="true"
+          args=[sys.executable,"private-upload.pyz","--file","Synthetic.ipa","--job","pilot_"+"a"*32,
+                "--journal","unused","--confirm-authorized-file","--confirm-free-account"]
+          result=subprocess.run(args,capture_output=True,text=True)
+          assert result.returncode==2 and result.stderr.strip()=="operator_only_no_live_ci_upload"
+          assert not os.path.exists("unused")
+          print("packaged_upload_ci_guard_verified")
           PY
+          PYTHONPATH="$PWD/private-upload.pyz" python3 test_private_upload.py -v
           cd "$GITHUB_WORKSPACE/linux-archive-dist"
-          sha256sum archive-verify.pyz README.md BUILDINFO > SHA256SUMS
+          sha256sum archive-verify.pyz private-upload.pyz README.md BUILDINFO > SHA256SUMS
           sha256sum -c SHA256SUMS
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: linux-archive-tools-${{ github.sha }}
+          name: linux-archive-tools-${{ matrix.arch }}-${{ github.sha }}
           path: linux-archive-dist/
           retention-days: 7
           if-no-files-found: error
