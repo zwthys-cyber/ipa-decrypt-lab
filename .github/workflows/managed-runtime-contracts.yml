@@ -7,6 +7,8 @@ on:
       - 'tests/test_managed_runtime.py'
       - 'tests/test_managed_state_transport.py'
       - 'tools/tf_state_http.py'
+      - 'tools/managed_migration.py'
+      - 'tests/test_managed_migration.py'
       - 'tools/testflight_state.py'
       - '.github/ops/tf_task*.py'
       - '.github/workflows/testflight-private-delivery.yml'
@@ -28,3 +30,59 @@ jobs:
           sudo apt-get install -y --no-install-recommends python3-pil
           /usr/bin/python3 -m unittest discover -s tests -p 'test_managed*.py' -v
           /usr/bin/python3 -m unittest discover -s .github/ops -p 'test_tf_task*.py' -v
+          node --test deploy/managed/cloudflare/worker.test.mjs
+  images:
+    needs: synthetic
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: dist/telegram-bot-api
+          key: telegram-bot-api-ubuntu24-x64-e3e9dd8e5b3d7ab-v1
+          fail-on-cache-miss: true
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: FiloSottile/age
+          ref: b74dce4cdbe35b5e5f66c06d9612b72f89028758
+          path: native-source/age
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.0'
+          cache-dependency-path: native-source/age/go.sum
+      - name: Build public helper and assemble isolated context
+        run: |
+          mkdir -p native-source/age/cmd/lab-delivery-crypt package/bin package/tools
+          cp tools/delivery_crypto.go native-source/age/cmd/lab-delivery-crypt/main.go
+          cp tests/delivery_crypto_test.go native-source/age/cmd/lab-delivery-crypt/main_test.go
+          (cd native-source/age && go test -p 2 -timeout 300s ./cmd/lab-delivery-crypt && CGO_ENABLED=0 go build -p 2 -trimpath -o ../../package/bin/delivery-crypt ./cmd/lab-delivery-crypt)
+          cp dist/telegram-bot-api package/bin/
+          for module in testflight_state tf_state_http account_profile version_catalog app_presentation version_request app_preflight capacity telegram_daemon multi_user persistent_journal telegram_controller telegram_runtime telegram_api telegram_menu telegram_queue task_progress delivery_scheduler ipa_audit managed_migration; do
+            cp "tools/$module.py" package/tools/
+          done
+          printf '%s\n' "$GITHUB_SHA" > package/SOURCE_COMMIT
+      - name: Build two images and check fail-closed startup
+        run: |
+          for role in controller state; do
+            docker build --platform linux/amd64 --target "$role" -f deploy/managed/Dockerfile -t "ipazake-$role:$GITHUB_SHA" package
+            docker run --rm --network none --entrypoint /usr/bin/python3 "ipazake-$role:$GITHUB_SHA" -c 'import os,sys; sys.path.insert(0,"/opt/ipazake/tools"); import telegram_daemon,tf_state_http; assert os.geteuid()==10001'
+            if docker run --rm --network none "ipazake-$role:$GITHUB_SHA"; then echo missing_volume_not_rejected; exit 1; fi
+          done
+          docker run --rm --network none --entrypoint /opt/ipazake/bin/telegram-bot-api "ipazake-controller:$GITHUB_SHA" --version
+      - name: Export build-only images and checksums
+        run: |
+          mkdir -p managed-images
+          for role in controller state; do
+            docker save "ipazake-$role:$GITHUB_SHA" | gzip -n > "managed-images/$role.tar.gz"
+          done
+          (cd managed-images && sha256sum controller.tar.gz state.tar.gz > SHA256SUMS)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: managed-images-${{ github.sha }}
+          path: managed-images/
+          retention-days: 3
+          if-no-files-found: error

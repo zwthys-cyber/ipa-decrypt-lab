@@ -75,6 +75,12 @@ def handler(root,token):
             self.send_header("Connection","close")
             self.end_headers()
             self.wfile.write(body)
+        def do_GET(self):
+            # No state, identifiers, or hashes in the unauthenticated health endpoint.
+            if self.path=="/healthz":
+                self.reply(200,{"status":"ready"})
+            else:
+                self.reply(404,{"status":"failed"})
         def do_POST(self):
             try:
                 supplied=self.headers.get_all("Authorization",[])

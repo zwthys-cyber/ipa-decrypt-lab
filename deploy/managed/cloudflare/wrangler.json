@@ -1,0 +1,17 @@
+{
+  "name": "ipazake-state-edge",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-11-24",
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": {
+    "enabled": false
+  },
+  "secrets": {
+    "required": [
+      "EDGE_TOKEN",
+      "ORIGIN_TOKEN",
+      "STATE_ORIGIN"
+    ]
+  }
+}

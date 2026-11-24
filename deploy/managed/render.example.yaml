@@ -1,0 +1,48 @@
+# Example only. Replace the image placeholders with verified registry digests.
+# Do not apply until billing, storage permissions and migration are explicitly approved.
+services:
+  - type: worker
+    name: ipazake-controller-pilot
+    runtime: image
+    image:
+      url: registry.example.invalid/ipazake/controller@sha256:REPLACE_WITH_VERIFIED_DIGEST
+    plan: 1c-2g
+    numInstances: 1
+    maxShutdownDelaySeconds: 120
+    disk:
+      name: controller-private
+      mountPath: /var/lib/ipazake
+      sizeGB: 20
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_OWNER_ID
+        sync: false
+      - key: TELEGRAM_API_ID
+        sync: false
+      - key: TELEGRAM_API_HASH
+        sync: false
+      - key: DELIVERY_AGE_IDENTITY
+        sync: false
+      - key: GH_TOKEN
+        sync: false
+  - type: web
+    name: ipazake-state-pilot
+    runtime: image
+    image:
+      url: registry.example.invalid/ipazake/state@sha256:REPLACE_WITH_VERIFIED_DIGEST
+    plan: 0.5c-512mb
+    numInstances: 1
+    maxShutdownDelaySeconds: 90
+    healthCheckPath: /healthz
+    disk:
+      name: state-private
+      mountPath: /var/lib/ipazake
+      sizeGB: 10
+    envVars:
+      - key: TF_STATE_API_TOKEN
+        sync: false
+      - key: TF_STATE_BIND
+        value: 0.0.0.0
+      - key: TF_STATE_TRUSTED_TLS_PROXY
+        value: "1"
