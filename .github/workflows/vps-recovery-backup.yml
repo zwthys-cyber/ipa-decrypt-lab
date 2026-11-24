@@ -5,7 +5,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: vps-controller-deploy
+  group: vps-release
   cancel-in-progress: false
 jobs:
   backup:
