@@ -10,7 +10,9 @@ PILOT=Path(__file__).resolve().parent
 class FreePilotSQLTests(unittest.TestCase):
     def setUp(self):
         self.db=sqlite3.connect(":memory:")
-        self.db.executescript((PILOT/"migrations/0001_pilot.sql").read_text())
+        self.db.execute("PRAGMA foreign_keys=ON")
+        for migration in sorted((PILOT/"migrations").glob("*.sql")):
+            self.db.executescript(migration.read_text())
         self.sql=json.loads(subprocess.check_output(
             ["node","--input-type=module","-e","import {SQL} from './worker.mjs';console.log(JSON.stringify(SQL))"],cwd=PILOT,text=True))
     def tearDown(self):self.db.close()
@@ -35,7 +37,10 @@ class FreePilotSQLTests(unittest.TestCase):
     def test_active_cap(self):
         for n in range(30):self.assertEqual(self.add(n+1,day=100+n),1)
         self.assertEqual(self.add(31,day=200),0)
-        self.db.execute(self.sql["cancel"],("123","pilot_"+format(1,"032x")))
+        job="pilot_"+format(1,"032x")
+        self.db.execute("INSERT INTO pilot_links(job_id,owner_id,file_id,filename,bytes,sha256,expires_at) VALUES(?,?,?,?,?,?,?)",
+            (job,"123","syntheticFile123","Example.zip",1,"a"*64,100))
         self.assertEqual(self.add(31,day=200),1)
+        self.assertEqual(self.add(32,day=201),0)
 
 if __name__=="__main__":unittest.main()

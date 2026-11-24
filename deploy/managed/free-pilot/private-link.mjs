@@ -6,6 +6,7 @@ const HASH=/^[a-f0-9]{64}$/;
 const EMAIL=/^[^\s@]{1,128}@[^\s@]{1,128}$/;
 export const MAX=10_000_000_000;
 export const WINDOW=7200;
+export const RETENTION_GRACE=86400;
 export const LINK_SQL={
   register:`INSERT INTO pilot_links(job_id,owner_id,file_id,filename,bytes,sha256,expires_at)
     SELECT job_id,owner_id,?,?,?,?,? FROM pilot_jobs
@@ -13,12 +14,14 @@ export const LINK_SQL={
     ON CONFLICT(job_id) DO NOTHING`,
   lookup:`SELECT l.file_id,l.filename,l.bytes,l.sha256,l.expires_at
     FROM pilot_links l JOIN pilot_jobs j ON j.job_id=l.job_id AND j.owner_id=l.owner_id
-    WHERE l.job_id=? AND l.owner_id=? AND j.state='waiting_for_runtime' AND l.expires_at>?`
+    WHERE l.job_id=? AND l.owner_id=? AND j.state='waiting_for_runtime' AND l.expires_at>? AND l.retired_at IS NULL`,
+  retire:`UPDATE pilot_links SET retired_at=COALESCE(retired_at,?)
+    WHERE job_id=? AND owner_id=? AND file_id=? AND filename=? AND bytes=? AND sha256=? AND expires_at<=?`
 };
 function need(ok){if(!ok)throw Error("private_link_unavailable");}
 export function metadata(value){
   need(value&&typeof value==="object"&&!Array.isArray(value)&&
-    FILE.test(value.file_id||"")&&HASH.test(value.sha256||"")&&
+    typeof value.file_id==="string"&&FILE.test(value.file_id)&&typeof value.sha256==="string"&&HASH.test(value.sha256)&&
     Number.isSafeInteger(value.bytes)&&value.bytes>0&&value.bytes<=MAX&&
     typeof value.filename==="string"&&value.filename.length<=160&&
     /^[\p{L}\p{N} ._()\-]+\.(?:ipa|zip|bin|txt)$/iu.test(value.filename)&&
@@ -92,4 +95,14 @@ export async function getLink(db,owner,id,env,now,send=fetch){
   const url=await verifyDrive(record,env,send);
   // Drive's ACL is checked again before returning a link. The bot's expiry is NOT a Drive ACL expiry.
   return {...record,url,expires_at:row.expires_at};
+}
+
+export async function retireLink(db,owner,value,now){
+  need(value&&Object.keys(value).sort().join(",")==="bytes,file_id,filename,job_id,sha256"&&typeof value.job_id==="string"&&JOB.test(value.job_id));
+  const record=metadata(value);
+  // Idempotent exact-receipt retirement, only after expiration plus a full day.
+  // Never delete provider files from this Worker.
+  const result=await db.prepare(LINK_SQL.retire).bind(now,value.job_id,owner,record.file_id,record.filename,record.bytes,record.sha256,now-RETENTION_GRACE).run();
+  need(result.success===true&&[0,1].includes(result.meta?.changes));
+  return result.meta.changes===1;
 }

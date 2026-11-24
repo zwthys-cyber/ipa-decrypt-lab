@@ -80,3 +80,13 @@ test("large metadata stays exact above 32-bit and rejects oversize or fractional
   for(const bytes of [0,-1,MAX+1,1.5,"10000000000",Number.MAX_SAFE_INTEGER])
     assert.throws(()=>metadata({...record,bytes}));
 });
+
+test("retirement is authenticated, exact and does not call Drive",async()=>{
+  const d=db(),m=mockDrive();
+  const req=(auth)=>new Request("https://pilot.example.invalid/v1/link-retire",{method:"POST",
+    headers:{"content-type":"application/json",authorization:"Bearer "+auth},body:JSON.stringify({...record,job_id:id})});
+  assert.equal((await handle(req(token),{...env,DB:d},now,m.send)).status,401);
+  assert.equal((await handle(req(issuer),{...env,DB:d},now,m.send)).status,200);
+  assert.deepEqual(d.calls,[LINK_SQL.retire,[now,id,String(owner),record.file_id,record.filename,record.bytes,record.sha256,now-86400]]);
+  assert.equal(m.calls.length,0);
+});

@@ -108,8 +108,10 @@ class Drive:
         need(status==200,"drive_metadata_unavailable");return decode(data)
     def check_quota(self,size):
         quota(self.get("about?fields=storageQuota(limit,usage),user(emailAddress)"),self.email,size)
-    def start(self,record):
-        raw=encode({"name":record["filename"],"mimeType":"application/octet-stream"})
+    def start(self,record,job):
+        need(JOB.fullmatch(job),"invalid_job")
+        raw=encode({"name":record["filename"],"mimeType":"application/octet-stream",
+                    "appProperties":{"pilot_job":job,"pilot_schema":"private-link-v1"}})
         status,headers,_=self.call("POST",GOOGLE+"/upload/drive/v3/files?uploadType=resumable&fields="+FIELDS,raw,
             {"Content-Type":"application/json","X-Upload-Content-Type":"application/octet-stream","X-Upload-Content-Length":str(record["bytes"])})
         need(status==200,"upload_start_unconfirmed")
@@ -184,7 +186,7 @@ def upload(drive,stream,record,journal,job):
         drive.check_quota(record["bytes"])
         state={**binding,"stage":"start_intent"}
         journal.write(state)
-        state={**state,"stage":"uploading","session":drive.start(record)}
+        state={**state,"stage":"uploading","session":drive.start(record,job)}
         journal.write(state)
     else:
         need(all(state.get(k)==v for k,v in binding.items()),"journal_binding_mismatch")

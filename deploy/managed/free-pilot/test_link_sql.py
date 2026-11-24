@@ -10,7 +10,7 @@ class LinkSQLTests(unittest.TestCase):
     def test_owner_cancel_expiry_and_no_overwrite(self):
         with sqlite3.connect(":memory:") as db:
             db.execute("PRAGMA foreign_keys=ON")
-            for name in ("0001_pilot.sql","0002_links.sql","0003_links_10gb.sql"):
+            for name in ("0001_pilot.sql","0002_links.sql","0003_links_10gb.sql","0004_retired_links.sql"):
                 db.executescript((ROOT/"migrations"/name).read_text())
             sql=json.loads(subprocess.check_output(["node","--input-type=module","-e",
                 "import {LINK_SQL} from './private-link.mjs';console.log(JSON.stringify(LINK_SQL))"],cwd=ROOT,text=True))
@@ -25,6 +25,11 @@ class LinkSQLTests(unittest.TestCase):
             self.assertIsNone(db.execute(sql["lookup"],(job,owner,100)).fetchone())
             db.execute("UPDATE pilot_jobs SET state='cancelled' WHERE job_id=?",(job,))
             self.assertIsNone(db.execute(sql["lookup"],(job,owner,99)).fetchone())
+            receipt=(job,owner,file,"Example.zip",10000000000,"a"*64)
+            self.assertEqual(db.execute(sql["retire"],(200,*receipt,99)).rowcount,0)
+            self.assertEqual(db.execute(sql["retire"],(200,*receipt,100)).rowcount,1)
+            self.assertEqual(db.execute(sql["retire"],(300,*receipt,100)).rowcount,1)
+            self.assertEqual(db.execute("SELECT retired_at FROM pilot_links").fetchone(),(200,))
     def test_migration_preserves_metadata_and_enforces_64bit_cap(self):
         with sqlite3.connect(":memory:") as db:
             db.execute("PRAGMA foreign_keys=ON")

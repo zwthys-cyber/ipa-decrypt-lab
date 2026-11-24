@@ -8,7 +8,7 @@ import {fileURLToPath} from "node:url";
 import {Miniflare} from "miniflare";
 const secret="T".repeat(48),owner=12345;
 const stamp=Math.floor(Date.now()/1000);
-const schema=await readFile(new URL("./migrations/0001_pilot.sql",import.meta.url),"utf8");
+const schema=(await Promise.all(["0001_pilot.sql","0002_links.sql","0003_links_10gb.sql","0004_retired_links.sql"].map(name=>readFile(new URL("./migrations/"+name,import.meta.url),"utf8")))).join("\n");
 const config=JSON.parse(await readFile(new URL("./wrangler.example.json",import.meta.url),"utf8"));
 function send(mf,id,text="123456",uid=owner,token=secret){
   return mf.dispatchFetch("http://localhost/telegram",{method:"POST",
@@ -83,5 +83,13 @@ test("workerd D1: 10 GB migration preserves old metadata and exact large integer
     assert.equal((await db.prepare("SELECT bytes FROM pilot_links WHERE job_id=?").bind(jobs[2]).first()).bytes,10000000000);
     await assert.rejects(db.prepare(sql).bind(...row(jobs[3],"syntheticOver123",10000000001)).run());
     assert.equal((await db.prepare("SELECT count(*) AS n FROM pilot_links").first()).n,3);
+    await migrate("0004_retired_links.sql");
+    const receipt=row(jobs[2],"syntheticMax123",10000000000);
+    const {LINK_SQL}=await import("./private-link.mjs");
+    const at=stamp+7200+86400;
+    const params=[jobs[2],String(owner),"syntheticMax123","Synthetic.zip",10000000000,"a".repeat(64)];
+    assert.equal((await db.prepare(LINK_SQL.retire).bind(at,...params,stamp+7199).run()).meta.changes,0);
+    assert.equal((await db.prepare(LINK_SQL.retire).bind(at,...params,stamp+7200).run()).meta.changes,1);
+    assert.equal((await db.prepare("SELECT retired_at FROM pilot_links WHERE job_id=?").bind(jobs[2]).first()).retired_at,at);
   }finally{await mf.dispose();}
 });

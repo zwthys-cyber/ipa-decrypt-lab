@@ -1,5 +1,5 @@
 // Free control-plane pilot: no external task dispatch, uploads or billing APIs.
-import {configured as linksConfigured,registerLink,getLink} from "./private-link.mjs";
+import {configured as linksConfigured,registerLink,getLink,retireLink} from "./private-link.mjs";
 const SECRET=/^[A-Za-z0-9_-]{43,128}$/;
 const OWNER=/^[1-9][0-9]{0,15}$/;
 const APP=/^[1-9][0-9]{4,19}$/;
@@ -9,10 +9,13 @@ export const SQL={
   insert:`INSERT INTO pilot_jobs(job_id,owner_id,update_id,app_id,region,day,created_at,state)
     SELECT ?,?,?,?,?,?,?,'waiting_for_runtime'
     WHERE (SELECT count(*) FROM pilot_jobs WHERE owner_id=? AND day=?)<3
-      AND (SELECT count(*) FROM pilot_jobs WHERE owner_id=? AND state='waiting_for_runtime')<30
+      AND (SELECT count(*) FROM pilot_jobs j WHERE j.owner_id=? AND j.state='waiting_for_runtime'
+        AND NOT EXISTS (SELECT 1 FROM pilot_links l WHERE l.job_id=j.job_id))<30
     ON CONFLICT(owner_id,update_id) DO NOTHING`,
   existing:"SELECT job_id FROM pilot_jobs WHERE owner_id=? AND update_id=?",
-  recent:"SELECT job_id,app_id,region,state FROM pilot_jobs WHERE owner_id=? ORDER BY created_at DESC,job_id DESC LIMIT 5",
+  recent:`SELECT j.job_id,j.app_id,j.region,j.state,l.expires_at,l.retired_at FROM pilot_jobs j
+    LEFT JOIN pilot_links l ON l.job_id=j.job_id AND l.owner_id=j.owner_id
+    WHERE j.owner_id=? ORDER BY j.created_at DESC,j.job_id DESC LIMIT 5`,
   cancel:"UPDATE pilot_jobs SET state='cancelled' WHERE owner_id=? AND job_id=? AND state='waiting_for_runtime'"
 };
 function response(status,value={ok:true}) {
@@ -72,17 +75,21 @@ function actor(update,owner,now){
 const HELP="免费控制层试验版：仅登记任务，不自动下载。发送 App Store 链接或数字 App ID；/status 查看最近任务；/cancel 任务编号 取消；/get 任务编号 领取已核对的私有网盘链接（需配置）。每天最多登记 3 次，最多 30 个等待任务。不支持 TestFlight。";
 export async function handle(request,env,now=Math.floor(Date.now()/1000),send=fetch){
   const url=new URL(request.url);
-  if(request.method!=="POST"||!["/telegram","/v1/link-register"].includes(url.pathname)||url.search)return response(404,{ok:false});
+  if(request.method!=="POST"||!["/telegram","/v1/link-register","/v1/link-retire"].includes(url.pathname)||url.search)return response(404,{ok:false});
   if(env.PILOT_ENABLED!=="1"||!OWNER.test(env.PILOT_OWNER_ID||"")||
      !SECRET.test(env.TELEGRAM_WEBHOOK_SECRET||"")||!env.DB?.prepare)return response(503,{ok:false});
-  if(url.pathname==="/v1/link-register"){
-    if(!linksConfigured(env)||!SECRET.test(env.PILOT_LINK_ISSUER_TOKEN||"")||
+  if(url.pathname!=="/telegram"){
+    if(env.PILOT_LINK_ENABLED!=="1"||(url.pathname==="/v1/link-register"&&!linksConfigured(env))||!SECRET.test(env.PILOT_LINK_ISSUER_TOKEN||"")||
        env.PILOT_LINK_ISSUER_TOKEN===env.TELEGRAM_WEBHOOK_SECRET)return response(503,{ok:false});
     const supplied=request.headers.get("authorization")||"";
     if(!/^Bearer [A-Za-z0-9_-]{43,128}$/.test(supplied)||!await sameSecret(supplied,"Bearer "+env.PILOT_LINK_ISSUER_TOKEN))return response(401,{ok:false});
     if(request.headers.get("content-type")!=="application/json")return response(400,{ok:false});
     try{
       const value=await body(request);
+      if(url.pathname==="/v1/link-retire"){
+        const retired=await retireLink(env.DB,env.PILOT_OWNER_ID,value,now);
+        return response(retired?200:409,{ok:retired});
+      }
       const stored=await registerLink(env.DB,env.PILOT_OWNER_ID,value,env,now,send);
       return response(stored?201:409,{ok:stored});
     }catch{return response(409,{ok:false});}
@@ -104,9 +111,13 @@ export async function handle(request,env,now=Math.floor(Date.now()/1000),send=fe
       const rows=result.results.map(row=>{
         if(!JOB.test(row.job_id)||!APP.test(row.app_id)||!["cn","default"].includes(row.region)||
           !["waiting_for_runtime","cancelled"].includes(row.state))throw Error("row");
-        return row.job_id+" · "+row.app_id+" · "+(row.region==="cn"?"国区":"外区")+" · "+(row.state==="cancelled"?"已取消":"等待可用计算环境");
+        let label="等待可用计算环境";
+        if(row.state==="cancelled")label="已取消";
+        else if(Number.isSafeInteger(row.retired_at))label="链接已退役（不代表网盘已删除）";
+        else if(Number.isSafeInteger(row.expires_at))label=row.expires_at<=now?"领取期限已过":"已登记私有文件（/get 核验领取）";
+        return row.job_id+" · "+row.app_id+" · "+(row.region==="cn"?"国区":"外区")+" · "+label;
       });
-      return say(item.id,"试验版最近任务（未实际下载）：\n"+(rows.join("\n")||"暂无"));
+      return say(item.id,"试验版最近任务（不自动下载）：\n"+(rows.join("\n")||"暂无"));
     }
     if(item.text.startsWith("/get ")){
       const id=item.text.slice(5).trim();
