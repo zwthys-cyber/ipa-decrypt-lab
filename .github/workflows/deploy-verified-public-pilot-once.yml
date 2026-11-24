@@ -28,7 +28,7 @@ jobs:
           from pathlib import Path
           root=Path(os.environ["RUNNER_TEMP"])
           archive=root/"pilot-public.zip"
-          if archive.stat().st_size>131072 or hashlib.sha256(archive.read_bytes()).hexdigest()!="64417dbdbfcc94dc3e49db8b6637a6fea8d53a6c3b3ad2b8913d2f6e9c4a4285":
+          if archive.stat().st_size>131072 or hashlib.sha256(archive.read_bytes()).hexdigest()!="74a4603ce989605ca2bfb36527bcf1b7fa9d03785a633ccfba7c58012ca46f9b":
               raise SystemExit("public_artifact_digest_unconfirmed")
           with zipfile.ZipFile(archive) as z:
               for name in ("BUILDINFO","worker.mjs","SHA256SUMS"):
