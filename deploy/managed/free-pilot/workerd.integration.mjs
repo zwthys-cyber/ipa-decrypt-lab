@@ -123,7 +123,7 @@ test("workerd D1: registered Drive link is returned only in the owner's private 
         return handle(request,env,now,drive);
       }};
     `);
-    mf=new Miniflare({modules:true,scriptPath:entry,compatibilityDate:config.compatibility_date,
+    mf=new Miniflare({modules:true,modulesRoot:folder,scriptPath:entry,compatibilityDate:config.compatibility_date,
       cf:false,host:"127.0.0.1",port:0,d1Databases:{DB:"33333333-3333-4333-8333-333333333333"},
       bindings:{PILOT_ENABLED:"1",PILOT_LINK_ENABLED:"1",PILOT_OWNER_ID:String(owner),
         TELEGRAM_WEBHOOK_SECRET:secret,PILOT_LINK_ISSUER_TOKEN:issuer,
