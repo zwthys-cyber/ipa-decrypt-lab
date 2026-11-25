@@ -261,6 +261,95 @@ jobs:
           path: linux-archive-dist/
           retention-days: 7
           if-no-files-found: error
+  arm64_images:
+    if: github.event_name == 'pull_request' || inputs.build_images
+    needs: [synthetic, arm64_delivery_helper]
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: arm64-delivery-helper-${{ github.sha }}
+          path: arm64-delivery
+      - name: Verify the matching native ARM64 helper
+        run: |
+          test "$(uname -m)" = aarch64
+          cd arm64-delivery
+          sha256sum -c SHA256SUMS
+          grep -Fx "source_commit=$GITHUB_SHA" BUILDINFO
+          grep -Fx "architecture=arm64" BUILDINFO
+          LC_ALL=C readelf -h delivery-crypt | grep -E 'Machine:[[:space:]]+AArch64'
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        id: arm64_bot_api
+        with:
+          path: arm64-bot-api
+          key: telegram-bot-api-ubuntu24-arm64-e3e9dd8e5b3d7ab-v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        if: steps.arm64_bot_api.outputs.cache-hit != 'true'
+        with:
+          repository: tdlib/telegram-bot-api
+          ref: e3e9dd8e5b3d7ab8537cd5a10dc31d5ffa8f82d1
+          path: native-source/telegram-bot-api
+          submodules: recursive
+          persist-credentials: false
+      - name: Compile the pinned public Telegram Local Bot API
+        if: steps.arm64_bot_api.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gperf libssl-dev zlib1g-dev cmake ninja-build
+          source=native-source/telegram-bot-api
+          cmake -S "$source" -B build-arm64-bot-api -G Ninja -DCMAKE_BUILD_TYPE=Release -DTD_ENABLE_JNI=OFF
+          cmake --build build-arm64-bot-api --target telegram-bot-api --parallel 2
+          install -d arm64-bot-api
+          install -m 0755 build-arm64-bot-api/telegram-bot-api arm64-bot-api/
+          cp "$source/LICENSE_1_0.txt" arm64-bot-api/Telegram-Bot-API-LICENSE.txt
+          if [ -f "$source/td/LICENSE_1_0.txt" ]; then cp "$source/td/LICENSE_1_0.txt" arm64-bot-api/TDLib-LICENSE.txt; fi
+          printf '%s\n' 'e3e9dd8e5b3d7ab8537cd5a10dc31d5ffa8f82d1' > arm64-bot-api/UPSTREAM_COMMIT
+      - name: Verify the native Telegram executable before caching
+        run: |
+          grep -Fx 'e3e9dd8e5b3d7ab8537cd5a10dc31d5ffa8f82d1' arm64-bot-api/UPSTREAM_COMMIT
+          LC_ALL=C readelf -h arm64-bot-api/telegram-bot-api | grep -E 'Machine:[[:space:]]+AArch64'
+          arm64-bot-api/telegram-bot-api --version
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        if: steps.arm64_bot_api.outputs.cache-hit != 'true'
+        with:
+          path: arm64-bot-api
+          key: telegram-bot-api-ubuntu24-arm64-e3e9dd8e5b3d7ab-v1
+      - name: Assemble and check the ARM64 managed images without network access
+        run: |
+          bash deploy/managed/assemble-image-context.sh package arm64-delivery/delivery-crypt arm64-bot-api/telegram-bot-api
+          for role in controller state; do
+            image="ipazake-$role:$GITHUB_SHA"
+            docker build --platform linux/arm64 --target "$role" -f deploy/managed/Dockerfile -t "$image" package
+            test "$(docker image inspect --format '{{.Architecture}}' "$image")" = arm64
+            docker run --rm --network none --entrypoint /usr/bin/python3 "$image" \
+              -c 'import os,platform,sys; sys.path.insert(0,"/opt/ipazake/tools"); import telegram_daemon,tf_state_http; assert os.geteuid()==10001 and platform.machine()=="aarch64"'
+            if docker run --rm --network none "$image"; then echo missing_volume_not_rejected; exit 1; fi
+          done
+          docker run --rm --network none --entrypoint /opt/ipazake/bin/telegram-bot-api "ipazake-controller:$GITHUB_SHA" --version
+      - name: Package verified ARM64 images and source provenance
+        run: |
+          mkdir -p managed-images-arm64/licenses
+          for role in controller state; do
+            docker save "ipazake-$role:$GITHUB_SHA" | gzip -n > "managed-images-arm64/$role.tar.gz"
+          done
+          cp -R arm64-delivery/licenses/. managed-images-arm64/licenses/
+          cp arm64-bot-api/*LICENSE.txt managed-images-arm64/licenses/
+          printf 'source_commit=%s\narchitecture=arm64\nbot_api_commit=%s\n' "$GITHUB_SHA" "$(cat arm64-bot-api/UPSTREAM_COMMIT)" > managed-images-arm64/BUILDINFO
+          (
+            cd managed-images-arm64
+            { sha256sum controller.tar.gz state.tar.gz BUILDINFO; find licenses -type f -print0 | sort -z | xargs -0 sha256sum; } > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: managed-images-arm64-${{ github.sha }}
+          path: managed-images-arm64/
+          retention-days: 3
+          if-no-files-found: error
   images:
     # Not part of the zero-cost control-plane pilot; never provision a host here.
     if: github.event_name == 'workflow_dispatch' && inputs.build_images
@@ -288,15 +377,12 @@ jobs:
           cache-dependency-path: native-source/age/go.sum
       - name: Build public helper and assemble isolated context
         run: |
-          mkdir -p native-source/age/cmd/lab-delivery-crypt package/bin package/tools
+          mkdir -p native-source/age/cmd/lab-delivery-crypt amd64-delivery
           cp tools/delivery_crypto.go native-source/age/cmd/lab-delivery-crypt/main.go
           cp tests/delivery_crypto_test.go native-source/age/cmd/lab-delivery-crypt/main_test.go
-          (cd native-source/age && go test -p 2 -timeout 300s ./cmd/lab-delivery-crypt && CGO_ENABLED=0 go build -p 2 -trimpath -o ../../package/bin/delivery-crypt ./cmd/lab-delivery-crypt)
-          cp dist/telegram-bot-api package/bin/
-          for module in testflight_state tf_state_http account_profile version_catalog app_presentation version_request app_preflight capacity telegram_daemon multi_user persistent_journal telegram_controller telegram_runtime telegram_api telegram_menu telegram_queue task_progress delivery_scheduler ipa_audit managed_migration; do
-            cp "tools/$module.py" package/tools/
-          done
-          printf '%s\n' "$GITHUB_SHA" > package/SOURCE_COMMIT
+          (cd native-source/age && go test -p 2 -timeout 300s ./cmd/lab-delivery-crypt && CGO_ENABLED=0 go build -p 2 -trimpath -o ../../amd64-delivery/delivery-crypt ./cmd/lab-delivery-crypt)
+          bash deploy/managed/assemble-image-context.sh package amd64-delivery/delivery-crypt dist/telegram-bot-api
+
       - name: Build two images and check fail-closed startup
         run: |
           for role in controller state; do
