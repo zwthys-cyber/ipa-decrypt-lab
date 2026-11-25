@@ -1,4 +1,4 @@
-name: Verify hosted owner-only /get for the existing CircleCI IPA
+name: Send one verified ARM64 sample link to the Telegram owner
 on:
   push:
     branches: ['ops/configure-free-pilot-20261124']
@@ -55,15 +55,20 @@ jobs:
           node --check "$RUNNER_TEMP/drive-auth.mjs"
           node --check "$RUNNER_TEMP/worker-source.mjs"
           node --check "$RUNNER_TEMP/private-link.mjs"
-      - name: Verify the actual /get handler with hosted D1 and owner-only Drive
+      - name: Install the fixed-host SSH transport on the GitHub runner
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends sshpass
+      - name: Verify the private reply and send it once through the existing bot
         env:
           CF_PILOT_ACCOUNT_ID: ${{ secrets.CF_PILOT_ACCOUNT_ID }}
           CF_PILOT_API_TOKEN: ${{ secrets.CF_PILOT_API_TOKEN }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          SSHPASS: ${{ secrets.VPS_SSH_PASSWORD }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
         run: |
           set -eu
           umask 077
           python3 - <<'PY'
-          import base64,hashlib,http.client,json,os,re,secrets,ssl,subprocess,sys,time
+          import base64,hashlib,http.client,json,os,re,secrets,shlex,ssl,subprocess,sys,time
           from pathlib import Path
           HOST="ipazake-free-control-pilot.hahayesadd.workers.dev"
           WORKER="ipazake-free-control-pilot"
@@ -143,7 +148,74 @@ jobs:
               for method,path,status in (("GET","/",404),("POST","/telegram",503)):
                   code,raw=call(HOST,method,path,{"Content-Type":"application/json"} if method=="POST" else {},b"{}" if method=="POST" else None)
                   need(code==status and json.loads(raw)=={"ok":False},"pilot_endpoint_unexpected")
-          stage="input";old=None;new=None;attempted=False;success=False
+          def send_once(url):
+              known=Path(os.environ["RUNNER_TEMP"])/"telegram-smoke-known-hosts"
+              known.write_text(os.environ["VPS_KNOWN_HOSTS"]+"\n")
+              host=os.environ["VPS_HOST"]
+              need(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.-]{0,252}",host),"vps_host_invalid")
+              remote=r'''
+          import http.client,json,os,re,stat,subprocess,sys,time
+          from pathlib import Path
+
+          def require(condition):
+              if not condition: raise ValueError()
+
+          stage="preflight"
+          try:
+              root=Path("/var/lib/ipazake")
+              config=Path("/etc/ipazake/bot.json")
+              info=config.lstat()
+              require(stat.S_ISREG(info.st_mode) and info.st_uid==0 and not info.st_mode&0o077 and info.st_size<=32768)
+              values=json.loads(config.read_text())
+              token,owner=values["TELEGRAM_BOT_TOKEN"],values["TELEGRAM_OWNER_ID"]
+              require(re.fullmatch(r"[0-9]{5,20}:[A-Za-z0-9_-]{20,80}",token) and re.fullmatch(r"[1-9][0-9]{0,15}",owner))
+              payload=json.loads(sys.stdin.buffer.read(4096))
+              require(set(payload)=={"url"} and re.fullmatch(r"https://drive.google.com/file/d/[A-Za-z0-9_-]{10,160}/view",payload["url"]))
+              health=json.loads((root/"health.json").read_text())
+              require(health.get("state")=="ready" and 0<=time.time()-int(health["at"])<120)
+              require(subprocess.run(["systemctl","is-active","--quiet","ipazake.service"],timeout=5).returncode==0)
+              conn=http.client.HTTPConnection("127.0.0.1",8081,timeout=15)
+              conn.connect()
+              stage="before_send"
+              os.umask(0o077)
+              marker=root/".v02-circleci-ipa-link-send-once"
+              fd=os.open(marker,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+              with os.fdopen(fd,"w") as record:
+                  record.write("attempt_reserved\n")
+                  record.flush()
+                  os.fsync(record.fileno())
+              stage="send_attempted"
+              body=json.dumps({"chat_id":int(owner),"text":"v0.2 私有交付测试\nARM64 示例 IPA（5,495 字节）。请登录指定 Google 账号打开。",
+                  "reply_markup":{"inline_keyboard":[[{"text":"打开私有下载链接","url":payload["url"]}]]},
+                  "link_preview_options":{"is_disabled":True}},ensure_ascii=False).encode()
+              conn.request("POST","/bot"+token+"/sendMessage",body=body,headers={"Content-Type":"application/json"})
+              response=conn.getresponse()
+              raw=response.read(32769)
+              conn.close()
+              require(response.status==200 and len(raw)<=32768)
+              answer=json.loads(raw)
+              result=answer.get("result",{})
+              require(answer.get("ok") is True and result.get("chat",{}).get("id")==int(owner)
+                      and result["chat"].get("type")=="private" and type(result.get("message_id")) is int and result["message_id"]>0)
+              with marker.open("a") as record:
+                  record.write("telegram_acknowledged\n")
+              print("telegram_owner_link_acknowledged",flush=True)
+          except FileExistsError:
+              print("telegram_attempt_already_reserved",flush=True)
+              sys.exit(2)
+          except Exception:
+              print("telegram_"+stage+"_unconfirmed",flush=True)
+              sys.exit(2)
+          '''
+              result=subprocess.run(["sshpass","-e","ssh","-o","UserKnownHostsFile="+str(known),"-o","StrictHostKeyChecking=yes",
+                                     "-o","ConnectTimeout=12","-o","LogLevel=ERROR","root@"+host,"python3 -c "+shlex.quote(remote)],
+                                    input=json.dumps({"url":url}).encode(),capture_output=True,timeout=45)
+              receipt=result.stdout.decode("utf-8","replace").strip()
+              if receipt in {"telegram_attempt_already_reserved","telegram_preflight_unconfirmed","telegram_before_send_unconfirmed","telegram_send_attempted_unconfirmed"}:
+                  raise Stop(receipt)
+              need(result.returncode==0 and receipt=="telegram_owner_link_acknowledged","telegram_ssh_or_result_unconfirmed")
+              print("telegram_owner_link_acknowledged: sends=1; private_chat=true; link_preview_disabled=true",flush=True)
+          stage="input";old=None;new=None;attempted=False;success=False;pending_url=None
           try:
               account=os.environ.get("CF_PILOT_ACCOUNT_ID","");token=os.environ.get("CF_PILOT_API_TOKEN","")
               need(re.fullmatch(r"[0-9a-fA-F]{32}",account) and re.fullmatch(r"[A-Za-z0-9_-]{20,256}",token),"cloudflare_credentials_unavailable")
@@ -242,7 +314,7 @@ jobs:
               const denied=await getFor(actor-1,2);
               const deniedValue=await denied.json();
               if(denied.status!==200||JSON.stringify(deniedValue)!=='{"ok":true}'||lookupCount!==1)throw Error(stage);
-              return {ok:true,bytes:size,owner_only:true,other_sender_denied:true,d1_fixture_rows_remaining:0};
+              return {ok:true,bytes:size,owner_only:true,other_sender_denied:true,d1_fixture_rows_remaining:0,button_url:answer.reply_markup.inline_keyboard[0][0].url};
             } catch {
               return {ok:false,stage};
             }
@@ -345,8 +417,10 @@ jobs:
                   failure=value.get("stage")
                   if failure not in {"oauth","fixture","d1","owner_reply","other_sender"}:failure="unknown"
                   raise Stop("transfer_"+failure)
+              pending_url=value.pop("button_url",None)
+              need(isinstance(pending_url,str) and re.fullmatch(r"https://drive.google.com/file/d/[A-Za-z0-9_-]{10,160}/view",pending_url),"button_url_unconfirmed")
               need(status==200 and value=={"probe":"circleci-ipa-owner-get-v1","ok":True,"bytes":5495,"owner_only":True,"other_sender_denied":True,"d1_fixture_rows_remaining":0},"owner_get_unconfirmed")
-              print("circleci_ipa_owner_get_verified: bytes=5495; owner_reply=true; other_sender_denied=true; fixture_rows_remaining=0; telegram_request_sent=false",flush=True)
+              print("circleci_ipa_owner_get_verified: bytes=5495; owner_reply=true; other_sender_denied=true; fixture_rows_remaining=0",flush=True)
               success=True
           except Stop as exc:
               print("stopped_stage="+stage+"; reason="+str(exc),file=sys.stderr,flush=True)
@@ -364,5 +438,11 @@ jobs:
                   except Exception:
                       print("original_deployment_restore_unconfirmed; temporary probe expires automatically",file=sys.stderr,flush=True)
                       success=False
-              if not success:sys.exit(2)
+          if not success:sys.exit(2)
+          try:
+              send_once(pending_url)
+          except Stop as exc:
+              print(str(exc),file=sys.stderr,flush=True);sys.exit(2)
+          except Exception:
+              print("telegram_transport_unconfirmed",file=sys.stderr,flush=True);sys.exit(2)
           PY
