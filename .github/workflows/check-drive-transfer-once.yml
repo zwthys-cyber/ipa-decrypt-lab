@@ -1,4 +1,4 @@
-name: Verify one synthetic private Drive transfer
+name: Verify the existing private Drive smoke file
 on:
   push:
     branches: ['ops/configure-free-pilot-20261124']
@@ -23,7 +23,7 @@ jobs:
           umask 077
           gh api repos/zwthys-cyber/ipa-decrypt-lab/actions/artifacts/14937919929/zip > "$RUNNER_TEMP/pilot-public.zip"
           gh api 'repos/zwthys-cyber/ipa-decrypt-lab/contents/deploy/managed/free-pilot/drive-auth.mjs?ref=2d3560232bc6f0b7d831a6adf5eb7b861e0c5c68' > "$RUNNER_TEMP/public-auth.json"
-          gh api 'repos/zwthys-cyber/ipa-decrypt-lab/contents/deploy/managed/free-pilot/drive-smoke.mjs?ref=2d3560232bc6f0b7d831a6adf5eb7b861e0c5c68' > "$RUNNER_TEMP/public-smoke.json"
+          gh api 'repos/zwthys-cyber/ipa-decrypt-lab/contents/deploy/managed/free-pilot/drive-smoke.mjs?ref=4cf32a41ea7fdabeca23edb80fa2d2a5743cff16' > "$RUNNER_TEMP/public-smoke.json"
           python3 - <<'PY'
           import base64,hashlib,json,os,zipfile
           from pathlib import Path
@@ -42,14 +42,14 @@ jobs:
           (root/"drive-auth.mjs").write_bytes(code)
           meta=json.loads((root/"public-smoke.json").read_text())
           code=base64.b64decode(meta["content"])
-          assert hashlib.sha1(b"blob "+str(len(code)).encode()+b"\0"+code).hexdigest()=="174ee271f61231bb6cb71d599072fcc188247231"
+          assert hashlib.sha1(b"blob "+str(len(code)).encode()+b"\0"+code).hexdigest()=="4d97c395e199e62de19e37f105a3fd8a08332cfe"
           (root/"drive-smoke.mjs").write_bytes(code)
           print("public_source_verified")
           PY
           node --check "$RUNNER_TEMP/worker.mjs"
           node --check "$RUNNER_TEMP/drive-auth.mjs"
           node --check "$RUNNER_TEMP/drive-smoke.mjs"
-      - name: One bounded synthetic transfer in existing isolated Worker
+      - name: Read-only verification of the existing synthetic fixture
         env:
           CF_PILOT_ACCOUNT_ID: ${{ secrets.CF_PILOT_ACCOUNT_ID }}
           CF_PILOT_API_TOKEN: ${{ secrets.CF_PILOT_API_TOKEN }}
@@ -170,7 +170,7 @@ jobs:
             const actual=[...new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(candidate)))].map(x=>x.toString(16).padStart(2,"0")).join("");
             let diff=0;for(let i=0;i<64;i++)diff|=actual.charCodeAt(i)^expected.charCodeAt(i);
             if(diff)return reply(404,{ok:false});
-            if(request.method==="GET")return reply(200,{probe:"synthetic-transfer-v1",ready:true});
+            if(request.method==="GET")return reply(200,{probe:"synthetic-fixture-inspection-v1",ready:true});
             let reason="oauth_network";
             const send=async(url,init)=>{
               if(url!=="https://oauth2.googleapis.com/token"){
@@ -205,9 +205,9 @@ jobs:
               else reason="oauth_token_validation";
               return new Response(bytes,{status:r.status,headers:{"Content-Type":"application/json"}});
             };
-            const result=await smokeTransfer(env,send);
+            const result=await smokeTransfer(env,send,{allowCreate:false});
             if(!result.ok&&result.stage==="oauth")result.stage=reason;
-            return reply(result.ok?200:503,{probe:"synthetic-transfer-v1",...result});
+            return reply(result.ok?200:503,{probe:"synthetic-fixture-inspection-v1",...result});
           }};
           '''.replace("__HASH__",digest).replace("__EXPIRY__",str(expires)).encode()
               files=Path(os.environ["RUNNER_TEMP"])
@@ -216,7 +216,7 @@ jobs:
               # Inherit existing Cloudflare bindings in place. No secret value is fetched or exported.
               metadata={"main_module":"probe.mjs","compatibility_date":DATE,
                         "bindings":[{"name":name,"type":"inherit","version_id":old} for name in sorted(NAMES)],
-                        "annotations":{"workers/message":"Expiring one-file synthetic transfer verification; zero traffic"}}
+                        "annotations":{"workers/message":"Expiring read-only synthetic fixture verification; zero traffic"}}
               metadata["modules"]=[
                   {"name":name,"content_type":"application/javascript+module",
                    "content_base64":base64.b64encode((files/name).read_bytes()).decode("ascii")}
@@ -241,24 +241,24 @@ jobs:
                   if status==404:
                       time.sleep(2);continue
                   value=json.loads(raw)
-                  need(status==200 and value=={"probe":"synthetic-transfer-v1","ready":True},"probe_readiness_unconfirmed")
+                  need(status==200 and value=={"probe":"synthetic-fixture-inspection-v1","ready":True},"probe_readiness_unconfirmed")
                   ready=True
                   break
               need(ready,"probe_routing_unconfirmed")
-              # Exactly one POST. Never retry an ambiguous write, and never delete any file.
-              stage="single_synthetic_transfer"
+              # Exactly one inspection. The probe cannot create a Drive file.
+              stage="existing_synthetic_fixture"
               status,raw=call(HOST,"POST","/__drive_readonly_probe",headers,b"")
               value=json.loads(raw)
-              need(value.get("probe")=="synthetic-transfer-v1","transfer_outcome_unconfirmed")
+              need(value.get("probe")=="synthetic-fixture-inspection-v1","transfer_outcome_unconfirmed")
               if status==503:
                   failure=value.get("stage")
-                  if failure not in {"configuration","oauth","oauth_network","oauth_illegal_invocation","oauth_timeout","oauth_dns","oauth_tls","oauth_connection_lost","oauth_redirect","oauth_response","oauth_scope_missing","oauth_scope_mismatch","oauth_token_validation","google_invalid_grant","google_invalid_client","google_unauthorized_client","google_invalid_scope","google_invalid_request","google_access_denied","google_admin_policy_enforced","google_temporarily_unavailable","google_other_error","quota_request","quota_response","quota_api_forbidden","quota_api_unauthorized","quota_api_limited","quota_api_unavailable","account_mismatch","quota_unavailable","quota_not_free_compatible","quota_insufficient","existing_fixture","generate_id","upload_start","upload","metadata","acl","download"}:failure="unknown"
-                  print("synthetic_file_may_exist="+str(value.get("upload_may_exist") is True).lower(),flush=True)
+                  if failure not in {"configuration","oauth","oauth_network","oauth_illegal_invocation","oauth_timeout","oauth_dns","oauth_tls","oauth_connection_lost","oauth_redirect","oauth_response","oauth_scope_missing","oauth_scope_mismatch","oauth_token_validation","google_invalid_grant","google_invalid_client","google_unauthorized_client","google_invalid_scope","google_invalid_request","google_access_denied","google_admin_policy_enforced","google_temporarily_unavailable","google_other_error","quota_request","quota_response","quota_api_forbidden","quota_api_unauthorized","quota_api_limited","quota_api_unavailable","account_mismatch","quota_unavailable","quota_not_free_compatible","quota_insufficient","existing_fixture","fixture_missing","metadata","metadata_missing","metadata_identity","metadata_owner","metadata_size","metadata_digest_missing","metadata_digest_mismatch","metadata_mime","metadata_resource_key","acl","download"}:failure="unknown"
+                  need(value.get("upload_may_exist") is False,"unexpected_upload_state")
                   raise Stop("transfer_"+failure)
               fixture=("ipazake free pilot transfer verification; synthetic data only.\n"+"-"*1024).encode()[:1024]
               expected_fixture_hash=hashlib.sha256(fixture).hexdigest()
-              need(status==200 and value.get("ok") is True and value.get("owner_only") is True and value.get("bytes")==1024 and value.get("sha256")==expected_fixture_hash,"transfer_unconfirmed")
-              print("synthetic_transfer_verified: bytes=1024; owner_only=true; sha256_match=true; newly_created="+str(value.get("created") is True).lower(),flush=True)
+              need(status==200 and value.get("ok") is True and value.get("owner_only") is True and value.get("bytes")==1024 and value.get("created") is False and value.get("sha256")==expected_fixture_hash,"transfer_unconfirmed")
+              print("existing_synthetic_fixture_verified: bytes=1024; owner_only=true; sha256_match=true; newly_created=false",flush=True)
               success=True
           except Stop as exc:
               print("stopped_stage="+stage+"; reason="+str(exc),file=sys.stderr,flush=True)
@@ -278,7 +278,3 @@ jobs:
                       success=False
               if not success:sys.exit(2)
           PY
-
-# Fresh owner-authorized personal-mode configuration confirmed; retain the single-write guard.
-
-# Recheck configuration after owner follow-up; no writes unless the strict preflight passes.
