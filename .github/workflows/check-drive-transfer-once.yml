@@ -1,4 +1,4 @@
-name: Verify the existing CircleCI ARM64 sample in Drive
+name: Verify hosted owner-only /get for the existing CircleCI IPA
 on:
   push:
     branches: ['ops/configure-free-pilot-20261124']
@@ -23,10 +23,10 @@ jobs:
           umask 077
           gh api repos/zwthys-cyber/ipa-decrypt-lab/actions/artifacts/14937919929/zip > "$RUNNER_TEMP/pilot-public.zip"
           gh api 'repos/zwthys-cyber/ipa-decrypt-lab/contents/deploy/managed/free-pilot/drive-auth.mjs?ref=2d3560232bc6f0b7d831a6adf5eb7b861e0c5c68' > "$RUNNER_TEMP/public-auth.json"
-          gh api 'repos/zwthys-cyber/ipa-decrypt-lab/contents/deploy/managed/free-pilot/drive-smoke.mjs?ref=c05329d6ffb51b4ed03b6e62dd942c2561545dc3' > "$RUNNER_TEMP/public-smoke.json"
+          gh api 'repos/zwthys-cyber/ipa-decrypt-lab/contents/deploy/managed/free-pilot/worker.mjs?ref=19b21edbfe041de77ca8cf45f3db41e4d076fdab' > "$RUNNER_TEMP/public-worker-source.json"
           gh api 'repos/zwthys-cyber/ipa-decrypt-lab/contents/deploy/managed/free-pilot/private-link.mjs?ref=c05329d6ffb51b4ed03b6e62dd942c2561545dc3' > "$RUNNER_TEMP/public-link.json"
           python3 - <<'PY'
-          import base64,hashlib,io,json,os,urllib.parse,urllib.request,zipfile
+          import base64,hashlib,json,os,zipfile
           from pathlib import Path
           root=Path(os.environ["RUNNER_TEMP"])
           archive=root/"pilot-public.zip"
@@ -41,40 +41,10 @@ jobs:
           code=base64.b64decode(meta["content"])
           assert hashlib.sha1(b"blob "+str(len(code)).encode()+b"\0"+code).hexdigest()=="539982a5366bdb83c88c467e8ef4383e1cfb61a9"
           (root/"drive-auth.mjs").write_bytes(code)
-          meta=json.loads((root/"public-smoke.json").read_text())
+          meta=json.loads((root/"public-worker-source.json").read_text())
           code=base64.b64decode(meta["content"])
-          assert hashlib.sha1(b"blob "+str(len(code)).encode()+b"\0"+code).hexdigest()=="a9eb3dbb75424cb87fc014d7b1bec55c01f737c0"
-          def bounded(url,limit):
-              with urllib.request.urlopen(url,timeout=12) as response:
-                  payload=response.read(limit+1)
-              assert len(payload)<=limit
-              return payload
-          api="https://circleci.com/api/v2/project/circleci/Nt3fThGbrJQiJ92BdY1epw/4qN2FckytyntefdBmqLhvj/7/artifacts"
-          items=json.loads(bounded(api,65536))["items"]
-          matches=[item["url"] for item in items if item["path"]=="arm64-ios-sample/ARMSample-unsigned.ipa"]
-          assert len(matches)==1
-          url=urllib.parse.urlsplit(matches[0])
-          assert url.scheme=="https" and url.netloc=="output.circle-artifacts.com"
-          sample=bounded(matches[0],8192)
-          assert len(sample)==5495 and hashlib.sha256(sample).hexdigest()=="afea265d6b8a3f05ec66031f98a9c88f2c7e18f65d10ef18438315a1d0d28ab0"
-          with zipfile.ZipFile(io.BytesIO(sample)) as archive:
-              assert archive.testzip() is None
-              assert set(archive.namelist())=={"Payload/","Payload/ARMSample.app/","Payload/ARMSample.app/Info.plist","Payload/ARMSample.app/ARMSample","Payload/ARMSample.app/PkgInfo"}
-          script=code.decode("utf-8")
-          replacements=[
-              ('export const NAME="ipazake-free-pilot-smoke-20261124.txt";',
-               'export const NAME="ARMSample-arm64-circleci-7.ipa";'),
-              ('export const SIZE=1024;', 'export const SIZE=5495;'),
-              (next(line for line in script.splitlines() if line.startswith("const FIXTURE=")),
-               'const FIXTURE=Uint8Array.from(atob('+json.dumps(base64.b64encode(sample).decode("ascii"))+'), value=>value.charCodeAt(0));'),
-              ('const MARKER="free-pilot-smoke-v1";', 'const MARKER="circleci-arm64-sample-v1";'),
-              ('["application/octet-stream","text/plain"].includes(file.mimeType)',
-               '(typeof file.mimeType==="string" && file.mimeType.length>0 && !file.mimeType.startsWith("application/vnd.google-apps."))')
-          ]
-          for previous,replacement in replacements:
-              assert script.count(previous)==1
-              script=script.replace(previous,replacement)
-          (root/"drive-smoke.mjs").write_text(script)
+          assert hashlib.sha1(b"blob "+str(len(code)).encode()+b"\0"+code).hexdigest()=="fabbac2a8b2324be817a0abc70447a356811008d"
+          (root/"worker-source.mjs").write_bytes(code)
           meta=json.loads((root/"public-link.json").read_text())
           code=base64.b64decode(meta["content"])
           assert hashlib.sha1(b"blob "+str(len(code)).encode()+b"\0"+code).hexdigest()=="59e382137fc5ea4a00646cb7cf70f0b853a361b5"
@@ -83,9 +53,9 @@ jobs:
           PY
           node --check "$RUNNER_TEMP/worker.mjs"
           node --check "$RUNNER_TEMP/drive-auth.mjs"
-          node --check "$RUNNER_TEMP/drive-smoke.mjs"
+          node --check "$RUNNER_TEMP/worker-source.mjs"
           node --check "$RUNNER_TEMP/private-link.mjs"
-      - name: Read back the existing pinned CircleCI IPA
+      - name: Verify the actual /get handler with hosted D1 and owner-only Drive
         env:
           CF_PILOT_ACCOUNT_ID: ${{ secrets.CF_PILOT_ACCOUNT_ID }}
           CF_PILOT_API_TOKEN: ${{ secrets.CF_PILOT_API_TOKEN }}
@@ -190,12 +160,93 @@ jobs:
               expires=int(time.time())+240
               public_probe=r'''
           import base from "./worker.mjs";
-          import {smokeTransfer} from "./drive-smoke.mjs";
+          import {handle} from "./worker-source.mjs";
+          import {accessForRequest} from "./drive-auth.mjs";
+          import {LINK_SQL,WINDOW} from "./private-link.mjs";
           const expected="__HASH__";
           const expires=__EXPIRY__;
           const host="ipazake-free-control-pilot.hahayesadd.workers.dev";
           function reply(status,obj){return Response.json(obj,{status,headers:{"Cache-Control":"no-store"}})}
           function fail(stage){return reply(503,{probe:"drive-readonly-v1",ok:false,stage})}
+          async function verifyGet(env,send) {
+            const name="ARMSample-arm64-circleci-7.ipa";
+            const digest="afea265d6b8a3f05ec66031f98a9c88f2c7e18f65d10ef18438315a1d0d28ab0";
+            const size=5495;
+            let stage="oauth";
+            try {
+              const token=await accessForRequest(env,send);
+              const googleRead=(url,init)=> {
+                const u=new URL(url);
+                if(u.origin!=="https://www.googleapis.com"||!u.pathname.startsWith("/drive/v3/")||init.method!=="GET")
+                  throw Error("unexpected_provider_request");
+                return fetch(url,init);
+              };
+              stage="fixture";
+              const search=new URLSearchParams({q:"trashed = false and name = '"+name+"' and appProperties has { key='pilot_fixture' and value='circleci-arm64-sample-v1' }",fields:"nextPageToken,files(id)",pageSize:"2"});
+              const listing=await googleRead("https://www.googleapis.com/drive/v3/files?"+search,{
+                method:"GET",redirect:"manual",signal:AbortSignal.timeout(10000),headers:{Authorization:"Bearer "+token}
+              });
+              if(listing.status!==200)throw Error(stage);
+              const list=await listing.json();
+              if(list.nextPageToken||!Array.isArray(list.files)||list.files.length!==1||!/^[A-Za-z0-9_-]{10,160}$/.test(list.files[0]?.id||""))
+                throw Error(stage);
+              const file=list.files[0].id;
+
+              stage="d1";
+              const actor=999999999999997;
+              const owner=String(actor);
+              const job="pilot_"+crypto.randomUUID().replaceAll("-","");
+              const now=Math.floor(Date.now()/1000);
+              const expires=now+WINDOW;
+              const db=env.DB;
+              const [insert,link,read,removeLink,removeJob,residue]=await db.batch([
+                db.prepare("INSERT INTO pilot_jobs(job_id,owner_id,update_id,app_id,region,day,created_at,state) VALUES(?,?,?,?,?,?,?,'waiting_for_runtime')").bind(job,owner,Date.now(),"123456","default",Math.floor(now/86400),now),
+                db.prepare(LINK_SQL.register).bind(file,name,size,digest,expires,job,owner),
+                db.prepare(LINK_SQL.lookup).bind(job,owner,now),
+                db.prepare("DELETE FROM pilot_links WHERE job_id=? AND owner_id=? AND file_id=?").bind(job,owner,file),
+                db.prepare("DELETE FROM pilot_jobs WHERE job_id=? AND owner_id=?").bind(job,owner),
+                db.prepare("SELECT (SELECT count(*) FROM pilot_jobs WHERE job_id=?)+(SELECT count(*) FROM pilot_links WHERE job_id=?) AS remaining").bind(job,job)
+              ]);
+              const row=read.results?.[0];
+              if(![insert,link,read,removeLink,removeJob,residue].every(item=>item.success===true)||
+                 ![insert,link,removeLink,removeJob].every(item=>item.meta.changes===1)||
+                 read.results.length!==1||row.file_id!==file||row.filename!==name||row.bytes!==size||row.sha256!==digest||
+                 row.expires_at!==expires||residue.results?.[0]?.remaining!==0)throw Error(stage);
+
+              stage="owner_reply";
+              const secret="test".repeat(12);
+              let lookupCount=0;
+              const receipt={prepare(sql){
+                if(sql!==LINK_SQL.lookup)throw Error("unexpected_query");
+                return {bind(id,user,at){
+                  if(id!==job||user!==owner||at!==now)throw Error("unexpected_binding");
+                  return {async first(){lookupCount++;return row;}};
+                }};
+              }};
+              const permissions={DB:receipt,PILOT_ENABLED:"1",PILOT_LINK_ENABLED:"1",PILOT_OWNER_ID:owner,
+                TELEGRAM_WEBHOOK_SECRET:secret,PILOT_DRIVE_ACCESS_TOKEN:token,
+                PILOT_DRIVE_RECIPIENT_EMAIL:env.PILOT_DRIVE_RECIPIENT_EMAIL};
+              function getFor(user,update){
+                const request=new Request("https://pilot.invalid/telegram",{method:"POST",
+                  headers:{"content-type":"application/json","x-telegram-bot-api-secret-token":secret},
+                  body:JSON.stringify({update_id:update,message:{date:now,chat:{id:user,type:"private"},from:{id:user,is_bot:false},text:"/get "+job}})});
+                return handle(request,permissions,now,googleRead);
+              }
+              const response=await getFor(actor,1);
+              const answer=await response.json();
+              if(response.status!==200||answer.method!=="sendMessage"||answer.chat_id!==actor||
+                 answer.reply_markup?.inline_keyboard?.[0]?.[0]?.url!=="https://drive.google.com/file/d/"+file+"/view"||
+                 !answer.text?.includes(digest)||answer.link_preview_options?.is_disabled!==true||lookupCount!==1)
+                throw Error(stage);
+              stage="other_sender";
+              const denied=await getFor(actor-1,2);
+              const deniedValue=await denied.json();
+              if(denied.status!==200||JSON.stringify(deniedValue)!=='{"ok":true}'||lookupCount!==1)throw Error(stage);
+              return {ok:true,bytes:size,owner_only:true,other_sender_denied:true,d1_fixture_rows_remaining:0};
+            } catch {
+              return {ok:false,stage};
+            }
+          }
           export default {async fetch(request,env,ctx){
             const u=new URL(request.url);
             if(u.pathname!=="/__drive_readonly_probe")return base.fetch(request,env,ctx);
@@ -206,7 +257,7 @@ jobs:
             const actual=[...new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(candidate)))].map(x=>x.toString(16).padStart(2,"0")).join("");
             let diff=0;for(let i=0;i<64;i++)diff|=actual.charCodeAt(i)^expected.charCodeAt(i);
             if(diff)return reply(404,{ok:false});
-            if(request.method==="GET")return reply(200,{probe:"circleci-ipa-roundtrip-v1",ready:true});
+            if(request.method==="GET")return reply(200,{probe:"circleci-ipa-owner-get-v1",ready:true});
             let reason="oauth_network";
             const send=async(url,init)=>{
               if(url!=="https://oauth2.googleapis.com/token"){
@@ -241,9 +292,9 @@ jobs:
               else reason="oauth_token_validation";
               return new Response(bytes,{status:r.status,headers:{"Content-Type":"application/json"}});
             };
-            const result=await smokeTransfer(env,send,{allowCreate:false});
+            const result=await verifyGet(env,send);
             if(!result.ok&&result.stage==="oauth")result.stage=reason;
-            return reply(result.ok?200:503,{probe:"circleci-ipa-roundtrip-v1",...result});
+            return reply(result.ok?200:503,{probe:"circleci-ipa-owner-get-v1",...result});
           }};
           '''.replace("__HASH__",digest).replace("__EXPIRY__",str(expires)).encode()
               files=Path(os.environ["RUNNER_TEMP"])
@@ -252,11 +303,11 @@ jobs:
               # Inherit existing Cloudflare bindings in place. No secret value is fetched or exported.
               metadata={"main_module":"probe.mjs","compatibility_date":DATE,
                         "bindings":[{"name":name,"type":"inherit","version_id":old} for name in sorted(NAMES)],
-                        "annotations":{"workers/message":"Expiring CircleCI sample IPA round trip; zero traffic"}}
+                        "annotations":{"workers/message":"Expiring owner-only CircleCI /get test; zero traffic"}}
               metadata["modules"]=[
                   {"name":name,"content_type":"application/javascript+module",
                    "content_base64":base64.b64encode((files/name).read_bytes()).decode("ascii")}
-                  for name in ("probe.mjs","worker.mjs","drive-auth.mjs","drive-smoke.mjs","private-link.mjs")
+                  for name in ("probe.mjs","worker.mjs","drive-auth.mjs","worker-source.mjs","private-link.mjs")
               ]
               body=json.dumps(metadata,separators=(",",":")).encode()
               stage="upload_probe_version"
@@ -277,26 +328,25 @@ jobs:
                   if status==404:
                       time.sleep(2);continue
                   value=json.loads(raw)
-                  need(status==200 and value=={"probe":"circleci-ipa-roundtrip-v1","ready":True},"probe_readiness_unconfirmed")
+                  need(status==200 and value=={"probe":"circleci-ipa-owner-get-v1","ready":True},"probe_readiness_unconfirmed")
                   ready=True
                   break
               need(ready,"probe_routing_unconfirmed")
-              # Read the existing fixture only; no retry of the upload.
-              stage="circleci_sample_roundtrip"
+              # The isolated D1 transaction removes its fixtures before returning the receipt.
+              stage="circleci_sample_owner_get"
               status,raw=call(HOST,"POST","/__drive_readonly_probe",headers,b"")
               value=json.loads(raw)
-              if value.get("probe")!="circleci-ipa-roundtrip-v1":
+              if value.get("probe")!="circleci-ipa-owner-get-v1":
                   print("probe_http_status="+str(status),flush=True)
                   code=value.get("code")
                   if type(code) is int and 0<code<10000: print("probe_error_code="+str(code),flush=True)
                   raise Stop("transfer_outcome_unconfirmed")
               if status==503:
                   failure=value.get("stage")
-                  if failure not in {"configuration","oauth","oauth_network","oauth_illegal_invocation","oauth_timeout","oauth_dns","oauth_tls","oauth_connection_lost","oauth_redirect","oauth_response","oauth_scope_missing","oauth_scope_mismatch","oauth_token_validation","google_invalid_grant","google_invalid_client","google_unauthorized_client","google_invalid_scope","google_invalid_request","google_access_denied","google_admin_policy_enforced","google_temporarily_unavailable","google_other_error","quota_request","quota_response","quota_api_forbidden","quota_api_unauthorized","quota_api_limited","quota_api_unavailable","account_mismatch","quota_unavailable","quota_not_free_compatible","quota_insufficient","existing_fixture","fixture_missing","metadata","metadata_missing","metadata_identity","metadata_owner","metadata_size","metadata_digest_missing","metadata_digest_mismatch","metadata_mime","metadata_resource_key","acl","download","private_link","hosted_d1"}:failure="unknown"
-                  need(value.get("upload_may_exist") is False,"unexpected_upload_state")
+                  if failure not in {"oauth","fixture","d1","owner_reply","other_sender"}:failure="unknown"
                   raise Stop("transfer_"+failure)
-              need(status==200 and value.get("ok") is True and value.get("owner_only") is True and value.get("bytes")==5495 and value.get("created") is False and value.get("sha256")=="afea265d6b8a3f05ec66031f98a9c88f2c7e18f65d10ef18438315a1d0d28ab0","transfer_unconfirmed")
-              print("circleci_ipa_roundtrip_verified: bytes=5495; owner_only=true; sha256_match=true; newly_created=false",flush=True)
+              need(status==200 and value=={"probe":"circleci-ipa-owner-get-v1","ok":True,"bytes":5495,"owner_only":True,"other_sender_denied":True,"d1_fixture_rows_remaining":0},"owner_get_unconfirmed")
+              print("circleci_ipa_owner_get_verified: bytes=5495; owner_reply=true; other_sender_denied=true; fixture_rows_remaining=0; telegram_request_sent=false",flush=True)
               success=True
           except Stop as exc:
               print("stopped_stage="+stage+"; reason="+str(exc),file=sys.stderr,flush=True)
