@@ -222,9 +222,13 @@ class Drive:
     def verify(self,record,file_id):
         need(isinstance(file_id,str) and FILE.fullmatch(file_id))
         f=self.get("files/"+file_id+"?fields="+FIELDS)
+        mime_type=f.get("mimeType")
+        # Drive may relabel uploaded bytes. The digest identifies the content.
         need(f.get("id")==file_id and f.get("name")==record["filename"] and f.get("size")==str(record["bytes"]) and
              f.get("sha256Checksum")==record["sha256"] and f.get("trashed") is False and f.get("ownedByMe") is True and
-             f.get("mimeType")=="application/octet-stream" and not f.get("resourceKey"),"file_integrity_unverified")
+             isinstance(mime_type,str) and mime_type.strip() and
+             not mime_type.strip().lower().startswith("application/vnd.google-apps.") and
+             not f.get("resourceKey"),"file_integrity_unverified")
         p=self.get("files/"+file_id+"/permissions?pageSize=100&fields=nextPageToken,permissions(type,role,emailAddress,deleted)")
         permissions=p.get("permissions")
         need(not p.get("nextPageToken") and isinstance(permissions,list) and len(permissions)==1,"file_not_owner_only")

@@ -20,6 +20,7 @@ class Fake:
         self.record=record
         self.offset=0;self.starts=0;self.interrupt=False;self.bad_hash=False
         self.full=False;self.share=False;self.register_calls=0
+        self.mime_type="application/octet-stream"
     def reply(self,value,status=200):return status,{},u.encode(value)
     def __call__(self,method,url,headers,body):
         if "/about?" in url:
@@ -46,7 +47,7 @@ class Fake:
         if url.startswith(u.GOOGLE+"/drive/v3/files/"+FILE+"?"):
             return self.reply({"id":FILE,"name":self.record["filename"],"size":str(self.record["bytes"]),
                 "sha256Checksum":"0"*64 if self.bad_hash else self.record["sha256"],"trashed":False,
-                "ownedByMe":True,"mimeType":"application/octet-stream"})
+                "ownedByMe":True,"mimeType":self.mime_type})
         if method=="POST" and url==ORIGIN+"/v1/link-register":
             self.register_calls+=1
             assert headers["Authorization"]=="Bearer "+"I"*48
@@ -93,6 +94,20 @@ class Tests(unittest.TestCase):
         self.fake.bad_hash=False;self.fake.share=True
         with self.assertRaisesRegex(u.Stop,"file_not_owner_only"):self.run_upload()
         self.assertEqual(self.fake.starts,1)
+    def test_metadata_recheck_recovers_same_upload_with_drive_media_type(self):
+        for mime_type in ("application/vnd.google-apps.shortcut", "", None):
+            with self.subTest(mime_type=mime_type):
+                self.fake.mime_type=mime_type
+                with self.assertRaisesRegex(u.Stop,"file_integrity_unverified"):
+                    self.run_upload()
+        self.assertEqual(self.journal.read()["stage"],"uploaded")
+
+        self.fake.mime_type="text/plain"
+        receipt,state=self.run_upload()
+        self.assertEqual(receipt["file_id"],FILE)
+        self.assertEqual(state["stage"],"uploaded")
+        self.assertEqual(self.fake.starts,1)
+
     def test_start_unknown_never_recreated(self):
         self.journal.write({"job_id":JOB,"record":self.record,"owner":EMAIL,"stage":"start_intent"})
         with self.assertRaisesRegex(u.Stop,"do_not_recreate"):self.run_upload()
@@ -234,6 +249,7 @@ class ArchiveUploadTests(unittest.TestCase):
             record=u.validate_file(stream,self.path.name)
             self.assertEqual(record["sha256"],hashlib.sha256(self.raw).hexdigest())
             fake=Capture(record);fake.interrupt=True
+            fake.mime_type="application/zip"
             drive=u.Drive(TOKEN,EMAIL,fake)
             with self.journal,patch.object(u,"CHUNK",256*1024):
                 with self.assertRaisesRegex(u.Stop,"network_outcome_unknown"):
