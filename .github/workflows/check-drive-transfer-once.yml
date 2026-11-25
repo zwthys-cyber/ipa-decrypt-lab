@@ -1,4 +1,4 @@
-name: Verify the existing private Drive smoke file
+name: Verify the existing Drive fixture with the private link verifier
 on:
   push:
     branches: ['ops/configure-free-pilot-20261124']
@@ -23,7 +23,8 @@ jobs:
           umask 077
           gh api repos/zwthys-cyber/ipa-decrypt-lab/actions/artifacts/14937919929/zip > "$RUNNER_TEMP/pilot-public.zip"
           gh api 'repos/zwthys-cyber/ipa-decrypt-lab/contents/deploy/managed/free-pilot/drive-auth.mjs?ref=2d3560232bc6f0b7d831a6adf5eb7b861e0c5c68' > "$RUNNER_TEMP/public-auth.json"
-          gh api 'repos/zwthys-cyber/ipa-decrypt-lab/contents/deploy/managed/free-pilot/drive-smoke.mjs?ref=e8c77971df4368deb4ebf68b9684ea5939d8c645' > "$RUNNER_TEMP/public-smoke.json"
+          gh api 'repos/zwthys-cyber/ipa-decrypt-lab/contents/deploy/managed/free-pilot/drive-smoke.mjs?ref=c05329d6ffb51b4ed03b6e62dd942c2561545dc3' > "$RUNNER_TEMP/public-smoke.json"
+          gh api 'repos/zwthys-cyber/ipa-decrypt-lab/contents/deploy/managed/free-pilot/private-link.mjs?ref=c05329d6ffb51b4ed03b6e62dd942c2561545dc3' > "$RUNNER_TEMP/public-link.json"
           python3 - <<'PY'
           import base64,hashlib,json,os,zipfile
           from pathlib import Path
@@ -42,13 +43,18 @@ jobs:
           (root/"drive-auth.mjs").write_bytes(code)
           meta=json.loads((root/"public-smoke.json").read_text())
           code=base64.b64decode(meta["content"])
-          assert hashlib.sha1(b"blob "+str(len(code)).encode()+b"\0"+code).hexdigest()=="466aa3f720a775fb02064d1ad2767568f50fd02a"
+          assert hashlib.sha1(b"blob "+str(len(code)).encode()+b"\0"+code).hexdigest()=="a9eb3dbb75424cb87fc014d7b1bec55c01f737c0"
           (root/"drive-smoke.mjs").write_bytes(code)
+          meta=json.loads((root/"public-link.json").read_text())
+          code=base64.b64decode(meta["content"])
+          assert hashlib.sha1(b"blob "+str(len(code)).encode()+b"\0"+code).hexdigest()=="59e382137fc5ea4a00646cb7cf70f0b853a361b5"
+          (root/"private-link.mjs").write_bytes(code)
           print("public_source_verified")
           PY
           node --check "$RUNNER_TEMP/worker.mjs"
           node --check "$RUNNER_TEMP/drive-auth.mjs"
           node --check "$RUNNER_TEMP/drive-smoke.mjs"
+          node --check "$RUNNER_TEMP/private-link.mjs"
       - name: Read-only verification of the existing synthetic fixture
         env:
           CF_PILOT_ACCOUNT_ID: ${{ secrets.CF_PILOT_ACCOUNT_ID }}
@@ -205,7 +211,7 @@ jobs:
               else reason="oauth_token_validation";
               return new Response(bytes,{status:r.status,headers:{"Content-Type":"application/json"}});
             };
-            const result=await smokeTransfer(env,send,{allowCreate:false});
+            const result=await smokeTransfer(env,send,{allowCreate:false,verifyLink:true});
             if(!result.ok&&result.stage==="oauth")result.stage=reason;
             return reply(result.ok?200:503,{probe:"synthetic-fixture-inspection-v1",...result});
           }};
@@ -220,7 +226,7 @@ jobs:
               metadata["modules"]=[
                   {"name":name,"content_type":"application/javascript+module",
                    "content_base64":base64.b64encode((files/name).read_bytes()).decode("ascii")}
-                  for name in ("probe.mjs","worker.mjs","drive-auth.mjs","drive-smoke.mjs")
+                  for name in ("probe.mjs","worker.mjs","drive-auth.mjs","drive-smoke.mjs","private-link.mjs")
               ]
               body=json.dumps(metadata,separators=(",",":")).encode()
               stage="upload_probe_version"
@@ -252,13 +258,13 @@ jobs:
               need(value.get("probe")=="synthetic-fixture-inspection-v1","transfer_outcome_unconfirmed")
               if status==503:
                   failure=value.get("stage")
-                  if failure not in {"configuration","oauth","oauth_network","oauth_illegal_invocation","oauth_timeout","oauth_dns","oauth_tls","oauth_connection_lost","oauth_redirect","oauth_response","oauth_scope_missing","oauth_scope_mismatch","oauth_token_validation","google_invalid_grant","google_invalid_client","google_unauthorized_client","google_invalid_scope","google_invalid_request","google_access_denied","google_admin_policy_enforced","google_temporarily_unavailable","google_other_error","quota_request","quota_response","quota_api_forbidden","quota_api_unauthorized","quota_api_limited","quota_api_unavailable","account_mismatch","quota_unavailable","quota_not_free_compatible","quota_insufficient","existing_fixture","fixture_missing","metadata","metadata_missing","metadata_identity","metadata_owner","metadata_size","metadata_digest_missing","metadata_digest_mismatch","metadata_mime","metadata_resource_key","acl","download"}:failure="unknown"
+                  if failure not in {"configuration","oauth","oauth_network","oauth_illegal_invocation","oauth_timeout","oauth_dns","oauth_tls","oauth_connection_lost","oauth_redirect","oauth_response","oauth_scope_missing","oauth_scope_mismatch","oauth_token_validation","google_invalid_grant","google_invalid_client","google_unauthorized_client","google_invalid_scope","google_invalid_request","google_access_denied","google_admin_policy_enforced","google_temporarily_unavailable","google_other_error","quota_request","quota_response","quota_api_forbidden","quota_api_unauthorized","quota_api_limited","quota_api_unavailable","account_mismatch","quota_unavailable","quota_not_free_compatible","quota_insufficient","existing_fixture","fixture_missing","metadata","metadata_missing","metadata_identity","metadata_owner","metadata_size","metadata_digest_missing","metadata_digest_mismatch","metadata_mime","metadata_resource_key","acl","download","private_link"}:failure="unknown"
                   need(value.get("upload_may_exist") is False,"unexpected_upload_state")
                   raise Stop("transfer_"+failure)
               fixture=("ipazake free pilot transfer verification; synthetic data only.\n"+"-"*1024).encode()[:1024]
               expected_fixture_hash=hashlib.sha256(fixture).hexdigest()
-              need(status==200 and value.get("ok") is True and value.get("owner_only") is True and value.get("bytes")==1024 and value.get("created") is False and value.get("sha256")==expected_fixture_hash,"transfer_unconfirmed")
-              print("existing_synthetic_fixture_verified: bytes=1024; owner_only=true; sha256_match=true; newly_created=false",flush=True)
+              need(status==200 and value.get("ok") is True and value.get("owner_only") is True and value.get("bytes")==1024 and value.get("created") is False and value.get("private_link_verified") is True and value.get("sha256")==expected_fixture_hash,"transfer_unconfirmed")
+              print("existing_synthetic_fixture_verified: bytes=1024; owner_only=true; sha256_match=true; private_link_verified=true; newly_created=false",flush=True)
               success=True
           except Stop as exc:
               print("stopped_stage="+stage+"; reason="+str(exc),file=sys.stderr,flush=True)
