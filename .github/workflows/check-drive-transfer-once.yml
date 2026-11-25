@@ -1,4 +1,4 @@
-name: Verify the existing Drive fixture with the private link verifier
+name: Verify private link registration on the hosted pilot D1 database
 on:
   push:
     branches: ['ops/configure-free-pilot-20261124']
@@ -161,11 +161,45 @@ jobs:
               public_probe=r'''
           import base from "./worker.mjs";
           import {smokeTransfer} from "./drive-smoke.mjs";
+          import {LINK_SQL,MAX,WINDOW} from "./private-link.mjs";
           const expected="__HASH__";
           const expires=__EXPIRY__;
           const host="ipazake-free-control-pilot.hahayesadd.workers.dev";
           function reply(status,obj){return Response.json(obj,{status,headers:{"Cache-Control":"no-store"}})}
           function fail(stage){return reply(503,{probe:"drive-readonly-v1",ok:false,stage})}
+          async function verifyHostedD1(db){
+            const suffix=crypto.randomUUID().replaceAll("-","");
+            const job="pilot_"+suffix;
+            const owner="synthetic:"+suffix;
+            const file="synthetic_"+suffix;
+            const filename="HostedD1Synthetic.zip";
+            const digest="a".repeat(64);
+            const now=Math.floor(Date.now()/1000);
+            const expires=now+WINDOW;
+            const registration=()=>db.prepare(LINK_SQL.register).bind(file,filename,MAX,digest,expires,job,owner);
+            const lookup=(identity,at)=>db.prepare(LINK_SQL.lookup).bind(job,identity,at);
+            // One D1 transaction. Plain INSERT aborts the batch on a collision; every cleanup is fixture-scoped.
+            const [inserted,registered,duplicate,retrieved,foreign,expired,cancelled,afterCancel,linkRemoved,jobRemoved,residue]=await db.batch([
+              db.prepare("INSERT INTO pilot_jobs(job_id,owner_id,update_id,app_id,region,day,created_at,state) VALUES(?,?,0,'123456','default',?,?,'waiting_for_runtime')").bind(job,owner,Math.floor(now/86400),now),
+              registration(),
+              registration(),
+              lookup(owner,now),
+              lookup(owner+":other",now),
+              lookup(owner,expires),
+              db.prepare("UPDATE pilot_jobs SET state='cancelled' WHERE job_id=? AND owner_id=?").bind(job,owner),
+              lookup(owner,now),
+              db.prepare("DELETE FROM pilot_links WHERE job_id=? AND owner_id=? AND file_id=?").bind(job,owner,file),
+              db.prepare("DELETE FROM pilot_jobs WHERE job_id=? AND owner_id=?").bind(job,owner),
+              db.prepare("SELECT (SELECT COUNT(*) FROM pilot_jobs WHERE job_id=?)+(SELECT COUNT(*) FROM pilot_links WHERE job_id=?) AS remaining").bind(job,job)
+            ]);
+            const row=retrieved.results?.[0];
+            return [inserted,registered,cancelled,linkRemoved,jobRemoved].every(r=>r.success===true&&r.meta.changes===1)&&
+              duplicate.success===true&&duplicate.meta.changes===0&&
+              retrieved.success===true&&retrieved.results.length===1&&row.file_id===file&&row.filename===filename&&row.bytes===MAX&&
+              row.sha256===digest&&row.expires_at===expires&&
+              [foreign,expired,afterCancel].every(r=>r.success===true&&r.results.length===0)&&
+              residue.success===true&&residue.results[0]?.remaining===0;
+          }
           export default {async fetch(request,env,ctx){
             const u=new URL(request.url);
             if(u.pathname!=="/__drive_readonly_probe")return base.fetch(request,env,ctx);
@@ -213,6 +247,12 @@ jobs:
             };
             const result=await smokeTransfer(env,send,{allowCreate:false,verifyLink:true});
             if(!result.ok&&result.stage==="oauth")result.stage=reason;
+            if(result.ok){
+              let verified=false;
+              try{verified=await verifyHostedD1(env.DB);}catch{}
+              if(!verified)return reply(503,{probe:"synthetic-fixture-inspection-v1",ok:false,stage:"hosted_d1",upload_may_exist:false});
+              result.hosted_d1_verified=true;
+            }
             return reply(result.ok?200:503,{probe:"synthetic-fixture-inspection-v1",...result});
           }};
           '''.replace("__HASH__",digest).replace("__EXPIRY__",str(expires)).encode()
@@ -258,13 +298,13 @@ jobs:
               need(value.get("probe")=="synthetic-fixture-inspection-v1","transfer_outcome_unconfirmed")
               if status==503:
                   failure=value.get("stage")
-                  if failure not in {"configuration","oauth","oauth_network","oauth_illegal_invocation","oauth_timeout","oauth_dns","oauth_tls","oauth_connection_lost","oauth_redirect","oauth_response","oauth_scope_missing","oauth_scope_mismatch","oauth_token_validation","google_invalid_grant","google_invalid_client","google_unauthorized_client","google_invalid_scope","google_invalid_request","google_access_denied","google_admin_policy_enforced","google_temporarily_unavailable","google_other_error","quota_request","quota_response","quota_api_forbidden","quota_api_unauthorized","quota_api_limited","quota_api_unavailable","account_mismatch","quota_unavailable","quota_not_free_compatible","quota_insufficient","existing_fixture","fixture_missing","metadata","metadata_missing","metadata_identity","metadata_owner","metadata_size","metadata_digest_missing","metadata_digest_mismatch","metadata_mime","metadata_resource_key","acl","download","private_link"}:failure="unknown"
+                  if failure not in {"configuration","oauth","oauth_network","oauth_illegal_invocation","oauth_timeout","oauth_dns","oauth_tls","oauth_connection_lost","oauth_redirect","oauth_response","oauth_scope_missing","oauth_scope_mismatch","oauth_token_validation","google_invalid_grant","google_invalid_client","google_unauthorized_client","google_invalid_scope","google_invalid_request","google_access_denied","google_admin_policy_enforced","google_temporarily_unavailable","google_other_error","quota_request","quota_response","quota_api_forbidden","quota_api_unauthorized","quota_api_limited","quota_api_unavailable","account_mismatch","quota_unavailable","quota_not_free_compatible","quota_insufficient","existing_fixture","fixture_missing","metadata","metadata_missing","metadata_identity","metadata_owner","metadata_size","metadata_digest_missing","metadata_digest_mismatch","metadata_mime","metadata_resource_key","acl","download","private_link","hosted_d1"}:failure="unknown"
                   need(value.get("upload_may_exist") is False,"unexpected_upload_state")
                   raise Stop("transfer_"+failure)
               fixture=("ipazake free pilot transfer verification; synthetic data only.\n"+"-"*1024).encode()[:1024]
               expected_fixture_hash=hashlib.sha256(fixture).hexdigest()
-              need(status==200 and value.get("ok") is True and value.get("owner_only") is True and value.get("bytes")==1024 and value.get("created") is False and value.get("private_link_verified") is True and value.get("sha256")==expected_fixture_hash,"transfer_unconfirmed")
-              print("existing_synthetic_fixture_verified: bytes=1024; owner_only=true; sha256_match=true; private_link_verified=true; newly_created=false",flush=True)
+              need(status==200 and value.get("ok") is True and value.get("owner_only") is True and value.get("bytes")==1024 and value.get("created") is False and value.get("private_link_verified") is True and value.get("hosted_d1_verified") is True and value.get("sha256")==expected_fixture_hash,"transfer_unconfirmed")
+              print("hosted_d1_verified: registered=true; duplicate_blocked=true; owner_only=true; expired_blocked=true; cancelled_blocked=true; exact_10gb_metadata=true; fixture_rows_remaining=0",flush=True)
               success=True
           except Stop as exc:
               print("stopped_stage="+stage+"; reason="+str(exc),file=sys.stderr,flush=True)
