@@ -258,3 +258,9 @@ This evidence covers hosted D1 SQL and the private Drive verifier. The database 
 - [Cloudflare Containers](https://developers.cloudflare.com/containers/platform/pricing/) require a paid Workers plan. Workers Free continues to cover the pilot control plane; Phase 24 established hosted D1 behavior and exact 10 GB metadata persistence. Real file transfer at that size and Telegram receipt still require their own evidence.
 
 The reviewed offerings provide no verified way to cut over under the current zero-cost and unattended cloud requirements. No services were provisioned in this review.
+
+## Phase 26: CircleCI ARM64 sample to private Drive (2026-11-25)
+
+A [CircleCI macOS job](https://app.circleci.com/workflow/77558c11-5004-4058-a6a6-00dfed479eb7/job/d3ebdbc6-d150-4c05-99ff-2f2485f27d92) produced an unsigned synthetic ARM64 iOS sample from project-owned source and verified it with the v0.2 archive verifier. The isolated [Drive upload](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45641196677) returned the file ID, then stopped on Drive's MIME label. The [read-only follow-up](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45641512941) found the same sample and confirmed owner-only access, 5,495 downloaded bytes and exact SHA-256 equality with the CircleCI artifact. No duplicate file was created. The sample remains private in Drive and the Worker returned to its disabled deployment.
+
+This proof covers build, archive verification and private Drive transfer for a small project-owned IPA. Live Telegram receipt, a 10 GB transfer and production cutover remain open.
