@@ -264,3 +264,9 @@ The reviewed offerings provide no verified way to cut over under the current zer
 A [CircleCI macOS job](https://app.circleci.com/workflow/77558c11-5004-4058-a6a6-00dfed479eb7/job/d3ebdbc6-d150-4c05-99ff-2f2485f27d92) produced an unsigned synthetic ARM64 iOS sample from project-owned source and verified it with the v0.2 archive verifier. The isolated [Drive upload](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45641196677) returned the file ID, then stopped on Drive's MIME label. The [read-only follow-up](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45641512941) found the same sample and confirmed owner-only access, 5,495 downloaded bytes and exact SHA-256 equality with the CircleCI artifact. No duplicate file was created. The sample remains private in Drive and the Worker returned to its disabled deployment.
 
 This proof covers build, archive verification and private Drive transfer for a small project-owned IPA. Live Telegram receipt, a 10 GB transfer and production cutover remain open.
+
+## Phase 27: hosted owner-only retrieval for the CircleCI IPA (2026-11-25)
+
+The [isolated retrieval test](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45642951780) registered and looked up the existing 5,495-byte CircleCI Drive sample using the hosted D1 SQL in a single batch. The batch removed both fixture rows before it returned the receipt. The Worker fed that receipt and a synthetic private update to the real `/get` handler. The handler rechecked the existing Google Drive file's metadata and owner-only access, constructed the expected private link reply, and withheld it from a different synthetic sender. The probe returned only a sanitized summary and restored the disabled Worker deployment.
+
+No Telegram API request was sent. This establishes the reply and access checks for the sample, while actual Telegram receipt, 10 GB transfer, and production cutover remain open.
