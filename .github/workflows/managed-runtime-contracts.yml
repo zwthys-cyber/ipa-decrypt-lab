@@ -267,6 +267,9 @@ jobs:
     needs: [synthetic, arm64_delivery_helper]
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 45
+    outputs:
+      artifact_id: ${{ steps.upload_images.outputs.artifact-id }}
+      sums_sha256: ${{ steps.package_images.outputs.sums_sha256 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -362,6 +365,7 @@ jobs:
       - name: Verify state service startup and restart with a mounted volume
         run: bash deploy/managed/verify-state-image.sh "ipazake-state:$GITHUB_SHA"
       - name: Package verified ARM64 images and source provenance
+        id: package_images
         run: |
           mkdir -p managed-images-arm64/licenses
           for role in controller state; do
@@ -370,17 +374,58 @@ jobs:
           cp -R arm64-delivery/licenses/. managed-images-arm64/licenses/
           cp arm64-bot-api/*LICENSE.txt managed-images-arm64/licenses/
           printf 'source_commit=%s\narchitecture=arm64\nbot_api_commit=%s\n' "$GITHUB_SHA" "$(cat arm64-bot-api/UPSTREAM_COMMIT)" > managed-images-arm64/BUILDINFO
+          for role in controller state; do
+            image_id=$(docker image inspect --format '{{.Id}}' "ipazake-$role:$GITHUB_SHA")
+            printf '%s_image_id=%s\n' "$role" "$image_id" >> managed-images-arm64/BUILDINFO
+          done
           (
             cd managed-images-arm64
             { sha256sum controller.tar.gz state.tar.gz BUILDINFO; find licenses -type f -print0 | sort -z | xargs -0 sha256sum; } > SHA256SUMS
-            sha256sum -c SHA256SUMS
+            sha256sum --check --strict SHA256SUMS
+            sums_sha256=$(sha256sum SHA256SUMS | cut -d ' ' -f 1)
+            printf 'SHA256SUMS digest: %s\n' "$sums_sha256"
+            printf 'sums_sha256=%s\n' "$sums_sha256" >> "$GITHUB_OUTPUT"
           )
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        id: upload_images
         with:
           name: managed-images-arm64-${{ github.sha }}
           path: managed-images-arm64/
           retention-days: 3
           if-no-files-found: error
+  arm64_image_import:
+    needs: arm64_images
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          artifact-ids: ${{ needs.arm64_images.outputs.artifact_id }}
+          path: managed-images-arm64
+      - name: Verify and import the published ARM64 images
+        working-directory: managed-images-arm64
+        env:
+          EXPECTED_SUMS_SHA256: ${{ needs.arm64_images.outputs.sums_sha256 }}
+        run: |
+          test "$(uname -m)" = aarch64
+          [[ "$EXPECTED_SUMS_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          printf '%s  SHA256SUMS\n' "$EXPECTED_SUMS_SHA256" | sha256sum --check --strict
+          sha256sum --check --strict SHA256SUMS
+          grep -Fx "source_commit=$GITHUB_SHA" BUILDINFO
+          grep -Fx 'architecture=arm64' BUILDINFO
+          for role in controller state; do
+            image="ipazake-$role:$GITHUB_SHA"
+            if docker image inspect "$image" >/dev/null 2>&1; then
+              echo "Image tag was already present before import: $image"
+              exit 1
+            fi
+            docker load --input "$role.tar.gz"
+            test "$(docker image inspect --format '{{.Os}}/{{.Architecture}} {{.Config.User}}' "$image")" = 'linux/arm64 10001:10001'
+            image_id=$(docker image inspect --format '{{.Id}}' "$image")
+            grep -Fx "${role}_image_id=$image_id" BUILDINFO
+            source=$(docker run --rm --network none --read-only --entrypoint /bin/cat "$image" /opt/ipazake/SOURCE_COMMIT)
+            test "$source" = "$GITHUB_SHA"
+          done
   images:
     # Not part of the zero-cost control-plane pilot; never provision a host here.
     if: github.event_name == 'workflow_dispatch' && inputs.build_images
