@@ -1,7 +1,7 @@
 // Run only on the CI runner with synthetic bindings; no remote D1, real bot or Apple account.
 import test from "node:test";
 import assert from "node:assert/strict";
-import {readFile,mkdtemp,rm} from "node:fs/promises";
+import {readFile,mkdtemp,copyFile,writeFile,rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -92,4 +92,68 @@ test("workerd D1: 10 GB migration preserves old metadata and exact large integer
     assert.equal((await db.prepare(LINK_SQL.retire).bind(at,...params,stamp+7200).run()).meta.changes,1);
     assert.equal((await db.prepare("SELECT retired_at FROM pilot_links WHERE job_id=?").bind(jobs[2]).first()).retired_at,at);
   }finally{await mf.dispose();}
+});
+
+test("workerd D1: registered Drive link is returned only in the owner's private /get reply",{timeout:60000},async()=>{
+  const folder=await mkdtemp(join(tmpdir(),"ipazake-link-d1-"));
+  const fileId="syntheticFileId123456";
+  const issuer="I".repeat(48);
+  const fixture={file_id:fileId,filename:"Synthetic.txt",bytes:1024,sha256:"a".repeat(64)};
+  const entry=join(folder,"test-entry.mjs");
+  let mf;
+  try{
+    await Promise.all(["worker.mjs","private-link.mjs","drive-auth.mjs"].map(name=>
+      copyFile(new URL("./"+name,import.meta.url),join(folder,name))));
+    await writeFile(entry,`
+      import {handle} from "./worker.mjs";
+      const fileId=${JSON.stringify(fileId)};
+      const record=${JSON.stringify(fixture)};
+      async function drive(url,init){
+        const u=new URL(url);
+        if(u.origin!=="https://www.googleapis.com"||init.method!=="GET"||init.redirect!=="manual")
+          throw Error("unexpected provider request");
+        if(u.pathname==="/drive/v3/files/"+fileId)
+          return Response.json({id:fileId,name:record.filename,size:String(record.bytes),sha256Checksum:record.sha256,trashed:false,ownedByMe:true,mimeType:"text/plain"});
+        if(u.pathname==="/drive/v3/files/"+fileId+"/permissions")
+          return Response.json({permissions:[{type:"user",role:"owner",emailAddress:"owner@example.invalid",deleted:false}]});
+        throw Error("unexpected provider request");
+      }
+      export default {fetch(request,env){
+        const now=${stamp}+(request.headers.get("x-synthetic-expired")==="1"?7200:0);
+        return handle(request,env,now,drive);
+      }};
+    `);
+    mf=new Miniflare({modules:true,scriptPath:entry,compatibilityDate:config.compatibility_date,
+      cf:false,host:"127.0.0.1",port:0,d1Databases:{DB:"33333333-3333-4333-8333-333333333333"},
+      bindings:{PILOT_ENABLED:"1",PILOT_LINK_ENABLED:"1",PILOT_OWNER_ID:String(owner),
+        TELEGRAM_WEBHOOK_SECRET:secret,PILOT_LINK_ISSUER_TOKEN:issuer,
+        PILOT_DRIVE_ACCESS_TOKEN:"synthetic-test-only-access-token",PILOT_DRIVE_RECIPIENT_EMAIL:"owner@example.invalid"}});
+    const db=await mf.getD1Database("DB");
+    const statements=schema.replace(/^--.*$/gm,"").split(";").map(s=>s.trim()).filter(Boolean);
+    assert.ok((await db.batch(statements.map(s=>db.prepare(s)))).every(x=>x.success));
+
+    assert.equal((await send(mf,101)).status,200);
+    const {job_id}=await db.prepare("SELECT job_id FROM pilot_jobs").first();
+    const register=token=>mf.dispatchFetch("http://localhost/v1/link-register",{method:"POST",
+      headers:{"content-type":"application/json",authorization:"Bearer "+token},
+      body:JSON.stringify({...fixture,job_id})});
+    assert.equal((await register(secret)).status,401);
+    assert.equal((await register(issuer)).status,201);
+    assert.equal((await register(issuer)).status,409);
+
+    assert.deepEqual(await (await send(mf,102,"/get "+job_id,54321)).json(),{ok:true});
+    const reply=await (await send(mf,103,"/get "+job_id)).json();
+    assert.equal(reply.method,"sendMessage");
+    assert.equal(reply.chat_id,owner);
+    assert.equal(reply.reply_markup.inline_keyboard[0][0].url,"https://drive.google.com/file/d/"+fileId+"/view");
+    assert.ok(reply.text.includes(fixture.sha256));
+    assert.equal(reply.link_preview_options.is_disabled,true);
+
+    const expired=await mf.dispatchFetch("http://localhost/telegram",{method:"POST",
+      headers:{"content-type":"application/json","x-telegram-bot-api-secret-token":secret,"x-synthetic-expired":"1"},
+      body:JSON.stringify({update_id:104,message:{date:stamp,chat:{id:owner,type:"private"},from:{id:owner,is_bot:false},text:"/get "+job_id}})});
+    assert.match((await expired.json()).text,/领取期限已过/);
+    assert.match((await (await send(mf,105,"/cancel "+job_id)).json()).text,/已取消/);
+    assert.equal((await (await send(mf,106,"/get "+job_id)).json()).reply_markup,undefined);
+  }finally{if(mf)await mf.dispose();await rm(folder,{recursive:true,force:true});}
 });

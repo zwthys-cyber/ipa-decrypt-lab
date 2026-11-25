@@ -1,6 +1,7 @@
 // Explicit, bounded deployment smoke fixture; not a general-purpose upload route.
 // Never logs or returns credentials, file IDs, session URLs, account names or raw provider data.
 import {accessForRequest,authMode,googleFetch} from "./drive-auth.mjs";
+import {verifyDrive} from "./private-link.mjs";
 export const NAME="ipazake-free-pilot-smoke-20261124.txt";
 export const SIZE=1024;
 const FIXTURE=new TextEncoder().encode(("ipazake free pilot transfer verification; synthetic data only.\n"+"-".repeat(SIZE)).slice(0,SIZE));
@@ -43,10 +44,11 @@ function validSession(value){
   need(url.origin===ROOT&&!url.username&&!url.password&&!url.hash&&url.pathname==="/upload/drive/v3/files"&&url.search.length<=4096&&!!url.searchParams.get("upload_id"),"session");
   return url.href;
 }
-export async function smokeTransfer(env,send=googleFetch,{allowCreate=true}={}){
+export async function smokeTransfer(env,send=googleFetch,{allowCreate=true,verifyLink=false}={}){
   let stage="configuration",createStarted=false;
   try{
     need(env.PILOT_ENABLED==="0"&&env.PILOT_LINK_ENABLED==="0"&&authMode(env)==="refresh"&&typeof env.PILOT_DRIVE_RECIPIENT_EMAIL==="string","configuration");
+    need(!verifyLink||allowCreate===false,"configuration");
     stage="oauth";const token=await accessForRequest(env,send);
     const email=env.PILOT_DRIVE_RECIPIENT_EMAIL;
     const request=(url,init={})=>send(url,{...init,redirect:"manual",signal:AbortSignal.timeout(15000),
@@ -116,7 +118,16 @@ export async function smokeTransfer(env,send=googleFetch,{allowCreate=true}={}){
     need(download.status===200,"download_status");
     const bytes=await read(download,SIZE);
     need(bytes.byteLength===SIZE&&await sha(bytes)===digest,"download_hash");
-    return {ok:true,bytes:SIZE,sha256:digest,owner_only:true,created:createStarted};
+    const result={ok:true,bytes:SIZE,sha256:digest,owner_only:true,created:createStarted};
+    if(verifyLink){
+      stage="private_link";
+      // Exercise the same verifier as /get while both deployment switches stay disabled.
+      const link=await verifyDrive({file_id:fileId,filename:NAME,bytes:SIZE,sha256:digest},
+        {...env,PILOT_LINK_ENABLED:"1"},send);
+      need(link==="https://drive.google.com/file/d/"+fileId+"/view","private_link");
+      return {...result,private_link_verified:true};
+    }
+    return result;
   }catch{
     // A failed create/download outcome is never automatically repeated.
     return {ok:false,stage,upload_may_exist:createStarted};

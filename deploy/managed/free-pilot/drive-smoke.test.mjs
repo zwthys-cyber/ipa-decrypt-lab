@@ -101,3 +101,17 @@ test("read-only metadata checks report a safe failure category before downloadin
    assert.ok(!f.calls.some(([u])=>u.includes("alt=media")||u.includes("uploadType")));
  }
 });
+
+test("private link check uses the existing fixture and returns only a sanitized result",async()=>{
+ const f=fake({stored:true,metadata:{mimeType:"text/plain"}});
+ const r=await smokeTransfer(env,f.send,{allowCreate:false,verifyLink:true});
+ assert.equal(r.ok,true);
+ assert.equal(r.private_link_verified,true);
+ assert.equal(r.created,false);
+ assert.equal(f.calls.filter(([url])=>url.includes("/permissions?")).length,2);
+ assert.ok(f.calls.filter(([url])=>new URL(url).hostname==="www.googleapis.com").every(([,method])=>method==="GET"));
+ assert.ok(!JSON.stringify(r).includes(id));
+ const blocked=fake();
+ assert.deepEqual(await smokeTransfer(env,blocked.send,{verifyLink:true}),{ok:false,stage:"configuration",upload_may_exist:false});
+ assert.equal(blocked.calls.length,0);
+});
