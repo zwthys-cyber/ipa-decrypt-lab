@@ -270,3 +270,9 @@ This proof covers build, archive verification and private Drive transfer for a s
 The [isolated retrieval test](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45642951780) registered and looked up the existing 5,495-byte CircleCI Drive sample using the hosted D1 SQL in a single batch. The batch removed both fixture rows before it returned the receipt. The Worker fed that receipt and a synthetic private update to the real `/get` handler. The handler rechecked the existing Google Drive file's metadata and owner-only access, constructed the expected private link reply, and withheld it from a different synthetic sender. The probe returned only a sanitized summary and restored the disabled Worker deployment.
 
 No Telegram API request was sent. This establishes the reply and access checks for the sample, while actual Telegram receipt, 10 GB transfer, and production cutover remain open.
+
+## Phase 28: private Telegram test with the existing bot (2026-11-25)
+
+The [owner-authorized one-shot test](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45644694693) regenerated the private `/get` reply for the existing ARM64 sample. The isolated Worker denied a different synthetic sender and restored its disabled deployment before the existing VPS bot sent the link. Telegram acknowledged exactly one `sendMessage` to the configured owner's private chat with link previews disabled. The VPS reserved a private one-shot marker before sending so an ambiguous response cannot cause an automatic duplicate. No credentials, private URL or chat identifier were logged.
+
+This verifies Telegram accepted the outgoing test reply. User-visible receipt and the inbound webhook cutover remain separate. The VPS continues polling, and this run did not change the Telegram webhook, the file's Drive permissions or the production routing.
