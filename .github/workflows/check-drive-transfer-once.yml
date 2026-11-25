@@ -59,7 +59,7 @@ jobs:
           assert len(sample)==5495 and hashlib.sha256(sample).hexdigest()=="afea265d6b8a3f05ec66031f98a9c88f2c7e18f65d10ef18438315a1d0d28ab0"
           with zipfile.ZipFile(io.BytesIO(sample)) as archive:
               assert archive.testzip() is None
-              assert set(archive.namelist())=={"Payload/","Payload/ARMSample.app/","Payload/ARMSample.app/Info.plist","Payload/ARMSample.app/ARMSample"}
+              assert set(archive.namelist())=={"Payload/","Payload/ARMSample.app/","Payload/ARMSample.app/Info.plist","Payload/ARMSample.app/ARMSample","Payload/ARMSample.app/PkgInfo"}
           script=code.decode("utf-8")
           replacements=[
               ('export const NAME="ipazake-free-pilot-smoke-20261124.txt";',
