@@ -21,17 +21,17 @@ jobs:
         run: |
           set -eu
           umask 077
-          gh api repos/zwthys-cyber/ipa-decrypt-lab/actions/artifacts/14929635275/zip > "$RUNNER_TEMP/pilot-public.zip"
-          gh api 'repos/zwthys-cyber/ipa-decrypt-lab/contents/deploy/managed/free-pilot/drive-auth.mjs?ref=30ae2675e76a03bcdbd6ef07b9bb28a87a7309b3' > "$RUNNER_TEMP/public-auth.json"
-          gh api 'repos/zwthys-cyber/ipa-decrypt-lab/contents/deploy/managed/free-pilot/drive-smoke.mjs?ref=e85be1c576ccedc608fd852d015a1b559669428c' > "$RUNNER_TEMP/public-smoke.json"
+          gh api repos/zwthys-cyber/ipa-decrypt-lab/actions/artifacts/14937919929/zip > "$RUNNER_TEMP/pilot-public.zip"
+          gh api 'repos/zwthys-cyber/ipa-decrypt-lab/contents/deploy/managed/free-pilot/drive-auth.mjs?ref=2d3560232bc6f0b7d831a6adf5eb7b861e0c5c68' > "$RUNNER_TEMP/public-auth.json"
+          gh api 'repos/zwthys-cyber/ipa-decrypt-lab/contents/deploy/managed/free-pilot/drive-smoke.mjs?ref=2d3560232bc6f0b7d831a6adf5eb7b861e0c5c68' > "$RUNNER_TEMP/public-smoke.json"
           python3 - <<'PY'
           import base64,hashlib,json,os,zipfile
           from pathlib import Path
           root=Path(os.environ["RUNNER_TEMP"])
           archive=root/"pilot-public.zip"
-          assert archive.stat().st_size<=131072 and hashlib.sha256(archive.read_bytes()).hexdigest()=="74a4603ce989605ca2bfb36527bcf1b7fa9d03785a633ccfba7c58012ca46f9b"
+          assert archive.stat().st_size<=131072 and hashlib.sha256(archive.read_bytes()).hexdigest()=="c3f74dd6c06d42018b0c934ec228808caea5c87415a7f54e7062a4737a374f73"
           with zipfile.ZipFile(archive) as z:
-              assert z.read("BUILDINFO").decode().splitlines()==["source_head=30ae2675e76a03bcdbd6ef07b9bb28a87a7309b3","checked_out_commit=28fa6da6bb767fd4b51eb7664a33498ff80eed06"]
+              assert z.read("BUILDINFO").decode().splitlines()==["source_head=2d3560232bc6f0b7d831a6adf5eb7b861e0c5c68","checked_out_commit=ebb6ab6fc04e6888c9e52359284cd1e468a36379"]
               assert z.namelist().count("worker.mjs")==1 and z.getinfo("worker.mjs").file_size<131072
               code=z.read("worker.mjs")
               assert [x.split()[0] for x in z.read("SHA256SUMS").decode().splitlines() if len(x.split())==2 and x.split()[1]=="worker.mjs"]==[hashlib.sha256(code).hexdigest()]
@@ -42,7 +42,7 @@ jobs:
           (root/"drive-auth.mjs").write_bytes(code)
           meta=json.loads((root/"public-smoke.json").read_text())
           code=base64.b64decode(meta["content"])
-          assert hashlib.sha1(b"blob "+str(len(code)).encode()+b"\0"+code).hexdigest()=="f3015ee47395f1337e367ec292d4ab67391c665e"
+          assert hashlib.sha1(b"blob "+str(len(code)).encode()+b"\0"+code).hexdigest()=="174ee271f61231bb6cb71d599072fcc188247231"
           (root/"drive-smoke.mjs").write_bytes(code)
           print("public_source_verified")
           PY
@@ -142,7 +142,7 @@ jobs:
               need(len(current)==1 and list(current.values())==[100],"active_deployment_not_single")
               old=next(iter(current))
               dbid=bindings(cf("GET",root+"/versions/"+old))
-              need(latest()==old,"undeployed_version_exists")
+              previous_latest=latest()
               # Fresh random challenge never persisted or logged; public code has only its hash.
               challenge=secrets.token_hex(32);digest=hashlib.sha256(challenge.encode()).hexdigest()
               expires=int(time.time())+240
@@ -209,7 +209,7 @@ jobs:
               subprocess.run(["node","--check",str(files/"probe.mjs")],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
               # Inherit existing Cloudflare bindings in place. No secret value is fetched or exported.
               metadata={"main_module":"probe.mjs","compatibility_date":DATE,
-                        "bindings":[{"name":name,"type":"inherit","version_id":"latest"} for name in sorted(NAMES)],
+                        "bindings":[{"name":name,"type":"inherit","version_id":old} for name in sorted(NAMES)],
                         "annotations":{"workers/message":"Expiring one-file synthetic transfer verification; zero traffic"}}
               boundary="----readonly-pilot-"+secrets.token_hex(16)
               def part(name,typ,data,filename=None):
@@ -221,6 +221,7 @@ jobs:
                   body+=part(name,"application/javascript+module",(files/name).read_bytes(),name)
               body+=("--"+boundary+"--\r\n").encode()
               stage="upload_probe_version"
+              need(active()=={old:100} and latest()==previous_latest,"concurrent_deployment_detected")
               new=cf("POST",root+"/versions?bindings_inherit=strict",body,"multipart/form-data; boundary="+boundary).get("id")
               need(uuid(new),"probe_version_unconfirmed")
               need(bindings(cf("GET",root+"/versions/"+new))==dbid,"binding_preservation_unconfirmed")
@@ -247,10 +248,12 @@ jobs:
               need(value.get("probe")=="synthetic-transfer-v1","transfer_outcome_unconfirmed")
               if status==503:
                   failure=value.get("stage")
-                  if failure not in {"configuration","oauth","oauth_network","oauth_illegal_invocation","oauth_timeout","oauth_dns","oauth_tls","oauth_connection_lost","oauth_redirect","oauth_response","oauth_scope_missing","oauth_scope_mismatch","oauth_token_validation","google_invalid_grant","google_invalid_client","google_unauthorized_client","google_invalid_scope","google_invalid_request","google_access_denied","google_admin_policy_enforced","google_temporarily_unavailable","google_other_error","quota","existing_fixture","generate_id","upload_start","upload","metadata","acl","download"}:failure="unknown"
+                  if failure not in {"configuration","oauth","oauth_network","oauth_illegal_invocation","oauth_timeout","oauth_dns","oauth_tls","oauth_connection_lost","oauth_redirect","oauth_response","oauth_scope_missing","oauth_scope_mismatch","oauth_token_validation","google_invalid_grant","google_invalid_client","google_unauthorized_client","google_invalid_scope","google_invalid_request","google_access_denied","google_admin_policy_enforced","google_temporarily_unavailable","google_other_error","quota_request","quota_response","quota_api_forbidden","quota_api_unauthorized","quota_api_limited","quota_api_unavailable","account_mismatch","quota_unavailable","quota_not_free_compatible","quota_insufficient","existing_fixture","generate_id","upload_start","upload","metadata","acl","download"}:failure="unknown"
                   print("synthetic_file_may_exist="+str(value.get("upload_may_exist") is True).lower(),flush=True)
                   raise Stop("transfer_"+failure)
-              need(status==200 and value.get("ok") is True and value.get("owner_only") is True and value.get("bytes")==1024 and isinstance(value.get("sha256"),str) and re.fullmatch("[a-f0-9]{64}",value["sha256"]),"transfer_unconfirmed")
+              fixture=("ipazake free pilot transfer verification; synthetic data only.\n"+"-"*1024).encode()[:1024]
+              expected_fixture_hash=hashlib.sha256(fixture).hexdigest()
+              need(status==200 and value.get("ok") is True and value.get("owner_only") is True and value.get("bytes")==1024 and value.get("sha256")==expected_fixture_hash,"transfer_unconfirmed")
               print("synthetic_transfer_verified: bytes=1024; owner_only=true; sha256_match=true; newly_created="+str(value.get("created") is True).lower(),flush=True)
               success=True
           except Stop as exc:
