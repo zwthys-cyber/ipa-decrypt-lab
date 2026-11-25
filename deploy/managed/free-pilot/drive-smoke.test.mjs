@@ -6,7 +6,9 @@ const env={PILOT_ENABLED:"0",PILOT_LINK_ENABLED:"0",PILOT_DRIVE_CLIENT_ID:"synth
  PILOT_DRIVE_CLIENT_SECRET:"synthetic-test-only-secret",PILOT_DRIVE_REFRESH_TOKEN:"synthetic-test-only-refresh",PILOT_DRIVE_RECIPIENT_EMAIL:"owner@example.invalid"};
 const id="syntheticFileId12345",session="https://www.googleapis.com/upload/drive/v3/files?upload_id=synthetic";
 function fake(opts={}){
- let bytes,metadata,calls=[],stored=opts.stored;
+ let bytes=opts.stored?new TextEncoder().encode(("ipazake free pilot transfer verification; synthetic data only.\n"+"-".repeat(SIZE)).slice(0,SIZE)):undefined;
+ let metadata=opts.stored?{appProperties:{pilot_fixture:"free-pilot-smoke-v1"}}:undefined;
+ const calls=[];
  return {calls,send:async(url,init={})=>{
    calls.push([url,init.method||"GET"]);assert.equal(init.redirect,"manual");assert.ok(init.signal instanceof AbortSignal);
    if(url==="https://oauth2.googleapis.com/token")return Response.json({access_token:"synthetic-issued-access-token",token_type:"Bearer",expires_in:3600,scope:SCOPE});
@@ -16,7 +18,7 @@ function fake(opts={}){
      if(opts.aboutStatus)return Response.json({error:{message:"synthetic provider error"}},{status:opts.aboutStatus});
      return Response.json({user:{emailAddress:opts.email||env.PILOT_DRIVE_RECIPIENT_EMAIL},storageQuota:opts.noQuota?{}:{limit:String(opts.limit??15*1024**3),usage:String(opts.usage||0)}});
    }
-   if(url.includes("/files?")&&url.includes("q="))return Response.json({files:[]});
+   if(url.includes("/files?")&&url.includes("q="))return Response.json({files:opts.stored?[{id}]:[]});
    if(url.includes("/generateIds?"))return Response.json({ids:[id]});
    if(url.includes("uploadType=resumable")){
      metadata=JSON.parse(init.body);assert.equal(metadata.id,id);assert.equal(metadata.name,NAME);assert.equal(metadata.appProperties.pilot_fixture,"free-pilot-smoke-v1");
@@ -27,7 +29,7 @@ function fake(opts={}){
    if(url.includes("?alt=media"))return new Response(opts.corrupt?new Uint8Array(SIZE):bytes);
    if(url.includes("/files/"+id+"?")){
       const hash=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",bytes)),n=>n.toString(16).padStart(2,"0")).join("");
-      return Response.json({...metadata,id,name:NAME,sha256Checksum:hash,size:String(SIZE),trashed:false,ownedByMe:true,mimeType:"application/octet-stream"});
+      return Response.json({...metadata,id,name:NAME,sha256Checksum:hash,size:String(SIZE),trashed:false,ownedByMe:true,mimeType:"application/octet-stream",...opts.metadata});
    }
    throw Error("unexpected endpoint");
  }};
@@ -66,4 +68,36 @@ test("free quota boundary is exact and malformed values fail closed",()=>{
  assert.equal(quotaStatus(val(limit+1),email),"quota_unavailable");
  assert.equal(quotaStatus(val(-1),email),"quota_unavailable");
  assert.equal(quotaStatus(null,email),"account_mismatch");
+});
+
+test("read-only check verifies an existing fixture without making any Drive writes",async()=>{
+ const f=fake({stored:true});
+ const r=await smokeTransfer(env,f.send,{allowCreate:false});
+ assert.equal(r.ok,true);
+ assert.equal(r.created,false);
+ assert.equal(r.owner_only,true);
+ assert.ok(f.calls.filter(([u])=>new URL(u).hostname==="www.googleapis.com").every(([,method])=>method==="GET"));
+});
+
+test("read-only check stops before reserving an ID if the fixture is missing",async()=>{
+ const f=fake();
+ const r=await smokeTransfer(env,f.send,{allowCreate:false});
+ assert.deepEqual(r,{ok:false,stage:"fixture_missing",upload_may_exist:false});
+ assert.equal(f.calls.length,3);
+});
+
+test("read-only metadata checks report a safe failure category before downloading",async()=>{
+ for(const [metadata,stage] of [
+   [{appProperties:{}},"metadata_identity"],
+   [{ownedByMe:false},"metadata_owner"],
+   [{size:"0"},"metadata_size"],
+   [{sha256Checksum:undefined},"metadata_digest_missing"],
+   [{sha256Checksum:"0".repeat(64)},"metadata_digest_mismatch"],
+   [{mimeType:"text/plain"},"metadata_mime"],
+   [{resourceKey:"synthetic"},"metadata_resource_key"],
+ ]){
+   const f=fake({stored:true,metadata});
+   assert.deepEqual(await smokeTransfer(env,f.send,{allowCreate:false}),{ok:false,stage,upload_may_exist:false});
+   assert.ok(!f.calls.some(([u])=>u.includes("alt=media")||u.includes("uploadType")));
+ }
 });

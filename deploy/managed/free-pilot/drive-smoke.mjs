@@ -43,7 +43,7 @@ function validSession(value){
   need(url.origin===ROOT&&!url.username&&!url.password&&!url.hash&&url.pathname==="/upload/drive/v3/files"&&url.search.length<=4096&&!!url.searchParams.get("upload_id"),"session");
   return url.href;
 }
-export async function smokeTransfer(env,send=googleFetch){
+export async function smokeTransfer(env,send=googleFetch,{allowCreate=true}={}){
   let stage="configuration",createStarted=false;
   try{
     need(env.PILOT_ENABLED==="0"&&env.PILOT_LINK_ENABLED==="0"&&authMode(env)==="refresh"&&typeof env.PILOT_DRIVE_RECIPIENT_EMAIL==="string","configuration");
@@ -69,6 +69,8 @@ export async function smokeTransfer(env,send=googleFetch){
     need(!prior.nextPageToken&&Array.isArray(prior.files)&&prior.files.length<=1,"fixture_ambiguous");
     let fileId=prior.files[0]?.id;
     if(prior.files.length===0){
+      stage="fixture_missing";
+      need(allowCreate===true,"fixture_missing");
       stage="generate_id";
       const ids=await json(await request(ROOT+"/drive/v3/files/generateIds?count=1&space=drive&type=files"));
       need(Array.isArray(ids.ids)&&ids.ids.length===1&&typeof ids.ids[0]==="string"&&ID.test(ids.ids[0]),"id");fileId=ids.ids[0];
@@ -86,9 +88,23 @@ export async function smokeTransfer(env,send=googleFetch){
     }
     need(typeof fileId==="string"&&ID.test(fileId),"id");
     stage="metadata";
-    const file=await json(await request(ROOT+"/drive/v3/files/"+fileId+"?fields="+FIELDS));
-    need(file.id===fileId&&file.name===NAME&&file.size===String(SIZE)&&file.sha256Checksum===digest&&file.trashed===false&&file.ownedByMe===true&&
-      file.mimeType==="application/octet-stream"&&!file.resourceKey&&file.appProperties?.pilot_fixture===MARKER,"file_metadata");
+    const details=await request(ROOT+"/drive/v3/files/"+fileId+"?fields="+FIELDS);
+    if(details.status===404){
+      stage="metadata_missing";
+      if(details.body)await details.body.cancel();
+      throw Error("metadata_missing");
+    }
+    const file=await json(details);
+    const invalid=[
+      ["metadata_identity",file.id!==fileId||file.name!==NAME||file.appProperties?.pilot_fixture!==MARKER],
+      ["metadata_owner",file.ownedByMe!==true||file.trashed!==false],
+      ["metadata_size",file.size!==String(SIZE)],
+      ["metadata_digest_missing",!file.sha256Checksum],
+      ["metadata_digest_mismatch",file.sha256Checksum!==digest],
+      ["metadata_mime",file.mimeType!=="application/octet-stream"],
+      ["metadata_resource_key",Boolean(file.resourceKey)],
+    ].find(([,failed])=>failed);
+    if(invalid){stage=invalid[0];throw Error(stage);}
     stage="acl";
     const acl=await json(await request(ROOT+"/drive/v3/files/"+fileId+"/permissions?pageSize=100&fields=nextPageToken,permissions(type,role,emailAddress,deleted)"));
     need(!acl.nextPageToken&&Array.isArray(acl.permissions)&&acl.permissions.length===1,"acl");
