@@ -244,3 +244,9 @@ Google now documents a no-charge [Drive API Standard Tier](https://developers.go
 The isolated [cloud verification](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45619922392) used the same Drive link verifier as `/get` on the existing 1 KiB sample. The verifier accepted the file's metadata and restricted permissions, generated the expected private Drive link, and reported only a sanitized success flag. The run also matched the downloaded SHA-256; it created no file, changed no Drive permissions, and restored the disabled Worker deployment.
 
 The [managed runtime contracts](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45620003273) exercised the actual Worker handler against workerd D1 and synthetic Drive responses. The test covers issuer authentication, duplicate registration, owner-only `/get` replies, and exclusion after expiry or cancellation. Telegram receipt and live D1 link registration remain unverified. The synthetic fixture is still private in Drive. The native cloud runtime and a real 10 GB transfer remain open.
+
+## Phase 24: hosted D1 registration and retrieval (2026-11-25)
+
+The [isolated hosted D1 run](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45620785416) passed using the pilot's actual registration and lookup SQL. A single atomic D1 batch inserted a uniquely scoped synthetic job and link, verified the exact 10,000,000,000-byte metadata value, and exercised duplicate rejection, owner scoping, expiration and cancellation. The same batch removed both fixture rows and confirmed zero residue. The run also revalidated the original 1 KiB private Drive sample without writing additional files, and restored the disabled Worker deployment.
+
+This evidence covers hosted D1 SQL and the private Drive verifier. The database test used synthetic metadata. A real 10 GB transfer, Telegram receipt, and an eligible zero-cost native cloud worker remain open.
