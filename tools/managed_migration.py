@@ -1,6 +1,7 @@
 """Offline frozen-snapshot comparison; never copies, edits or prints private state."""
 import argparse
 import hashlib
+import json
 import os
 from pathlib import Path
 import sqlite3
@@ -37,6 +38,11 @@ def check_db(root,name,controller=False):
         need(db.execute("PRAGMA quick_check").fetchall()==[("ok",)])
         if controller:
             need(db.execute("SELECT count(*) FROM tasks WHERE state IN ('pending','sending')").fetchone()==(0,))
+            if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='metadata'").fetchone():
+                for (value,) in db.execute("SELECT value FROM metadata WHERE name='version_browser'"):
+                    need(isinstance(value, str) and len(value) <= 2 * 1024 * 1024)
+                    browser = json.loads(value)
+                    need(isinstance(browser, dict) and browser.get("pending") is None)
     return digest(path)
 
 def tree(root):

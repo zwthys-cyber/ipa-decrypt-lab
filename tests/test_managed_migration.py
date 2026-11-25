@@ -41,6 +41,27 @@ class ManagedMigrationTests(unittest.TestCase):
         shutil.copy2(self.source/"state.sqlite3",self.controller/"state.sqlite3")
         with self.assertRaises(ValueError):compare(self.source,self.controller,self.state)
 
+    def test_catalog_state_requires_all_scopes_idle(self):
+        path = self.source / "state.sqlite3"
+        with sqlite3.connect(path) as db:
+            db.execute("CREATE TABLE metadata(scope TEXT, name TEXT, value TEXT)")
+            db.executemany("INSERT INTO metadata VALUES (?, ?, ?)", [
+                ("owner", "version_browser", '{"pending":null}'),
+                ("other", "version_browser", '{"pending":null}'),
+            ])
+        db.close()
+        shutil.copy2(path, self.controller / path.name)
+        compare(self.source, self.controller, self.state)
+
+        for value in ('{"pending":{"rid":"synthetic"}}', 'null', '{invalid'):
+            with self.subTest(value=value):
+                with sqlite3.connect(path) as db:
+                    db.execute("UPDATE metadata SET value=? WHERE scope='other'", (value,))
+                db.close()
+                shutil.copy2(path, self.controller / path.name)
+                with self.assertRaises(ValueError):
+                    compare(self.source, self.controller, self.state)
+
     def test_wal_and_symlink_rejected(self):
         wal=self.source/"state.sqlite3-wal";wal.touch()
         with self.assertRaises(ValueError):compare(self.source,self.controller,self.state)
