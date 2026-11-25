@@ -56,3 +56,9 @@ Official provider references: https://render.com/docs/blueprint-spec and https:/
 ## Phase 4: free-only control-plane pilot
 
 See [zero-cost constraints and pilot setup](ZERO-COST.md). The independent Worker/D1 pilot does not use the HTTPS state relay or managed container. Image compilation is now an explicit manual build-only option, not part of the free pilot's PR checks. The existing production controller, native worker, state, tokens, and Telegram polling mode remain unchanged.
+
+### Live migration state inventory (2026-11-25)
+
+The [encrypted backup](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45637494802) captured the controller and Telegram state, TestFlight session ciphertext, and the private return journal. The subsequent [read-only source inventory](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45638716965) confirmed those paths exist and are owner-only. The source had no `testflight/acceptance.sqlite` or SQLite sidecars at its standard location. The service was ready and had no active task at inspection time.
+
+An absent file is consistent with the live state helper's lazy initialization, but the inventory does not establish the history of prior invite acceptances. The managed state service requires a verified acceptance ledger before startup. Preserve the backup as a partial migration snapshot and establish the ledger's provenance before migrating TestFlight. Production cutover still depends on an eligible destination and compatible replacement runtime.
