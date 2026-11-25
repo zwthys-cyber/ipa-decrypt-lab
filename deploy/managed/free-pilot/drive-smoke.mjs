@@ -101,7 +101,8 @@ export async function smokeTransfer(env,send=googleFetch,{allowCreate=true}={}){
       ["metadata_size",file.size!==String(SIZE)],
       ["metadata_digest_missing",!file.sha256Checksum],
       ["metadata_digest_mismatch",file.sha256Checksum!==digest],
-      ["metadata_mime",file.mimeType!=="application/octet-stream"],
+      // Drive may classify this fixed text fixture from its content and .txt name.
+      ["metadata_mime",!["application/octet-stream","text/plain"].includes(file.mimeType)],
       ["metadata_resource_key",Boolean(file.resourceKey)],
     ].find(([,failed])=>failed);
     if(invalid){stage=invalid[0];throw Error(stage);}

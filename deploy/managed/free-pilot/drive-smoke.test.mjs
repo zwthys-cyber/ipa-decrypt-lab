@@ -71,7 +71,7 @@ test("free quota boundary is exact and malformed values fail closed",()=>{
 });
 
 test("read-only check verifies an existing fixture without making any Drive writes",async()=>{
- const f=fake({stored:true});
+ const f=fake({stored:true,metadata:{mimeType:"text/plain"}});
  const r=await smokeTransfer(env,f.send,{allowCreate:false});
  assert.equal(r.ok,true);
  assert.equal(r.created,false);
@@ -93,7 +93,7 @@ test("read-only metadata checks report a safe failure category before downloadin
    [{size:"0"},"metadata_size"],
    [{sha256Checksum:undefined},"metadata_digest_missing"],
    [{sha256Checksum:"0".repeat(64)},"metadata_digest_mismatch"],
-   [{mimeType:"text/plain"},"metadata_mime"],
+   [{mimeType:"text/html"},"metadata_mime"],
    [{resourceKey:"synthetic"},"metadata_resource_key"],
  ]){
    const f=fake({stored:true,metadata});
