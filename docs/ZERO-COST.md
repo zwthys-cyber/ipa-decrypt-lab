@@ -250,3 +250,11 @@ The [managed runtime contracts](https://github.com/zwthys-cyber/ipa-decrypt-lab/
 The [isolated hosted D1 run](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45620785416) passed using the pilot's actual registration and lookup SQL. A single atomic D1 batch inserted a uniquely scoped synthetic job and link, verified the exact 10,000,000,000-byte metadata value, and exercised duplicate rejection, owner scoping, expiration and cancellation. The same batch removed both fixture rows and confirmed zero residue. The run also revalidated the original 1 KiB private Drive sample without writing additional files, and restored the disabled Worker deployment.
 
 This evidence covers hosted D1 SQL and the private Drive verifier. The database test used synthetic metadata. A real 10 GB transfer, Telegram receipt, and an eligible zero-cost native cloud worker remain open.
+
+## Phase 25: native cloud eligibility recheck (2026-11-25)
+
+- [Scaleway Apple silicon M4](https://www.scaleway.com/en/mac-mini-m4/) starts at €0.22/hour with a 24-hour minimum allocation. [EC2 Mac](https://aws.amazon.com/ec2/instance-types/mac/) also bills for a dedicated host with a 24-hour minimum. Both require a budget for compute.
+- [Microsoft-hosted Azure Pipelines macOS agents](https://learn.microsoft.com/en-us/azure/devops/pipelines/agents/hosted?view=azure-devops) are discarded after each CI job and provide 14 GB of SSD space. They do not establish an unattended production host. [GitHub-hosted runners](https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job) also create a fresh runner for each job.
+- [Cloudflare Containers](https://developers.cloudflare.com/containers/platform/pricing/) require a paid Workers plan. Workers Free continues to cover the pilot control plane; Phase 24 established hosted D1 behavior and exact 10 GB metadata persistence. Real file transfer at that size and Telegram receipt still require their own evidence.
+
+The reviewed offerings provide no verified way to cut over under the current zero-cost and unattended cloud requirements. No services were provisioned in this review.
