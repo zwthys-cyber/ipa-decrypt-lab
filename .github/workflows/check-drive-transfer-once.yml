@@ -23,7 +23,7 @@ jobs:
           umask 077
           gh api repos/zwthys-cyber/ipa-decrypt-lab/actions/artifacts/14937919929/zip > "$RUNNER_TEMP/pilot-public.zip"
           gh api 'repos/zwthys-cyber/ipa-decrypt-lab/contents/deploy/managed/free-pilot/drive-auth.mjs?ref=2d3560232bc6f0b7d831a6adf5eb7b861e0c5c68' > "$RUNNER_TEMP/public-auth.json"
-          gh api 'repos/zwthys-cyber/ipa-decrypt-lab/contents/deploy/managed/free-pilot/drive-smoke.mjs?ref=4cf32a41ea7fdabeca23edb80fa2d2a5743cff16' > "$RUNNER_TEMP/public-smoke.json"
+          gh api 'repos/zwthys-cyber/ipa-decrypt-lab/contents/deploy/managed/free-pilot/drive-smoke.mjs?ref=e8c77971df4368deb4ebf68b9684ea5939d8c645' > "$RUNNER_TEMP/public-smoke.json"
           python3 - <<'PY'
           import base64,hashlib,json,os,zipfile
           from pathlib import Path
@@ -42,7 +42,7 @@ jobs:
           (root/"drive-auth.mjs").write_bytes(code)
           meta=json.loads((root/"public-smoke.json").read_text())
           code=base64.b64decode(meta["content"])
-          assert hashlib.sha1(b"blob "+str(len(code)).encode()+b"\0"+code).hexdigest()=="4d97c395e199e62de19e37f105a3fd8a08332cfe"
+          assert hashlib.sha1(b"blob "+str(len(code)).encode()+b"\0"+code).hexdigest()=="466aa3f720a775fb02064d1ad2767568f50fd02a"
           (root/"drive-smoke.mjs").write_bytes(code)
           print("public_source_verified")
           PY
