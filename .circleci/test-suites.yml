@@ -1,0 +1,30 @@
+---
+name: Archive audit
+discover: git ls-files -- tests/test_ipa_audit.py
+run: python3 .circleci/junit.py unittest "<< outputs.junit >>" << test.atoms >>
+outputs:
+  junit: test-results/archive-audit/junit.xml
+---
+name: Free pilot Python
+discover: >-
+  git ls-files --
+  deploy/managed/free-pilot/test_archive_verify.py
+  deploy/managed/free-pilot/test_link_sql.py
+  deploy/managed/free-pilot/test_private_cleanup.py
+  deploy/managed/free-pilot/test_private_upload.py
+  deploy/managed/free-pilot/test_sql.py
+  deploy/managed/free-pilot/test_zip_preflight.py
+run: python3 .circleci/junit.py unittest "<< outputs.junit >>" << test.atoms >>
+outputs:
+  junit: test-results/free-pilot/python.xml
+---
+name: Free pilot Worker
+discover: >-
+  git ls-files --
+  deploy/managed/free-pilot/drive-auth.test.mjs
+  deploy/managed/free-pilot/drive-smoke.test.mjs
+  deploy/managed/free-pilot/private-link.test.mjs
+  deploy/managed/free-pilot/worker.test.mjs
+run: python3 .circleci/junit.py node "<< outputs.junit >>" << test.atoms >>
+outputs:
+  junit: test-results/free-pilot/worker.xml

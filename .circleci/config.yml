@@ -1,51 +1,56 @@
 version: 2.1
 
+functions:
+  setup-python: github.com/circleci-functions/setup-python@v0.5.0
+  setup-node: github.com/circleci-functions/setup-node@v0.6.0
+
 jobs:
-  arm64-ios-archive:
-    macos:
-      xcode: "26.5"
-    resource_class: m4pro.medium
+  archive-audit:
+    docker:
+      - image: cimg/base:stable
     steps:
       - checkout
+      - setup-python:
+          with:
+            python-version: "3.12"
       - run:
-          name: Verify the Apple silicon runner
+          name: Install the unittest JUnit reporter
+          command: python3 -m pip install unittest-xml-reporting==3.2.0
+      - run: circleci testsuite run "Archive audit"
+      - store_test_results:
+          path: test-results/archive-audit
+  free-pilot:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      - setup-python:
+          with:
+            python-version: "3.12"
+      - setup-node:
+          with:
+            node-version: "22"
+      - run:
+          name: Install the unittest JUnit reporter
+          command: python3 -m pip install unittest-xml-reporting==3.2.0
+      - run:
+          name: Install the pinned Worker bundler
+          working_directory: deploy/managed/free-pilot
+          command: npm install --no-save --package-lock=false --no-audit --no-fund esbuild@0.28.2
+      - run:
+          name: Build the Worker and check its syntax
           command: |
-            set -euo pipefail
-            test "$(uname -m)" = arm64
-            xcodebuild -version
-            python3 --version
-      - run:
-          name: Run the archive verifier tests
-          command: python3 deploy/managed/free-pilot/test_archive_verify.py -v
-      - run:
-          name: Build the project-owned ARM64 iOS sample
-          command: |
-            set -euo pipefail
-            fixture_commit=3bd9bcf51567379659931094a842707ec064cf13
-            fixture_dir=build/arm64-fixture
-            git init --quiet "$fixture_dir"
-            git -C "$fixture_dir" fetch --depth=1 --no-tags \
-              https://github.com/zwthys-cyber/macos-compat.git "$fixture_commit"
-            git -C "$fixture_dir" checkout --quiet --detach FETCH_HEAD
-            test "$(git -C "$fixture_dir" rev-parse HEAD)" = "$fixture_commit"
-            bash "$fixture_dir/sample/build-ipa.sh"
-      - run:
-          name: Verify the packaged sample with the v0.2 archive tool
-          command: |
-            set -euo pipefail
-            output_dir=build/arm64-fixture/build/ipa
-            artifact="$output_dir/ARMSample-unsigned.ipa"
-            expected=$(awk '$2 == "ARMSample-unsigned.ipa" {print $1}' "$output_dir/SHA256SUMS")
-            [[ "$expected" =~ ^[0-9a-f]{64}$ ]]
-            chmod 0600 "$artifact"
-            python3 deploy/managed/free-pilot/archive_verify.py "$artifact" \
-              --expected-sha256 "$expected" --confirm-authorized-file |
-              tee "$output_dir/delivery-verification.json"
-      - store_artifacts:
-          path: build/arm64-fixture/build/ipa
-          destination: arm64-ios-sample
+            root=deploy/managed/free-pilot
+            mkdir -p pilot-dist
+            "$root/node_modules/.bin/esbuild" "$root/worker.mjs" --bundle --platform=browser --format=esm --target=es2022 --outfile=pilot-dist/worker.mjs
+            node --check pilot-dist/worker.mjs
+      - run: circleci testsuite run "Free pilot Python"
+      - run: circleci testsuite run "Free pilot Worker"
+      - store_test_results:
+          path: test-results/free-pilot
 
 workflows:
-  arm64-archive-validation:
+  starter:
     jobs:
-      - arm64-ios-archive
+      - archive-audit
+      - free-pilot
