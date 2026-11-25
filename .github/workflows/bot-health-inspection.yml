@@ -1,4 +1,4 @@
-name: Inspect live bot service health
+name: Inspect live migration state inventory
 on:
   workflow_dispatch:
 permissions:
@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Install SSH client on GitHub runner
         run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends sshpass
-      - name: Read service health without changing runtime or polling Telegram
+      - name: Read fixed migration state file attributes and service health
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           SSHPASS: ${{ secrets.VPS_SSH_PASSWORD }}
@@ -35,6 +35,35 @@ jobs:
               print(json.dumps({"health_state":h.get("state") if h.get("state") in ("starting","ready","github_unavailable","telegram_unavailable","stopped","failed") else "unknown","health_age_seconds":max(0,int(time.time())-int(h.get("at",0))),"task_active":h.get("task_active") is True}))
           except Exception: print('{"health_readable":false}')
           print(json.dumps({"disk_free_gib":round(shutil.disk_usage("/var/lib/ipazake").free/2**30,2)}))
+          import stat
+          root=pathlib.Path("/var/lib/ipazake")
+          expected={
+              "controller_db":"state.sqlite3",
+              "recovery_sqlite":"recovery-backup.sqlite3",
+              "telegram_state":"telegram",
+              "tf_session":"testflight/session.age",
+              "tf_acceptance":"testflight/acceptance.sqlite",
+              "tf_acceptance_wal":"testflight/acceptance.sqlite-wal",
+              "tf_acceptance_shm":"testflight/acceptance.sqlite-shm",
+              "tf_acceptance_journal":"testflight/acceptance.sqlite-journal",
+              "tf_private_returns":"tf-private-return.sqlite",
+          }
+          def describe(path):
+              try:
+                  entry=path.lstat()
+              except FileNotFoundError:
+                  return {"present":False}
+              mode=entry.st_mode
+              category=("file" if stat.S_ISREG(mode) else "directory" if stat.S_ISDIR(mode)
+                        else "symlink" if stat.S_ISLNK(mode) else "other")
+              return {"present":True,"kind":category,"owner_only":not bool(mode&0o077)}
+          root_ok=describe(root).get("kind")=="directory"
+          testflight_ok=root_ok and describe(root/"testflight").get("kind")=="directory"
+          inventory={}
+          for label,relative in expected.items():
+              safe_parent=testflight_ok if relative.startswith("testflight/") else root_ok
+              inventory[label]=describe(root/relative) if safe_parent else {"inspected":False}
+          print(json.dumps({"migration_inventory":inventory},sort_keys=True))
           logs=subprocess.run(["journalctl","-u","ipazake.service","--since","2 hours ago","-n","1000","--output=json","--no-pager"],capture_output=True,text=True,timeout=20)
           codes=collections.Counter()
           for line in logs.stdout.splitlines():
