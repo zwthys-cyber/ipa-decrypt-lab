@@ -1,6 +1,6 @@
-# Managed runtime pilot (v0.2 phase 1)
+# Managed runtime pilot (v0.2)
 
-Status: implementation candidate; not a production deployment. No provider, credentials, or billing are configured by this change. The owner requires zero cost; the container image builds are retained for testing, not as approval to provision paid compute. See [zero-cost constraints](ZERO-COST.md).
+The v0.2 pilot was still a draft on 2026-11-25. The VPS remains the production controller. The [latest managed contracts](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45663099506) passed native ARM64 image builds, independent import and volume checks. The owner requires zero cost. See [the project status](PROJECT-STATUS.md) and [zero-cost constraints](ZERO-COST.md).
 
 The Linux controller can run as a single non-root managed container without SSH or systemd. The existing systemd path remains the default. A managed container is **not** a scale-to-zero Worker: it needs continuous availability for Telegram polling, persistent private storage and enough disk for local file handling. Use a provider that permits this workload and supports the required memory, storage, and private networking. Do not use GitHub Actions as a permanent service host. Use only authorized inputs and distribution.
 
@@ -42,7 +42,7 @@ The worker supports the explicit repository variable TF_STATE_TRANSPORT=https an
 
 ## Phase 3: managed images, edge ingress and offline migration check
 
-The managed-runtime-contracts workflow now produces two Linux amd64 images from an isolated public build context only, after synthetic contracts. Both images use UID/GID 10001 and fail without a private persistent volume. The artifact contains Docker image archives and checksums, not an automatic registry push or provider deployment. Verify SHA256SUMS and exact source, then publish to an approved private registry from a trusted environment. Deploy by immutable image digest. The state image uses a separate entrypoint and provides a minimal /healthz endpoint; its data operations still require the independent state token.
+The managed-runtime-contracts workflow can produce two Linux amd64 images from an isolated public build context in a manual build-only run after synthetic contracts. The native ARM64 jobs produce a matching pair for pull request validation. Both images use UID/GID 10001 and fail without a private persistent volume. The artifact contains Docker image archives and checksums, not an automatic registry push or provider deployment. Verify SHA256SUMS and exact source, then publish to an approved private registry from a trusted environment. Deploy by immutable image digest. The state image uses a separate entrypoint and provides a minimal /healthz endpoint; its data operations still require the independent state token.
 
 The earlier paid Render Blueprint proposal is withdrawn because the owner requires zero recurring and overage charges. The deployable paid example has been removed from this branch. No provider deployment is approved. See [zero-cost constraints](ZERO-COST.md).
 
@@ -55,7 +55,7 @@ Official provider references: https://render.com/docs/blueprint-spec and https:/
 
 ## Phase 4: free-only control-plane pilot
 
-See [zero-cost constraints and pilot setup](ZERO-COST.md). The independent Worker/D1 pilot does not use the HTTPS state relay or managed container. Image compilation is now an explicit manual build-only option, not part of the free pilot's PR checks. The existing production controller, native worker, state, tokens, and Telegram polling mode remain unchanged.
+See [zero-cost constraints and pilot setup](ZERO-COST.md). The independent Worker/D1 pilot does not use the HTTPS state relay or managed container. The free pilot tests and packaging run as separate jobs. The current pull request also builds and independently imports ARM64 images. The production Telegram controller continues to poll on the VPS.
 
 ### Live migration state inventory (2026-11-25)
 

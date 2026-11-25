@@ -1,5 +1,7 @@
 # 原始 IPA 下载与当前生产入口
 
+截至 2026-11-25，现有生产入口仍由 VPS 和 GitHub Actions 组成。v0.2 的 Linux 工具用于已取得归档的校验与交付，见[归档工具](../deploy/managed/free-pilot/LINUX-ARCHIVE.zh-CN.md)和[当前状态](PROJECT-STATUS.md)。
+
 当前下载组件随 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5) 发布。正式入口是 Telegram 管理员与白名单私聊，以及 GitHub 的 `private-delivery.yml`（外区）、`china-private-delivery.yml`（中国区）和主人专用 `testflight-private-delivery.yml`；历史列表分别使用 `version-catalog.yml`（外区）与 `china-version-catalog.yml`（国区）。2026-11-08 [X 完整导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)已验证下载与解密恢复。
 
 ## App Store 处理流程
@@ -23,7 +25,7 @@ Apple Secrets 使用 `APPLE_ID`、`APPLE_PASSWORD`，需要时配置短期 `APPL
 
 `store-download.yml`（Original App Store IPA）保留为固定 ipatool 提交的受控研究入口，不是生产机器人采用的下载路径。旧 ARM 对照也不能推广成现有生产平台支持；当前生产仅允许 macOS 26 Intel 与 macOS 15 Intel。
 
-早期 generic BadLogin、5002、空响应与 HTTP 拒绝没有证明密码错误、账号封禁或明确双重认证要求。Go 的 plist-compat 实验、首次 Swift 登录及 ent/download 历程，分别见[认证兼容](AUTH-COMPATIBILITY.md)、[原生对照](NATIVE-STORE.md)和[下载结果](../NATIVE-DOWNLOAD-RESULTS.md)。历史失败结论由[最新项目状态](PROJECT-STATUS.md)中的实测更新。
+早期 generic BadLogin、5002、空响应与 HTTP 拒绝没有证明密码错误、账号封禁或明确双重认证要求。早期兼容对照与下载证据见[认证兼容](AUTH-COMPATIBILITY.md)和[下载结果](../NATIVE-DOWNLOAD-RESULTS.md)。历史失败结论由[最新项目状态](PROJECT-STATUS.md)中的实测更新。
 
 
 ## 中国区账号的独立接入状态（2026-11-09）

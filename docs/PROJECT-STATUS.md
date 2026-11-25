@@ -1,5 +1,15 @@
 # 项目进展
 
+## 当前状态（2026-11-25）
+
+- **公开发行**为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。11 月 9 日刷新了公开附件，源码以 `BUILDINFO.json` 为准。国区历史版本属于之后的线上部署。详见[发布说明](RELEASES.md)。
+- **线上控制器**最近一次成功部署为 [42727462163](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42727462163)。11 月 25 日的[只读检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45638716965)记录服务健康、当时没有活动任务，仍采用 VPS 轮询。当天的[加密备份](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45637494802)包含控制器、Telegram 状态、TestFlight 会话密文和回执库；检查时标准路径中缺少可核验的 TestFlight 接受记录。
+- **v0.2** 仍是[草稿 PR](https://github.com/zwthys-cyber/ipa-decrypt-lab/pull/1)。最新[托管运行时验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45663099506)通过 ARM64 镜像构建、独立导入、持久卷预检、状态服务重启，以及双架构合成 ZIP64 全量读取。Drive 上传校验新增了媒体类型改标回归，仍核对大小、SHA-256、归属与权限。
+- **私有交付试验**完成了项目自有 ARM64 样例的 Drive 存取和[一次 Telegram 私聊链接发送](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45644694693)，接收人确认可打开。生产 webhook 切换和真实 10 GB 网盘传输仍待验证。详见[零费用试验记录](ZERO-COST.md)。
+- **主仓库 CircleCI** 的[首跑](https://app.circleci.com/workflow/7fcc4b73-7caa-4de2-8f16-763288eb34e2)通过 84 项测试，三个 Smarter Testing 套件均通过 Doctor。[CircleCI M4 Pro](https://app.circleci.com/workflow/40131029-8872-4661-8351-f1b0fd0034ba/job/c35d0d9a-2113-4b8a-b3fe-07db03f99967) 另通过了项目自有 iOS 样例的构建和归档校验。指定 `cimg/base:stable` 当前为 Linux amd64，glibc 2.31；workerd 集成仍由 GitHub Actions 验证。
+
+以下记录以原验证日期为准。
+
 ## 国区历史版本已接入生产（2026-11-10）
 
 `/versions 国区完整链接` 可查询、翻页并点选历史版本；`/version 国区完整链接 版本号或历史ID` 固定国区账号下载。国区/外区缓存、查询请求、按钮、恢复和交付收据均独立绑定。纯数字ID仍默认外区；没有自动跨区或最新版回退。
@@ -47,7 +57,7 @@ TF 文件名现包含英文 `Beta`，例如 `CapyPlayer_Beta_1.1.7.ipa`；只改
 
 ## 2026-11-09 按链接选择中国区或原外区账号（历史阶段）
 
-用户要求按 App Store 链接识别地区。main 已实现 `/cn/` 自动选择独立中国区最新版工作流，其他地区链接和纯数字 App ID 保留原外区账号；该阶段国区历史请求被拒绝；11月10日已接入，见本页开头，始终不跨账号回退。编号、固定工作流、进度与回执绑定账号，SQLite 重启恢复、取消、取文件及白名单配额保持隔离。普通国区任务不恢复模型、不申请电脑授权、不接收验证码；会话失效转管理员维护。
+用户要求按 App Store 链接识别地区。main 已实现 `/cn/` 自动选择独立中国区最新版工作流，其他地区链接和纯数字 App ID 保留原外区账号；该阶段国区历史请求被拒绝；11月10日已接入，见本页的 11 月 10 日部署记录，始终不跨账号回退。编号、固定工作流、进度与回执绑定账号，SQLite 重启恢复、取消、取文件及白名单配额保持隔离。普通国区任务不恢复模型、不申请电脑授权、不接收验证码；会话失效转管理员维护。
 
 [链接与隔离回归 42564779892](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42564779892) 通过 480 项主 Python（1 跳过）、68 项隔离 Python 与 5 项 Node 检查；[主分支复核 42564839403](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42564839403) 也通过。[双 Intel 运行包 42564839454](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42564839454) 已成功，包含本轮公共导出流程复用及账号回执绑定。国区独立客户端、真实导出和 VPS 上线分别验证，后续完成记录单列，不把合成检查当作真实 Telegram 收发。
 

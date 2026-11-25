@@ -1,5 +1,11 @@
 # Zero-cost deployment constraints
 
+## Status as of 2026-11-25
+
+The VPS remains the production Telegram poller. The webhook pilot can register requests and verify existing private links. Automatic dispatch and a production cutover remain open. The [small private link test](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45644694693) reached the existing Telegram bot, and the owner confirmed access. The [current GitHub run](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45663099506) passed the Linux ARM64 image and dual-architecture archive checks; the [main project CircleCI run](https://app.circleci.com/workflow/7fcc4b73-7caa-4de2-8f16-763288eb34e2) passed 84 tests. These results cover the referenced builds and fixtures. See [the project status](PROJECT-STATUS.md) for the deployment and backup records.
+
+The dated phases below retain the evidence and limitations observed at each stage.
+
 Owner requirement (2026-11-24): no paid VPS, no paid subscriptions or metered overage charges. No automatic provisioning or upgrade to a paid plan. A trial or expiring promotional credit is not a durable zero-cost solution. An estimated bill of zero is not a hard spending limit.
 
 ## Available free control-plane candidates

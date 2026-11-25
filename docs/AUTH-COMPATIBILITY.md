@@ -1,6 +1,8 @@
 # 认证兼容与故障诊断
 
-当前版本为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。2026-11-08 的[正式 X 导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)已验证原生登录、下载及完整解密恢复；不要再把历史 204/403/SP 失败写成当前运行状态。
+本文记录既有生产认证的兼容性。v0.2 的受控运行时验证和生产迁移条件见[当前项目状态](PROJECT-STATUS.md)。
+
+截至 2026-11-25，最新公开发行版为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。2026-11-08 的[正式 X 导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)已验证原生登录、下载及完整解密恢复；不要再把历史 204/403/SP 失败写成当前运行状态。
 
 ## 当前 App Store 生产链路
 
@@ -26,7 +28,7 @@ GitHub Actions 的 `store-login-diagnostic.yml` 只执行有界登录及清理�
 
 ## 历史 plist-compat 实验
 
-早期比较过固定 AssppWeb 与 ipatool 请求模板，`plist-compat` 只调整 plist Content-Type 和 attempt 值；没有证明这项调整单独恢复登录。它是 `store-download.yml` 的受控 Go 客户端对照，不是当前生产修复。历史运行与版本范围见[下载调查](DOWNLOADER.md)、[Swift 初次对照](NATIVE-STORE.md)及[项目状态](PROJECT-STATUS.md)。
+早期比较过固定 AssppWeb 与 ipatool 请求模板，`plist-compat` 只调整 plist Content-Type 和 attempt 值；没有证明这项调整单独恢复登录。它是 `store-download.yml` 的受控 Go 客户端对照，不是当前生产修复。历史运行与版本范围见[下载调查](DOWNLOADER.md)及[项目状态](PROJECT-STATUS.md)。
 
 
 ## 中国区账号的独立接入状态（2026-11-09）

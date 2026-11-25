@@ -1,40 +1,41 @@
 # 项目文档索引
 
-本文档于 2026-11-10 更新，当前成品版本为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。Apple 新原生认证与 Store AMD/SP 设备注册已恢复，正式 X 导出通过 32 个加密切片、86,704 页完整验证。安装运行仍未验证。TF 已接入主人自动任务，CapyPlayer 新请求的实际解密与用户收件截图均已记录；最新部署为新 TF 文件添加 `Beta` 命名标识。本次 alpha.5 附件更新纳入该功能，新包来源以 `BUILDINFO.json` 为准，原标签保留，详见 [TF 记录](TESTFLIGHT.md)。
+更新于 2026-11-25。公开成品为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)，生产机器人仍在 VPS。v0.2 和 CircleCI 的当前进度见[项目状态](PROJECT-STATUS.md)。
 
-主分支与线上控制器另接入国区历史版本，完整国区链接用于查询与指定下载；alpha.5 附件仍是此前发布快照。实测与部署证据见 [项目状态](PROJECT-STATUS.md)。
-
-## 使用、部署与发布
+## 使用与部署
 
 | 文档 | 用途 |
 | --- | --- |
-| [README](../README.md) | 项目能力、运行架构与已验证范围 |
-| [项目状态](PROJECT-STATUS.md) | 当前事实、运行证据、边界与待办 |
-| [成品包与发布](RELEASES.md) | 平台选择、附件、摘要、来源与发布工作流 |
-| [新版发布说明](releases/v0.1.0-alpha.5.md) | TF/Beta 命名、地区识别、独立账号与重打包来源 |
-| [多用户白名单](MULTI-USER.md) | 管理员授权、用户隔离与限制 |
-| [进度与加速版](releases/v0.1.0-alpha.3.md) | alpha.3 的进度与提速快照 |
-| [登录修复版](releases/v0.1.0-alpha.2.md) | alpha.2 的兼容修复快照 |
-| [Telegram](TELEGRAM.md) | 指令、历史版本、配额、进度与交付 |
-| [VPS 部署](VPS-DEPLOYMENT.md) | 私有配置、安装、健康检查和回滚 |
-| [任务恢复](SESSION-RECOVERY.md) | SQLite、取消、未知发送结果和备份 |
-| [中国区账号接入](CHINA-ACCOUNT.md) | 实时验证码、独立模型/备份、保存模型复用、链接路由、会话维护及验证边界 |
-| [TestFlight 自动处理](TESTFLIGHT.md) | 主人入口、持久会话、独立队列、真实导出/回传证据与限制 |
-| [认证兼容](AUTH-COMPATIBILITY.md) | 当前原生登录、SP 挑战、bag 与设备证明 |
-| [下载模块](DOWNLOADER.md) | 当前工作流、组件及早期 Go 研究入口 |
-| [代理约束](../AGENTS.md) | 编译位置、凭据保护、平台及验证边界 |
+| [README](../README.md) | 当前发布、线上运行和开发进度 |
+| [项目状态](PROJECT-STATUS.md) | 当前事实、验证记录和剩余条件 |
+| [成品包下载](RELEASES.md) | 平台、校验和与源码来源 |
+| [Telegram](TELEGRAM.md) | 私聊指令、历史版本、进度和交付 |
+| [多用户白名单](MULTI-USER.md) | 管理员授权、额度及撤权 |
+| [VPS 部署](VPS-DEPLOYMENT.md) | 现有服务的部署、备份和回滚 |
+| [任务恢复](SESSION-RECOVERY.md) | SQLite、重启、取消及发送状态 |
+| [中国区账号](CHINA-ACCOUNT.md) | 地区路由和已验证范围 |
+| [TestFlight](TESTFLIGHT.md) | 生产验证记录、会话及迁移条件 |
+| [认证兼容](AUTH-COMPATIBILITY.md) | 兼容边界和历史诊断记录 |
+| [下载模块](DOWNLOADER.md) | 既有组件及验证范围 |
+| [仓库约束](../AGENTS.md) | 构建环境、凭据保护及验证约束 |
 
-## 历史研究与证据
+## v0.2 与持续集成
 
-| 文档 | 保留的历史范围 |
+| 文档 | 用途 |
 | --- | --- |
-| [原生认证对照](NATIVE-STORE.md) | 首次 Swift 登录及早期下载失败 |
-| [原生下载修正](NATIVE-DOWNLOAD-FIX.md) | 会话复用与免费许可处理 |
-| [原始下载结果](../NATIVE-DOWNLOAD-RESULTS.md) | 2026-11-03 原包获取及 remap 失败 |
-| [ent/download 调查](../ENT-DOWNLOAD.md) | 端点、会话、kbsync 与许可边界 |
-| [iOS 原生解密跟进](../IOS-DECRYPTION-FOLLOWUP.md) | SINF 与原生 syscall 实测 |
-| [离线后端档案](../OFFLINE-BACKEND.md) | 模型恢复、旧阻塞及跨运行器证据 |
-| [早期研究](RESEARCH.md) | 合成样本、平台差异与失败证据 |
-| [旧版发布记录](releases/v0.1.0-alpha.1.md) | 已被新版替换的公开成品范围 |
+| [托管运行时](MANAGED-RUNTIME.md) | ARM64 镜像、持久卷、状态服务和切换条件 |
+| [零费用约束和试验记录](ZERO-COST.md) | 候选平台、Telegram webhook、D1 和 Drive |
+| [免费试验版部署](../deploy/managed/free-pilot/DEPLOY.zh-CN.md) | 独立测试环境和验收条件 |
+| [授权归档校验](../deploy/managed/free-pilot/LINUX-ARCHIVE.zh-CN.md) | 双架构归档工具和合成 ZIP64 验证 |
+| [CircleCI 配置](https://github.com/zwthys-cyber/ipa-decrypt-lab/tree/circleci-project-setup/.circleci) | Linux starter 与三个 Smarter Testing 套件 |
 
-历史材料中的“当前”“尚未实现”“暂停”按其原实验日期解释，不能覆盖最新项目状态。所有编译与测试在 GitHub-hosted Actions 执行；VPS 只运行已验证成品。Release 不含账号、模型、交付私钥、Telegram token 或应用文件；公开发布与 VPS 部署是两个独立动作。
+## 发布与历史证据
+
+| 文档 | 用途 |
+| --- | --- |
+| [alpha.5](releases/v0.1.0-alpha.5.md)、[alpha.4](releases/v0.1.0-alpha.4.md)、[alpha.3](releases/v0.1.0-alpha.3.md)、[alpha.2](releases/v0.1.0-alpha.2.md)、[alpha.1](releases/v0.1.0-alpha.1.md) | 各版本发布时的功能、限制及来源 |
+| [原始下载调查](../NATIVE-DOWNLOAD-RESULTS.md) | 2026-11-03 的原始观察 |
+| [离线后端档案](../OFFLINE-BACKEND.md) | 早期实验、失败与验证证据 |
+| [早期研究](RESEARCH.md) | 合成样本和平台能力记录 |
+
+历史材料按原实验日期阅读。正式发布包和线上部署的来源分别记录在[发布说明](RELEASES.md)及[项目状态](PROJECT-STATUS.md)。

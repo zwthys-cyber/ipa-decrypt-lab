@@ -1,5 +1,7 @@
 # VPS 部署
 
+截至 2026-11-25，生产控制器继续在 Debian VPS 上轮询。最近一次成功[部署](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42727462163)源于 `b70d0f3`，[只读健康检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45638716965)确认当时服务正常。v0.2 的 ARM64 镜像和备份验收另见[托管运行时](MANAGED-RUNTIME.md)。
+
 编译和测试都在 GitHub 上执行，VPS 只运行验证过的成品。服务器负责 Telegram、任务记录和文件交付；Apple 下载及 FairPlay 解密仍由 GitHub macOS 处理。
 
 当前部署环境为 Debian 13、x86_64、4 GB 内存的服务器。systemd 给机器人服务设置了 2 GiB 内存上限。交付前还会检查至少 8,147,483,648 字节（约 8.15 GB）可用磁盘。

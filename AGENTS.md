@@ -1,6 +1,8 @@
 # Project constraints
 
-- All project compilation, automated tests and build validation MUST run on GitHub-hosted Actions runners only. The VPS may run CI-verified finished services (2026-11-04).
+Last reviewed 2026-11-25. Use [the current project status](docs/PROJECT-STATUS.md) for release, production and CI evidence. The v0.2 work is a draft, and the VPS remains the production Telegram poller. Historical sections below apply to their stated dates.
+
+- Build and validate official release and VPS artifacts on GitHub-hosted Actions. The user also authorized isolated CircleCI validation of the project-owned iOS sample and the Linux archive audit and free-pilot tests. The VPS runs CI-verified finished services.
 - Never build, install build dependencies or run test suites on the VPS or this workspace. Install only necessary system runtime packages and the CI-verified deployment bundle on the authorized VPS. No local project execution.
 - Edit source through GitHub APIs. Do not create local project checkouts or build caches.
 - Do not use a personal iPhone or TrollStore installation as infrastructure.
@@ -16,7 +18,7 @@
 
 - Telegram integration resumed on 2026-11-04. Implement bounded GitHub-hosted bot sessions and verified private delivery; the later explicit authorization permits finished-service execution on the VPS, but never permanent Actions hosting.
 
-## Current operational snapshot (2026-11-10)
+## Operational snapshot (2026-11-10)
 - Live VPS controller: b70d0f3730651ebcc03c8d4ca31e9e5d4bd84c51 / deployment42727462163, healthy. CN free historical catalog/paging/selection/exact-version delivery is now integrated using full /cn/ links. TF owner-only; App Store CN/foreign routes and ordinary white-list users retained. New TF files have Beta in filename.
 - Fresh CapyPlayer request42714371079 proved46 images/17724 pages; user screenshot confirms private file receipt. No installation/runtime or universal model compatibility proof. CN-exclusive Douyin license issue remains unresolved.
 - Public alpha.5 attachment refresh completed in42720498732 from source6fa96e8b4ec7500fad84638dde333c4174c04b30, using build-only VPS42720309329 and exact-fingerprint dual-platform native42714903141. All25 local Markdown documents checked;3 packages/8 assets published and public BUILDINFO/SHA256SUMS read back with7 matching asset digests. Retain original source tag and use new BUILDINFO/SOURCE_COMMIT for attachment provenance. Publication does not deploy or send an IPA.
