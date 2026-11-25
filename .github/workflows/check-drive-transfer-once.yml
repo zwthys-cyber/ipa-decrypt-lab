@@ -57,7 +57,7 @@ jobs:
           set -eu
           umask 077
           python3 - <<'PY'
-          import hashlib,http.client,json,os,re,secrets,ssl,subprocess,sys,time
+          import base64,hashlib,http.client,json,os,re,secrets,ssl,subprocess,sys,time
           from pathlib import Path
           HOST="ipazake-free-control-pilot.hahayesadd.workers.dev"
           WORKER="ipazake-free-control-pilot"
@@ -80,6 +80,12 @@ jobs:
               status,raw=call("api.cloudflare.com",method,path,{"Authorization":"Bearer "+token,"Accept":"application/json","Content-Type":content_type},body)
               if status not in (200,201):
                   print("cloudflare_http_status="+str(status),flush=True)
+                  try:
+                      errors=json.loads(raw).get("errors",[])
+                      codes=sorted({item["code"] for item in errors[:20] if isinstance(item,dict) and type(item.get("code")) is int and 0<item["code"]<1000000})
+                      if codes: print("cloudflare_error_codes="+",".join(map(str,codes)),flush=True)
+                  except (AttributeError, TypeError, ValueError):
+                      pass
                   raise Stop("cloudflare_request_unconfirmed")
               value=json.loads(raw)
               need(isinstance(value,dict) and value.get("success") is True and isinstance(value.get("result"),dict),"cloudflare_request_unconfirmed")
@@ -211,18 +217,16 @@ jobs:
               metadata={"main_module":"probe.mjs","compatibility_date":DATE,
                         "bindings":[{"name":name,"type":"inherit","version_id":old} for name in sorted(NAMES)],
                         "annotations":{"workers/message":"Expiring one-file synthetic transfer verification; zero traffic"}}
-              boundary="----readonly-pilot-"+secrets.token_hex(16)
-              def part(name,typ,data,filename=None):
-                  disposition='Content-Disposition: form-data; name="'+name+'"'
-                  if filename:disposition+='; filename="'+filename+'"'
-                  return ("--"+boundary+"\r\n"+disposition+"\r\nContent-Type: "+typ+"\r\n\r\n").encode()+data+b"\r\n"
-              body=part("metadata","application/json",json.dumps(metadata,separators=(",",":")).encode())
-              for name in ("probe.mjs","worker.mjs","drive-auth.mjs","drive-smoke.mjs"):
-                  body+=part(name,"application/javascript+module",(files/name).read_bytes(),name)
-              body+=("--"+boundary+"--\r\n").encode()
+              metadata["modules"]=[
+                  {"name":name,"content_type":"application/javascript+module",
+                   "content_base64":base64.b64encode((files/name).read_bytes()).decode("ascii")}
+                  for name in ("probe.mjs","worker.mjs","drive-auth.mjs","drive-smoke.mjs")
+              ]
+              body=json.dumps(metadata,separators=(",",":")).encode()
               stage="upload_probe_version"
               need(active()=={old:100} and latest()==previous_latest,"concurrent_deployment_detected")
-              new=cf("POST",root+"/versions?bindings_inherit=strict",body,"multipart/form-data; boundary="+boundary).get("id")
+              versions_root="/client/v4/accounts/"+account+"/workers/workers/"+WORKER+"/versions"
+              new=cf("POST",versions_root+"?deploy=false",body).get("id")
               need(uuid(new),"probe_version_unconfirmed")
               need(bindings(cf("GET",root+"/versions/"+new))==dbid,"binding_preservation_unconfirmed")
               need(active()=={old:100} and latest()==new,"concurrent_deployment_detected")
