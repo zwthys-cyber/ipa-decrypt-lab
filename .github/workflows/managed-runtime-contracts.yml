@@ -8,6 +8,7 @@ on:
       - 'tests/test_managed_state_transport.py'
       - 'tools/tf_state_http.py'
       - 'tools/managed_migration.py'
+      - 'tools/managed_volume_preflight.py'
       - 'tests/test_managed_migration.py'
       - 'tools/testflight_state.py'
       - '.github/ops/tf_task*.py'
@@ -330,6 +331,34 @@ jobs:
             if docker run --rm --network none "$image"; then echo missing_volume_not_rejected; exit 1; fi
           done
           docker run --rm --network none --entrypoint /opt/ipazake/bin/telegram-bot-api "ipazake-controller:$GITHUB_SHA" --version
+      - name: Preflight a controller volume without credentials or network
+        run: |
+          image="ipazake-controller:$GITHUB_SHA"
+          volume=$(docker volume create "ipazake-controller-check-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT")
+          trap 'docker volume rm "$volume" >/dev/null' EXIT
+          mount="type=volume,source=$volume,target=/var/lib/ipazake"
+          docker run --rm --network none --mount "$mount" --user 0:0 \
+            --entrypoint /bin/sh "$image" -c 'chown 10001:10001 /var/lib/ipazake && chmod 0700 /var/lib/ipazake'
+          preflight() {
+            docker run --rm --network none "$@" --entrypoint /usr/bin/python3 "$image" \
+              /opt/ipazake/tools/managed_volume_preflight.py
+          }
+          expect_rejection() {
+            local expected="$1" output
+            shift
+            if output=$(preflight "$@" 2>&1); then
+              echo "Invalid controller volume passed preflight: $expected"
+              return 1
+            fi
+            grep -Fx "$expected" <<<"$output"
+          }
+          preflight --mount "$mount"
+          expect_rejection managed_volume_not_mounted
+          expect_rejection managed_volume_read_only --mount "$mount,readonly"
+          expect_rejection managed_volume_insufficient_space \
+            --tmpfs /var/lib/ipazake:rw,size=32m,mode=0700,uid=10001,gid=10001
+          docker run --rm --network none --mount "$mount" --entrypoint /bin/sh "$image" \
+            -c 'test -z "$(ls -A /var/lib/ipazake)"'
       - name: Verify state service startup and restart with a mounted volume
         run: bash deploy/managed/verify-state-image.sh "ipazake-state:$GITHUB_SHA"
       - name: Package verified ARM64 images and source provenance

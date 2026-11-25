@@ -7,14 +7,14 @@ The Linux controller can run as a single non-root managed container without SSH 
 ## Runtime prerequisites
 
 - A CI-verified controller bundle built from the matching source commit; alpha.5 predates this mode.
-- Linux amd64, one replica, UID/GID 10001, at least 2 GiB memory and a private volume with sufficient free space (existing delivery guard: at least 8,147,483,648 bytes). Mount at /var/lib/ipazake, owned by UID 10001, mode 0700. Use stop-before-start deployments, not rolling replicas.
+- Linux ARM64 or amd64, one replica, UID/GID 10001, at least 2 GiB memory and a private volume with sufficient free space (existing delivery guard: at least 8,147,483,648 bytes). Mount at /var/lib/ipazake, owned by UID 10001, mode 0700. Use stop-before-start deployments, not rolling replicas.
 - Inject the existing six credentials via the provider's private environment settings: TELEGRAM_BOT_TOKEN, TELEGRAM_OWNER_ID, TELEGRAM_API_ID, TELEGRAM_API_HASH, DELIVERY_AGE_IDENTITY, GH_TOKEN. Do not add them to Docker build args, files in the build context, logs or image layers.
 - No public listening port is required for the controller. Local Bot API stays on loopback. Keep restart and encrypted backups at the platform level.
 - The production worker and its prerequisites remain unchanged. This change does not approve using GitHub-hosted runners as permanent production hosting.
 
 ## Build and validation
 
-The existing vps-release workflow validates the container using the exact assembled package before publishing the bundle. The PR workflow runs synthetic credential/volume/journal tests. Neither requires real credentials or sends files. The current vps-release workflow builds only on main; a branch PR does not produce a verified release bundle.
+The existing vps-release workflow validates the container using the exact assembled package before publishing the bundle. The PR workflow runs synthetic credential, volume and journal tests and produces validation builds of the ARM64 images. Neither workflow requires real credentials or sends files during these checks. The vps-release workflow builds its release bundles on main.
 
 After a successful matching CI build, use the published digest to check the bundle, unpack it into a private build context containing only the public bundle, and build with deploy/managed/Dockerfile. Provider startup configuration and image registry must be reviewed separately. Never deploy an unverified branch directly.
 
@@ -66,3 +66,16 @@ An absent file is consistent with the live state helper's lazy initialization, b
 ### Native Linux ARM64 checks
 
 The managed contracts run the controller, state transport, frozen-snapshot and file delivery tests on native Linux amd64 and ARM64 runners. The ARM64 delivery helper job builds and tests the same age-based executable used by the controller and publishes it with source provenance and checksums. The ARM64 image job compiles the pinned Local Bot API for ARM64 on a cache miss, then builds the controller and state images with the matching ARM64 helper. The job checks executable and container architecture, non-root imports, missing-volume rejection and the Local Bot API version. It also starts the state image twice with the same isolated volume, checks readiness and status authentication, and verifies that the synthetic session checksum survives container replacement. Use the image artifact only after this job succeeds. The macOS export runtime has separate architecture requirements.
+
+### Offline controller volume preflight
+
+With the controller stopped, mount the intended private volume and run the check from the matching CI-verified controller image. This example uses a Docker named volume and the image's default UID/GID 10001.
+
+```sh
+docker run --rm --network none \
+  --mount "type=volume,source=$CONTROLLER_VOLUME,target=/var/lib/ipazake" \
+  --entrypoint /usr/bin/python3 "$CONTROLLER_IMAGE" \
+  /opt/ipazake/tools/managed_volume_preflight.py
+```
+
+The check requires a mounted, owner-only, writable filesystem with at least 8,147,483,648 available bytes. It checks local lock contention, SQLite WAL support and committed journal readback in a temporary directory on the volume. It removes the temporary files and does not read existing controller records or require credentials. Success prints `managed_controller_volume_ready`. The lock check covers the local mount. Keep one controller replica.
