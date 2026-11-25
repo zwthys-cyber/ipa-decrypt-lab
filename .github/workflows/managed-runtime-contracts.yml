@@ -330,6 +330,8 @@ jobs:
             if docker run --rm --network none "$image"; then echo missing_volume_not_rejected; exit 1; fi
           done
           docker run --rm --network none --entrypoint /opt/ipazake/bin/telegram-bot-api "ipazake-controller:$GITHUB_SHA" --version
+      - name: Verify state service startup and restart with a mounted volume
+        run: bash deploy/managed/verify-state-image.sh "ipazake-state:$GITHUB_SHA"
       - name: Package verified ARM64 images and source provenance
         run: |
           mkdir -p managed-images-arm64/licenses
