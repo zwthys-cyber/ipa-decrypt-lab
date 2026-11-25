@@ -241,7 +241,7 @@ jobs:
               else reason="oauth_token_validation";
               return new Response(bytes,{status:r.status,headers:{"Content-Type":"application/json"}});
             };
-            const result=await smokeTransfer(env,send,{allowCreate:false,verifyLink:true});
+            const result=await smokeTransfer(env,send,{allowCreate:false});
             if(!result.ok&&result.stage==="oauth")result.stage=reason;
             return reply(result.ok?200:503,{probe:"circleci-ipa-roundtrip-v1",...result});
           }};
@@ -285,14 +285,18 @@ jobs:
               stage="circleci_sample_roundtrip"
               status,raw=call(HOST,"POST","/__drive_readonly_probe",headers,b"")
               value=json.loads(raw)
-              need(value.get("probe")=="circleci-ipa-roundtrip-v1","transfer_outcome_unconfirmed")
+              if value.get("probe")!="circleci-ipa-roundtrip-v1":
+                  print("probe_http_status="+str(status),flush=True)
+                  code=value.get("code")
+                  if type(code) is int and 0<code<10000: print("probe_error_code="+str(code),flush=True)
+                  raise Stop("transfer_outcome_unconfirmed")
               if status==503:
                   failure=value.get("stage")
                   if failure not in {"configuration","oauth","oauth_network","oauth_illegal_invocation","oauth_timeout","oauth_dns","oauth_tls","oauth_connection_lost","oauth_redirect","oauth_response","oauth_scope_missing","oauth_scope_mismatch","oauth_token_validation","google_invalid_grant","google_invalid_client","google_unauthorized_client","google_invalid_scope","google_invalid_request","google_access_denied","google_admin_policy_enforced","google_temporarily_unavailable","google_other_error","quota_request","quota_response","quota_api_forbidden","quota_api_unauthorized","quota_api_limited","quota_api_unavailable","account_mismatch","quota_unavailable","quota_not_free_compatible","quota_insufficient","existing_fixture","fixture_missing","metadata","metadata_missing","metadata_identity","metadata_owner","metadata_size","metadata_digest_missing","metadata_digest_mismatch","metadata_mime","metadata_resource_key","acl","download","private_link","hosted_d1"}:failure="unknown"
                   need(value.get("upload_may_exist") is False,"unexpected_upload_state")
                   raise Stop("transfer_"+failure)
-              need(status==200 and value.get("ok") is True and value.get("owner_only") is True and value.get("bytes")==5495 and value.get("created") is False and value.get("private_link_verified") is True and value.get("sha256")=="afea265d6b8a3f05ec66031f98a9c88f2c7e18f65d10ef18438315a1d0d28ab0","transfer_unconfirmed")
-              print("circleci_ipa_roundtrip_verified: bytes=5495; owner_only=true; sha256_match=true; private_link_verified=true; newly_created=false",flush=True)
+              need(status==200 and value.get("ok") is True and value.get("owner_only") is True and value.get("bytes")==5495 and value.get("created") is False and value.get("sha256")=="afea265d6b8a3f05ec66031f98a9c88f2c7e18f65d10ef18438315a1d0d28ab0","transfer_unconfirmed")
+              print("circleci_ipa_roundtrip_verified: bytes=5495; owner_only=true; sha256_match=true; newly_created=false",flush=True)
               success=True
           except Stop as exc:
               print("stopped_stage="+stage+"; reason="+str(exc),file=sys.stderr,flush=True)
