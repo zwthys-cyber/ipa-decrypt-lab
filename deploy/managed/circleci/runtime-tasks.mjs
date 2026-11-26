@@ -1,3 +1,4 @@
+import {offlineEntry} from "./runtime-recovery.mjs";
 // Real-task admission and immutable verification. Source handoff is a separate, explicit operation.
 import {canaryWindow} from "./runtime-canary.mjs";
 import {need} from "./runtime-auth.mjs";
@@ -27,6 +28,7 @@ export async function requireEntry(env){
  need(Number.isSafeInteger(Number(env.RUNTIME_OWNER_ID))&&Number(env.RUNTIME_OWNER_ID)>0,"runtime_owner_configuration");
  const window=await canaryWindow(env,Math.floor(Date.now()/1000));if(window)return window;
  const row=await env.DB.prepare("SELECT * FROM runtime_entry_handoff WHERE owner_id=?").bind(env.RUNTIME_OWNER_ID).first();
+ if(!row)return offlineEntry(env);
  need(row&&HEX.test(row.snapshot_sha256||"")&&HEX.test(row.session_sha256||"")&&
   row.old_service_stopped_at>0&&row.billing_verified_at>0&&row.sealed_at>=row.old_service_stopped_at&&
   row.sealed_at>=row.billing_verified_at&&Number.isSafeInteger(row.legacy_rows)&&row.legacy_rows>=0&&

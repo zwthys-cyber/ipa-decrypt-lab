@@ -77,7 +77,7 @@ export async function stageHandoff(db,ownerId,evidence,rows){
 }
 export async function sealHandoff(db,ownerId,evidence,now){
   owner(ownerId);proof(evidence);require(Number.isSafeInteger(now)&&now>0,"tf_handoff_time");
-  // Caller must verify the stopped source and immutable snapshot before calling. No external route exists.
+  // Caller must verify a stopped source or an explicit offline token/dispatch fence, and the immutable snapshot. No external route exists.
   const result=await db.prepare(`UPDATE circleci_tf_handoff SET sealed_at=?
     WHERE owner_id=? AND snapshot_sha256=? AND session_sha256=? AND source_sha=? AND ready=1 AND sealed_at IS NULL`)
     .bind(now,ownerId,evidence.snapshot_sha256,evidence.session_sha256,evidence.source_sha).run();

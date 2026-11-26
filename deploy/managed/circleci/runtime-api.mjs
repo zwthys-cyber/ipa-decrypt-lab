@@ -1,3 +1,4 @@
+import {RECOVERY_SCHEMA,stageRecovery,sealRecovery,recoveryStatus,refreshRecoveryFence} from "./runtime-recovery.mjs";
 // Staged managed-runtime API. Real exports and Telegram admission remain disabled until handoff.
 import {CATALOG_SCHEMA,catalogTask,openCatalog,catalogAction,saveCatalog,completeCatalogNotices} from "./runtime-catalog.mjs";
 import {CANARY_SCHEMA,installCanary,revokeCanary} from "./runtime-canary.mjs";
@@ -11,7 +12,7 @@ import {DRIVE_FIXTURE,FIXTURE_SCHEMA} from "./runtime-fixture.mjs";
 import {uploadAccess,verifyOwnedUpload,cleanupFixture} from "./runtime-drive.mjs";
 import {need,UUID,publicJSON,circleIdentity,githubIdentity} from "./runtime-auth.mjs";
 import {requestRuntimeLease,pendingRuntimeLease,publishRuntimeLease,readRuntimeLease,closeRuntimeLease} from "./runtime-lease.mjs";
-export const schemaStatements=()=>[RUNTIME_SCHEMA,UPLOAD_SCHEMA,FIXTURE_SCHEMA,TASK_SCHEMA,TF_SCHEMA,NOTIFY_SCHEMA,CANARY_SCHEMA,CATALOG_SCHEMA].flatMap(sql=>sql.split(";")).map(sql=>sql.trim()).filter(Boolean);
+export const schemaStatements=()=>[RUNTIME_SCHEMA,UPLOAD_SCHEMA,FIXTURE_SCHEMA,TASK_SCHEMA,TF_SCHEMA,NOTIFY_SCHEMA,CANARY_SCHEMA,CATALOG_SCHEMA,RECOVERY_SCHEMA].flatMap(sql=>sql.split(";")).map(sql=>sql.trim()).filter(Boolean);
 const PREFIX="/v2/runtime/";
 const JOB=/^pilot_[a-f0-9]{32}$/,SHA=/^[a-f0-9]{40}$/;
 const ORIGIN="https://ipazake-free-control-pilot.hahayesadd.workers.dev";
@@ -138,7 +139,7 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
    const count=exists?await env.DB.prepare("SELECT count(*) n FROM runtime_jobs WHERE state NOT IN ('completed','cancelled','closed')").first():{n:0};
    return reply(200,{ok:true,source_sha:env.RUNTIME_SOURCE_SHA,active:count.n>0});
   }
-  if(["init","admit-fixture","admit-drive-fixture","admit-export","catalog-open","catalog-action","status","owner-cancel","owner-get","canary/install","canary/revoke"].includes(path)){
+  if(["init","admit-fixture","admit-drive-fixture","admit-export","catalog-open","catalog-action","recovery/stage","recovery/seal","recovery/status","status","owner-cancel","owner-get","canary/install","canary/revoke"].includes(path)){
    await admin(request,env);
    if(path==="init"){
     await body(request,[]);
@@ -165,6 +166,12 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
     }else need((await task(env,id)).drive_fixture===0,"runtime_fixture_admission_binding");
     await dispatchNative(env,id,now,send);
     const row=await task(env,id);return reply(200,{ok:true,job_id:id,state:row.state,run_id:row.run_id});
+   }
+   if(path.startsWith("recovery/")){
+    const fields=path==="recovery/stage"?["packet"]:path==="recovery/seal"?["packet"]:[];
+    const value=await body(request,fields,1048576);
+    return reply(200,path==="recovery/stage"?await stageRecovery(env,value.packet,now,send):
+     path==="recovery/seal"?await sealRecovery(env,value.packet,now,send):await recoveryStatus(env));
    }
    if(path==="catalog-open"||path==="catalog-action"){
     const value=await body(request,path==="catalog-open"?["request_id","profile","target"]:["request_id","view_id","message_id","action","version_id"]);
@@ -366,6 +373,7 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
 }
 
 export async function runtimeTick(env,now=Math.floor(Date.now()/1000),send=(url,init)=>globalThis.fetch(url,init)){
+ await refreshRecoveryFence(env,now,send);
  await requireEntry(env);
  const rows=await env.DB.prepare("SELECT * FROM runtime_jobs WHERE owner_id=? AND state IN ('submitted','running','uploading','link_ready','cancel_intent','cancel_pending','failed_pending')").bind(env.RUNTIME_OWNER_ID).all();
  for(const row of rows.results||[])await reconcileFixture(env,row,send);

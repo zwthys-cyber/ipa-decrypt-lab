@@ -44,7 +44,7 @@ async function setup(bindings={}){
  const base=await mkdtemp(join(tmpdir(),"runtime-api-"));
  const folder=join(base,"circleci");await mkdir(folder);await mkdir(join(base,"free-pilot"));
  await copyFile(new URL("../free-pilot/drive-auth.mjs",import.meta.url),join(base,"free-pilot","drive-auth.mjs"));
- const files=["runtime-api.mjs","runtime-catalog.mjs","runtime-canary.mjs","runtime-notify.mjs","runtime-tasks.mjs","runtime-telegram.mjs","tf-acceptance.mjs","runtime-schema.mjs","runtime-auth.mjs","runtime-lease.mjs","runtime-upload.mjs","runtime-drive.mjs","runtime-fixture.mjs",
+ const files=["runtime-api.mjs","runtime-recovery.mjs","runtime-catalog.mjs","runtime-canary.mjs","runtime-notify.mjs","runtime-tasks.mjs","runtime-telegram.mjs","tf-acceptance.mjs","runtime-schema.mjs","runtime-auth.mjs","runtime-lease.mjs","runtime-upload.mjs","runtime-drive.mjs","runtime-fixture.mjs",
   "oidc.mjs","github-oidc.mjs"];
  await Promise.all(files.map(name=>copyFile(new URL(name,import.meta.url),join(folder,name))));
  const entry=join(folder,"entry.mjs");

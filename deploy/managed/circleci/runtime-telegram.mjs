@@ -1,3 +1,4 @@
+import {quarantineUpdate} from "./runtime-recovery.mjs";
 // Owner-private managed entry; it remains closed until the final handoff is sealed.
 import {requireEntry} from "./runtime-tasks.mjs";
 const ID=/^pilot_[a-f0-9]{32}$/;
@@ -46,6 +47,13 @@ export async function handleManagedTelegram(request,env,invoke,now=Math.floor(Da
  let update;try{update=await payload(request);}catch{return response(400,{ok:false});}
  const owner=env.RUNTIME_OWNER_ID;
  if(!Number.isSafeInteger(update?.update_id)||update.update_id<handoff.telegram_update_floor)return response(200);
+ if(handoff.offline){
+  const oldMessage=update.message||update.callback_query?.message,actor=update.message?.from||update.callback_query?.from;
+  if(actor?.is_bot===false&&String(actor.id)===owner&&oldMessage?.chat?.type==="private"&&String(oldMessage.chat.id)===owner&&
+   (!Number.isSafeInteger(oldMessage.date)||oldMessage.date<handoff.activated_at)){
+   try{await quarantineUpdate(env,update,now);return response(200);}catch{return response(503,{ok:false});}
+  }
+ }
  async function requestTag(profile,suffix=""){
   const raw=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("telegram-managed\0"+owner+"\0"+update.update_id+suffix));
   return ({default:"",cn:"cn_",tf:"tf_"}[profile])+Array.from(new Uint8Array(raw),x=>x.toString(16).padStart(2,"0")).join("").slice(0,32);
