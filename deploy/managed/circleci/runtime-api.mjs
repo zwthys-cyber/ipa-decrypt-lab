@@ -10,6 +10,7 @@ import {DRIVE_FIXTURE,FIXTURE_SCHEMA} from "./runtime-fixture.mjs";
 import {uploadAccess,verifyOwnedUpload,cleanupFixture} from "./runtime-drive.mjs";
 import {need,UUID,publicJSON,circleIdentity,githubIdentity} from "./runtime-auth.mjs";
 import {requestRuntimeLease,pendingRuntimeLease,publishRuntimeLease,readRuntimeLease,closeRuntimeLease} from "./runtime-lease.mjs";
+export const schemaStatements=()=>[RUNTIME_SCHEMA,UPLOAD_SCHEMA,FIXTURE_SCHEMA,TASK_SCHEMA,TF_SCHEMA,NOTIFY_SCHEMA,CANARY_SCHEMA].flatMap(sql=>sql.split(";")).map(sql=>sql.trim()).filter(Boolean);
 const PREFIX="/v2/runtime/";
 const JOB=/^pilot_[a-f0-9]{32}$/,SHA=/^[a-f0-9]{40}$/;
 const ORIGIN="https://ipazake-free-control-pilot.hahayesadd.workers.dev";
@@ -137,7 +138,7 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
    await admin(request,env);
    if(path==="init"){
     await body(request,[]);
-    const sql=(RUNTIME_SCHEMA+"\n"+UPLOAD_SCHEMA+"\n"+FIXTURE_SCHEMA+"\n"+TASK_SCHEMA+"\n"+TF_SCHEMA+"\n"+NOTIFY_SCHEMA+"\n"+CANARY_SCHEMA).split(";").map(x=>x.trim()).filter(Boolean);
+    const sql=schemaStatements();
     const result=await env.DB.batch(sql.map(x=>env.DB.prepare(x)));
     need(result.every(x=>x.success===true),"runtime_schema");
     return reply(200,{ok:true,source_sha:env.RUNTIME_SOURCE_SHA});
