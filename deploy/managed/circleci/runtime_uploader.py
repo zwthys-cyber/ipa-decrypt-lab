@@ -23,7 +23,6 @@ class RemoteJournal:
    if str(error)=="upload_session" and state.get("stage")=="uploading":
     # Shape only. Never print the resumable ID, query values, access token or Location.
     parsed=urlsplit(state["session"]);items=parse_qsl(parsed.query)
-    known={"uploadType","upload_id","fields","alt","upload_protocol"}
     print(json.dumps(dict(stage="upload_session_shape",https=parsed.scheme=="https",
      google_host=parsed.hostname=="www.googleapis.com",expected_path=parsed.path=="/upload/drive/v3/files",
      query_keys=sorted(k if re.fullmatch(r"[A-Za-z_$][A-Za-z0-9_$-]{0,47}",k) else "other" for k,v in items),

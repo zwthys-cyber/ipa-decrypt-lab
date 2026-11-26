@@ -88,7 +88,7 @@ test("Google may retain the exact requested response fields in its resumable Loc
  const s=await setup();try{
   await writeUploadJournal(s.db,task,initial,100);
   const fields="id,name,size,sha256Checksum,trashed,ownedByMe,mimeType,resourceKey";
-  const value=session+"&fields="+encodeURIComponent(fields)+"&supportsAllDrives=false&prettyPrint=false";
+  const value=session+"&fields="+encodeURIComponent(fields)+"&session_crd=SYNTHETIC_CAPABILITY_12345";
   await writeUploadJournal(s.db,task,{...initial,stage:"uploading",session:value},101);
   assert.equal((await readUploadJournal(s.db,task)).session,value);
  }finally{await s.close();}
@@ -98,7 +98,8 @@ test("upload session flags never enable shared-drive behavior or arbitrary redir
  const s=await setup();try{
   await writeUploadJournal(s.db,task,initial,100);
   for(const suffix of ["&supportsAllDrives=true","&prettyPrint=true","&alt=media","&upload_protocol=multipart",
-   "&redirect=https://evil.invalid","&fields=owners"]){
+   "&redirect=https://evil.invalid","&fields=owners","&session_crd=https://evil.invalid",
+   "&session_crd="+encodeURIComponent("x".repeat(2049))]){
    await assert.rejects(writeUploadJournal(s.db,task,{...initial,stage:"uploading",session:session+suffix},101));
   }
  }finally{await s.close();}
