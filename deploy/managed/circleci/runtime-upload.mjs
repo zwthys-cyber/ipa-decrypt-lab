@@ -28,7 +28,8 @@ function session(value){
   require(url.protocol==="https:"&&url.hostname==="www.googleapis.com"&&!url.username&&!url.password&&
     !url.port&&!url.hash&&url.pathname==="/upload/drive/v3/files"&&url.searchParams.get("uploadType")==="resumable"&&
     /^[A-Za-z0-9._~+\/=-]{10,2048}$/.test(url.searchParams.get("upload_id")||"")&&
-    [...url.searchParams.keys()].every(k=>["uploadType","upload_id"].includes(k))&&
+    [...url.searchParams.keys()].every(k=>["uploadType","upload_id","fields"].includes(k))&&
+    (!url.searchParams.has("fields")||url.searchParams.get("fields")==="id,name,size,sha256Checksum,trashed,ownedByMe,mimeType,resourceKey")&&
     [...url.searchParams.keys()].length===new Set(url.searchParams.keys()).size,"upload_session");
 }
 function shape(value,task){

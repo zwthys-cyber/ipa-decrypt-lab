@@ -95,6 +95,7 @@ def deploy(bundle,drive_fixture=False):
   try:
    admitted=call("admit-drive-fixture" if drive_fixture else "admit-fixture",control,dict(probe_id=probe))
    need(admitted.get("job_id")==job,"runtime_admission_binding")
+   receipt.update(run_id=admitted.get("run_id"));save()
    break
   except (ValueError,urllib.error.URLError,TimeoutError):
    if attempt==29:raise

@@ -3,6 +3,8 @@ from pathlib import Path
 import os
 import sys
 import time
+import json
+from urllib.parse import urlsplit,parse_qsl
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"free-pilot"))
 from private_upload import Drive,upload,validate_file,file_snapshot
 from task_context import require
@@ -15,7 +17,17 @@ class RemoteJournal:
   return self.rpc("upload-journal",dict(self.identity,action="get",state=None))["state"]
  def write(self,state):
   self.checkpoint()
-  self.rpc("upload-journal",dict(self.identity,action="put",state=state))
+  try:self.rpc("upload-journal",dict(self.identity,action="put",state=state))
+  except ValueError as error:
+   if str(error)=="upload_session" and state.get("stage")=="uploading":
+    # Shape only. Never print the resumable ID, query values, access token or Location.
+    parsed=urlsplit(state["session"]);items=parse_qsl(parsed.query)
+    known={"uploadType","upload_id","fields","alt","upload_protocol"}
+    print(json.dumps(dict(stage="upload_session_shape",https=parsed.scheme=="https",
+     google_host=parsed.hostname=="www.googleapis.com",expected_path=parsed.path=="/upload/drive/v3/files",
+     query_keys=sorted(k if k in known else "other" for k,v in items),
+     upload_id_length=len(dict(items).get("upload_id","")))),flush=True)
+   raise
 
 class LeasedDrive(Drive):
  def __init__(self,rpc,identity,checkpoint):

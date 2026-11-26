@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 import struct
 import re
-from app_presentation import filename as delivery_filename
+from app_presentation import filename as delivery_filename,component as filename_component
 from task_context import RECIPIENT, minimal_env, require
 from private_export import audit, validate_report, scrub_archive, verify_output, verify_version, digest
 from capacity import MAX_IPA_BYTES, DECRYPT_TIMEOUT, CRYPTO_TIMEOUT
@@ -61,7 +61,7 @@ def export_original(task,engine,age,root,original,info,model,output,env,runner,s
         account_data_removed=True,plaintext_published=False,encrypted_images=images,decrypted_pages=pages,
         plaintext_bytes=plain_size,plaintext_sha256=plain_digest,ciphertext_bytes=sealed.stat().st_size,
         ciphertext_sha256=digest(sealed),recipient=RECIPIENT)
-    receipt["filename"]=delivery_filename({"display_name":info.get("trackName") or info["bundleId"],
+    receipt["filename"]=delivery_filename({"display_name":filename_component(info.get("trackName") or info["bundleId"],"Application",96),
         "version":verified.get("version") or resolved_version},receipt["app_id"],testflight=task["profile"]=="tf")
     receipt["filename"]="".join(c if c.isalnum() or c in " ._()-" else "_" for c in receipt["filename"])
     require(1<=len(receipt["filename"])<=160 and not receipt["filename"].startswith("."),"delivery_filename")

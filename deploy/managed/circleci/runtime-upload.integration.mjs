@@ -83,3 +83,13 @@ test("cancellation closes further journal access without deleting preserved inte
     assert.equal((await s.db.prepare("SELECT stage FROM runtime_uploads").first()).stage,"start_intent");
   }finally{await s.close();}
 });
+
+test("Google may retain the exact requested response fields in its resumable Location",async()=>{
+ const s=await setup();try{
+  await writeUploadJournal(s.db,task,initial,100);
+  const fields="id,name,size,sha256Checksum,trashed,ownedByMe,mimeType,resourceKey";
+  const value=session+"&fields="+encodeURIComponent(fields);
+  await writeUploadJournal(s.db,task,{...initial,stage:"uploading",session:value},101);
+  assert.equal((await readUploadJournal(s.db,task)).session,value);
+ }finally{await s.close();}
+});

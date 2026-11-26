@@ -92,12 +92,12 @@ class WorkerTests(unittest.TestCase):
             Path(args[args.index("--report")+1]).write_text(json.dumps(report))
         return subprocess.CompletedProcess([],0,"","")
 
-    def export(self,checkpoint=None,delivery=None):
+    def export(self,checkpoint=None,delivery=None,metadata=None):
         def stage(name):
             self.stages.append(name)
             if checkpoint:checkpoint(name)
         # The only host substitution is a unit-test platform value; CI flags remain honest.
-        with patch.object(context.platform,"system",return_value="Darwin"),patch.object(context.platform,"machine",return_value="arm64"),              patch.object(worker,"check_app",return_value=dict(bundleId="example.synthetic",fileSizeBytes=20000)):
+        with patch.object(context.platform,"system",return_value="Darwin"),patch.object(context.platform,"machine",return_value="arm64"),              patch.object(worker,"check_app",return_value=metadata or dict(bundleId="example.synthetic",fileSizeBytes=20000)):
             return worker.export_task(self.task,self.values,self.root/"out",self.env,stage,self.loader,self.execute,delivery=delivery)
 
     def make_cn(self):
@@ -180,6 +180,13 @@ class WorkerTests(unittest.TestCase):
         receipt=self.export(delivery=deliver)
         self.assertEqual(receipt["private_delivery"]["file_id"],"PRIVATE_FIXTURE_123")
         self.assertEqual(len(observed),1);self.assertFalse(observed[0].exists())
+
+    def test_long_unicode_display_name_retains_version_and_upload_filename_budget(self):
+        receipt=self.export(metadata=dict(bundleId="example.synthetic",fileSizeBytes=20000,
+            trackName="应用程序" * 100))
+        self.assertLessEqual(len(receipt["filename"]),160)
+        self.assertTrue(receipt["filename"].endswith("_1.2.3.ipa"))
+        self.assertTrue(all(c.isalnum() or c in " ._()-" for c in receipt["filename"]))
 
     def test_unconfirmed_private_upload_never_publishes_output(self):
         def fail(path,receipt):raise RuntimeError("synthetic-private-upload-unknown")
