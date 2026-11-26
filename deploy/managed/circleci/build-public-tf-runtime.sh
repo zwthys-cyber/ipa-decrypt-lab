@@ -2,13 +2,17 @@
 # Standalone public TF producer. No Go or Swift compilation is required here.
 set -euo pipefail
 source deploy/managed/circleci/public-build-common.sh
+# The runner image and current formula metadata can contain different Homebrew generations.
+brew --version
+brew update
+brew --version
 checkout_public apple-auth/apple-auth 98c862f7bebc8283a9b87f1578e703f0765dc81d apple-auth
 if ! brew install cmake ninja pkgconf mbedtls@3 curl nlohmann-json libzip; then
   # Homebrew can leave bottles installed after a failed dependency post-install.
   # Recover those steps explicitly; any remaining error stops this public build.
   for formula in ca-certificates openssl@4 libssh2; do
     if brew list --versions "$formula" >/dev/null 2>&1; then
-      brew postinstall --verbose "$formula"
+      HOMEBREW_DEVELOPER=1 HOMEBREW_STDERR=1 brew postinstall --verbose "$formula"
     fi
   done
   brew install cmake ninja pkgconf mbedtls@3 curl nlohmann-json libzip
