@@ -1,5 +1,7 @@
 import copy
 import json
+import io
+from unittest.mock import patch
 import unittest
 import control_cloud as cloud
 
@@ -44,6 +46,23 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn(b'application/javascript+module',body)
         self.assertIn(b'"keep_bindings": ["secret_text"]',body)
         self.assertTrue(kind.startswith("multipart/form-data; boundary="))
+
+    def test_all_declared_control_operations_use_only_the_fixed_origin(self):
+        seen=[]
+        class Reply(io.BytesIO):
+            def __init__(self):
+                super().__init__(b'{"ok":true}')
+        class Client:
+            def open(self,request,timeout):
+                seen.append(request.full_url)
+                return Reply()
+        with patch.object(cloud.urllib.request,"build_opener",return_value=Client()):
+            for path in ("probe-init","probe-submit","probe-status","probe-diagnostics","probe-retire"):
+                self.assertTrue(cloud.public_call(self.origin,"synthetic-control-token","/v1/runtime/"+path,{})["ok"])
+            with self.assertRaises(ValueError):
+                cloud.public_call(self.origin,"synthetic-control-token","/v1/runtime/credentials",{})
+        self.assertEqual(len(seen),5)
+        self.assertTrue(all(value.startswith(self.origin+"/v1/runtime/") for value in seen))
 
     def test_admin_token_never_sent_to_arbitrary_origin(self):
         with self.assertRaisesRegex(ValueError,"control_origin_invalid"):

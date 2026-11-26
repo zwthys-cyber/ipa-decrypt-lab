@@ -48,7 +48,8 @@ def multipart(metadata, source):
 
 def public_call(origin, token, path, value):
     require(re.fullmatch(r"https://ipazake-free-control-pilot\.[a-z0-9][a-z0-9-]{0,62}\.workers\.dev", origin)
-            and path in ("/v1/runtime/probe-init", "/v1/runtime/probe-submit", "/v1/runtime/probe-status"),
+            and path in ("/v1/runtime/probe-init", "/v1/runtime/probe-submit", "/v1/runtime/probe-status",
+                         "/v1/runtime/probe-diagnostics", "/v1/runtime/probe-retire"),
             "control_origin_invalid")
     req = urllib.request.Request(origin + path, data=json.dumps(value).encode(),
         headers={"Authorization":"Bearer " + token, "Content-Type":"application/json",
