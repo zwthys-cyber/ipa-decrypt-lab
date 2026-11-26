@@ -52,6 +52,8 @@ def api(token, path, data=None, version=2):
                      "Pipeline definition not found.": "definition_not_found",
                      "Insufficient permissions": "permission_denied"}
             reason = known.get(message, "unclassified")
+            if reason == "unclassified" and isinstance(message, str) and len(message) <= 500:
+                reason = re.sub(r"[^a-z0-9]+", "_", message.replace(token, "redacted").lower())[:180] or "empty_message"
             kind = content.get("error", {}).get("type")
             if isinstance(kind, str) and re.fullmatch(r"[a-z_]{1,50}", kind):
                 reason = kind
