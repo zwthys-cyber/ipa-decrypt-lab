@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import json
+import re
 from urllib.parse import urlsplit,parse_qsl
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"free-pilot"))
 from private_upload import Drive,upload,validate_file,file_snapshot
@@ -25,7 +26,7 @@ class RemoteJournal:
     known={"uploadType","upload_id","fields","alt","upload_protocol"}
     print(json.dumps(dict(stage="upload_session_shape",https=parsed.scheme=="https",
      google_host=parsed.hostname=="www.googleapis.com",expected_path=parsed.path=="/upload/drive/v3/files",
-     query_keys=sorted(k if k in known else "other" for k,v in items),
+     query_keys=sorted(k if re.fullmatch(r"[A-Za-z_$][A-Za-z0-9_$-]{0,47}",k) else "other" for k,v in items),
      upload_id_length=len(dict(items).get("upload_id","")))),flush=True)
    raise
 
