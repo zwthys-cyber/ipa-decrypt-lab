@@ -65,7 +65,49 @@ cp tests/delivery_crypto_test.go native-source/age/cmd/lab-delivery-crypt/main_t
 )
 python3 deploy/managed/circleci/runtime.py pack-and-verify
 mv native-source/ApplePackage/.build native-source/ApplePackage/.build-hidden
-relocated-circle-runtime/ApplePackageTool --help
+relocated-circle-base-runtime/ApplePackageTool --help
 relocated-circle-runtime/offline-engine --help
 otool -L relocated-circle-runtime/ApplePackageTool
 # Runtime archives are public and contain no credentials, models or third-party IPAs.
+
+# Reuse only the just-tested public Swift build, before any credentials exist.
+mv native-source/ApplePackage/.build-hidden native-source/ApplePackage/.build
+python3 .github/ops/patch_cn_login.py native-source/ApplePackage
+(
+  cd native-source/ApplePackage
+  swift build -j 2 --build-tests
+  swift test --skip-build --filter 'SAPAuthenticationRequestTests|LabEntDownloadTests|LabAuthRouteTests|LabStoreAMD|LabCNLoginFlowTests|LabCNSummaryTests'
+  swift build -j 2 --product ApplePackageTool
+)
+python3 deploy/managed/circleci/runtime.py pack-and-verify --variant cn
+mv native-source/ApplePackage/.build native-source/ApplePackage/.build-hidden
+relocated-circle-cn-runtime/ApplePackageTool --help
+relocated-circle-cn-runtime/ApplePackageTool login-cn --help
+relocated-circle-cn-runtime/ApplePackageTool resume-cn --help
+relocated-circle-cn-runtime/ApplePackageTool summary-cn --help
+
+checkout_public apple-auth/apple-auth 98c862f7bebc8283a9b87f1578e703f0765dc81d apple-auth
+HOMEBREW_NO_AUTO_UPDATE=1 brew install cmake ninja pkgconf mbedtls@3 curl nlohmann-json libzip
+python3 -m unittest discover -s .github/ops -p 'test_tf_virtual*.py'
+python3 -m unittest discover -s .github/ops -p 'test_tf_invitation.py'
+node --test .github/ops/cn_action.test.cjs
+python3 .github/ops/tf_virtual_transport_patch.py native-source/apple-auth/src/client/transport.cpp
+python3 .github/ops/tf_virtual_auth_patch.py native-source/apple-auth/src/client/authentication.cpp
+python3 .github/ops/tf_virtual_pet_patch.py native-source/apple-auth/src/client/authentication.cpp native-source/apple-auth/src/client/store.cpp native-source/apple-auth/src/client/client.cpp native-source/apple-auth/src/client/apple_plist.cpp
+python3 .github/ops/tf_virtual_invitation_patch.py native-source/apple-auth/src/testflight/internal.hpp native-source/apple-auth/src/testflight/protocol.cpp
+cp .github/ops/tf_virtual_pet_contract.cpp native-source/apple-auth/lab_tf_pet_contract.cpp
+cp .github/ops/tf_sdk_contract.cpp native-source/apple-auth/tf_sdk_contract.cpp
+cp .github/ops/tf_task_native.cpp native-source/apple-auth/lab_tf_task_native.cpp
+cp .github/ops/tf_virtual_client.cpp native-source/apple-auth/tf_virtual_client.cpp
+cp .github/ops/tf_virtual_transport_bridge.cpp native-source/apple-auth/lab_tf_transport_bridge.cpp
+cp .github/ops/tf_virtual_auth_contract.cpp native-source/apple-auth/lab_tf_auth_contract.cpp
+cat .github/ops/tf_sdk_contract.cmake .github/ops/tf_virtual_client.cmake .github/ops/tf_sdk_compat.cmake >> native-source/apple-auth/CMakeLists.txt
+tf_prefix="$(brew --prefix mbedtls@3);$(brew --prefix curl);$(brew --prefix nlohmann-json);$(brew --prefix libzip)"
+cmake -S native-source/apple-auth -B tf-sdk-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$tf_prefix" -DAPPLE_AUTH_WITH_TESTFLIGHT=ON -DAPPLE_AUTH_BUILD_EXAMPLES=ON
+cmake --build tf-sdk-build --parallel 4
+ctest --test-dir tf-sdk-build --output-on-failure --no-tests=error --timeout 180
+python3 deploy/managed/circleci/runtime.py pack-and-verify --variant testflight
+mv tf-sdk-build tf-sdk-build-hidden
+relocated-circle-testflight-runtime/tf_virtual_client --task-self-test
+relocated-circle-testflight-runtime/tf_virtual_client --plain-transport-self-test
+relocated-circle-testflight-runtime/tf_virtual_client --cookie-self-test

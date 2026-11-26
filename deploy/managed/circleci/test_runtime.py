@@ -18,7 +18,7 @@ class BundleTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.expected = dict(commit="a"*40, workflow_id="12345678-1234-1234-1234-123456789abc",
                              job_number="7", source_fingerprint="b"*64, xcode="Xcode 26.5",
-                             swift="Swift 6", macos="26.3.1")
+                             swift="Swift 6", macos="26.3.1", variant="base", dependencies="")
         self.payloads = {name: b"public fixture" for name in runtime.BINARIES}
         self.payloads[runtime.RESOURCE + "/fixture.txt"] = b"resource"
         self.manifest = dict(schema=runtime.SCHEMA, platform="circleci-macos-26-arm64",
@@ -57,7 +57,7 @@ class BundleTests(unittest.TestCase):
 
     def test_wrong_platform_and_circle_identity(self):
         for key, value in (("platform", "macos-26-intel"), ("workflow_id", "87654321-1234-1234-1234-123456789abc"),
-                           ("commit", "c"*40), ("xcode", "Xcode 26.2"), ("job_number", "8")):
+                           ("commit", "c"*40), ("xcode", "Xcode 26.2"), ("job_number", "8"), ("variant", "cn"), ("dependencies", "different ABI")):
             with self.subTest(key=key):
                 original = self.manifest[key]
                 self.manifest[key] = value
@@ -92,6 +92,35 @@ class BundleTests(unittest.TestCase):
     def test_partial_expected_identity_rejected(self):
         del self.expected["xcode"]
         with self.assertRaisesRegex(ValueError, "trusted_identity_required"):
+            self.verify()
+
+    def test_cn_archive_has_separate_profile(self):
+        self.expected["variant"] = self.manifest["variant"] = "cn"
+        self.assertEqual(self.verify()["variant"], "cn")
+
+    def tf_fixture(self):
+        self.expected["variant"] = self.manifest["variant"] = "testflight"
+        self.expected["dependencies"] = self.manifest["dependencies"] = "mbedtls@3 fixture"
+        self.payloads = {name: b"public TF fixture" for name in
+                         ("tf_virtual_client", "libapple_auth.dylib", "libapple_auth_client.dylib")}
+        self.manifest["files"] = {name: dict(size=len(data), sha256=hashlib.sha256(data).hexdigest())
+                                  for name, data in self.payloads.items()}
+
+    def test_tf_inventory_and_abi(self):
+        self.tf_fixture()
+        self.assertEqual(self.verify()["variant"], "testflight")
+
+    def test_tf_missing_libraries_refused(self):
+        self.tf_fixture()
+        del self.payloads["libapple_auth_client.dylib"]
+        del self.manifest["files"]["libapple_auth_client.dylib"]
+        with self.assertRaisesRegex(ValueError, "inventory_mismatch"):
+            self.verify()
+
+    def test_tf_refuses_unrelated_library(self):
+        self.tf_fixture()
+        self.payloads["libUnexpected.dylib"] = b"refused"
+        with self.assertRaisesRegex(ValueError, "invalid_path"):
             self.verify()
 
     def test_host_gate(self):
