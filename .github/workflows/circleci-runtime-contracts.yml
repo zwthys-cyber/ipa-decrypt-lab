@@ -18,4 +18,5 @@ jobs:
         with:
           persist-credentials: false
       - run: python3 deploy/managed/circleci/test_runtime.py -v
-      - run: bash -n deploy/managed/circleci/build-public-runtime.sh deploy/managed/circleci/build-public-tf-runtime.sh deploy/managed/circleci/public-build-common.sh
+      - run: python3 deploy/managed/circleci/test_fetch_runtime.py -v
+      - run: bash -n deploy/managed/circleci/build-public-runtime.sh deploy/managed/circleci/build-public-tf-runtime.sh deploy/managed/circleci/public-build-common.sh deploy/managed/circleci/verify-runtime-consumer.sh
