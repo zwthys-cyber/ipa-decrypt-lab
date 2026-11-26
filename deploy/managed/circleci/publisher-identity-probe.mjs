@@ -22,7 +22,10 @@ try{
     actor_match:claim.actor_id===T.owner_id,source_match:claim.sha===process.env.GITHUB_SHA,
     workflow_source_match:claim.workflow_sha===process.env.GITHUB_SHA,
     workflow_match:claim.workflow_ref===T.repository+"/"+T.workflows.probe+"@"+T.ref,
-    hosted:claim.runner_environment==="github-hosted"};
+    hosted:claim.runner_environment==="github-hosted",run_match:String(claim.run_id)===process.env.GITHUB_RUN_ID,
+    first_attempt:claim.run_attempt===1||claim.run_attempt==="1",environment_present:!!claim.environment,
+    job_workflow_present:!!claim.job_workflow_ref,job_workflow_matches:claim.job_workflow_ref===claim.workflow_ref,
+    job_workflow_source_matches:claim.job_workflow_sha===process.env.GITHUB_SHA};
   const identity=await verifyGithubJWT(token,{source:process.env.GITHUB_SHA,run:process.env.GITHUB_RUN_ID,role:"probe"},
     await fetchGithubKeys());
   writeFileSync("publisher-identity-proof.json",JSON.stringify(identity)+"\n",{mode:0o600});

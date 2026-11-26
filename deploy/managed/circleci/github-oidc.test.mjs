@@ -19,6 +19,8 @@ async function signed(changes={},header={}){
 }
 test("signed publisher binds immutable IDs, workflow, source and first hosted attempt",async()=>{
   assert.equal((await verifyGithubJWT(await signed(),expected,keys,now)).role,"lease");
+  assert.equal((await verifyGithubJWT(await signed({job_workflow_ref:T.repository+"/"+T.workflows.lease+"@"+T.ref,
+    job_workflow_sha:expected.source,run_id:123456,run_attempt:1}),expected,keys,now)).role,"lease");
   const sub="repo:zwthys-cyber@"+T.owner_id+"/ipa-decrypt-lab@"+T.repository_id+":ref:"+T.ref;
   assert.equal((await verifyGithubJWT(await signed({sub}),expected,keys,now)).verified,true);
 });

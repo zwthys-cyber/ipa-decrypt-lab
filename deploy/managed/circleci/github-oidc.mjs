@@ -45,8 +45,11 @@ export async function verifyGithubJWT(token,expected,keys,now=Math.floor(Date.no
     claim.repository_owner_id===t.owner_id&&claim.actor_id===t.owner_id,"github_jwt_repository");
   require(claim.ref===t.ref&&claim.ref_type==="branch"&&claim.sha===expected.source&&claim.workflow_sha===expected.source&&
     claim.workflow_ref===t.repository+"/"+t.workflows[expected.role]+"@"+t.ref,"github_jwt_source");
-  require(claim.run_id===expected.run&&claim.run_attempt==="1"&&claim.runner_environment==="github-hosted"&&
-    !claim.environment&&!claim.job_workflow_ref&&!claim.job_workflow_sha,"github_jwt_run");
+  const sameRun=claim.run_id===expected.run||(Number.isSafeInteger(claim.run_id)&&String(claim.run_id)===expected.run);
+  const ownJob=(!claim.job_workflow_ref&&!claim.job_workflow_sha)||
+    (claim.job_workflow_ref===claim.workflow_ref&&claim.job_workflow_sha===expected.source);
+  require(sameRun&&(claim.run_attempt==="1"||claim.run_attempt===1)&&claim.runner_environment==="github-hosted"&&
+    !claim.environment&&ownJob,"github_jwt_run");
   require(expected.role==="lease"?claim.event_name==="workflow_dispatch":
     ["push","workflow_dispatch"].includes(claim.event_name),"github_jwt_event");
   return {schema:"github-publisher-identity-v1",verified:true,role:expected.role,run_id:expected.run,
