@@ -117,6 +117,14 @@ def deploy(bundle):
                 raise ValueError("control_init_http_" + str(error.code)) from None
             time.sleep(3)
     require(initialized and initialized.get("ok") is True, "control_init_failed")
+    diagnostic = public_call(origin, control, "/v1/runtime/probe-diagnostics", {})
+    print(json.dumps(dict(stage="circleci_provider_identity", **diagnostic)), flush=True)
+    require(diagnostic.get("owner_authenticated") is True, "cloud_circleci_identity_unavailable")
+    # Explicit retirement is limited server-side to the one audited, credential-free historical probe.
+    retired = public_call(origin, control, "/v1/runtime/probe-retire",
+        dict(job_id="pilot_e942f4db020cb1e680e66f842302fcdf",
+             source_sha="e6802e32bf7ae98762491178eb95dd3915e067a5"))
+    require(retired.get("ok") is True and retired.get("original_task_rearmed") is False, "audited_probe_resolution_failed")
     probe_id = secrets.token_hex(16)
     logical_job = "pilot_" + probe_id
     receipt.update(job_id=logical_job, status="awaiting_cloud_roundtrip")
@@ -135,7 +143,9 @@ def deploy(bundle):
             receipt.update(status="verified", signed_claim_verified=True, durable_completion_verified=True)
             save()
             return
-        require(value.get("state") not in ("unknown", "intent"), "cloud_dispatch_ambiguous_no_retry")
+        if value.get("state") in ("unknown", "intent"):
+            print(json.dumps(dict(stage="dispatch_diagnostic", **value)), flush=True)
+            raise ValueError("cloud_dispatch_ambiguous_no_retry")
         time.sleep(10)
     raise ValueError("cloud_probe_pending_no_retry")
 

@@ -14,7 +14,7 @@ const source="a".repeat(40),run="12345678-1234-1234-1234-123456789abc";
 const config={enabled:"synthetic-only",owner,job:jobs[0],source,now:1000,token:"synthetic-token-no-real-account"};
 const sql=(await Promise.all([
   "../free-pilot/migrations/0001_pilot.sql","../free-pilot/migrations/0002_links.sql",
-  "./migrations/0001_dispatch.sql"
+  "./migrations/0001_dispatch.sql","./migrations/0002_probe_resolution.sql"
 ].map(path=>readFile(new URL(path,import.meta.url),"utf8")))).join("\n");
 function make(folder){
   return new Miniflare({modules:true,script:"export default {fetch(){return new Response('disabled',{status:503});}}",

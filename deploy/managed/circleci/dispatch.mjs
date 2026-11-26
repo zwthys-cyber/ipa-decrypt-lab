@@ -7,7 +7,8 @@ export const DISPATCH_SQL=Object.freeze({
     SELECT job_id,owner_id,?,?,'intent',?,? FROM pilot_jobs
     WHERE job_id=? AND owner_id=? AND state='waiting_for_runtime'
       AND NOT EXISTS (SELECT 1 FROM pilot_links WHERE job_id=pilot_jobs.job_id)
-      AND NOT EXISTS (SELECT 1 FROM circleci_dispatches WHERE state IN ('intent','submitted','unknown'))
+      AND NOT EXISTS (SELECT 1 FROM circleci_dispatches d WHERE d.state IN ('intent','submitted','unknown')
+        AND NOT EXISTS (SELECT 1 FROM circleci_probe_resolutions r WHERE r.job_id=d.job_id AND r.source_sha=d.source_sha))
     ON CONFLICT(job_id) DO NOTHING`,
   submitted:`UPDATE circleci_dispatches SET state='submitted',run_id=?,updated_at=?
     WHERE job_id=? AND owner_id=? AND request_id=? AND source_sha=? AND state='intent'`,
@@ -42,6 +43,7 @@ export async function dispatchSynthetic(db,config,send=fetch){
       config.now,config.job,config.owner).run());
   }catch{return {state:"storage_unavailable"};}
   if(!claimed)return {state:"blocked"};
+  let failure="dispatch_transport_unknown";
   try{
     const parameters={dispatch_probe:true,probe_source:config.source,probe_id:request,build_native_runtime:false};
     if(config.controlOrigin!==undefined){
@@ -52,17 +54,26 @@ export async function dispatchSynthetic(db,config,send=fetch){
     }
     const response=await send("https://circleci.com/api/v3/runs",{
       method:"POST",redirect:"error",signal:AbortSignal.timeout(15000),
-      headers:{authorization:"Bearer "+config.token,"content-type":"application/json",accept:"application/json"},
+      headers:{"user-agent":"ipa-decrypt-control-plane/0.2",authorization:"Bearer "+config.token,"content-type":"application/json",accept:"application/json"},
       body:JSON.stringify({data:{attributes:{config:{branch:TRUST.ref.slice(11)},
         checkout:{branch:TRUST.ref.slice(11)},parameters},references:{pipeline:{id:TRUST.definition}}}})
     });
+    failure="dispatch_http_"+String(response.status);
     if(response.status!==201)throw Error("dispatch_unconfirmed");
+    failure="dispatch_response_invalid";
     const value=await read(response),run=value?.data?.id;
     if(!UUID.test(run||""))throw Error("dispatch_unconfirmed");
+    failure="dispatch_storage_unconfirmed";
     const stored=changed(await db.prepare(DISPATCH_SQL.submitted).bind(run,config.now,...identity(config,request)).run());
     if(!stored)throw Error("dispatch_storage");
     return {state:"submitted",run_id:run};
-  }catch{
+  }catch(error){
+    if(failure==="dispatch_transport_unknown"&&["TypeError","TimeoutError","AbortError"].includes(error?.name))
+      failure="dispatch_transport_"+error.name.toLowerCase();
+    try{
+      await db.prepare("INSERT INTO circleci_dispatch_diagnostics(job_id,code,recorded_at) VALUES(?,?,?) ON CONFLICT(job_id) DO NOTHING")
+        .bind(config.job,failure,config.now).run();
+    }catch{}
     try{await db.prepare(DISPATCH_SQL.unknown).bind(config.now,...identity(config,request)).run();}catch{}
     return {state:"unknown"};
   }
@@ -74,7 +85,7 @@ export async function finishSynthetic(db,config,send=fetch){
     return {state:"blocked"};
   // Readback may be repeated for the same known ID; it never dispatches another run.
   const response=await send("https://circleci.com/api/v3/runs/"+row.run_id,{
-    method:"GET",redirect:"error",signal:AbortSignal.timeout(15000),headers:{authorization:"Bearer "+config.token,accept:"application/json"}});
+    method:"GET",redirect:"error",signal:AbortSignal.timeout(15000),headers:{"user-agent":"ipa-decrypt-control-plane/0.2",authorization:"Bearer "+config.token,accept:"application/json"}});
   if(response.status!==200)return {state:"pending"};
   const value=await read(response),run=value?.data,refs=run?.references;
   const vcs=refs?.event?.attributes?.vcs;

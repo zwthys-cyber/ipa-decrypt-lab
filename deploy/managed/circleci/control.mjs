@@ -62,7 +62,7 @@ async function body(request,keys){
 }
 async function get(send,url){
   const result=await send(url,{method:"GET",redirect:"error",signal:AbortSignal.timeout(10000),
-    headers:{accept:"application/json"}});
+    headers:{"user-agent":"ipa-decrypt-control-plane/0.2",accept:"application/json"}});
   require(result.status===200,"provider_pending");
   const raw=await result.text();require(raw.length<=1048576,"provider_limit");return JSON.parse(raw);
 }
@@ -115,7 +115,9 @@ async function initialize(env){
   require(result.every(x=>x.success===true),"schema_initialization");
   const required={circleci_dispatches:["job_id","owner_id","request_id","source_sha","state","run_id","created_at","updated_at"],
     circleci_control_jobs:["job_id","source_sha","kind","created_at"],
-    circleci_claims:["job_id","run_id","worker_job_id","claimed_at","finished_at"]};
+    circleci_claims:["job_id","run_id","worker_job_id","claimed_at","finished_at"],
+    circleci_probe_resolutions:["job_id","source_sha","reason","resolved_at"],
+    circleci_dispatch_diagnostics:["job_id","code","recorded_at"]};
   for(const [table,columns] of Object.entries(required)){
     const result=await env.DB.prepare("PRAGMA table_info("+table+")").all();
     require(result.success===true&&result.results?.map(x=>x.name).join(",")===columns.join(",")&&
@@ -124,7 +126,7 @@ async function initialize(env){
 }
 export async function handleRuntime(request,env,now=Math.floor(Date.now()/1000),send=fetch){
   const url=new URL(request.url),path=url.pathname;
-  const paths=["/v1/runtime/probe-init","/v1/runtime/probe-submit","/v1/runtime/probe-status",
+  const paths=["/v1/runtime/probe-init","/v1/runtime/probe-submit","/v1/runtime/probe-status","/v1/runtime/probe-diagnostics","/v1/runtime/probe-retire",
     "/v1/runtime/claim","/v1/runtime/probe-finish"];
   if(request.method!=="POST"||url.search||!paths.includes(path))return response(404);
   if(!configured(env,request))return response(503);
@@ -136,6 +138,31 @@ export async function handleRuntime(request,env,now=Math.floor(Date.now()/1000),
       if(!await same(request.headers.get("authorization")||"","Bearer "+env.CIRCLECI_CONTROL_TOKEN))return response(401);
       if(path==="/v1/runtime/probe-init"){
         await body(request,[]);await initialize(env);return response(200,{ok:true,schema:"circleci-control-init-v1"});
+      }
+      if(path==="/v1/runtime/probe-diagnostics"){
+        await body(request,[]);
+        const result=await send(BASE+"/me",{method:"GET",redirect:"error",signal:AbortSignal.timeout(10000),
+          headers:{"user-agent":"ipa-decrypt-control-plane/0.2",authorization:"Bearer "+env.CIRCLECI_API_TOKEN,
+            accept:"application/json"}});
+        let actor;
+        try{actor=await result.json();}catch{}
+        return response(200,{ok:true,circle_http_status:result.status,
+          owner_authenticated:result.status===200&&actor?.id===TRUST.user});
+      }
+      if(path==="/v1/runtime/probe-retire"){
+        const value=await body(request,["job_id","source_sha"]);
+        // One immutable, audited empty validation only. This is not a generic unknown-task reset.
+        require(value.job_id==="pilot_e942f4db020cb1e680e66f842302fcdf"&&
+          value.source_sha==="e6802e32bf7ae98762491178eb95dd3915e067a5","probe_not_audited");
+        const row=await env.DB.prepare(CONTROL_SQL.context).bind(value.job_id,env.RUNTIME_OWNER_ID).first();
+        if(!row)return response(200,{ok:true,record_not_present:true,original_task_rearmed:false});
+        require(row&&row.kind==="synthetic_noop"&&row.source_sha===value.source_sha&&
+          row.dispatch_state==="unknown"&&row.run_id===null&&!row.worker_job_id,"probe_not_retirable");
+        const result=await env.DB.prepare(
+          "INSERT INTO circleci_probe_resolutions(job_id,source_sha,reason,resolved_at) VALUES(?,?,'audited_synthetic_noop',?) ON CONFLICT(job_id) DO NOTHING"
+          ).bind(value.job_id,value.source_sha,now).run();
+        require(result.success===true,"resolution_storage");
+        return response(200,{ok:true,original_intent_preserved:true,original_task_rearmed:false});
       }
       if(path==="/v1/runtime/probe-submit"){
         const value=await body(request,["probe_id"]);require(HEX.test(value.probe_id||""),"invalid_probe");
@@ -154,8 +181,9 @@ export async function handleRuntime(request,env,now=Math.floor(Date.now()/1000),
       if(row.dispatch_state==="submitted"&&row.finished_at!==null&&row.worker_job_id)
         await finishSynthetic(env.DB,config(env,value.job_id,now),send);
       const latest=await context(env,value.job_id);
+      const diagnostic=await env.DB.prepare("SELECT code FROM circleci_dispatch_diagnostics WHERE job_id=?").bind(value.job_id).first();
       return response(200,{ok:true,job_id:value.job_id,state:latest.dispatch_state,
-        claimed:!!latest.worker_job_id,probe_finished:Number.isSafeInteger(latest.finished_at)});
+        diagnostic:diagnostic?.code||null,claimed:!!latest.worker_job_id,probe_finished:Number.isSafeInteger(latest.finished_at)});
     }
     const value=await body(request,["job_id","worker_job_id"]);
     const {row,identity}=await authenticated(request,env,value,now,send);
@@ -172,9 +200,10 @@ export async function handleRuntime(request,env,now=Math.floor(Date.now()/1000),
     const result=await env.DB.prepare(CONTROL_SQL.finish).bind(now,row.job_id,row.run_id,identity.job_id).run();
     require(result.success===true,"finish_storage");
     return response(200,{ok:true,schema:"circleci-control-probe-finished-v1"});
-  }catch{
-    // No provider payload, JWT, token or private task data enters a response or a log.
-    return response(409);
+  }catch(error){
+    // Only fixed local failure tokens may leave this route, never provider bodies or credential data.
+    const code=typeof error?.message==="string"&&/^[a-z_]{1,40}$/.test(error.message)?error.message:"control_unavailable";
+    return response(409,{ok:false,code});
   }
 }
 export default {fetch(request,env){return handleRuntime(request,env);}};

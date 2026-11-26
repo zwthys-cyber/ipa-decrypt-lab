@@ -13,7 +13,12 @@ if(!origin&&!job){
       const result=await fetch(origin+path,{method:"POST",redirect:"error",signal:AbortSignal.timeout(15000),
         headers:{"user-agent":"ipa-decrypt-circleci-runtime/0.2","content-type":"application/json",authorization:"Bearer "+process.env.CIRCLE_OIDC_TOKEN_V3},body});
       if(![200,409,503].includes(result.status))throw Error("control_probe_response");
-      if(result.status!==200)return null;
+      if(result.status!==200){
+        let detail;try{detail=await result.json();}catch{}
+        const code=/^[a-z_]{1,40}$/.test(detail?.code||"")?detail.code:"control_pending";
+        console.log(JSON.stringify({schema:"circleci-control-retry-v1",stage:path,code}));
+        return null;
+      }
       return result.json();
     }
     let task;

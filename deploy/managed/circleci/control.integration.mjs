@@ -45,6 +45,7 @@ async function setup(){
       async function provider(url,init){
         if(url==="https://oidc.circleci.com/org/"+trust.org+"/.well-known/jwks-pub.json")
           return Response.json({keys:[${JSON.stringify(jwk)}]});
+        if(url==="https://circleci.com/api/v2/me")return Response.json({id:trust.user});
         if(url==="https://circleci.com/api/v3/runs"&&init.method==="POST"){
           posts++;const p=JSON.parse(init.body).data.attributes.parameters;
           if(p.control_probe_url!==${JSON.stringify(origin)}||!p.control_probe_job?.startsWith("pilot_"))throw Error("callback_missing");
@@ -101,7 +102,7 @@ test("real workerd: signed claim, idempotent callback and verified terminal read
     assert.equal((await s.request("/v1/runtime/probe-finish",body,jwt)).status,200);
     assert.equal((await s.request("/v1/runtime/probe-finish",body,jwt)).status,200);
     result=await s.request("/v1/runtime/probe-status",{job_id:job},secret,{"x-fixture-terminal":"1"});
-    assert.deepEqual(await result.json(),{ok:true,job_id:job,state:"finished",claimed:true,probe_finished:true});
+    assert.deepEqual(await result.json(),{ok:true,job_id:job,state:"finished",diagnostic:null,claimed:true,probe_finished:true});
     assert.equal((await s.request("/v1/runtime/claim",body,jwt)).status,409);
     assert.equal((await s.db.prepare("SELECT count(*) n FROM circleci_claims").first()).n,1);
     assert.equal((await s.request("/telegram")).status,503);
@@ -150,5 +151,27 @@ test("real workerd: cancelled jobs cannot be claimed; no production credential r
     assert.equal((await s.request("/v1/runtime/claim",{job_id:job,worker_job_id:workerJob},await token())).status,409);
     assert.equal((await s.request("/v1/runtime/credentials",{})).status,404);
     assert.equal((await s.request("/v1/runtime/probe-submit",{probe_id:probe,owner_id:"54321"})).status,409);
+  }finally{await s.close();}
+});
+
+test("real workerd: the one audited empty probe gets an additive resolution, never a reset",{timeout:60000},async()=>{
+  const s=await setup();try{
+    await s.request("/v1/runtime/probe-init");
+    const diagnostic=await (await s.request("/v1/runtime/probe-diagnostics")).json();
+    assert.equal(diagnostic.owner_authenticated,true);
+    const oldJob="pilot_e942f4db020cb1e680e66f842302fcdf",oldSource="e6802e32bf7ae98762491178eb95dd3915e067a5";
+    await s.db.prepare("INSERT INTO pilot_jobs VALUES(?,?,?,?,?,?,?,?)")
+      .bind(oldJob,owner,99,"123456","default",0,100,"waiting_for_runtime").run();
+    await s.db.prepare("INSERT INTO circleci_control_jobs VALUES(?,?,?,?)")
+      .bind(oldJob,oldSource,"synthetic_noop",100).run();
+    await s.db.prepare("INSERT INTO circleci_dispatches VALUES(?,?,?,?,?,?,?,?)")
+      .bind(oldJob,owner,"f".repeat(32),oldSource,"unknown",null,100,100).run();
+    assert.equal((await s.request("/v1/runtime/probe-retire",{job_id:job,source_sha:oldSource})).status,409);
+    const resolved=await s.request("/v1/runtime/probe-retire",{job_id:oldJob,source_sha:oldSource});
+    assert.equal(resolved.status,200);assert.equal((await resolved.json()).original_task_rearmed,false);
+    const row=await s.db.prepare("SELECT state,request_id FROM circleci_dispatches WHERE job_id=?").bind(oldJob).first();
+    assert.deepEqual(row,{state:"unknown",request_id:"f".repeat(32)});
+    assert.equal((await s.db.prepare("SELECT count(*) n FROM circleci_probe_resolutions").first()).n,1);
+    assert.equal((await s.request("/v1/runtime/probe-submit",{probe_id:probe})).status,201);
   }finally{await s.close();}
 });
