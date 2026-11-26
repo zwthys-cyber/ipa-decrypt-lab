@@ -1,5 +1,15 @@
 # 项目进展
 
+## 离线恢复与原机器人 Token 交接（2026-11-26 23:38 UTC）
+
+用户明确旧VPS无法使用，迁移改用保全的加密备份，不再等待SSH恢复；用户选择保留原机器人并更换Token。新Token仅存MANAGED_TELEGRAM_BOT_TOKEN，不覆盖旧工作流的TELEGRAM_BOT_TOKEN。
+
+[离线恢复45912001065](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45912001065)在源码bbf92311d908916834c27555d2df120a3cf4a5b4成功：重新认证并读回同一份378022字节源密文，完整保存29条任务（closed7/delivered20/pending2）、89条updates（unfinished0）、14条metadata，包括offset与version_browser，以及6个Telegram状态文件的索引。原私有回传1条confirmed、未知0，原接受账本仍不存在。恢复清单加密后再解密比对，SHA-256为675f966d71e0dd432a19f6a585d5fef637bc6da0c478a7e02ba74104887448da；artifact15160242814仅包含加密计划和脱敏收据。原加密源仍长期保存在独立13段Secrets，计划可从其重新生成。7项公开合成测试覆盖篡改/账号绑定、未知更新和接受结果保留、Token更换与旧工作流退役边界。
+
+真实Bot API只读身份检查已确认replacement_same_bot_verified:true、old_token_rejected:true；未发送消息，未提交新的Apple任务。5个旧工作流已在确认无运行任务后停用，并由独立GitHub运行重新核对disabled_manually、active_runs0：private-delivery.yml、china-private-delivery.yml、testflight-private-delivery.yml、version-catalog.yml、china-version-catalog.yml。已核对旧VPS实际安装源码b70d0f3730651ebcc03c8d4ca31e9e5d4bd84c51：启动时先要求private-delivery.yml active，再启动本地Bot API与恢复任务；同时停用所有旧派发入口，防止旧机继续提交下载。未撤销共用GitHub派发凭据，未停用新CircleCI签发/验证工作流，未清除历史记录。退役清单见deploy/managed/circleci/legacy-dispatch-retirement.json，启用前仍需新鲜读回。
+
+这是离线恢复准备与凭据更换验证，尚未写入正式D1交接、安装新webhook或启用生产。旧机是否停机仍未证明，恢复清单正确保留source_disabled_verified:false、telegram_isolation_verified:false、permanent_handoff:false。上次快照后旧服务曾恢复，无法保证其后全部变化可取回；缺口必须明确保留，两个pending及未知操作不重放。后续应实现独立的离线交接凭证（新Token/旧工作流隔离、历史数据逐项读回、旧消息隔离和后台调度），不能伪造旧机stopped_at或把有时限快照改成最终冻结证明。TF历史接受 tombstone 仍须按原公开证据重建后才能启用新接受权限。Go Club任务、文件和已确认通知不重复。
+
 ## 版本目录、分页与选择下载已接通（2026-11-26）
 
 候选源码5b25f0298ff0e16ddfd10d084fcac0cf3ab632d6已接通 owner-private /versions、目录排队、默认/国区专用元数据凭据、分页按钮与精确版本选择。该源码的[控制端验证45910022331](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45910022331)成功：81项控制端/OIDC/D1/交付集成测试和16项既有入口测试全过；包含默认/CN目录实际签发协议、禁止目录任务访问上传/导出接口、消息确认、翻页与整组列表单次选择、缓存、刷新、独立查询配额、终态核对后队列推进。Python执行接线9项及既有工作机验证在[45909860642](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45909860642)通过。目录原生传输测试10项、age凭据测试11项保持通过。均为 GitHub 合成验证，不是新的真实账号查询或应用下载。

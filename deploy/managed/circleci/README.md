@@ -1,5 +1,11 @@
 # CircleCI on-demand migration candidate
 
+## 最新决定：旧机不可用，转离线恢复（2026-11-26 23:38 UTC）
+
+已从长期Secrets中的原加密源生成并验证离线恢复计划：[45912001065](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45912001065)。29条任务、89条更新、14条metadata（含offset/browser）和原TF状态得到保留，旧pending继续held；源接受账本不存在，不初始化。用户保留原机器人并更换Token，独立MANAGED_TELEGRAM_BOT_TOKEN已通过同bot身份与旧Token失效检查。5个旧导出/版本查询工作流已停用，无活动任务；新CircleCI工作流保持独立。
+
+不再等待旧SSH恢复，但当前仍未安装新webhook或启用生产。下一步须落地离线D1交接与历史TF确认、隔离旧消息并启用后台调度；不能把过去有时限暂停快照当成现在的永久停机证明。恢复后的未知变化不重放，Go Club已完成交付不重复。下面关于源访问阻塞的章节仅为其所标时点的历史证据。
+
 ## 最新候选：版本目录与分页接线通过 GitHub 验证（2026-11-26）
 
 /versions 的目录排队、默认/CN元数据专用凭据、缓存与分页、刷新、本人私聊消息绑定、整份列表单次选择和精确版本下载接线已实现。[控制端45910022331](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45910022331)通过81项集成与16项既有入口测试；Python接线9项、目录10项、凭据11项亦通过。目录任务不能领取模型、访问上传或调用导出接口。大版本ID保持文本/BigInt校验，避免JavaScript数字精度损失；旧任务表与真实交付记录不重建、不清理。
