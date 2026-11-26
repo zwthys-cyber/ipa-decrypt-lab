@@ -63,6 +63,26 @@ class ProbeTests(unittest.TestCase):
             with self.subTest(key=key), self.assertRaises(ValueError):
                 probe.worker_receipt("a"*40, "b"*32, self.ident, env)
 
+    def test_run_source_and_definition_binding(self):
+        run = dict(data=dict(attributes=dict(phase="ended", current_outcome="succeeded"),
+                   references=dict(project=dict(id=probe.PROJECT), pipeline=dict(id=self.ident),
+                       event=dict(attributes=dict(vcs=dict(
+                           origin_repository_url="https://github.com/" + probe.REPO,
+                           target_repository_url="https://github.com/" + probe.REPO,
+                           branch=probe.BRANCH, revision="a"*40))))))
+        self.assertEqual(probe.validate_run(run, "a"*40, self.ident)["current_outcome"], "succeeded")
+        for commit, definition in (("c"*40, self.ident), ("a"*40, "bad")):
+            with self.assertRaises(ValueError):
+                probe.validate_run(run, commit, definition)
+        run["data"]["references"]["event"]["attributes"]["vcs"]["branch"] = "main"
+        with self.assertRaises(ValueError):
+            probe.validate_run(run, "a"*40, self.ident)
+
+    def test_terminal_failed_run_refused(self):
+        with self.assertRaises(ValueError):
+            probe.validate_run(dict(data=dict(attributes=dict(phase="ended", current_outcome="failed"))),
+                               "a"*40, self.ident)
+
     def test_api_path_rejected_before_transport(self):
         for path in ("https://evil.invalid", "/context", "/project/../context", "/project/x?token=x"):
             with self.assertRaisesRegex(ValueError, "invalid_api_path"):

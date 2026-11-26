@@ -27,7 +27,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 def api(token, path, data=None, version=2):
-    require((path == "/me" or path.startswith(("/project/", "/projects/", "/pipeline/", "/workflow/", "/pipelines/")) or path == "/runs")
+    require((path == "/me" or path.startswith(("/project/", "/projects/", "/pipeline/", "/workflow/", "/pipelines/")) or path == "/runs" or path.startswith("/runs/"))
             and ".." not in path and "?" not in path, "invalid_api_path")
     require(version in (2, 3), "invalid_api_version")
     headers = {"Authorization": "Bearer " + token, "Accept": "application/json"}
@@ -99,6 +99,21 @@ def worker_receipt(commit, request_id, pipeline_id, env=None):
                 commit=commit, request_id=request_id, pipeline_id=pipeline_id,
                 workflow_id=workflow, job_number=job)
 
+def validate_run(value, commit, definition):
+    run = value.get("data", {})
+    refs = run.get("references", {})
+    vcs = refs.get("event", {}).get("attributes", {}).get("vcs", {})
+    require(refs.get("project", {}).get("id") == PROJECT and
+            refs.get("pipeline", {}).get("id") == definition and
+            vcs.get("origin_repository_url") == "https://github.com/" + REPO and
+            vcs.get("target_repository_url") == "https://github.com/" + REPO and
+            vcs.get("branch") == BRANCH and vcs.get("revision") == commit,
+            "run_source_or_project_mismatch")
+    attrs = run.get("attributes", {})
+    require(not (attrs.get("phase") == "ended" and attrs.get("current_outcome") != "succeeded"),
+            "run_failed")
+    return attrs
+
 def github_probe():
     require(os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("GITHUB_REPOSITORY") == REPO
             and os.environ.get("GITHUB_REF") == "refs/heads/" + BRANCH, "github_branch_required")
@@ -126,13 +141,22 @@ def github_probe():
     receipt = dict(schema="circleci-dispatch-probe-trigger-v1", production=False, project_id=PROJECT,
                    project_slug=SLUG, definition_id=definition, commit=commit, request_id=request_id,
                    pipeline_id=pipeline, status="submitted")
+    Path("circleci-probe-receipt.json").write_text(json.dumps(receipt, sort_keys=True) + "\n")
     print(json.dumps(receipt), flush=True)
     deadline = time.monotonic() + 480
     workflow_id = None
     while time.monotonic() < deadline:
-        _, state = api(token, "/pipeline/" + pipeline)
-        require(state.get("project_slug") == SLUG and not state.get("errors"), "pipeline_failed")
-        _, workflows = api(token, "/pipeline/" + pipeline + "/workflow")
+        try:
+            _, state = api(token, "/runs/" + pipeline, version=3)
+            validate_run(state, commit, definition)
+            _, workflows = api(token, "/pipeline/" + pipeline + "/workflow")
+        except ValueError as error:
+            # Read APIs may briefly return 404 for the newly acknowledged run.
+            # This retries only GET for that exact ID, never the trigger POST.
+            if str(error).startswith("circleci_http_404_"):
+                time.sleep(10)
+                continue
+            raise
         items = workflows.get("items")
         require(isinstance(items, list) and len(items) <= 1, "unexpected_workflows")
         if items:
