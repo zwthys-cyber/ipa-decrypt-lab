@@ -6,6 +6,7 @@ on:
       - '.github/workflows/circleci-connection-probe.yml'
       - 'deploy/managed/circleci/probe.py'
       - 'deploy/managed/circleci/test_probe.py'
+      - 'deploy/managed/circleci/oidc*.mjs'
   workflow_dispatch:
 permissions:
   contents: read
@@ -22,7 +23,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Test safe endpoint, source binding and definition selection
-        run: python3 deploy/managed/circleci/test_probe.py -v
+        run: |
+          python3 deploy/managed/circleci/test_probe.py -v
+          node --test deploy/managed/circleci/oidc.test.mjs
       - name: Trigger exactly one credential-free Linux probe and verify completion
         env:
           CIRCLECI_API_TOKEN: ${{ secrets.CIRCLECI_API_TOKEN }}

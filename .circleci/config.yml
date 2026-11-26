@@ -18,7 +18,7 @@ parameters:
 jobs:
   dispatch-contract-probe:
     docker:
-      - image: cimg/python:3.13
+      - image: cimg/python:3.13-node
     resource_class: small
     steps:
       - checkout
@@ -32,6 +32,8 @@ jobs:
             set -euo pipefail
             python3 deploy/managed/circleci/test_probe.py -v
             python3 deploy/managed/circleci/probe.py worker
+            node --test deploy/managed/circleci/oidc.test.mjs
+            node deploy/managed/circleci/oidc-probe.mjs
       - store_artifacts:
           path: dispatch-probe-out
           destination: synthetic-dispatch-probe
