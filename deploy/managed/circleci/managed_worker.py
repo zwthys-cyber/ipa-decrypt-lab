@@ -1,4 +1,4 @@
-"""Bounded CircleCI task client. The staging kind has no Apple or upload operations."""
+"""Bounded CircleCI task client. Staging permits only a pinned project-owned upload fixture."""
 import base64
 import hashlib
 import json
@@ -21,7 +21,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 def need(ok,code):
  if not ok:raise ValueError(code)
 def rpc_once(path,value):
- need(path in ("claim","lease-request","lease-read","finish"),"managed_endpoint")
+ need(path in ("claim","lease-request","lease-read","finish","plaintext-proof","upload-access","upload-journal","upload-register","fixture-cleanup"),"managed_endpoint")
  token=os.environ.get("CIRCLE_OIDC_TOKEN_V3","")
  need(token and len(token)<=16384,"managed_identity")
  request=urllib.request.Request(ORIGIN+"/v2/runtime/"+path,data=json.dumps(dict(value,_source=os.environ["MANAGED_SOURCE"])).encode(),method="POST",
@@ -90,10 +90,31 @@ def main():
     print(json.dumps(dict(stage="waiting_for_credentials",job_id=task["job_id"])),flush=True);last_print=time.monotonic()
    time.sleep(3)
   else:raise ValueError("managed_lease_timed_out")
+  uploaded=False;cleaned=False
+  if result.get("drive_fixture") is True:
+   from runtime_uploader import deliver
+   binding=result["fixture_binding"]
+   need(binding["producer_source"]==pins["source"] and binding["producer_job"]==pins["job_number"] and
+    binding["producer_workflow"]==pins["workflow_id"],"managed_fixture_producer")
+   endpoint=fetch_runtime.trusted_job(pins)
+   matches=[item for item in fetch_runtime.api(endpoint)["items"] if item.get("path")==binding["path"]]
+   need(len(matches)==1,"managed_fixture_artifact")
+   sample=root/"fixture.ipa";fetch_runtime.download(matches[0]["url"],sample,binding["sha256"])
+   need(sample.stat().st_size==binding["bytes"],"managed_fixture_size");sample.chmod(0o600)
+   def checkpoint():
+    need(int(time.time())<task["deadline"],"managed_task_expired")
+   fixture=dict(schema="circleci-private-upload-fixture-v1",job_id=task["job_id"],run_id=task["run_id"],
+    worker_job_id=task["worker_job_id"],source_commit=task["source_sha"],fixture_authorized=True,
+    decryption_proven=False,plaintext_verified=False,account_data_removed=False,archive_verified=True,
+    plaintext_sha256=binding["sha256"],plaintext_bytes=binding["bytes"],filename=binding["filename"])
+   # validate_file inside deliver reads every member CRC and the complete SHA before any Drive creation.
+   deliver(sample,fixture,rpc,identity,ORIGIN,checkpoint,fixture=True);uploaded=True
+   cleaned=rpc("fixture-cleanup",identity).get("cleaned") is True
+   need(cleaned,"managed_fixture_cleanup")
   rpc("finish",dict(identity,fixture_verified=True))
   proof=dict(schema="circleci-managed-task-proof-v1",job_id=task["job_id"],source_sha=task["source_sha"],
    run_id=task["run_id"],worker_job_id=task["worker_job_id"],fixture_verified=True,cipher_sha256=digest,
-   production=False,apple_operation=False,file_upload=False,telegram_send=False)
+   production=False,apple_operation=False,file_upload=uploaded,fixture_cleaned=cleaned,decryption_proven=False,telegram_send=False)
   out=Path("managed-runtime-out");out.mkdir(mode=0o700,exist_ok=True)
   (out/"receipt.json").write_text(json.dumps(proof,sort_keys=True)+"\n")
   print(json.dumps(proof,sort_keys=True),flush=True)

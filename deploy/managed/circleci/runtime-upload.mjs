@@ -10,7 +10,7 @@ export const UPLOAD_SCHEMA=`CREATE TABLE IF NOT EXISTS runtime_uploads(
 function context(task){
   require(task&&JOB.test(task.job_id||"")&&/^[1-9][0-9]{0,15}$/.test(task.owner_id||"")&&
     UUID.test(task.worker_job_id||"")&&SHA.test(task.source_sha||"")&&
-    ["running","uploading","link_ready"].includes(task.state)&&task.kind==="export"&&
+    ["running","uploading","link_ready"].includes(task.state)&&(task.kind==="export"||(task.kind==="fixture"&&task.drive_fixture===1&&task.fixture_authorized===1))&&
     HASH.test(task.plaintext_sha256||"")&&Number.isSafeInteger(task.plaintext_bytes)&&
     task.plaintext_bytes>0&&task.plaintext_bytes<=2000000000&&
     /^[^\s@]{1,128}@[^\s@]{1,128}$/.test(task.recipient_email||""),"upload_context");

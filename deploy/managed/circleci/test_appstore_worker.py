@@ -92,13 +92,13 @@ class WorkerTests(unittest.TestCase):
             Path(args[args.index("--report")+1]).write_text(json.dumps(report))
         return subprocess.CompletedProcess([],0,"","")
 
-    def export(self,checkpoint=None):
+    def export(self,checkpoint=None,delivery=None):
         def stage(name):
             self.stages.append(name)
             if checkpoint:checkpoint(name)
         # The only host substitution is a unit-test platform value; CI flags remain honest.
         with patch.object(context.platform,"system",return_value="Darwin"),patch.object(context.platform,"machine",return_value="arm64"),              patch.object(worker,"check_app",return_value=dict(bundleId="example.synthetic",fileSizeBytes=20000)):
-            return worker.export_task(self.task,self.values,self.root/"out",self.env,stage,self.loader,self.execute)
+            return worker.export_task(self.task,self.values,self.root/"out",self.env,stage,self.loader,self.execute,delivery=delivery)
 
     def make_cn(self):
         self.task.update(profile="cn",request_id="cn_"+"b"*32);self.values=cn_values()
@@ -167,6 +167,23 @@ class WorkerTests(unittest.TestCase):
         def stop(stage):
             if stage=="artifact_ready":raise InterruptedError("cancelled")
         with self.assertRaises(InterruptedError):self.export(stop)
+        self.assertFalse((self.root/"out").exists())
+
+    def test_private_delivery_receives_only_the_fully_verified_scrubbed_file(self):
+        observed=[]
+        def deliver(path,receipt):
+            self.assertTrue(receipt["plaintext_verified"])
+            with zipfile.ZipFile(path) as z:self.assertEqual(z.read("Payload/Demo.app/Demo"),image(0))
+            observed.append(path)
+            return dict(file_id="PRIVATE_FIXTURE_123",filename=receipt["filename"],
+                bytes=receipt["plaintext_bytes"],sha256=receipt["plaintext_sha256"])
+        receipt=self.export(delivery=deliver)
+        self.assertEqual(receipt["private_delivery"]["file_id"],"PRIVATE_FIXTURE_123")
+        self.assertEqual(len(observed),1);self.assertFalse(observed[0].exists())
+
+    def test_unconfirmed_private_upload_never_publishes_output(self):
+        def fail(path,receipt):raise RuntimeError("synthetic-private-upload-unknown")
+        with self.assertRaises(RuntimeError):self.export(delivery=fail)
         self.assertFalse((self.root/"out").exists())
 
     def test_task_rejects_wrong_source_run_worker_owner_profile_and_github_spoof(self):

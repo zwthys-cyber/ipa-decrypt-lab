@@ -39,8 +39,10 @@ async function signed(kind,changes={}){
  return raw+"."+enc(await crypto.subtle.sign("RSASSA-PKCS1-v1_5",signer.key.privateKey,new TextEncoder().encode(raw)));
 }
 async function setup(){
- const folder=await mkdtemp(join(tmpdir(),"runtime-api-"));
- const files=["runtime-api.mjs","runtime-schema.mjs","runtime-auth.mjs","runtime-lease.mjs","runtime-upload.mjs",
+ const base=await mkdtemp(join(tmpdir(),"runtime-api-"));
+ const folder=join(base,"circleci");await mkdir(folder);await mkdir(join(base,"free-pilot"));
+ await copyFile(new URL("../free-pilot/drive-auth.mjs",import.meta.url),join(base,"free-pilot","drive-auth.mjs"));
+ const files=["runtime-api.mjs","runtime-schema.mjs","runtime-auth.mjs","runtime-lease.mjs","runtime-upload.mjs","runtime-drive.mjs","runtime-fixture.mjs",
   "oidc.mjs","github-oidc.mjs"];
  await Promise.all(files.map(name=>copyFile(new URL(name,import.meta.url),join(folder,name))));
  const entry=join(folder,"entry.mjs");
@@ -48,7 +50,7 @@ async function setup(){
  import {handleRuntimeV2} from "./runtime-api.mjs";
  const C=${JSON.stringify(C)},G=${JSON.stringify(G)};
  const run=${JSON.stringify(run)},workflow=${JSON.stringify(workflow)},worker=${JSON.stringify(worker)};
- let nativePosts=0,publisherPosts=0;
+ let nativePosts=0,publisherPosts=0,deleted=false;
  export default {async fetch(request,env){
   if(new URL(request.url).pathname==="/fixture-count")return Response.json({nativePosts,publisherPosts});
   async function provider(url,options){
@@ -87,6 +89,15 @@ async function setup(){
     return Response.json({id:Number(${JSON.stringify(publisher)}),repository:{id:Number(G.repository_id)},actor:{id:Number(G.owner_id)},
      event:"workflow_dispatch",run_attempt:1,head_sha:${JSON.stringify(source)},head_branch:C.ref.slice(11),
      status:"in_progress",path:G.workflows.lease,display_title:"CircleCI lease "+${JSON.stringify(job)}});
+   if(url.startsWith("https://www.googleapis.com/drive/v3/")){
+    if(options.method==="DELETE"){deleted=true;return new Response(null,{status:204});}
+    if(url.includes("about?"))return Response.json({storageQuota:{limit:String(15*1024**3),usage:"0"},user:{emailAddress:"fixture@example.invalid"}});
+    if(url.includes("/permissions?"))return Response.json({permissions:[{type:"user",role:"owner",emailAddress:"fixture@example.invalid"}]});
+    if(deleted)return new Response(null,{status:404});
+    return Response.json({id:"FIXTURE_FILE_12345",name:"Migration_ARM_Probe.ipa",size:"5496",
+     sha256Checksum:"85025bd1cfea42339ed38b09e9580e1094b2949153c83c81e66d9b1ad9043e93",
+     ownedByMe:true,trashed:false,mimeType:"application/octet-stream"});
+   }
    throw Error("unexpected_provider_request");
   }
   return handleRuntimeV2(request,env,${now},provider);
@@ -95,13 +106,13 @@ async function setup(){
  const mf=new Miniflare({modules:true,modulesRoot:folder,scriptPath:entry,compatibilityDate:"2026-07-30",
   cf:false,host:"127.0.0.1",port:0,d1Databases:{DB:"99999999-9999-4999-8999-999999999999"},
   bindings:{RUNTIME_MODE:"staging",RUNTIME_CONTROL_ORIGIN:origin,RUNTIME_SOURCE_SHA:source,RUNTIME_OWNER_ID:owner,
-   CIRCLECI_CONTROL_TOKEN:secret,CIRCLECI_API_TOKEN:"synthetic-circle-token",RUNTIME_GH_TOKEN:"synthetic-github-token"}});
+   CIRCLECI_CONTROL_TOKEN:secret,CIRCLECI_API_TOKEN:"synthetic-circle-token",RUNTIME_GH_TOKEN:"synthetic-github-token",PILOT_DRIVE_RECIPIENT_EMAIL:"fixture@example.invalid",PILOT_DRIVE_ACCESS_TOKEN:"T".repeat(32)}});
  const db=await mf.getD1Database("DB");
  const request=(path,value={},kind="admin",token=secret,extra={})=>mf.dispatchFetch(origin+"/v2/runtime/"+path,{
   method:"POST",headers:{"content-type":"application/json","x-ipazake-source-sha":source,
    [kind==="circle"?"x-ipazake-job-token":kind==="github"?"x-ipazake-github-token":"x-ipazake-control-token"]:token,...extra},
   body:JSON.stringify({...value,_source:source})});
- const close=async()=>{await mf.dispose();await rm(folder,{recursive:true,force:true});};
+ const close=async()=>{await mf.dispose();await rm(base,{recursive:true,force:true});};
  return {mf,db,request,close};
 }
 test("real workerd managed claim, automatic publisher, immutable lease and completion",{timeout:60000},async()=>{
@@ -175,5 +186,45 @@ test("a stale deployment rejects admission before creating any native intent",{t
   assert.equal(result.status,409);assert.equal((await result.json()).code,"runtime_source_not_ready");
   assert.equal((await s.db.prepare("SELECT count(*) n FROM runtime_jobs").first()).n,0);
   assert.equal((await s.mf.dispatchFetch(origin+"/fixture-count").then(r=>r.json())).nativePosts,0);
+ }finally{await s.close();}
+});
+
+test("drive fixture requires pinned proof, durable intent, owner verification and cleanup",{timeout:60000},async()=>{
+ const s=await setup();try{
+  await s.request("init");await s.request("admit-drive-fixture",{probe_id:probe});
+  const c=await signed("circle"),identity={job_id:job,worker_job_id:worker};
+  const claimed=await (await s.request("claim",identity,"circle",c)).json();
+  assert.equal(claimed.drive_fixture,true);
+  assert.equal((await s.request("upload-access",identity,"circle",c)).status,409);
+  const b=claimed.fixture_binding;
+  const receipt={schema:"circleci-private-upload-fixture-v1",job_id:job,run_id:run,worker_job_id:worker,
+   source_commit:source,fixture_authorized:true,decryption_proven:false,plaintext_verified:false,
+   account_data_removed:false,archive_verified:true,plaintext_sha256:b.sha256,plaintext_bytes:b.bytes,filename:b.filename};
+  assert.equal((await s.request("plaintext-proof",{...identity,receipt:{...receipt,decryption_proven:true}},"circle",c)).status,409);
+  assert.equal((await s.request("plaintext-proof",{...identity,receipt},"circle",c)).status,200);
+  assert.equal((await s.request("upload-access",identity,"circle",c)).status,200);
+  const record={filename:b.filename,bytes:b.bytes,sha256:b.sha256},file_id="FIXTURE_FILE_12345";
+  assert.equal((await s.request("upload-register",{...identity,record:{...record,file_id}},"circle",c)).status,409);
+  const state={job_id:job,owner:"fixture@example.invalid",record};
+  for(const item of [{stage:"start_intent"},{stage:"uploading",session:"https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=SYNTHETIC_12345678"},
+   {stage:"uploaded",file_id},{stage:"registration_intent",file_id,registration_origin:origin}]){
+   const r=await s.request("upload-journal",{...identity,action:"put",state:{...state,...item}},"circle",c);
+   assert.equal(r.status,200,await r.text());
+  }
+  for(let n=0;n<2;n++)assert.equal((await s.request("upload-register",{...identity,record:{...record,file_id}},"circle",c)).status,200);
+  assert.equal((await s.request("finish",{...identity,fixture_verified:true},"circle",c)).status,409);
+  for(let n=0;n<2;n++)assert.equal((await (await s.request("fixture-cleanup",identity,"circle",c)).json()).cleaned,true);
+  const status=await (await s.request("status",{job_id:job})).json();
+  assert.equal(status.drive_uploaded,true);assert.equal(status.fixture_cleaned,true);
+ }finally{await s.close();}
+});
+test("ordinary credential fixtures cannot acquire upload access",{timeout:60000},async()=>{
+ const s=await setup();try{
+  await s.request("init");await s.request("admit-fixture",{probe_id:probe});
+  const c=await signed("circle"),identity={job_id:job,worker_job_id:worker};
+  await s.request("claim",identity,"circle",c);
+  assert.equal((await s.request("upload-access",identity,"circle",c)).status,409);
+  assert.equal((await s.request("fixture-cleanup",identity,"circle",c)).status,409);
+  assert.equal((await s.request("admit-drive-fixture",{probe_id:probe})).status,409);
  }finally{await s.close();}
 });

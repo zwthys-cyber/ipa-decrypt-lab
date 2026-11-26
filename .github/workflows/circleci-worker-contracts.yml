@@ -4,6 +4,8 @@ on:
     branches: [upgrade/managed-runtime-v0.2]
     paths:
       - 'deploy/managed/circleci/appstore_worker.py'
+      - 'deploy/managed/circleci/runtime_uploader.py'
+      - 'deploy/managed/circleci/test_runtime_uploader.py'
       - 'deploy/managed/circleci/verified_export.py'
       - 'deploy/managed/circleci/task_context.py'
       - 'deploy/managed/circleci/private_process.py'
@@ -39,6 +41,7 @@ jobs:
       - name: Verify CircleCI identities, saved CN session, cancellation, ZIP proofs and real encryption
         working-directory: deploy/managed/circleci
         run: |
+          python3 test_runtime_uploader.py -v
           python3 test_appstore_worker.py -v
           python3 test_tf_worker.py -v
           python3 test_credential_envelope.py -v

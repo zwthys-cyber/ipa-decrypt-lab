@@ -9,6 +9,7 @@ on:
       - 'deploy/managed/circleci/*credential*'
       - 'deploy/managed/circleci/tf-acceptance*'
       - 'deploy/managed/circleci/runtime-*'
+      - 'deploy/managed/circleci/runtime_uploader.py'
       - 'deploy/managed/circleci/github-oidc*'
       - 'deploy/managed/circleci/managed_worker.py'
       - 'deploy/managed/circleci/runtime_cloud.py'
@@ -40,9 +41,10 @@ jobs:
         working-directory: deploy/managed/circleci
         run: |
           python3 test_control_cloud.py -v
-          python3 -m py_compile credential_probe.py credential_envelope.py managed_worker.py runtime_cloud.py
+          python3 test_runtime_uploader.py -v
+          python3 -m py_compile credential_probe.py credential_envelope.py managed_worker.py runtime_cloud.py runtime_uploader.py
           node --check control-probe.mjs
-          node --test control.integration.mjs dispatch.integration.mjs oidc.test.mjs credential-broker.integration.mjs tf-acceptance.integration.mjs runtime-upload.integration.mjs runtime-api.integration.mjs github-oidc.test.mjs
+          node --test control.integration.mjs dispatch.integration.mjs oidc.test.mjs credential-broker.integration.mjs tf-acceptance.integration.mjs runtime-upload.integration.mjs runtime-drive.test.mjs runtime-api.integration.mjs github-oidc.test.mjs
           node --test ../free-pilot/worker.test.mjs ../free-pilot/private-link.test.mjs ../free-pilot/drive-auth.test.mjs
       - name: Bundle only the source-tested disabled control candidate
         run: |
@@ -99,7 +101,7 @@ jobs:
 
   managed-runtime-probe:
     needs: contracts
-    if: github.ref == 'refs/heads/upgrade/managed-runtime-v0.2' && contains(github.event.head_commit.message, '[managed-runtime-probe]')
+    if: github.ref == 'refs/heads/upgrade/managed-runtime-v0.2' && (contains(github.event.head_commit.message, '[managed-runtime-probe]') || contains(github.event.head_commit.message, '[managed-drive-probe]'))
     runs-on: ubuntu-24.04
     timeout-minutes: 24
     steps:
@@ -128,7 +130,7 @@ jobs:
           CIRCLECI_API_TOKEN: ${{ secrets.CIRCLECI_API_TOKEN }}
           RUNTIME_OWNER_ID: ${{ secrets.TELEGRAM_OWNER_ID }}
           RUNTIME_GH_TOKEN: ${{ secrets.VPS_GH_TOKEN }}
-        run: python3 deploy/managed/circleci/runtime_cloud.py --bundle circleci-control-dist/worker.mjs
+        run: python3 deploy/managed/circleci/runtime_cloud.py --bundle circleci-control-dist/worker.mjs ${{ contains(github.event.head_commit.message, '[managed-drive-probe]') && '--drive-fixture' || '' }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:

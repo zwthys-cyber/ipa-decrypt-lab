@@ -4,6 +4,8 @@ import json
 import os
 from pathlib import Path
 import struct
+import re
+from app_presentation import filename as delivery_filename
 from task_context import RECIPIENT, minimal_env, require
 from private_export import audit, validate_report, scrub_archive, verify_output, verify_version, digest
 from capacity import MAX_IPA_BYTES, DECRYPT_TIMEOUT, CRYPTO_TIMEOUT
@@ -16,7 +18,7 @@ def model_bytes(encoded):
     return value
 
 def export_original(task,engine,age,root,original,info,model,output,env,runner,stage,
-                    version_id="",resolved_version=""):
+                    version_id="",resolved_version="",delivery=None):
     root=Path(root);original=Path(original);output=Path(output)
     require(not original.is_symlink() and original.is_file() and
         0<original.stat().st_size<=MAX_IPA_BYTES,"export_source_size")
@@ -59,8 +61,20 @@ def export_original(task,engine,age,root,original,info,model,output,env,runner,s
         account_data_removed=True,plaintext_published=False,encrypted_images=images,decrypted_pages=pages,
         plaintext_bytes=plain_size,plaintext_sha256=plain_digest,ciphertext_bytes=sealed.stat().st_size,
         ciphertext_sha256=digest(sealed),recipient=RECIPIENT)
+    receipt["filename"]=delivery_filename({"display_name":info.get("trackName") or info["bundleId"],
+        "version":verified.get("version") or resolved_version},receipt["app_id"],testflight=task["profile"]=="tf")
+    receipt["filename"]="".join(c if c.isalnum() or c in " ._()-" else "_" for c in receipt["filename"])
+    require(1<=len(receipt["filename"])<=160 and not receipt["filename"].startswith("."),"delivery_filename")
     if task["profile"]=="tf":
         receipt.update(target_type="testflight",testflight_invite=task["target"])
+    if delivery is not None:
+        stage("uploading_private")
+        deposited=delivery(cleaned,receipt)
+        require(type(deposited) is dict and set(deposited)=={"file_id","filename","bytes","sha256"} and
+            re.fullmatch(r"[A-Za-z0-9_-]{10,160}",deposited.get("file_id","")) and
+            deposited["filename"]==receipt["filename"] and deposited["bytes"]==plain_size and
+            deposited["sha256"]==plain_digest,"private_delivery_binding")
+        receipt["private_delivery"]=deposited
     stage("publishing_ciphertext")
     created=False
     try:

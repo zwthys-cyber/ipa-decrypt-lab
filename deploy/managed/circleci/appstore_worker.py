@@ -17,7 +17,7 @@ import cn_profile
 import fetch_runtime
 
 def export_task(task,values,output,env=None,checkpoint=lambda stage:None,
-                load_runtime=fetch_runtime.fetch,execute=private_run):
+                load_runtime=fetch_runtime.fetch,execute=private_run,delivery=None):
     env=os.environ if env is None else env
     task=validate(task,env)
     require(task["profile"] in ("default","cn"),"appstore_profile_required")
@@ -73,7 +73,7 @@ def export_task(task,values,output,env=None,checkpoint=lambda stage:None,
                 require(classify(result)=="authenticated","apple_authentication_rejected")
                 version_id,resolved=download(email,child)
                 receipt=export_original(task,engine,age,root,original,info,values["FAIRPLAY_MODEL_B64"],staged,
-                    env,run,stage,version_id,resolved)
+                    env,run,stage,version_id,resolved,delivery=delivery)
             finally:
                 try:run(binary,["logout",email],child,30)
                 except Exception:pass
@@ -83,7 +83,7 @@ def export_task(task,values,output,env=None,checkpoint=lambda stage:None,
                 version_id,resolved=download(account["email"],child,account["guid"])
                 cn_profile.bound(path,account,values)
                 receipt=export_original(task,engine,age,root,original,info,values["FAIRPLAY_CN_MODEL_B64"],staged,
-                    env,run,stage,version_id,resolved)
+                    env,run,stage,version_id,resolved,delivery=delivery)
         stage("finalizing_ciphertext")
         require(not output.exists() and not output.is_symlink(),"export_destination")
         staged.rename(output)

@@ -32,7 +32,7 @@ def restore_session(encoded,root):
     return value
 
 def export_task(task,values,output,env=None,checkpoint=lambda stage:None,acceptance=None,
-                load_runtime=fetch_runtime.fetch,execute=private_run):
+                load_runtime=fetch_runtime.fetch,execute=private_run,delivery=None):
     env=os.environ if env is None else env
     task=validate(task,env);require(task["profile"]=="tf","tf_profile_required")
     values=credentials("tf",values);model_bytes(values["FAIRPLAY_CN_MODEL_B64"])
@@ -92,7 +92,7 @@ def export_task(task,values,output,env=None,checkpoint=lambda stage:None,accepta
         normalized=root/"canonical.ipa";canonicalize(original,normalized);archive_binding(normalized,bundle)
         staged=root/"sealed-out"
         receipt=export_original(task,root/"cn"/"offline-engine",age,root,normalized,
-            dict(bundleId=bundle,trackId=identifier),values["FAIRPLAY_CN_MODEL_B64"],staged,env,run,stage)
+            dict(bundleId=bundle,trackId=identifier),values["FAIRPLAY_CN_MODEL_B64"],staged,env,run,stage,delivery=delivery)
         receipt.update(acceptance_attempted=result["acceptance_attempted"])
         (staged/"receipt.json").write_text(json.dumps(receipt,sort_keys=True)+"\n")
         stage("finalizing_ciphertext");require(not output.exists() and not output.is_symlink(),"export_destination")

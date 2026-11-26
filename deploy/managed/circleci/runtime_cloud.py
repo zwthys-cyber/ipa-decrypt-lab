@@ -16,7 +16,7 @@ ORIGIN="https://ipazake-free-control-pilot.hahayesadd.workers.dev"
 def need(ok,code):
  if not ok:raise ValueError(code)
 def call(path,token=None,value=None):
- need(path in ("ready","init","admit-fixture","status"),"runtime_cloud_endpoint")
+ need(path in ("ready","init","admit-fixture","admit-drive-fixture","status"),"runtime_cloud_endpoint")
  headers={"User-Agent":"ipa-decrypt-managed-deployer/0.2","Accept":"application/json"}
  if token:headers["X-Ipazake-Control-Token"]=token
  if value is not None:
@@ -36,7 +36,7 @@ def call(path,token=None,value=None):
   except Exception:pass
   raise ValueError(code) from None
  value=json.loads(raw);need(value.get("ok") is True,"runtime_cloud_response");return value
-def deploy(bundle):
+def deploy(bundle,drive_fixture=False):
  env=os.environ
  need(env.get("GITHUB_ACTIONS")=="true" and env.get("GITHUB_REPOSITORY")=="zwthys-cyber/ipa-decrypt-lab" and
   env.get("GITHUB_REF")=="refs/heads/upgrade/managed-runtime-v0.2","runtime_cloud_context")
@@ -93,7 +93,7 @@ def deploy(bundle):
  # Reuse the same logical ID only; the durable dispatch CAS permits one external POST.
  for attempt in range(30):
   try:
-   admitted=call("admit-fixture",control,dict(probe_id=probe))
+   admitted=call("admit-drive-fixture" if drive_fixture else "admit-fixture",control,dict(probe_id=probe))
    need(admitted.get("job_id")==job,"runtime_admission_binding")
    break
   except (ValueError,urllib.error.URLError,TimeoutError):
@@ -110,6 +110,8 @@ def deploy(bundle):
    need(status.get("fixture_verified") is True and status.get("ciphertext_cleared") is True and
     re.fullmatch(r"[1-9][0-9]{0,19}",status.get("publisher_run_id") or "") and
     re.fullmatch(r"[a-f0-9]{64}",status.get("cipher_sha256") or ""),"runtime_completion_proof")
+   if drive_fixture:need(status.get("drive_fixture") is True and status.get("drive_uploaded") is True and status.get("fixture_cleaned") is True,"runtime_drive_fixture_unconfirmed")
+   receipt.update(file_upload=drive_fixture,fixture_cleaned=status.get("fixture_cleaned") is True,decryption_proven=False)
    receipt.update(status="verified",managed_task_verified=True,publisher_identity_verified=True,
     ciphertext_cleared=True,publisher_run_id=status["publisher_run_id"],run_id=status["run_id"],
     cipher_sha256=status["cipher_sha256"]);save();return
@@ -118,8 +120,8 @@ def deploy(bundle):
   time.sleep(10)
  raise ValueError("runtime_task_pending_no_retry")
 def main():
- parser=argparse.ArgumentParser();parser.add_argument("--bundle",required=True);args=parser.parse_args()
- try:deploy(args.bundle);return 0
+ parser=argparse.ArgumentParser();parser.add_argument("--bundle",required=True);parser.add_argument("--drive-fixture",action="store_true");args=parser.parse_args()
+ try:deploy(args.bundle,args.drive_fixture);return 0
  except Exception as error:
   code=str(error) if isinstance(error,ValueError) and re.fullmatch(r"[a-z0-9_]+",str(error)) else "managed_runtime_cloud_failed"
   print(code,file=sys.stderr);return 2
