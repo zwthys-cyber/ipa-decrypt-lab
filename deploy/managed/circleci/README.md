@@ -1,5 +1,20 @@
 # CircleCI on-demand migration candidate
 
+## 当前迁移状态（2026-11-26）
+
+自动任务与凭据签发已完成真实云端验证：[控制端/工作机证明 45851572093](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45851572093)，[一次性签发 45851926514](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45851926514)。源码 `07701765cd5b7a011e9d27ae98dfbfb2eec24da8`，CircleCI run `edb6e561-752e-4e0d-b487-c425b37bca3d`。真实 macOS ARM 工作机下载固定公共运行包、领取并解开仅属于本任务的虚构凭据，服务端回读确认密文清除；SHA-256 `5e870ff3be84a7fe3a17bef9a6135be82bcd3d293ee8ba0517556d5670763e01`。没有 Apple 操作、上传或 Telegram 发送。已修复 GitHub App 项目名称误当仓库身份、签发者元数据读取，以及部署传播期间的源码版本绑定问题。同一逻辑任务的内部请求可恢复，外部派发意图只提交一次。
+
+源状态已经加密保全并存入分块 GitHub Secrets：[在线备份 45842375113](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45842375113)，[Secrets 回读 45843176901](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45843176901)。归档 SHA-256 `3ec6f97fc70ca3e1aa187046a5d3f6bd76a23fd34b077af43de3b867eb23bc29`；验证了原虚拟 TF 会话、10 个文件、7 条 closed / 20 条 delivered / 2 条 pending。源历史接受账本不存在，保留这一事实。在线快照 `frozen:false`，不能当作最终冻结交接；两个 pending 不自动重放。
+
+当前公共运行包已升级到成功的 CircleCI job62（源码 `2896fff82275ef791e3703cc17ed9473c77b151a`，workflow `1c28d9d9-f709-4cb4-b9ae-f5f4413208a5`），runtime-pins.json 是当前摘要来源，下面 job60/61 是历史证据。[工作机适配验证 45852931305](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45852931305) 已通过新增的私有交付回调和上传恢复测试，以及默认/CN/TF 原有回归。
+
+私有上传候选已加入持久创建意图、断线续传、不可变摘要/名称/大小、服务端独立 Drive 校验和仅本人可见 ACL 检查。真实 Drive 验证仍待通过；验证仅使用 job62 的项目自有 5496 字节 ARM 示例 IPA（SHA-256 `85025bd1cfea42339ed38b09e9580e1094b2949153c83c81e66d9b1ad9043e93`），完成后清理该测试文件。样例上传不能作为实际 DRM 导出或大文件交付证明。
+
+尚未完成：真实任务入口与版本目录/取消闭环、历史状态与接受账本最终导入、冻结交接、费用限制核查、单一机器人入口切换，以及新链接的实际私有交付验收。控制端仍是 staging，真实 Apple 导出未开放；旧 VPS 保持唯一机器人。所有编译和测试均在 GitHub/CircleCI 执行。
+
+以下保留先前阶段的历史记录，后文“最新”仅指当时阶段。
+
+
 ## 新运行包独立 ARM 加载与 macOS 适配验证通过（2026-11-26，最新）
 
 [CircleCI job61](https://app.circleci.com/workflow/b1d0deb7-f168-41a5-87f8-d5088f6d9023/job/02c0b8e6-ba26-4b9e-b38f-5c8b155a319d) 与 [GitHub 45839573020](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45839573020) 均成功，消费者源码 `92d8d4fbf9f7f4ec3aac48e0494fcc2f619f8fa3`。独立 ARM 主机实际下载 job60 的 base/CN/TF 三包并回读三份成功的 fetch receipt，核对固定摘要、源码输入、来源和 ABI；执行新的 TF 原生上下文自检，以及实际 macOS 上的13项默认/CN、6项TF虚构任务适配测试（真实 ZIP/age/进程取消）。消费者跳过 iOS 样例编译，断言没有 Swift/TF 构建树，不重新编译项目运行工具。新参数 `runtime_consumer: true` 显式选择该路径，普通推送保持不启动 macOS。

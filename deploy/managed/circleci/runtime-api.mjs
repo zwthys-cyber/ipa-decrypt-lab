@@ -168,7 +168,7 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
    path==="upload-journal"?["job_id","worker_job_id","action","state"]:
    path==="upload-register"?["job_id","worker_job_id","record"]:
    path==="finish"?["job_id","worker_job_id","fixture_verified"]:["job_id","worker_job_id"];
-  const value=await body(request,fields),row=await task(env,value.job_id);
+  const value=await body(request,fields,path==="upload-journal"?8192:4096),row=await task(env,value.job_id);
   const identity=await circleIdentity(request,env,row,value.worker_job_id,now,send);
   if(path==="claim"){
    need(row.kind==="fixture","runtime_production_disabled");

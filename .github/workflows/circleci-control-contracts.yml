@@ -44,7 +44,7 @@ jobs:
           python3 test_runtime_uploader.py -v
           python3 -m py_compile credential_probe.py credential_envelope.py managed_worker.py runtime_cloud.py runtime_uploader.py
           node --check control-probe.mjs
-          node --test control.integration.mjs dispatch.integration.mjs oidc.test.mjs credential-broker.integration.mjs tf-acceptance.integration.mjs runtime-upload.integration.mjs runtime-drive.test.mjs runtime-api.integration.mjs github-oidc.test.mjs
+          timeout 180s node --test control.integration.mjs dispatch.integration.mjs oidc.test.mjs credential-broker.integration.mjs tf-acceptance.integration.mjs runtime-upload.integration.mjs runtime-drive.test.mjs runtime-api.integration.mjs github-oidc.test.mjs
           node --test ../free-pilot/worker.test.mjs ../free-pilot/private-link.test.mjs ../free-pilot/drive-auth.test.mjs
       - name: Bundle only the source-tested disabled control candidate
         run: |

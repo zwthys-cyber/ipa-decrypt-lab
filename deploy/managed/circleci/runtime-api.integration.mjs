@@ -103,7 +103,7 @@ async function setup(){
   return handleRuntimeV2(request,env,${now},provider);
  }};
  `);
- const mf=new Miniflare({modules:true,modulesRoot:folder,scriptPath:entry,compatibilityDate:"2026-07-30",
+ const mf=new Miniflare({modules:true,modulesRoot:base,scriptPath:entry,compatibilityDate:"2026-07-30",
   cf:false,host:"127.0.0.1",port:0,d1Databases:{DB:"99999999-9999-4999-8999-999999999999"},
   bindings:{RUNTIME_MODE:"staging",RUNTIME_CONTROL_ORIGIN:origin,RUNTIME_SOURCE_SHA:source,RUNTIME_OWNER_ID:owner,
    CIRCLECI_CONTROL_TOKEN:secret,CIRCLECI_API_TOKEN:"synthetic-circle-token",RUNTIME_GH_TOKEN:"synthetic-github-token",PILOT_DRIVE_RECIPIENT_EMAIL:"fixture@example.invalid",PILOT_DRIVE_ACCESS_TOKEN:"T".repeat(32)}});
