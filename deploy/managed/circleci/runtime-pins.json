@@ -1,44 +1,44 @@
 {
   "schema": "circleci-native-pins-v1",
-  "source": "fa258c072f246011079affe7cecd369422ecef0d",
-  "workflow_id": "ca2fe102-a78d-4284-a20f-321d5ccdfa1e",
-  "job_number": 40,
+  "source": "f6c9f1c5c96553a7af4e78141a9b8ea68afd682d",
+  "workflow_id": "cc64895c-dcb1-4e8c-861a-43731544d2f5",
+  "job_number": 60,
   "variants": {
     "base": {
-      "commit": "fa258c072f246011079affe7cecd369422ecef0d",
-      "workflow_id": "ca2fe102-a78d-4284-a20f-321d5ccdfa1e",
-      "job_number": "40",
-      "source_fingerprint": "643e153569fe9255b306da298aaa1eba3bb8e837124befd9cc228cf4431b0fef",
+      "commit": "f6c9f1c5c96553a7af4e78141a9b8ea68afd682d",
+      "workflow_id": "cc64895c-dcb1-4e8c-861a-43731544d2f5",
+      "job_number": "60",
+      "source_fingerprint": "fa9a90e514db5e3e83e72669dbcadf4d8e81ee958625410d2cd74dabc549f968",
       "xcode": "Xcode 26.5\nBuild version 17F42",
       "swift": "Apple Swift version 6.3.2 (swiftlang-6.3.2.1.108 clang-2100.1.1.101)\nTarget: arm64-apple-macosx26.0",
       "macos": "26.3.1",
       "variant": "base",
       "dependencies": "",
-      "archive_sha256": "4e79550a90fcd0cb510de671de19d053c1dcc2899454c8431d83dbc548409012"
+      "archive_sha256": "36fe7378fd311a0d0603a31874119113a76c69576150d6804819722189aaf76b"
     },
     "cn": {
-      "commit": "fa258c072f246011079affe7cecd369422ecef0d",
-      "workflow_id": "ca2fe102-a78d-4284-a20f-321d5ccdfa1e",
-      "job_number": "40",
-      "source_fingerprint": "643e153569fe9255b306da298aaa1eba3bb8e837124befd9cc228cf4431b0fef",
+      "commit": "f6c9f1c5c96553a7af4e78141a9b8ea68afd682d",
+      "workflow_id": "cc64895c-dcb1-4e8c-861a-43731544d2f5",
+      "job_number": "60",
+      "source_fingerprint": "fa9a90e514db5e3e83e72669dbcadf4d8e81ee958625410d2cd74dabc549f968",
       "xcode": "Xcode 26.5\nBuild version 17F42",
       "swift": "Apple Swift version 6.3.2 (swiftlang-6.3.2.1.108 clang-2100.1.1.101)\nTarget: arm64-apple-macosx26.0",
       "macos": "26.3.1",
       "variant": "cn",
       "dependencies": "",
-      "archive_sha256": "c5b1ab083f49f201dfc6be20d7ea0a0b5b9e97895d3d70579a833b79e28880b4"
+      "archive_sha256": "7233e062ab3a20a3de15c601ed2d0557b46f586224800418ee2183ddce2d77b0"
     },
     "testflight": {
-      "commit": "fa258c072f246011079affe7cecd369422ecef0d",
-      "workflow_id": "ca2fe102-a78d-4284-a20f-321d5ccdfa1e",
-      "job_number": "40",
-      "source_fingerprint": "643e153569fe9255b306da298aaa1eba3bb8e837124befd9cc228cf4431b0fef",
+      "commit": "f6c9f1c5c96553a7af4e78141a9b8ea68afd682d",
+      "workflow_id": "cc64895c-dcb1-4e8c-861a-43731544d2f5",
+      "job_number": "60",
+      "source_fingerprint": "fa9a90e514db5e3e83e72669dbcadf4d8e81ee958625410d2cd74dabc549f968",
       "xcode": "Xcode 26.5\nBuild version 17F42",
       "swift": "Apple Swift version 6.3.2 (swiftlang-6.3.2.1.108 clang-2100.1.1.101)\nTarget: arm64-apple-macosx26.0",
       "macos": "26.3.1",
       "variant": "testflight",
       "dependencies": "cmake 4.5.1\ncurl 8.23.0\nlibzip 1.12.1\nmbedtls@3 3.6.8\nninja 1.13.2\nnlohmann-json 3.12.0",
-      "archive_sha256": "582ef7a08127af006089ea3643da8c69ca631b89f6a37f2ef2fcbe4279657c0d"
+      "archive_sha256": "f4942727f1265c7399bd6cede28bf1404f1f3ea4b0be589526e618f97b8ad7f8"
     }
   }
 }

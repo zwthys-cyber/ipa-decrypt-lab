@@ -5,6 +5,10 @@ parameters:
     type: boolean
     default: false
 
+  runtime_consumer:
+    type: boolean
+    default: false
+
   validate_arm64_archive:
     type: boolean
     default: false
@@ -74,39 +78,44 @@ jobs:
             set -euo pipefail
             python3 deploy/managed/free-pilot/test_archive_verify.py -v
             python3 deploy/managed/circleci/test_runtime.py -v
-      - run:
-          name: Build the project-owned ARM64 iOS sample
-          command: |
-            set -euo pipefail
-            fixture_commit=3bd9bcf51567379659931094a842707ec064cf13
-            fixture_dir=build/arm64-fixture
-            git init --quiet "$fixture_dir"
-            git -C "$fixture_dir" fetch --depth=1 --no-tags \
-              https://github.com/zwthys-cyber/macos-compat.git "$fixture_commit"
-            git -C "$fixture_dir" checkout --quiet --detach FETCH_HEAD
-            test "$(git -C "$fixture_dir" rev-parse HEAD)" = "$fixture_commit"
-            bash "$fixture_dir/sample/build-ipa.sh"
-      - run:
-          name: Verify the packaged sample with the v0.2 archive tool
-          command: |
-            set -euo pipefail
-            output_dir=build/arm64-fixture/build/ipa
-            artifact="$output_dir/ARMSample-unsigned.ipa"
-            expected=$(awk '$2 == "ARMSample-unsigned.ipa" {print $1}' "$output_dir/SHA256SUMS")
-            [[ "$expected" =~ ^[0-9a-f]{64}$ ]]
-            chmod 0600 "$artifact"
-            python3 deploy/managed/free-pilot/archive_verify.py "$artifact" \
-              --expected-sha256 "$expected" --confirm-authorized-file |
-              tee "$output_dir/delivery-verification.json"
-      - store_artifacts:
-          path: build/arm64-fixture/build/ipa
-          destination: arm64-ios-sample
+      - when:
+          condition:
+            not: << pipeline.parameters.runtime_consumer >>
+          steps:
+            - run:
+                name: Build the project-owned ARM64 iOS sample
+                command: |
+                  set -euo pipefail
+                  fixture_commit=3bd9bcf51567379659931094a842707ec064cf13
+                  fixture_dir=build/arm64-fixture
+                  git init --quiet "$fixture_dir"
+                  git -C "$fixture_dir" fetch --depth=1 --no-tags \
+                    https://github.com/zwthys-cyber/macos-compat.git "$fixture_commit"
+                  git -C "$fixture_dir" checkout --quiet --detach FETCH_HEAD
+                  test "$(git -C "$fixture_dir" rev-parse HEAD)" = "$fixture_commit"
+                  bash "$fixture_dir/sample/build-ipa.sh"
+            - run:
+                name: Verify the packaged sample with the v0.2 archive tool
+                command: |
+                  set -euo pipefail
+                  output_dir=build/arm64-fixture/build/ipa
+                  artifact="$output_dir/ARMSample-unsigned.ipa"
+                  expected=$(awk '$2 == "ARMSample-unsigned.ipa" {print $1}' "$output_dir/SHA256SUMS")
+                  [[ "$expected" =~ ^[0-9a-f]{64}$ ]]
+                  chmod 0600 "$artifact"
+                  python3 deploy/managed/free-pilot/archive_verify.py "$artifact" \
+                    --expected-sha256 "$expected" --confirm-authorized-file |
+                    tee "$output_dir/delivery-verification.json"
+            - store_artifacts:
+                path: build/arm64-fixture/build/ipa
+                destination: arm64-ios-sample
 
       - run:
           name: Gate the one-off public runtime producer
           command: |
             set -euo pipefail
             if [ "<< pipeline.parameters.build_native_runtime >>" != true ] &&
+               [ "<< pipeline.parameters.runtime_consumer >>" != true ] &&
                ! git log -1 --format=%B | grep -Eq '\[circleci-((tf-)?runtime-build|runtime-consumer)\]'; then
               circleci-agent step halt
             fi
@@ -114,7 +123,8 @@ jobs:
           name: Build and relocate the credential-free ARM64 runtime
           no_output_timeout: 20m
           command: |
-            if git log -1 --format=%B | grep -Fq '[circleci-runtime-consumer]'; then
+            if [ "<< pipeline.parameters.runtime_consumer >>" = true ] ||
+               git log -1 --format=%B | grep -Fq '[circleci-runtime-consumer]'; then
               bash deploy/managed/circleci/verify-runtime-consumer.sh
             elif git log -1 --format=%B | grep -Fq '[circleci-tf-runtime-build]'; then
               bash deploy/managed/circleci/build-public-tf-runtime.sh
@@ -137,5 +147,6 @@ workflows:
         - or:
             - << pipeline.parameters.build_native_runtime >>
             - << pipeline.parameters.validate_arm64_archive >>
+            - << pipeline.parameters.runtime_consumer >>
     jobs:
       - arm64-ios-archive

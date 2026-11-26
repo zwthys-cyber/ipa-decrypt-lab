@@ -12,6 +12,9 @@ on:
       - 'deploy/managed/circleci/credential_envelope.py'
       - 'deploy/managed/circleci/tf_worker.py'
       - 'deploy/managed/circleci/test_tf_worker.py'
+      - 'deploy/managed/circleci/native_request.py'
+      - 'deploy/managed/circleci/runtime-pins.json'
+      - 'deploy/managed/circleci/verify-runtime-consumer.sh'
       - '.github/ops/tf_task_native.cpp'
       - '.github/ops/tf_virtual_client.cpp'
       - '.github/workflows/circleci-worker-contracts.yml'
@@ -46,7 +49,7 @@ jobs:
 
   public-native-producer:
     needs: synthetic-worker
-    if: github.ref == 'refs/heads/upgrade/managed-runtime-v0.2' && contains(github.event.head_commit.message, '[circleci-runtime-build]')
+    if: github.ref == 'refs/heads/upgrade/managed-runtime-v0.2' && (contains(github.event.head_commit.message, '[circleci-runtime-build]') || contains(github.event.head_commit.message, '[circleci-runtime-consumer]'))
     runs-on: ubuntu-24.04
     timeout-minutes: 43
     steps:
@@ -56,6 +59,7 @@ jobs:
       - name: Request exactly one credential-free producer after adapter verification
         env:
           CIRCLECI_API_TOKEN: ${{ secrets.CIRCLECI_API_TOKEN }}
+          NATIVE_REQUEST_MODE: ${{ contains(github.event.head_commit.message, '[circleci-runtime-consumer]') && 'consumer' || 'producer' }}
         run: python3 deploy/managed/circleci/native_request.py
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()

@@ -1,5 +1,18 @@
 # CircleCI on-demand migration candidate
 
+## 默认/CN/TF 执行适配与新公共运行包（2026-11-26）
+
+[GitHub 45838198217](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45838198217) 通过 13 项默认/CN 适配测试、6 项 TF 测试、10 项实际 age 交接、8 项旧导出与22项归档校验。适配复用现有完整明文报告、逐图像/页数、版本、库存、CRC 与账号资料清理，改用标准 age 加密；登录、下载、解密与加密子进程收到各自最小环境。取消/超时终止整个进程组，最终发布前失败不保留输出。测试使用虚构原生返回与账号资料，实际 ZIP/age/子进程操作，不是实际 Apple 导出成功证明。
+
+CN 独立校验保存会话、国区、GUID、checkpoint 与模型，使用 resume-cn，不伪装 GitHub 标志、不增加密码/OTP或注册流程。TF 单独支持 CircleCI run/worker/source/期限原生门禁，原 GitHub main/首次尝试门禁保留。TF 恢复已验证的原虚拟身份，CircleCI 的拟用凭据类型仅包含任务加密的保存会话和 CN 模型，不包含交付长期私钥；实际会话尚未从 VPS 交接。已有成员路径不申请接受许可；新邀请在未接入持久许可代理时明确停止。
+
+[CircleCI job60](https://app.circleci.com/workflow/cc64895c-dcb1-4e8c-861a-43731544d2f5/job/6ed40d3c-d26c-40b6-9ad6-9c73e2de911a) 已从源码 `f6c9f1c5c96553a7af4e78141a9b8ea68afd682d` 构建三包并通过验证，包含新的 TF 原生上下文自检。三包公共归档已独立下载计算 SHA-256，并更新 runtime-pins.json；共同源码指纹 `fa9a90e514db5e3e83e72669dbcadf4d8e81ee958625410d2cd74dabc549f968`。新的独立 ARM 消费者验证仍需单独记录，不能以这次 producer 成功代替。
+
+[GitHub 45839095118](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45839095118) 通过新增 7 项真实 workerd/D1 历史接受账本测试，连同已有控制/调度/OIDC/lease 共35项与旧入口16项检查。候选账本保持历史 confirmed/intent/unknown，保存许可前先提交意图，过期/重启不重新授权，历史冲突不覆盖；邀请键使用 owner 范围的 HMAC。账本仅为候选模块，没有部署新接口或封存真实历史状态，不能报告交接完成。
+
+生产仍由原 VPS 独占 Telegram 入口。剩余为真实凭据/TF 状态和历史账本交接、控制端实际任务路由、持久私有上传/取消/未知结果回查、费用设置确认与最终入口切换。当前服务器没有编译或执行项目测试。
+
+
 ## 真实临时加密交接已验证（2026-11-26，最新）
 
 [GitHub 45834580675](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45834580675) 与 [CircleCI job 59](https://app.circleci.com/workflow/d6244a39-80f3-4f7c-a860-6613f9e3a520/job/a1f2c487-96b5-4ae2-8da7-6b9890f8584b) 均成功，源码 `021d212332810cae3962298ac18a43f208951388`。逻辑任务 `pilot_d32d8ee76ec8e4f32ced07ac249aaf39`，run `d6a6a2d1-91a6-48d4-ac6f-9cb749eb9013`。CircleCI 真实 OIDC 领取任务后生成临时 age 密钥，GitHub 将虚构凭据加密给该任务；控制端只存放密文，绑定 job/run/worker/source/recipient/nonce/期限，拒绝替换请求或密文。CircleCI 解密并检查完整上下文后回报完成。两端独立回读密文 SHA-256 均为 `94b94afd17fc80fc04cce453bcf92026263a77021422449d4be806b8594ddcbd`，D1 完成记录与密文清除标记均确认。bundle SHA-256 为 `47200f063a246ef10841808c41a1243612df9682ac5fe3aacbc22baa35ea6c56`。

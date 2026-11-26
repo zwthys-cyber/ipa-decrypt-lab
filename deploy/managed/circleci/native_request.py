@@ -17,9 +17,11 @@ def main():
             "native_request_context")
         source=os.environ.get("GITHUB_SHA","");require(re.fullmatch(r"[a-f0-9]{40}",source),"native_request_source")
         token=os.environ.get("CIRCLECI_API_TOKEN","");require(len(token)>=16,"native_request_credentials")
-        receipt.update(status="intent",source=source);save()
+        mode=os.environ.get("NATIVE_REQUEST_MODE","producer")
+        require(mode in ("producer","consumer"),"native_request_mode")
+        receipt.update(status="intent",source=source,mode=mode);save()
         code,value=api(token,"/runs",dict(data=dict(attributes=dict(config=dict(branch=BRANCH),
-            checkout=dict(branch=BRANCH),parameters=dict(dispatch_probe=False,build_native_runtime=True)),
+            checkout=dict(branch=BRANCH),parameters=dict(dispatch_probe=False,build_native_runtime=mode=="producer",runtime_consumer=mode=="consumer")),
             references=dict(pipeline=dict(id=DEFINITION)))),version=3)
         run=value.get("data",{}).get("id")
         require(code==201 and uuid(run),"native_request_ambiguous_no_retry")
