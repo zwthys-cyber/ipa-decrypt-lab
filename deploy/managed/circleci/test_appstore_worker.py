@@ -181,6 +181,10 @@ class WorkerTests(unittest.TestCase):
             dict(self.task,deadline=int(time.time())-1)):
             with self.assertRaises(ValueError):context.validate(changed,self.env,host=("Darwin","arm64"))
 
+    def test_github_app_project_names_are_not_used_as_repository_identity(self):
+        env=dict(self.env,CIRCLE_PROJECT_USERNAME="independent-circle-organization",CIRCLE_PROJECT_REPONAME="opaque-project")
+        self.assertEqual(context.validate(self.task,env,host=("Darwin","arm64")),self.task)
+
     def test_private_process_cancellation_kills_child_process(self):
         marker=self.root/"child.pid";env=context.minimal_env(self.env,self.root)
         def stop():

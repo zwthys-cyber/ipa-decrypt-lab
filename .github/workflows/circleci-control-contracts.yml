@@ -10,6 +10,8 @@ on:
       - 'deploy/managed/circleci/tf-acceptance*'
       - 'deploy/managed/circleci/runtime-*'
       - 'deploy/managed/circleci/github-oidc*'
+      - 'deploy/managed/circleci/managed_worker.py'
+      - 'deploy/managed/circleci/runtime_cloud.py'
       - 'deploy/managed/free-pilot/worker.mjs'
       - 'deploy/managed/circleci/cloud_inventory.py'
       - '.github/workflows/circleci-control-contracts.yml'
@@ -38,7 +40,7 @@ jobs:
         working-directory: deploy/managed/circleci
         run: |
           python3 test_control_cloud.py -v
-          python3 -m py_compile credential_probe.py credential_envelope.py
+          python3 -m py_compile credential_probe.py credential_envelope.py managed_worker.py runtime_cloud.py
           node --check control-probe.mjs
           node --test control.integration.mjs dispatch.integration.mjs oidc.test.mjs credential-broker.integration.mjs tf-acceptance.integration.mjs runtime-upload.integration.mjs runtime-api.integration.mjs github-oidc.test.mjs
           node --test ../free-pilot/worker.test.mjs ../free-pilot/private-link.test.mjs ../free-pilot/drive-auth.test.mjs
@@ -92,5 +94,45 @@ jobs:
         with:
           name: circleci-cloud-control-proof-${{ github.sha }}
           path: circleci-cloud-control-proof.json
+          retention-days: 1
+          if-no-files-found: warn
+
+  managed-runtime-probe:
+    needs: contracts
+    if: github.ref == 'refs/heads/upgrade/managed-runtime-v0.2' && contains(github.event.head_commit.message, '[managed-runtime-probe]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: circleci-control-candidate-${{ github.sha }}
+          path: circleci-control-dist
+      - name: Verify source and bundle before changing the isolated candidate
+        working-directory: circleci-control-dist
+        run: |
+          sha256sum -c SHA256SUMS
+          test "$(cat BUILDINFO)" = "source_commit=$GITHUB_SHA"
+      - name: Verify the existing repository-scoped dispatcher credential
+        env:
+          GH_TOKEN: ${{ secrets.VPS_GH_TOKEN }}
+        run: |
+          test "$(gh api repos/zwthys-cyber/ipa-decrypt-lab --jq .id)" = "1444792484"
+          test "$(gh api repos/zwthys-cyber/ipa-decrypt-lab/actions/workflows/circleci-secret-lease.yml --jq .state)" = "active"
+      - name: Prove one automatic managed task and isolated publisher without Apple operations
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_PILOT_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_PILOT_API_TOKEN }}
+          CIRCLECI_API_TOKEN: ${{ secrets.CIRCLECI_API_TOKEN }}
+          RUNTIME_OWNER_ID: ${{ secrets.TELEGRAM_OWNER_ID }}
+          RUNTIME_GH_TOKEN: ${{ secrets.VPS_GH_TOKEN }}
+        run: python3 deploy/managed/circleci/runtime_cloud.py --bundle circleci-control-dist/worker.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: managed-runtime-cloud-proof-${{ github.sha }}
+          path: managed-runtime-cloud-proof.json
           retention-days: 1
           if-no-files-found: warn

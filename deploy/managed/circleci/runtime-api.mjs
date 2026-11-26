@@ -80,12 +80,41 @@ async function dispatchPublisher(env,row,context,now,send){
  await env.DB.prepare("UPDATE runtime_publisher_dispatches SET state=? WHERE job_id=? AND state='intent'")
   .bind(state,row.job_id).run();
 }
+
+async function reconcileFixture(env,row,send){
+ if(row.kind!=="fixture"||!row.run_id||!["submitted","running"].includes(row.state))return;
+ const run=(await publicJSON(send,"https://circleci.com/api/v3/runs/"+row.run_id)).data;
+ const refs=run?.references,vcs=refs?.event?.attributes?.vcs;
+ need(run?.id===row.run_id&&refs?.project?.id===TRUST.project&&refs?.pipeline?.id===TRUST.definition&&
+  vcs?.revision===row.source_sha&&vcs?.origin_repository_url==="https://"+TRUST.source&&
+  vcs?.target_repository_url==="https://"+TRUST.source&&vcs?.branch===TRUST.ref.slice(11),"runtime_terminal_binding");
+ if(run?.attributes?.phase!=="ended")return;
+ if(run.attributes.current_outcome==="succeeded"&&row.finished_at!==null&&row.fixture_verified===1){
+  await env.DB.prepare("UPDATE runtime_jobs SET state='completed' WHERE job_id=? AND kind='fixture' AND state='running'").bind(row.job_id).run();
+ }else if(["failed","canceled","cancelled","error"].includes(run.attributes.current_outcome)){
+  // Only a known, ended, credential-free validation. Original ID, nonce and history are retained.
+  await env.DB.prepare("UPDATE runtime_jobs SET state='closed' WHERE job_id=? AND kind='fixture' AND state IN ('submitted','running')")
+   .bind(row.job_id).run();
+  await closeRuntimeLease(env.DB,row,Math.floor(Date.now()/1000));
+ }
+}
+
 export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000),send=(url,init)=>globalThis.fetch(url,init)){
  const url=new URL(request.url),path=url.pathname.slice(PREFIX.length);
- if(request.method!=="POST"||url.search||!url.pathname.startsWith(PREFIX))return reply(404);
+ if(url.search||!url.pathname.startsWith(PREFIX))return reply(404);
+ if(request.method!=="POST"&&!(request.method==="GET"&&path==="ready"))return reply(404);
  if(env.RUNTIME_MODE!=="staging"||env.RUNTIME_CONTROL_ORIGIN!==ORIGIN||url.origin!==ORIGIN||
   !SHA.test(env.RUNTIME_SOURCE_SHA||"")||!/^[1-9][0-9]{0,15}$/.test(env.RUNTIME_OWNER_ID||"")||!env.DB?.prepare)return reply(503);
  try{
+  if(path==="ready"){
+   const exists=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='runtime_jobs'").first();
+   if(exists){
+    const rows=await env.DB.prepare("SELECT * FROM runtime_jobs WHERE kind='fixture' AND state IN ('submitted','running')").all();
+    for(const row of rows.results||[])await reconcileFixture(env,row,send);
+   }
+   const count=exists?await env.DB.prepare("SELECT count(*) n FROM runtime_jobs WHERE state NOT IN ('completed','cancelled','closed')").first():{n:0};
+   return reply(200,{ok:true,source_sha:env.RUNTIME_SOURCE_SHA,active:count.n>0});
+  }
   if(["init","admit-fixture","status"].includes(path)){
    await admin(request,env);
    if(path==="init"){
@@ -107,20 +136,11 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
     const row=await task(env,id);return reply(200,{ok:true,job_id:id,state:row.state,run_id:row.run_id});
    }
    const value=await body(request,["job_id"]);let row=await task(env,value.job_id);
-   if(row.finished_at!==null&&row.run_id&&["running","link_ready"].includes(row.state)){
-    const run=(await publicJSON(send,"https://circleci.com/api/v3/runs/"+row.run_id)).data;
-    const refs=run?.references,vcs=refs?.event?.attributes?.vcs;
-    need(run?.id===row.run_id&&refs?.project?.id===TRUST.project&&refs?.pipeline?.id===TRUST.definition&&
-     vcs?.revision===row.source_sha&&vcs?.origin_repository_url==="https://"+TRUST.source&&
-     vcs?.target_repository_url==="https://"+TRUST.source&&vcs?.branch===TRUST.ref.slice(11),"runtime_terminal_binding");
-    if(run?.attributes?.phase==="ended"&&run?.attributes?.current_outcome==="succeeded"&&row.fixture_verified===1)
-     await env.DB.prepare("UPDATE runtime_jobs SET state='completed' WHERE job_id=? AND state='running'").bind(row.job_id).run();
-    row=await task(env,row.job_id);
-   }
-   const lease=await env.DB.prepare("SELECT cipher_sha256,consumed_at,ciphertext FROM runtime_credential_leases WHERE job_id=?").bind(row.job_id).first();
+   await reconcileFixture(env,row,send);row=await task(env,row.job_id);
+   const lease=await env.DB.prepare("SELECT cipher_sha256,consumed_at,ciphertext,publisher_run_id FROM runtime_credential_leases WHERE job_id=?").bind(row.job_id).first();
    return reply(200,{ok:true,job_id:row.job_id,state:row.state,run_id:row.run_id,claimed:!!row.worker_job_id,
     finished:row.finished_at!==null,fixture_verified:row.fixture_verified===1,
-    cipher_sha256:lease?.cipher_sha256||null,ciphertext_cleared:!!lease&&lease.ciphertext===null&&lease.consumed_at!==null});
+    publisher_run_id:lease?.publisher_run_id||null,cipher_sha256:lease?.cipher_sha256||null,ciphertext_cleared:!!lease&&lease.ciphertext===null&&lease.consumed_at!==null});
   }
   if(["publisher/pending","publisher/publish"].includes(path)){
    const publish=path.endsWith("publish");

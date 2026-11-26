@@ -1,6 +1,19 @@
 version: 2.1
 
 parameters:
+  managed_runtime:
+    type: boolean
+    default: false
+  managed_job:
+    type: string
+    default: ""
+  managed_source:
+    type: string
+    default: ""
+  managed_origin:
+    type: string
+    default: ""
+
   build_native_runtime:
     type: boolean
     default: false
@@ -31,6 +44,30 @@ parameters:
     default: ""
 
 jobs:
+  managed-runtime-task:
+    macos:
+      xcode: "26.5"
+    resource_class: m4pro.medium
+    steps:
+      - checkout
+      - run:
+          name: Prepare only standard runtime tools before any private lease
+          command: |
+            set -euo pipefail
+            test "$(uname -m)" = arm64
+            brew install age
+      - run:
+          name: Execute the exact source-bound managed task
+          no_output_timeout: 12m
+          environment:
+            MANAGED_JOB: << pipeline.parameters.managed_job >>
+            MANAGED_SOURCE: << pipeline.parameters.managed_source >>
+            MANAGED_ORIGIN: << pipeline.parameters.managed_origin >>
+            MANAGED_RUN_ID: << pipeline.id >>
+          command: python3 deploy/managed/circleci/managed_worker.py
+      - store_artifacts:
+          path: managed-runtime-out
+          destination: managed-runtime-proof
   dispatch-contract-probe:
     docker:
       - image: cimg/python:3.13-node
@@ -136,14 +173,22 @@ jobs:
           destination: public-arm64-native-runtime
 
 workflows:
+  managed-runtime-tasks:
+    when: << pipeline.parameters.managed_runtime >>
+    jobs:
+      - managed-runtime-task
   synthetic-dispatch-probe:
-    when: << pipeline.parameters.dispatch_probe >>
+    when:
+      and:
+        - << pipeline.parameters.dispatch_probe >>
+        - not: << pipeline.parameters.managed_runtime >>
     jobs:
       - dispatch-contract-probe
   arm64-archive-validation:
     when:
       and:
         - not: << pipeline.parameters.dispatch_probe >>
+        - not: << pipeline.parameters.managed_runtime >>
         - or:
             - << pipeline.parameters.build_native_runtime >>
             - << pipeline.parameters.validate_arm64_archive >>

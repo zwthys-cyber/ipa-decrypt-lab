@@ -67,7 +67,7 @@ async function setup(){
    }
    if(url==="https://circleci.com/api/v3/runs/"+run){
     const terminal=request.headers.get("x-fixture-terminal")==="1";
-    return Response.json({data:{id:run,attributes:{phase:terminal?"ended":"started",current_outcome:terminal?"succeeded":null},
+    return Response.json({data:{id:run,attributes:{phase:terminal?"ended":"started",current_outcome:terminal?(request.headers.get("x-fixture-failed")==="1"?"failed":"succeeded"):null},
      references:{project:{id:C.project},pipeline:{id:C.definition},event:{attributes:{vcs:{
       origin_repository_url:"https://"+C.source,target_repository_url:"https://"+C.source,branch:C.ref.slice(11),
       revision:request.headers.get("x-fixture-wrong-source")==="1"?"b".repeat(40):${JSON.stringify(source)}
@@ -151,6 +151,19 @@ test("real workerd ambiguous native creation never launches another task",{timeo
   const first=await s.request("admit-fixture",{probe_id:probe},"admin",secret,{"x-fixture-unknown":"1"});
   assert.equal((await first.json()).state,"dispatch_unknown");
   assert.equal((await (await s.request("admit-fixture",{probe_id:probe})).json()).state,"dispatch_unknown");
+  assert.equal((await s.mf.dispatchFetch(origin+"/fixture-count").then(r=>r.json())).nativePosts,1);
+ }finally{await s.close();}
+});
+
+test("known failed fixtures close without rearming the original job or dispatch nonce",{timeout:60000},async()=>{
+ const s=await setup();try{
+  await s.request("init");await s.request("admit-fixture",{probe_id:probe});
+  const before=await s.db.prepare("SELECT dispatch_nonce,run_id FROM runtime_jobs WHERE job_id=?").bind(job).first();
+  const status=await s.request("status",{job_id:job},"admin",secret,{"x-fixture-terminal":"1","x-fixture-failed":"1"});
+  assert.equal((await status.json()).state,"closed");
+  await s.request("admit-fixture",{probe_id:probe});
+  const after=await s.db.prepare("SELECT dispatch_nonce,run_id FROM runtime_jobs WHERE job_id=?").bind(job).first();
+  assert.deepEqual(after,before);
   assert.equal((await s.mf.dispatchFetch(origin+"/fixture-count").then(r=>r.json())).nativePosts,1);
  }finally{await s.close();}
 });

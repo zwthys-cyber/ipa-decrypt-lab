@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS runtime_jobs(
  plaintext_sha256 TEXT,plaintext_bytes INTEGER,filename TEXT,
  file_id TEXT,link_expires INTEGER
 );
-CREATE UNIQUE INDEX IF NOT EXISTS runtime_one_fixture_per_owner ON runtime_jobs(owner_id) WHERE kind='fixture';
+CREATE UNIQUE INDEX IF NOT EXISTS runtime_one_fixture_source_per_owner ON runtime_jobs(owner_id,source_sha) WHERE kind='fixture';
 CREATE TABLE IF NOT EXISTS runtime_credential_leases(
  job_id TEXT PRIMARY KEY REFERENCES runtime_jobs(job_id),context_json TEXT NOT NULL,expires_at INTEGER NOT NULL,
  ciphertext TEXT,cipher_sha256 TEXT,publisher_run_id TEXT UNIQUE,published_at INTEGER,consumed_at INTEGER

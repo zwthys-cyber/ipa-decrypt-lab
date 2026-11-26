@@ -1,0 +1,101 @@
+"""Bounded CircleCI task client. The staging kind has no Apple or upload operations."""
+import base64
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.request
+from credential_envelope import context,consumer,open_envelope,public_env
+from task_context import validate
+import fetch_runtime
+ORIGIN="https://ipazake-free-control-pilot.hahayesadd.workers.dev"
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+ def redirect_request(self,*args,**kwargs):return None
+def need(ok,code):
+ if not ok:raise ValueError(code)
+def rpc(path,value):
+ need(path in ("claim","lease-request","lease-read","finish"),"managed_endpoint")
+ token=os.environ.get("CIRCLE_OIDC_TOKEN_V3","")
+ need(token and len(token)<=16384,"managed_identity")
+ request=urllib.request.Request(ORIGIN+"/v2/runtime/"+path,data=json.dumps(value).encode(),method="POST",
+  headers={"X-Ipazake-Job-Token":token,"Content-Type":"application/json","User-Agent":"ipa-decrypt-managed-worker/0.2"})
+ try:
+  with urllib.request.build_opener(NoRedirect).open(request,timeout=25) as response:
+   need(response.status==200,"managed_response")
+   raw=response.read(360001);need(len(raw)<=360000,"managed_response_limit")
+ except urllib.error.HTTPError as error:
+  code="managed_request_rejected"
+  try:
+   value=json.loads(error.read(4096))
+   if re.fullmatch(r"[a-z_]{1,60}",value.get("code","")):code=value["code"]
+  except Exception:pass
+  raise ValueError(code) from None
+ value=json.loads(raw);need(value.get("ok") is True,"managed_response");return value
+def main():
+ env=os.environ
+ need(env.get("CIRCLECI")=="true" and not env.get("GITHUB_ACTIONS") and
+  env.get("MANAGED_ORIGIN")==ORIGIN and env.get("MANAGED_SOURCE")==env.get("CIRCLE_SHA1") and
+  re.fullmatch(r"pilot_[a-f0-9]{32}",env.get("MANAGED_JOB","")),"managed_context")
+ identity=dict(job_id=env["MANAGED_JOB"],worker_job_id=env["CIRCLE_WORKFLOW_JOB_ID"])
+ result=None
+ for attempt in range(12):
+  try:result=rpc("claim",identity);break
+  except (ValueError,urllib.error.URLError):
+   if attempt==11:raise
+   time.sleep(2)
+ task=result["task"]
+ need(task["run_id"]==env["MANAGED_RUN_ID"] and task["source_sha"]==env["MANAGED_SOURCE"],"managed_run_binding")
+ actual_env=dict(env,RUNTIME_RUN_ID=task["run_id"]);validate(task,actual_env)
+ need(result["task_kind"]=="fixture","managed_private_execution_disabled")
+ with tempfile.TemporaryDirectory(prefix="managed-task-") as directory:
+  root=Path(directory);root.chmod(0o700)
+  repo=Path(__file__).resolve().parents[3]
+  pins=json.loads(Path(__file__).with_name("runtime-pins.json").read_text())
+  loaded=fetch_runtime.fetch(repo,pins,"base",root/"runtime")
+  print(json.dumps(dict(stage="public_runtime_verified",job_id=task["job_id"],variant=loaded["variant"])),flush=True)
+  key=root/"identity.txt"
+  subprocess.run(["age-keygen","-o",str(key)],capture_output=True,check=True,timeout=20,env=public_env(env))
+  recipient=subprocess.check_output(["age-keygen","-y",str(key)],text=True,timeout=15,env=public_env(env)).strip()
+  expected=context(dict(schema="circleci-credential-request-v1",job_id=task["job_id"],run_id=task["run_id"],
+   worker_job_id=task["worker_job_id"],source_sha=task["source_sha"],profile="synthetic",recipient=recipient,
+   nonce=os.urandom(16).hex(),expires_at=int(time.time())+600))
+  consumer(actual_env,expected)
+  answer=rpc("lease-request",dict(identity,recipient=recipient,nonce=expected["nonce"],expires_at=expected["expires_at"]))
+  need(answer.get("context")==expected,"managed_lease_binding")
+  deadline=time.monotonic()+540;last_print=0
+  while time.monotonic()<deadline:
+   answer=rpc("lease-read",identity)
+   if answer.get("ciphertext"):
+    need(answer.get("context")==expected,"managed_lease_binding")
+    cipher=base64.b64decode(answer["ciphertext"],validate=True)
+    digest=hashlib.sha256(cipher).hexdigest()
+    need(digest==answer.get("cipher_sha256"),"managed_lease_digest")
+    values=open_envelope(cipher,key,expected,actual_env)
+    need(values=={"fixture":"synthetic-private-fixture"},"managed_fixture")
+    break
+   if time.monotonic()-last_print>=30:
+    print(json.dumps(dict(stage="waiting_for_credentials",job_id=task["job_id"])),flush=True);last_print=time.monotonic()
+   time.sleep(3)
+  else:raise ValueError("managed_lease_timed_out")
+  rpc("finish",dict(identity,fixture_verified=True))
+  proof=dict(schema="circleci-managed-task-proof-v1",job_id=task["job_id"],source_sha=task["source_sha"],
+   run_id=task["run_id"],worker_job_id=task["worker_job_id"],fixture_verified=True,cipher_sha256=digest,
+   production=False,apple_operation=False,file_upload=False,telegram_send=False)
+  out=Path("managed-runtime-out");out.mkdir(mode=0o700,exist_ok=True)
+  (out/"receipt.json").write_text(json.dumps(proof,sort_keys=True)+"\n")
+  print(json.dumps(proof,sort_keys=True),flush=True)
+def entry():
+ def stop(*unused):raise InterruptedError()
+ signal.signal(signal.SIGTERM,stop);signal.signal(signal.SIGINT,stop)
+ try:main();return 0
+ except BaseException as error:
+  code=str(error) if isinstance(error,ValueError) and re.fullmatch(r"[a-z_]{1,60}",str(error)) else "managed_worker_failed"
+  print(code,file=sys.stderr);return 2
+if __name__=="__main__":raise SystemExit(entry())
