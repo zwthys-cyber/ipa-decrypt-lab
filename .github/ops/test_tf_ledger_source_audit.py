@@ -70,6 +70,17 @@ class SourceAuditTests(unittest.TestCase):
         self.assertEqual(path.read_bytes(),before)
         self.assertNotIn("privateInvite",json.dumps(report))
 
+    def test_supplied_progress_report_receives_closed_result(self):
+        progress={"stage":"runtime"}
+        result=audit.inspect(self.root,now=100,report=progress)
+        self.assertIs(result,progress)
+        self.assertEqual(result["schema"],"ipa-tf-source-audit-v1")
+        self.assertEqual(result["stage"],"complete")
+        (self.root/"testflight/session.age").unlink()
+        with self.assertRaises(FileNotFoundError):
+            audit.inspect(self.root,now=100,report=progress)
+        self.assertEqual(progress["stage"],"session")
+
     def test_live_wal_rows_are_observed(self):
         path=self.root/"state.sqlite3"
         with closing(sqlite3.connect(path)) as writer:
