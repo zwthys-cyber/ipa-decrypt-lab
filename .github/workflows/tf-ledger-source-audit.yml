@@ -57,28 +57,28 @@ jobs:
             'env LAB_RUNTIME=vps PYTHONDONTWRITEBYTECODE=1 python3 -' \
             < .github/ops/tf_ledger_source_audit.py > "$inspection_dir/result" 2> "$inspection_dir/error"; then
             AUDIT_ERROR="$inspection_dir/error" AUDIT_RESULT="$inspection_dir/result" python3 - <<'PY'
-            import json,os,pathlib
-            error=pathlib.Path(os.environ["AUDIT_ERROR"]).read_bytes()[:16384]
-            code="source_audit_transport_failed"
-            for needle,label in ((b"Connection timed out","source_audit_transport_timeout"),
-                                 (b"Connection refused","source_audit_transport_refused"),
-                                 (b"Permission denied","source_audit_authentication_failed"),
-                                 (b"Host key verification failed","source_audit_host_key_failed"),
-                                 (b"REMOTE HOST IDENTIFICATION HAS CHANGED","source_audit_host_key_failed")):
-                if needle in error:
-                    code=label
-                    break
-            try:
-                value=json.loads(pathlib.Path(os.environ["AUDIT_RESULT"]).read_bytes()[:4096])
-                if (type(value) is dict and set(value)=={"schema","status","stage"} and
-                    value["schema"]=="ipa-tf-source-audit-v1" and value["status"]=="source_audit_failed" and
-                    value["stage"] in {"runtime","root","health","controller","session","acceptance","candidates","returns"}):
-                    print(json.dumps(value,sort_keys=True))
-                else:
-                    print(code)
-            except Exception:
-                print(code)
-            PY
+          import json,os,pathlib
+          error=pathlib.Path(os.environ["AUDIT_ERROR"]).read_bytes()[:16384]
+          code="source_audit_transport_failed"
+          for needle,label in ((b"Connection timed out","source_audit_transport_timeout"),
+                               (b"Connection refused","source_audit_transport_refused"),
+                               (b"Permission denied","source_audit_authentication_failed"),
+                               (b"Host key verification failed","source_audit_host_key_failed"),
+                               (b"REMOTE HOST IDENTIFICATION HAS CHANGED","source_audit_host_key_failed")):
+              if needle in error:
+                  code=label
+                  break
+          try:
+              value=json.loads(pathlib.Path(os.environ["AUDIT_RESULT"]).read_bytes()[:4096])
+              if (type(value) is dict and set(value)=={"schema","status","stage"} and
+                  value["schema"]=="ipa-tf-source-audit-v1" and value["status"]=="source_audit_failed" and
+                  value["stage"] in {"runtime","root","health","controller","session","acceptance","candidates","returns"}):
+                  print(json.dumps(value,sort_keys=True))
+              else:
+                  print(code)
+          except Exception:
+              print(code)
+          PY
             exit 1
           fi
           AUDIT_RESULT="$inspection_dir/result" python3 - <<'PY'

@@ -4,6 +4,8 @@ import importlib.util
 import json
 from pathlib import Path
 import sqlite3
+import subprocess
+import textwrap
 import sys
 import tempfile
 import unittest
@@ -80,6 +82,14 @@ class SourceAuditTests(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             audit.inspect(self.root,now=100,report=progress)
         self.assertEqual(progress["stage"],"session")
+
+    def test_workflow_shell_syntax_before_any_private_inputs(self):
+        workflow=(ROOT/".github/workflows/tf-ledger-source-audit.yml").read_text()
+        marker="        run: |\n"
+        self.assertEqual(workflow.count(marker),1)
+        script=textwrap.dedent(workflow.split(marker,1)[1])
+        result=subprocess.run(["bash","-n"],input=script,text=True,capture_output=True)
+        self.assertEqual(result.returncode,0,result.stderr)
 
     def test_live_wal_rows_are_observed(self):
         path=self.root/"state.sqlite3"
