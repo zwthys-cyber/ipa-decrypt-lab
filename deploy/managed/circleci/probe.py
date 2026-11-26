@@ -26,14 +26,15 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
 
-def api(token, path, data=None):
-    require((path == "/me" or path.startswith(("/project/", "/projects/", "/pipeline/", "/workflow/")))
+def api(token, path, data=None, version=2):
+    require((path == "/me" or path.startswith(("/project/", "/projects/", "/pipeline/", "/workflow/", "/pipelines/")) or path == "/runs")
             and ".." not in path and "?" not in path, "invalid_api_path")
+    require(version in (2, 3), "invalid_api_version")
     headers = {"Authorization": "Bearer " + token, "Accept": "application/json"}
     raw = None if data is None else json.dumps(data).encode()
     if raw is not None:
         headers["Content-Type"] = "application/json"
-    req = urllib.request.Request("https://circleci.com/api/v2" + path, data=raw, headers=headers)
+    req = urllib.request.Request("https://circleci.com/api/v" + str(version) + path, data=raw, headers=headers)
     try:
         with urllib.request.build_opener(NoRedirect()).open(req, timeout=30) as response:
             content = response.read(1048577)
@@ -41,7 +42,22 @@ def api(token, path, data=None):
             return response.status, json.loads(content)
     except urllib.error.HTTPError as error:
         # Never print response bodies, request headers or a token-bearing URL.
-        raise ValueError("circleci_http_" + str(error.code)) from None
+        reason = "unknown"
+        try:
+            content = json.loads(error.read(16384))
+            message = content.get("message", "")
+            known = {"Project not found": "project_not_found", "Project not found.": "project_not_found",
+                     "Not Found": "not_found", "Not found.": "not_found",
+                     "Pipeline definition not found": "definition_not_found",
+                     "Pipeline definition not found.": "definition_not_found",
+                     "Insufficient permissions": "permission_denied"}
+            reason = known.get(message, "unclassified")
+            kind = content.get("error", {}).get("type")
+            if isinstance(kind, str) and re.fullmatch(r"[a-z_]{1,50}", kind):
+                reason = kind
+        except Exception:
+            pass
+        raise ValueError("circleci_http_" + str(error.code) + "_" + reason) from None
     except (urllib.error.URLError, TimeoutError):
         raise ValueError("circleci_transport_unknown") from None
 
@@ -95,12 +111,16 @@ def github_probe():
     _, definitions = api(token, "/projects/" + PROJECT + "/pipeline-definitions")
     print("circleci_definitions_read", flush=True)
     definition = select_definition(definitions)
+    print(json.dumps(dict(definition_id=definition, token_owner_matches_existing_trigger=identity["id"] == "532966ad-3735-4fbf-9bdb-03e7071fab4d")), flush=True)
     commit, request_id = os.environ["GITHUB_SHA"], secrets.token_hex(16)
     request = payload(definition, commit, request_id)
     # Synthetic only. No automatic retry after this POST, including ambiguous responses.
-    code, created = api(token, "/project/" + SLUG + "/pipeline/run", request)
-    require(code == 201 and uuid(created.get("id")), "dispatch_not_confirmed_no_retry")
-    pipeline = created["id"]
+    code, created = api(token, "/runs", dict(data=dict(
+        attributes={k:request[k] for k in ("config", "checkout", "parameters")},
+        references=dict(pipeline=dict(id=definition)))), version=3)
+    resource = created.get("data", {})
+    require(code == 201 and uuid(resource.get("id")), "dispatch_not_confirmed_no_retry")
+    pipeline = resource["id"]
     receipt = dict(schema="circleci-dispatch-probe-trigger-v1", production=False, project_id=PROJECT,
                    project_slug=SLUG, definition_id=definition, commit=commit, request_id=request_id,
                    pipeline_id=pipeline, status="submitted")
