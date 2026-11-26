@@ -34,14 +34,14 @@ jobs:
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/upgrade/managed-runtime-v0.2') &&
       (github.event_name == 'workflow_dispatch' ||
        (github.event_name == 'push' && contains(github.event.head_commit.message, '[tf-ledger-source-audit]')))
-    runs-on: ubuntu-24.04
+    runs-on: macos-15
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - name: Install SSH client on the GitHub runner only
-        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends sshpass
+        run: brew install sshpass
       - name: Read the existing source without initializing or changing its ledgers
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -53,7 +53,7 @@ jobs:
           inspection_dir=$(mktemp -d)
           trap 'rm -rf -- "$inspection_dir"' EXIT
           printf '%s\n' "$VPS_KNOWN_HOSTS" > "$inspection_dir/known_hosts"
-          if ! sshpass -e ssh -o "UserKnownHostsFile=$inspection_dir/known_hosts" -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 -o LogLevel=ERROR "root@$VPS_HOST" \
+          if ! sshpass -e ssh -4 -o "UserKnownHostsFile=$inspection_dir/known_hosts" -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 -o LogLevel=ERROR "root@$VPS_HOST" \
             'env LAB_RUNTIME=vps PYTHONDONTWRITEBYTECODE=1 python3 -' \
             < .github/ops/tf_ledger_source_audit.py > "$inspection_dir/result" 2> "$inspection_dir/error"; then
             AUDIT_ERROR="$inspection_dir/error" AUDIT_RESULT="$inspection_dir/result" python3 - <<'PY'
