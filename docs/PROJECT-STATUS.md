@@ -8,7 +8,11 @@
 
 当前公共运行包已升级到成功的 CircleCI job62（源码 `2896fff82275ef791e3703cc17ed9473c77b151a`，workflow `1c28d9d9-f709-4cb4-b9ae-f5f4413208a5`），runtime-pins.json 是当前摘要来源，下面 job60/61 是历史证据。[工作机适配验证 45852931305](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45852931305) 已通过新增的私有交付回调和上传恢复测试，以及默认/CN/TF 原有回归。
 
-私有上传候选已加入持久创建意图、断线续传、不可变摘要/名称/大小、服务端独立 Drive 校验和仅本人可见 ACL 检查。真实 Drive 验证仍待通过；验证仅使用 job62 的项目自有 5496 字节 ARM 示例 IPA（SHA-256 `85025bd1cfea42339ed38b09e9580e1094b2949153c83c81e66d9b1ad9043e93`），完成后清理该测试文件。样例上传不能作为实际 DRM 导出或大文件交付证明。
+私有上传真实闭环已通过：[GitHub 45855018329](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45855018329)、[签发 45855245169](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45855245169)、[CircleCI job68](https://app.circleci.com/workflow/9faf88d4-a820-412d-8d99-b9b022f76c02/job/51afdfd2-3a3a-43c0-9133-faff76471add) 均成功，部署源码 `b1b43141f1ef45c76a2aac1011f6302969ea7d24`。任务 `pilot_06a7bb734c08c9f9e673bf1678d9270c`，run `7c80f489-4749-4926-a6b9-bddd98ab0f48`。真实 macOS 下载 job62 的项目自有 5496 字节 ARM IPA（SHA-256 `85025bd1cfea42339ed38b09e9580e1094b2949153c83c81e66d9b1ad9043e93`），完整 CRC/SHA 校验后上传 Drive。Cloudflare 独立回读摘要、大小、名称和仅本人可见 ACL，确认注册后仅删除该示例文件，回读 404 确认清理。两端回读 `file_upload:true`、`fixture_cleaned:true`、`ciphertext_cleared:true`；凭据密文 SHA-256 `e1e007538b503357af7336e3c13c87a7c7f8d301ad7ed801cf556ba2ceebe83d`。测试文件没有发送到 Telegram；这不是实际 DRM 导出或大文件交付证明。
+
+上传升级包括创建前持久化意图、同一会话断线续传、不可变内容绑定、服务端独立注册和测试清理日志。未知创建不重建；早先验证任务 job65/66/67 的失败记录保留，没有重置或重复它们的逻辑派发。真实 Google Location 带有 `fields` 和 `session_crd`，日志校验现已准确兼容：固定 Google HTTPS 路径、固定字段投影、有限长度的不透明会话参数，仍拒绝重定向/额外查询键。会话凭据只留在私有日志，公开证明不含 URL、参数值、Google token 或邮箱。新增长中文名称预算，保留版本与 Beta 文件标记。该次 GitHub 通过63项控制/OIDC/上传检查、16项旧入口回归、6项部署和6项上传适配检查；[工作机回归 45855018206](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45855018206) 包含17项默认/CN、6项TF、10项age与旧导出/归档校验。
+
+[新源只读核查 45854611541](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45854611541) 成功：健康记录新鲜、观察到服务空闲、TF未完任务0、私有回传1条且未知0、原会话与固定密文匹配、源接受账本依然不存在。这次观察没有停止服务或冻结状态，不能替代切换前的最终快照。
 
 尚未完成：真实任务入口与版本目录/取消闭环、历史状态与接受账本最终导入、冻结交接、费用限制核查、单一机器人入口切换，以及新链接的实际私有交付验收。控制端仍是 staging，真实 Apple 导出未开放；旧 VPS 保持唯一机器人。所有编译和测试均在 GitHub/CircleCI 执行。
 
