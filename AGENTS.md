@@ -1,7 +1,8 @@
 # Project constraints
 
-Last reviewed 2026-11-25. Use [the current project status](docs/PROJECT-STATUS.md) for release, production and CI evidence. The v0.2 work is a draft, and the VPS remains the production Telegram poller. Historical sections below apply to their stated dates.
+Last reviewed 2026-11-26. Use [the current project status](docs/PROJECT-STATUS.md) for release, production and CI evidence. The v0.2 work is a draft, and the VPS remains the production Telegram poller. Historical sections below apply to their stated dates.
 
+- The owner selected CircleCI on 2026-11-26 for personal, link-triggered on-demand workers; no 24-hour worker is required. Public ARM runtime producer development and CircleCI validation are authorized. Preserve durable state and do not claim cutover until authenticated dispatch, runtime and private-delivery checks pass.
 - Build and validate official release and VPS artifacts on GitHub-hosted Actions. The user also authorized isolated CircleCI validation of the project-owned iOS sample and the Linux archive audit and free-pilot tests. The VPS runs CI-verified finished services.
 - Never build, install build dependencies or run test suites on the VPS or this workspace. Install only necessary system runtime packages and the CI-verified deployment bundle on the authorized VPS. No local project execution.
 - Edit source through GitHub APIs. Do not create local project checkouts or build caches.

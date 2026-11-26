@@ -1,0 +1,21 @@
+name: CircleCI runtime bundle contracts
+on:
+  push:
+    branches: [upgrade/managed-runtime-v0.2]
+    paths: ['deploy/managed/circleci/**', '.circleci/config.yml', '.github/workflows/circleci-runtime-contracts.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: circleci-runtime-contracts-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  public-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - run: python3 deploy/managed/circleci/test_runtime.py -v
+      - run: bash -n deploy/managed/circleci/build-public-runtime.sh

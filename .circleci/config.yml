@@ -1,5 +1,10 @@
 version: 2.1
 
+parameters:
+  build_native_runtime:
+    type: boolean
+    default: false
+
 jobs:
   arm64-ios-archive:
     macos:
@@ -16,7 +21,9 @@ jobs:
             python3 --version
       - run:
           name: Run the archive verifier tests
-          command: python3 deploy/managed/free-pilot/test_archive_verify.py -v
+          command: |
+            python3 deploy/managed/free-pilot/test_archive_verify.py -v
+            python3 deploy/managed/circleci/test_runtime.py -v
       - run:
           name: Build the project-owned ARM64 iOS sample
           command: |
@@ -44,6 +51,22 @@ jobs:
       - store_artifacts:
           path: build/arm64-fixture/build/ipa
           destination: arm64-ios-sample
+
+      - run:
+          name: Gate the one-off public runtime producer
+          command: |
+            set -euo pipefail
+            if [ "<< pipeline.parameters.build_native_runtime >>" != true ] &&
+               ! git log -1 --format=%B | grep -Fq '[circleci-runtime-build]'; then
+              circleci-agent step halt
+            fi
+      - run:
+          name: Build and relocate the credential-free ARM64 runtime
+          no_output_timeout: 20m
+          command: bash deploy/managed/circleci/build-public-runtime.sh
+      - store_artifacts:
+          path: circle-runtime-dist
+          destination: public-arm64-native-runtime
 
 workflows:
   arm64-archive-validation:

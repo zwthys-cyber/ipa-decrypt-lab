@@ -1,5 +1,14 @@
 # 项目进展
 
+## Latest direction: owner-only, on-demand CircleCI (2026-11-26)
+
+The owner explicitly selected CircleCI for personal link-triggered use; 24-hour worker availability is not a requirement. This supersedes earlier hosting comparisons that treated an always-on worker as necessary. Target: Telegram webhook → Cloudflare Worker/D1 durable state → bounded CircleCI macOS worker → private Drive link. Keep App Store default/CN, available historical versions and owner-only TestFlight in migration scope.
+
+The existing GitHub App integration already triggers CircleCI from this branch. The new public ARM64 producer is gated by the boolean pipeline parameter `build_native_runtime` or an explicit `[circleci-runtime-build]` commit marker. Ordinary pushes still run the existing owned-sample check, but do not rebuild the native runtime. The producer receives no account secrets and emits only public binaries/resources/licenses with source, architecture, CircleCI workflow/job and toolchain provenance. Relocation and fixture checks must pass before reuse. CircleCI packages use a separate schema; existing GitHub Intel producer guards and production fingerprints are preserved.
+
+This is a staged implementation, not a production cutover. Public artifact verification is not Apple acquisition/decryption evidence. CN/TF runtime variants, authenticated worker claims, durable acceptance/upload/cancellation handling, source-bound runtime fetching, bounded credits and actual owner-private delivery remain necessary. A CircleCI personal API token/account connection is still missing; do not place it in chat or pipeline parameters. Existing VPS polling and all historical state remain in place until a separately verified handover; never activate a webhook concurrently with that poller.
+
+
 ## 当前状态（2026-11-26）
 
 - **公开发行**为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。11 月 9 日刷新了公开附件，源码以 `BUILDINFO.json` 为准。国区历史版本属于之后的线上部署。详见[发布说明](RELEASES.md)。
