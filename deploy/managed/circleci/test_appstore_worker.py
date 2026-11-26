@@ -13,6 +13,7 @@ import sys
 import tempfile
 import time
 import unittest
+import zipfile
 from unittest.mock import patch
 import task_context as context
 import appstore_worker as worker
