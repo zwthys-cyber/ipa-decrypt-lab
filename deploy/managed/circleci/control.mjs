@@ -137,7 +137,7 @@ export async function handleRuntime(request,env,now=Math.floor(Date.now()/1000),
         "control_configuration");
       if(!await same(request.headers.get("authorization")||"","Bearer "+env.CIRCLECI_CONTROL_TOKEN))return response(401);
       if(path==="/v1/runtime/probe-init"){
-        await body(request,[]);await initialize(env);return response(200,{ok:true,schema:"circleci-control-init-v1"});
+        await body(request,[]);await initialize(env);return response(200,{ok:true,schema:"circleci-control-init-v1",source_sha:env.CIRCLECI_SOURCE_SHA});
       }
       if(path==="/v1/runtime/probe-diagnostics"){
         await body(request,[]);

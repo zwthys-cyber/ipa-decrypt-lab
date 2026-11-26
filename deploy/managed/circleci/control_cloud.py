@@ -108,14 +108,17 @@ def deploy(bundle):
     save()
     # Additive initialization is executed through the already-authorized Worker D1 binding.
     initialized = None
-    for attempt in range(6):
+    for attempt in range(20):
         try:
             initialized = public_call(origin, control, "/v1/runtime/probe-init", {})
-            break
+            if initialized.get("source_sha") == source:
+                break
+            initialized = None
+            time.sleep(2)
         except urllib.error.HTTPError as error:
-            if error.code not in (404, 503):
+            if error.code not in (401, 404, 503):
                 raise ValueError("control_init_http_" + str(error.code)) from None
-            time.sleep(3)
+            time.sleep(2)
     require(initialized and initialized.get("ok") is True, "control_init_failed")
     diagnostic = public_call(origin, control, "/v1/runtime/probe-diagnostics", {})
     print(json.dumps(dict(stage="circleci_provider_identity", **diagnostic)), flush=True)
