@@ -133,7 +133,7 @@ def main():
    production=not fixture_task,apple_operation=not fixture_task,file_upload=uploaded,fixture_cleaned=cleaned,decryption_proven=not fixture_task,telegram_send=False)
   if real_receipt is not None:
    proof.update(encrypted_images=real_receipt["encrypted_images"],decrypted_pages=real_receipt["decrypted_pages"],
-    plaintext_bytes=real_receipt["plaintext_bytes"])
+    plaintext_bytes=real_receipt["plaintext_bytes"],telegram_send=real_receipt.get("_notification_confirmed") is True)
   out=Path("managed-runtime-out");out.mkdir(mode=0o700,exist_ok=True)
   (out/"receipt.json").write_text(json.dumps(proof,sort_keys=True)+"\n")
   print(json.dumps(proof,sort_keys=True),flush=True)

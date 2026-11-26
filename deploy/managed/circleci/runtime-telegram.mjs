@@ -68,7 +68,7 @@ export async function handleManagedTelegram(request,env,invoke,now=Math.floor(Da
    const get=text.startsWith("/get "),id=text.slice(get?5:8).trim();
    if(!ID.test(id))return say(owner,"任务编号无效。");
    const value=await invoke(get?"owner-get":"owner-cancel",{job_id:id});
-   if(!get)return say(owner,value.state==="cancelled"?"已取消。":"已记录取消请求，确认工作机结束前不会释放任务容量。");
+   if(!get)return say(owner,value.state==="cancelled"?"已取消。":value.state==="completed"?"文件已完成核验，无法取消已完成任务。":"已记录取消请求，确认工作机结束前不会释放任务容量。");
    return say(owner,"私有文件已核验\n文件："+value.filename+"\n大小："+value.bytes+" 字节\nSHA-256："+value.sha256+
     "\n请登录自己的 Google 账号访问。领取期限不等于网盘文件权限到期。",
     {reply_markup:{inline_keyboard:[[{text:"打开私有文件",url:value.url}]]},link_preview_options:{is_disabled:true}});

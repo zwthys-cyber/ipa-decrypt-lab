@@ -6,6 +6,7 @@ import {mkdtemp,mkdir,copyFile,writeFile,rm} from "node:fs/promises";
 import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {Miniflare} from "miniflare";
+import {parseTask} from "./runtime-telegram.mjs";
 import {TRUST as C} from "./oidc.mjs";
 import {GITHUB_TRUST as G} from "./github-oidc.mjs";
 globalThis.crypto??=webcrypto;
@@ -42,7 +43,7 @@ async function setup(bindings={}){
  const base=await mkdtemp(join(tmpdir(),"runtime-api-"));
  const folder=join(base,"circleci");await mkdir(folder);await mkdir(join(base,"free-pilot"));
  await copyFile(new URL("../free-pilot/drive-auth.mjs",import.meta.url),join(base,"free-pilot","drive-auth.mjs"));
- const files=["runtime-api.mjs","runtime-tasks.mjs","runtime-telegram.mjs","tf-acceptance.mjs","runtime-schema.mjs","runtime-auth.mjs","runtime-lease.mjs","runtime-upload.mjs","runtime-drive.mjs","runtime-fixture.mjs",
+ const files=["runtime-api.mjs","runtime-notify.mjs","runtime-tasks.mjs","runtime-telegram.mjs","tf-acceptance.mjs","runtime-schema.mjs","runtime-auth.mjs","runtime-lease.mjs","runtime-upload.mjs","runtime-drive.mjs","runtime-fixture.mjs",
   "oidc.mjs","github-oidc.mjs"];
  await Promise.all(files.map(name=>copyFile(new URL(name,import.meta.url),join(folder,name))));
  const entry=join(folder,"entry.mjs");
@@ -51,7 +52,7 @@ async function setup(bindings={}){
  import {handleManagedTelegram} from "./runtime-telegram.mjs";
  const C=${JSON.stringify(C)},G=${JSON.stringify(G)};
  const run=${JSON.stringify(run)},workflow=${JSON.stringify(workflow)},worker=${JSON.stringify(worker)};
- let nativePosts=0,publisherPosts=0,deleted=false,managedJob="pilot_11111111111111111111111111111111";
+ let nativePosts=0,publisherPosts=0,notifications=0,deleted=false,managedJob="pilot_11111111111111111111111111111111";
  export default {async fetch(request,env){
   if(new URL(request.url).pathname==="/fixture-count")return Response.json({nativePosts,publisherPosts});
   async function provider(url,options){
@@ -93,6 +94,13 @@ async function setup(bindings={}){
     return Response.json({id:Number(${JSON.stringify(publisher)}),repository:{id:Number(G.repository_id)},actor:{id:Number(G.owner_id)},
      event:"workflow_dispatch",run_attempt:1,head_sha:${JSON.stringify(source)},head_branch:C.ref.slice(11),
      status:"in_progress",path:G.workflows.lease,display_title:"CircleCI lease "+managedJob});
+   if(url.startsWith("https://api.telegram.org/bot")){
+    notifications++;
+    const value=JSON.parse(options.body);
+    if(String(value.chat_id)!==env.RUNTIME_OWNER_ID)throw Error("wrong_notification_owner");
+    if(request.headers.get("x-fixture-notify-unknown")==="1")throw Error("unknown_notification");
+    return Response.json({ok:true,result:{message_id:10,chat:{type:"private",id:Number(env.RUNTIME_OWNER_ID)}}});
+   }
    if(url.startsWith("https://www.googleapis.com/drive/v3/")){
     if(options.method==="DELETE"){deleted=true;return new Response(null,{status:204});}
     if(url.includes("about?"))return Response.json({storageQuota:{limit:String(15*1024**3),usage:"0"},user:{emailAddress:"fixture@example.invalid"}});
@@ -104,7 +112,7 @@ async function setup(bindings={}){
    }
    throw Error("unexpected_provider_request");
   }
-  if(new URL(request.url).pathname==="/fixture-drive")return Response.json({deleted});
+  if(new URL(request.url).pathname==="/fixture-drive")return Response.json({deleted,notifications});
   if(new URL(request.url).pathname==="/telegram")return handleManagedTelegram(request,env,async(path,value)=>{
    const result=await handleRuntimeV2(new Request(G.audience+"/v2/runtime/"+path,{method:"POST",
     headers:{"content-type":"application/json","x-ipazake-source-sha":env.RUNTIME_SOURCE_SHA,"x-ipazake-control-token":env.CIRCLECI_CONTROL_TOKEN},
@@ -242,7 +250,7 @@ test("ordinary credential fixtures cannot acquire upload access",{timeout:60000}
 });
 
 async function production(){
- const s=await setup({RUNTIME_MODE:"production",RUNTIME_EXPORT_ENABLED:"1",RUNTIME_TELEGRAM_ENABLED:"1",TELEGRAM_WEBHOOK_SECRET:"S".repeat(48)});
+ const s=await setup({RUNTIME_MODE:"production",RUNTIME_EXPORT_ENABLED:"1",RUNTIME_TELEGRAM_ENABLED:"1",TELEGRAM_WEBHOOK_SECRET:"S".repeat(48),TELEGRAM_BOT_TOKEN:"123456789:"+"T".repeat(36)});
  assert.equal((await s.request("init")).status,200);return s;
 }
 async function handoff(s){
@@ -290,7 +298,7 @@ test("production lifecycle binds profile lease, immutable proof, registered file
   assert.equal((await s.request("lease-consumed",identity,"circle",c)).status,200);
   assert.equal((await s.db.prepare("SELECT ciphertext FROM runtime_credential_leases WHERE job_id=?").bind(id).first()).ciphertext,null);
   const proof=exportProof(id);
-  for(const changed of [{plaintext_verified:false},{account_profile:"cn"},{source_commit:"b".repeat(40)},{app_id:"654321"}])
+  for(const changed of [{plaintext_verified:false},{account_profile:"cn"},{source_commit:"b".repeat(40)},{app_id:"654321"},{encrypted_images:0},{decrypted_pages:0},{account_data_removed:false},{runtime_verified:true},{requested_version:"1.2"}])
    assert.equal((await s.request("plaintext-proof",{...identity,receipt:{...proof,...changed}},"circle",c)).status,409);
   const saved=await s.request("plaintext-proof",{...identity,receipt:proof},"circle",c);assert.equal(saved.status,200,await saved.text());
   assert.equal((await s.request("plaintext-proof",{...identity,receipt:{...proof,plaintext_sha256:"f".repeat(64)}},"circle",c)).status,409);
@@ -303,7 +311,9 @@ test("production lifecycle binds profile lease, immutable proof, registered file
   const registered=await s.request("upload-register",{...identity,record:{...record,file_id}},"circle",c);assert.equal(registered.status,200,await registered.text());
   assert.equal((await s.request("owner-get",{job_id:id})).status,409);
   assert.equal((await s.request("export-finish",{...identity,receipt:proof},"circle",c)).status,409);
-  const finished=await s.request("export-finish",{...identity,receipt:{...proof,private_delivery:{...record,file_id}}},"circle",c);assert.equal(finished.status,200,await finished.text());
+  const finished=await s.request("export-finish",{...identity,receipt:{...proof,private_delivery:{...record,file_id}}},"circle",c);assert.equal(finished.status,200);assert.equal((await finished.json()).notification_confirmed,true);
+  const repeated=await s.request("export-finish",{...identity,receipt:{...proof,private_delivery:{...record,file_id}}},"circle",c);
+  assert.equal(repeated.status,200);assert.equal((await s.mf.dispatchFetch(origin+"/fixture-drive").then(r=>r.json())).notifications,1);
   const completed=await (await s.request("status",{job_id:id},"admin",secret,{"x-fixture-terminal":"1"})).json();assert.equal(completed.state,"completed");
   const link=await (await s.request("owner-get",{job_id:id})).json();assert.equal(link.ok,true);
   assert.equal(link.url,"https://drive.google.com/file/d/"+file_id+"/view");
@@ -350,4 +360,15 @@ test("owner retrieval survives source upgrades while worker identity remains sou
   const c=await signed("circle");
   assert.equal((await s.request("claim",{job_id:job,worker_job_id:worker},"circle",c)).status,409);
  }finally{await s.close();}
+});
+
+test("managed links retain profile/version routing and reject foreign URL targets",()=>{
+ assert.deepEqual(parseTask("123456"),{profile:"default",target:"123456",version:""});
+ assert.deepEqual(parseTask("/version https://apps.apple.com/cn/app/id123456 889619746"),{profile:"cn",target:"123456",version:"889619746"});
+ assert.deepEqual(parseTask("itms-beta://testflight.apple.com/join/SyntheticInvite"),{profile:"tf",target:"SyntheticInvite",version:""});
+ for(const text of ["http://apps.apple.com/app/id123456","https://apps.apple.com.evil/app/id123456",
+  "https://user:pass@apps.apple.com/app/id123456","https://testflight.apple.com/join/SyntheticInvite?redirect=https://evil.invalid",
+  "/version https://testflight.apple.com/join/SyntheticInvite 1.2"]){
+  assert.equal(parseTask(text),null);
+ }
 });

@@ -39,5 +39,5 @@ def execute_export(task,values,root,env,rpc,origin,load_runtime):
    load_runtime=load_runtime,delivery=upload)
  checkpoint("artifact_ready",force=True)
  require(receipt.get("private_delivery") and receipt["private_delivery"].get("file_id"),"managed_delivery_unconfirmed")
- rpc("export-finish",dict(identity,receipt=receipt))
- return receipt
+ finished=rpc("export-finish",dict(identity,receipt=receipt))
+ return dict(receipt,_notification_confirmed=finished.get("notification_confirmed") is True)

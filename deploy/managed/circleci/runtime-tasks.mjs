@@ -42,10 +42,10 @@ export function exportRequest(value){
 }
 const canonical=value=>JSON.stringify(Object.fromEntries(Object.keys(value).sort().map(k=>[k,value[k]])));
 export async function admitExport(env,value,now){
- await requireEntry(env);exportRequest(value);
+ const entry=await requireEntry(env);exportRequest(value);
  if(value.profile==="tf"){
-  const handoff=await env.DB.prepare("SELECT ready,sealed_at FROM circleci_tf_handoff WHERE owner_id=?").bind(env.RUNTIME_OWNER_ID).first();
-  need(handoff?.ready===1&&handoff.sealed_at>0&&/^[a-f0-9]{64}$/.test(env.RUNTIME_TF_HMAC_KEY||""),"runtime_tf_handoff_required");
+  const handoff=await env.DB.prepare("SELECT ready,sealed_at,snapshot_sha256,session_sha256 FROM circleci_tf_handoff WHERE owner_id=?").bind(env.RUNTIME_OWNER_ID).first();
+  need(handoff?.ready===1&&handoff.sealed_at>0&&handoff.snapshot_sha256===entry.snapshot_sha256&&handoff.session_sha256===entry.session_sha256&&/^[a-f0-9]{64}$/.test(env.RUNTIME_TF_HMAC_KEY||""),"runtime_tf_handoff_required");
  }
  const limit=env.RUNTIME_DAILY_LIMIT===undefined?3:Number(env.RUNTIME_DAILY_LIMIT);
  need(Number.isSafeInteger(limit)&&limit>=1&&limit<=20,"runtime_quota_configuration");

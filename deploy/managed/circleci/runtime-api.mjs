@@ -1,4 +1,5 @@
 // Staged managed-runtime API. Real exports and Telegram admission remain disabled until handoff.
+import {NOTIFY_SCHEMA,notifyOwner} from "./runtime-notify.mjs";
 import {TASK_SCHEMA,requireEntry,admitExport,saveExportProof,verifyFinishedExport} from "./runtime-tasks.mjs";
 import {SCHEMA as TF_SCHEMA,claimPermit,finishPermit,inviteHash} from "./tf-acceptance.mjs";
 import {TRUST} from "./oidc.mjs";
@@ -135,7 +136,7 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
    await admin(request,env);
    if(path==="init"){
     await body(request,[]);
-    const sql=(RUNTIME_SCHEMA+"\n"+UPLOAD_SCHEMA+"\n"+FIXTURE_SCHEMA+"\n"+TASK_SCHEMA+"\n"+TF_SCHEMA).split(";").map(x=>x.trim()).filter(Boolean);
+    const sql=(RUNTIME_SCHEMA+"\n"+UPLOAD_SCHEMA+"\n"+FIXTURE_SCHEMA+"\n"+TASK_SCHEMA+"\n"+TF_SCHEMA+"\n"+NOTIFY_SCHEMA).split(";").map(x=>x.trim()).filter(Boolean);
     const result=await env.DB.batch(sql.map(x=>env.DB.prepare(x)));
     need(result.every(x=>x.success===true),"runtime_schema");
     return reply(200,{ok:true,source_sha:env.RUNTIME_SOURCE_SHA});
@@ -170,15 +171,19 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
    if(path==="owner-cancel"){
     await requireEntry(env);need(row.kind==="export","runtime_cancel_export_only");
     if(["completed","closed","cancelled"].includes(row.state))return reply(200,{ok:true,state:row.state});
+    if(row.finished_at!==null&&row.file_id)return reply(200,{ok:true,state:"completed"});
     if(row.state==="waiting"){
      const stopped=await env.DB.prepare("UPDATE runtime_jobs SET state='cancelled' WHERE job_id=? AND state='waiting'").bind(row.job_id).run();
      need(stopped.success===true,"runtime_cancel_storage");
      if(stopped.meta?.changes===1)return reply(200,{ok:true,state:"cancelled"});
      row=await task(env,row.job_id,false);
     }
+    const cancelled=await env.DB.prepare("UPDATE runtime_jobs SET state='cancel_pending' WHERE job_id=? AND finished_at IS NULL AND state NOT IN ('completed','closed','cancelled')")
+     .bind(row.job_id).run();
+    need(cancelled.success===true,"runtime_cancel_storage");
+    if(cancelled.meta?.changes!==1)return reply(200,{ok:true,state:(await task(env,row.job_id,false)).finished_at!==null?"completed":"closed"});
     const intent=await env.DB.prepare("INSERT INTO runtime_cancel_intents(job_id,created_at,outcome) VALUES(?,?,'intent') ON CONFLICT DO NOTHING").bind(row.job_id,now).run();
     need(intent.success===true,"runtime_cancel_storage");
-    await env.DB.prepare("UPDATE runtime_jobs SET state='cancel_pending' WHERE job_id=? AND state NOT IN ('completed','closed','cancelled')").bind(row.job_id).run();
     await closeRuntimeLease(env.DB,row,now);
     if(intent.meta?.changes===1&&row.workflow_id){
      let outcome="unknown";
@@ -193,7 +198,7 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
     return reply(200,{ok:true,state:"cancel_pending"});
    }
    if(path==="owner-get"){
-    await requireEntry(env);need(row.kind==="export"&&row.state==="completed"&&row.file_id&&row.link_expires>now,"runtime_link_unavailable");
+    await requireEntry(env);need(row.kind==="export"&&(row.state==="completed"||(row.state==="link_ready"&&row.finished_at!==null))&&row.file_id&&row.link_expires>now,"runtime_link_unavailable");
     const record={file_id:row.file_id,filename:row.filename,bytes:row.plaintext_bytes,sha256:row.plaintext_sha256};
     await verifyOwnedUpload({...row,recipient_email:env.PILOT_DRIVE_RECIPIENT_EMAIL,control_origin:ORIGIN},record,env,send);
     return reply(200,{ok:true,...record,url:"https://drive.google.com/file/d/"+encodeURIComponent(row.file_id)+"/view",expires_at:row.link_expires});
@@ -272,7 +277,10 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
    await closeRuntimeLease(env.DB,row,now);
    const result=await env.DB.prepare("UPDATE runtime_jobs SET finished_at=COALESCE(finished_at,?) WHERE job_id=? AND state='link_ready' AND worker_job_id=?").bind(now,row.job_id,identity.job_id).run();
    need(result.success===true&&result.meta?.changes===1,"runtime_export_finish_storage");
-   return reply(200,{ok:true});
+   const completed=await task(env,row.job_id);
+   let notification=false;
+   try{notification=await notifyOwner(env,completed,now,send);}catch{}
+   return reply(200,{ok:true,notification_confirmed:notification});
   }
   if(path==="plaintext-proof"){
    if(row.kind==="export"){
