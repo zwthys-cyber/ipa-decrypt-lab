@@ -16,7 +16,7 @@ ORIGIN="https://ipazake-free-control-pilot.hahayesadd.workers.dev"
 def need(ok,code):
  if not ok:raise ValueError(code)
 def call(path,token=None,value=None):
- need(path in ("ready","init","admit-fixture","admit-drive-fixture","status"),"runtime_cloud_endpoint")
+ need(path in ("ready","init","admit-fixture","admit-drive-fixture","status","canary/install","canary/revoke","admit-export","owner-cancel","owner-get"),"runtime_cloud_endpoint")
  headers={"User-Agent":"ipa-decrypt-managed-deployer/0.2","Accept":"application/json"}
  if token:headers["X-Ipazake-Control-Token"]=token
  if value is not None:
@@ -36,7 +36,7 @@ def call(path,token=None,value=None):
   except Exception:pass
   raise ValueError(code) from None
  value=json.loads(raw);need(value.get("ok") is True,"runtime_cloud_response");return value
-def deploy(bundle,drive_fixture=False):
+def deploy(bundle,drive_fixture=False,prepare_only=False):
  env=os.environ
  need(env.get("GITHUB_ACTIONS")=="true" and env.get("GITHUB_REPOSITORY")=="zwthys-cyber/ipa-decrypt-lab" and
   env.get("GITHUB_REF")=="refs/heads/upgrade/managed-runtime-v0.2","runtime_cloud_context")
@@ -89,6 +89,7 @@ def deploy(bundle,drive_fixture=False):
    if not any(x in str(error) for x in ("runtime_admin_authentication","http_503","http_404","runtime_fields","runtime_source_not_ready")):raise
   time.sleep(2)
  else:raise ValueError("runtime_deployment_not_ready")
+ if prepare_only:return dict(control_token=control,source_sha=source)
  probe=secrets.token_hex(16);job="pilot_"+probe;receipt.update(status="admitted_once",job_id=job);save()
  # Reuse the same logical ID only; the durable dispatch CAS permits one external POST.
  for attempt in range(30):

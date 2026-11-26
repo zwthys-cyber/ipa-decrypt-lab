@@ -1,0 +1,75 @@
+name: CircleCI bounded owner task
+run-name: CircleCI owner canary ${{ inputs.app_id }}
+on:
+  workflow_dispatch:
+    inputs:
+      app_id:
+        description: Owner-requested free App Store ID (default account, latest version)
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: circleci-signed-control
+  cancel-in-progress: false
+jobs:
+  owner-task:
+    if: github.ref == 'refs/heads/upgrade/managed-runtime-v0.2' && github.run_attempt == 1 && github.actor_id == '246379322'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Require successful matching control and worker adapter contracts
+        id: contracts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json,os,subprocess
+          repo="zwthys-cyber/ipa-decrypt-lab"
+          for workflow in ("circleci-control-contracts.yml","circleci-worker-contracts.yml"):
+              path="repos/"+repo+"/actions/workflows/"+workflow+"/runs?head_sha="+os.environ["GITHUB_SHA"]+"&per_page=20"
+              value=json.loads(subprocess.check_output(["gh","api",path]))
+              found=[r for r in value["workflow_runs"] if r["head_sha"]==os.environ["GITHUB_SHA"] and r["event"]=="push" and r["status"]=="completed" and r["conclusion"]=="success"]
+              if len(found)!=1:raise SystemExit("matching_contracts_not_ready")
+              if workflow=="circleci-control-contracts.yml":
+                  with open(os.environ["GITHUB_OUTPUT"],"a") as out:out.write("control_run="+str(found[0]["id"])+"\n")
+          PY
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.contracts.outputs.control_run }}
+          name: circleci-control-candidate-${{ github.sha }}
+          path: circleci-control-dist
+      - name: Verify exact source bundle
+        working-directory: circleci-control-dist
+        run: |
+          sha256sum -c SHA256SUMS
+          test "$(cat BUILDINFO)" = "source_commit=$GITHUB_SHA"
+      - name: Install runtime SSH and age transport on GitHub only
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends sshpass age
+      - name: Execute one bounded owner task with encrypted preservation and source restoration
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_PILOT_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_PILOT_API_TOKEN }}
+          CIRCLECI_API_TOKEN: ${{ secrets.CIRCLECI_API_TOKEN }}
+          RUNTIME_OWNER_ID: ${{ secrets.TELEGRAM_OWNER_ID }}
+          RUNTIME_GH_TOKEN: ${{ secrets.VPS_GH_TOKEN }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          SSHPASS: ${{ secrets.VPS_SSH_PASSWORD }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
+          TARGET_APP_ID: ${{ inputs.app_id }}
+        run: python3 deploy/managed/circleci/owner_canary.py --bundle circleci-control-dist/worker.mjs --app-id "$TARGET_APP_ID"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: circleci-owner-canary-${{ github.run_id }}
+          path: owner-canary-output/
+          retention-days: 7
+          if-no-files-found: warn

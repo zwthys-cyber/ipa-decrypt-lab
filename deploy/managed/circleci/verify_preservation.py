@@ -8,7 +8,7 @@ import tarfile
 PROMOTED="8349899c8806e2481edfc6f8f532d6aaa855f32c241b86951a03ea62df799765"
 def need(ok):
     if not ok:raise ValueError("preservation_verification_failed")
-def verify(stream,output):
+def verify(stream,output,expected_frozen=False):
     records={};manifest=None;session=None;total=0
     with tarfile.open(fileobj=stream,mode="r|gz") as archive:
         for member in archive:
@@ -32,14 +32,14 @@ def verify(stream,output):
             if name=="state/testflight/session.age":session=b"".join(chunks)
     # Drain the outer age reader so its complete authentication tag is checked.
     while stream.read(1024*1024):pass
-    need(manifest and manifest.get("schema")=="ipa-online-preservation-v1" and manifest.get("frozen") is False and
+    need(manifest and manifest.get("schema")=="ipa-online-preservation-v1" and manifest.get("frozen") is expected_frozen and
         manifest.get("cutover_approved") is False and manifest.get("files")==records and
         session and session.startswith(b"age-encryption.org/v1\n") and hashlib.sha256(session).hexdigest()==PROMOTED and
         manifest.get("session_sha256")==PROMOTED)
     output=Path(output);output.mkdir(mode=0o700,exist_ok=True)
     with os.fdopen(os.open(output/"tf-session.age",os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o600),"wb") as dest:
         dest.write(session)
-    receipt=dict(schema="ipa-online-preservation-receipt-v1",archive_verified=True,frozen=False,cutover_approved=False,
+    receipt=dict(schema="ipa-online-preservation-receipt-v1",archive_verified=True,frozen=expected_frozen,cutover_approved=False,
         files=len(records),session_matches_promoted=True,session_sha256=PROMOTED,
         acceptance_ledger_present="state/testflight/acceptance.sqlite" in records,
         task_states=manifest["task_states"])

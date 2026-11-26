@@ -1,4 +1,5 @@
 // Real-task admission and immutable verification. Source handoff is a separate, explicit operation.
+import {canaryWindow} from "./runtime-canary.mjs";
 import {need} from "./runtime-auth.mjs";
 const HEX=/^[a-f0-9]{64}$/,SHA=/^[a-f0-9]{40}$/;
 export const TASK_SCHEMA=`
@@ -23,6 +24,8 @@ export function version(value){
 }
 export async function requireEntry(env){
  need(env.RUNTIME_MODE==="production"&&env.RUNTIME_EXPORT_ENABLED==="1","runtime_entry_disabled");
+ need(Number.isSafeInteger(Number(env.RUNTIME_OWNER_ID))&&Number(env.RUNTIME_OWNER_ID)>0,"runtime_owner_configuration");
+ const window=await canaryWindow(env,Math.floor(Date.now()/1000));if(window)return window;
  const row=await env.DB.prepare("SELECT * FROM runtime_entry_handoff WHERE owner_id=?").bind(env.RUNTIME_OWNER_ID).first();
  need(row&&HEX.test(row.snapshot_sha256||"")&&HEX.test(row.session_sha256||"")&&
   row.old_service_stopped_at>0&&row.billing_verified_at>0&&row.sealed_at>=row.old_service_stopped_at&&
@@ -43,6 +46,7 @@ export function exportRequest(value){
 const canonical=value=>JSON.stringify(Object.fromEntries(Object.keys(value).sort().map(k=>[k,value[k]])));
 export async function admitExport(env,value,now){
  const entry=await requireEntry(env);exportRequest(value);
+ if(entry.canary)need(value.profile==="default"&&value.request_id===entry.request_id&&value.target===entry.target&&value.version==="","runtime_canary_request_binding");
  if(value.profile==="tf"){
   const handoff=await env.DB.prepare("SELECT ready,sealed_at,snapshot_sha256,session_sha256 FROM circleci_tf_handoff WHERE owner_id=?").bind(env.RUNTIME_OWNER_ID).first();
   need(handoff?.ready===1&&handoff.sealed_at>0&&handoff.snapshot_sha256===entry.snapshot_sha256&&handoff.session_sha256===entry.session_sha256&&/^[a-f0-9]{64}$/.test(env.RUNTIME_TF_HMAC_KEY||""),"runtime_tf_handoff_required");
@@ -52,16 +56,17 @@ export async function admitExport(env,value,now){
  const legacy=await env.DB.prepare("SELECT request_id FROM runtime_legacy_tasks WHERE request_id=? AND owner_id=?").bind(value.request_id,env.RUNTIME_OWNER_ID).first();
  need(!legacy,"runtime_historical_request_held");
  const start=Math.floor(now/86400)*86400;
+ const savedQuota=entry.canary?await env.DB.prepare("SELECT count(*) n FROM runtime_canary_legacy WHERE source_sha=? AND owner_id=? AND created_at>=? AND created_at<?").bind(env.RUNTIME_SOURCE_SHA,env.RUNTIME_OWNER_ID,start,start+86400).first():{n:0};
  const raw=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("managed-export\0"+env.RUNTIME_OWNER_ID+"\0"+value.request_id));
  const id="pilot_"+Array.from(new Uint8Array(raw),x=>x.toString(16).padStart(2,"0")).join("").slice(0,32);
  const result=await env.DB.prepare(`INSERT INTO runtime_jobs
   (job_id,owner_id,request_id,profile,kind,target,version,source_sha,state,created_at,deadline)
   SELECT ?,?,?,?,'export',?,?,?,'waiting',?,?
   WHERE ((SELECT count(*) FROM runtime_jobs WHERE owner_id=? AND kind='export' AND created_at>=? AND created_at<?)
-   +(SELECT count(*) FROM runtime_legacy_tasks WHERE owner_id=? AND created_at>=? AND created_at<?))<?
+   +(SELECT count(*) FROM runtime_legacy_tasks WHERE owner_id=? AND created_at>=? AND created_at<?)+?)<?
    AND (SELECT count(*) FROM runtime_jobs WHERE owner_id=? AND kind='export' AND state='waiting')<30
   ON CONFLICT DO NOTHING`).bind(id,env.RUNTIME_OWNER_ID,value.request_id,value.profile,value.target,value.version,
-   env.RUNTIME_SOURCE_SHA,now,now+3600,env.RUNTIME_OWNER_ID,start,start+86400,env.RUNTIME_OWNER_ID,start,start+86400,limit,env.RUNTIME_OWNER_ID).run();
+   env.RUNTIME_SOURCE_SHA,now,Math.min(now+3600,entry.lease_deadline||now+3600),env.RUNTIME_OWNER_ID,start,start+86400,env.RUNTIME_OWNER_ID,start,start+86400,savedQuota.n,limit,env.RUNTIME_OWNER_ID).run();
  need(result.success===true,"runtime_admission_storage");
  const row=await env.DB.prepare("SELECT * FROM runtime_jobs WHERE request_id=? AND owner_id=?").bind(value.request_id,env.RUNTIME_OWNER_ID).first();
  need(row,"runtime_daily_or_queue_limit");

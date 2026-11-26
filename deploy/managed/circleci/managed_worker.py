@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import signal
 import shutil
+import threading
 import subprocess
 import sys
 import tempfile
@@ -16,6 +17,7 @@ import urllib.request
 from credential_envelope import context,consumer,open_envelope,public_env
 from task_context import validate
 import fetch_runtime
+TASK_DEADLINE=0
 ORIGIN="https://ipazake-free-control-pilot.hahayesadd.workers.dev"
 class NoRedirect(urllib.request.HTTPRedirectHandler):
  def redirect_request(self,*args,**kwargs):return None
@@ -28,7 +30,7 @@ def rpc_once(path,value):
  request=urllib.request.Request(ORIGIN+"/v2/runtime/"+path,data=json.dumps(dict(value,_source=os.environ["MANAGED_SOURCE"])).encode(),method="POST",
   headers={"X-Ipazake-Job-Token":token,"X-Ipazake-Source-Sha":os.environ["MANAGED_SOURCE"],"Content-Type":"application/json","User-Agent":"ipa-decrypt-managed-worker/0.2"})
  try:
-  with urllib.request.build_opener(NoRedirect).open(request,timeout=25) as response:
+  with urllib.request.build_opener(NoRedirect).open(request,timeout=min(25,max(1,TASK_DEADLINE-time.time())) if TASK_DEADLINE else 25) as response:
    need(response.status==200,"managed_response")
    raw=response.read(360001);need(len(raw)<=360000,"managed_response_limit")
  except urllib.error.HTTPError as error:
@@ -42,6 +44,7 @@ def rpc_once(path,value):
 def rpc(path,value):
  # Every mutation is keyed by the same committed job/context; external dispatches use durable CAS intents.
  for attempt in range(30):
+  if TASK_DEADLINE and time.time()>=TASK_DEADLINE:raise InterruptedError("deadline")
   try:return rpc_once(path,value)
   except ValueError as error:
    warm=("runtime_source_not_ready","runtime_fields","runtime_provider_pending","runtime_job_binding")
@@ -51,6 +54,7 @@ def rpc(path,value):
   time.sleep(2)
  raise ValueError("managed_runtime_not_ready")
 def main():
+ global TASK_DEADLINE
  env=os.environ
  need(env.get("CIRCLECI")=="true" and not env.get("GITHUB_ACTIONS") and
   env.get("MANAGED_ORIGIN")==ORIGIN and env.get("MANAGED_SOURCE")==env.get("CIRCLE_SHA1") and
@@ -60,6 +64,9 @@ def main():
  task=result["task"]
  need(task["run_id"]==env["MANAGED_RUN_ID"] and task["source_sha"]==env["MANAGED_SOURCE"],"managed_run_binding")
  actual_env=dict(env,RUNTIME_RUN_ID=task["run_id"]);validate(task,actual_env)
+ TASK_DEADLINE=task["deadline"]
+ watchdog=threading.Timer(max(1,TASK_DEADLINE-time.time()),lambda:os.kill(os.getpid(),signal.SIGTERM))
+ watchdog.daemon=True;watchdog.start()
  need(result["task_kind"] in ("fixture","export"),"managed_task_kind")
  fixture_task=result["task_kind"]=="fixture"
  with tempfile.TemporaryDirectory(prefix="managed-task-") as directory:
@@ -143,7 +150,7 @@ def entry():
  try:main();return 0
  except BaseException as error:
   try:
-   if re.fullmatch(r"pilot_[a-f0-9]{32}",os.environ.get("MANAGED_JOB","")):
+   if (not TASK_DEADLINE or time.time()<TASK_DEADLINE-3) and re.fullmatch(r"pilot_[a-f0-9]{32}",os.environ.get("MANAGED_JOB","")):
     rpc("worker-failed",dict(job_id=os.environ["MANAGED_JOB"],worker_job_id=os.environ["CIRCLE_WORKFLOW_JOB_ID"]))
   except BaseException:pass
   code=str(error) if isinstance(error,ValueError) and re.fullmatch(r"[a-z_]{1,60}",str(error)) else "managed_worker_failed"

@@ -1,4 +1,5 @@
 // Staged managed-runtime API. Real exports and Telegram admission remain disabled until handoff.
+import {CANARY_SCHEMA,installCanary,revokeCanary} from "./runtime-canary.mjs";
 import {NOTIFY_SCHEMA,notifyOwner} from "./runtime-notify.mjs";
 import {TASK_SCHEMA,requireEntry,admitExport,saveExportProof,verifyFinishedExport} from "./runtime-tasks.mjs";
 import {SCHEMA as TF_SCHEMA,claimPermit,finishPermit,inviteHash} from "./tf-acceptance.mjs";
@@ -132,15 +133,17 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
    const count=exists?await env.DB.prepare("SELECT count(*) n FROM runtime_jobs WHERE state NOT IN ('completed','cancelled','closed')").first():{n:0};
    return reply(200,{ok:true,source_sha:env.RUNTIME_SOURCE_SHA,active:count.n>0});
   }
-  if(["init","admit-fixture","admit-drive-fixture","admit-export","status","owner-cancel","owner-get"].includes(path)){
+  if(["init","admit-fixture","admit-drive-fixture","admit-export","status","owner-cancel","owner-get","canary/install","canary/revoke"].includes(path)){
    await admin(request,env);
    if(path==="init"){
     await body(request,[]);
-    const sql=(RUNTIME_SCHEMA+"\n"+UPLOAD_SCHEMA+"\n"+FIXTURE_SCHEMA+"\n"+TASK_SCHEMA+"\n"+TF_SCHEMA+"\n"+NOTIFY_SCHEMA).split(";").map(x=>x.trim()).filter(Boolean);
+    const sql=(RUNTIME_SCHEMA+"\n"+UPLOAD_SCHEMA+"\n"+FIXTURE_SCHEMA+"\n"+TASK_SCHEMA+"\n"+TF_SCHEMA+"\n"+NOTIFY_SCHEMA+"\n"+CANARY_SCHEMA).split(";").map(x=>x.trim()).filter(Boolean);
     const result=await env.DB.batch(sql.map(x=>env.DB.prepare(x)));
     need(result.every(x=>x.success===true),"runtime_schema");
     return reply(200,{ok:true,source_sha:env.RUNTIME_SOURCE_SHA});
    }
+   if(path==="canary/install"){const value=await body(request,["packet"],262144);return reply(200,await installCanary(env,value.packet,now));}
+   if(path==="canary/revoke"){const value=await body(request,["nonce"]);return reply(200,await revokeCanary(env,value.nonce,now));}
    if(["admit-fixture","admit-drive-fixture"].includes(path)){
     need(env.RUNTIME_MODE==="staging","runtime_fixture_only");
     const value=await body(request,["probe_id"]);need(/^[a-f0-9]{32}$/.test(value.probe_id||""),"runtime_fixture_id");
@@ -169,7 +172,7 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
    await reconcileFixture(env,row,send);row=await task(env,row.job_id,false);
    if(path==="status"&&row.kind==="export")await promoteNext(env,now,send);
    if(path==="owner-cancel"){
-    await requireEntry(env);need(row.kind==="export","runtime_cancel_export_only");
+    need(row.kind==="export","runtime_cancel_export_only");
     if(["completed","closed","cancelled"].includes(row.state))return reply(200,{ok:true,state:row.state});
     if(row.finished_at!==null&&row.file_id)return reply(200,{ok:true,state:"completed"});
     if(row.state==="waiting"){
@@ -203,10 +206,15 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
     await verifyOwnedUpload({...row,recipient_email:env.PILOT_DRIVE_RECIPIENT_EMAIL,control_origin:ORIGIN},record,env,send);
     return reply(200,{ok:true,...record,url:"https://drive.google.com/file/d/"+encodeURIComponent(row.file_id)+"/view",expires_at:row.link_expires});
    }
+   const proof=await env.DB.prepare("SELECT receipt_json FROM runtime_export_proofs WHERE job_id=?").bind(row.job_id).first();
+   const exportProof=proof?JSON.parse(proof.receipt_json):null;
+   const notice=await env.DB.prepare("SELECT state FROM runtime_notifications WHERE job_id=?").bind(row.job_id).first();
    const lease=await env.DB.prepare("SELECT cipher_sha256,consumed_at,ciphertext,publisher_run_id FROM runtime_credential_leases WHERE job_id=?").bind(row.job_id).first();
    return reply(200,{ok:true,job_id:row.job_id,state:row.state,run_id:row.run_id,claimed:!!row.worker_job_id,
     drive_fixture:row.drive_fixture===1,drive_uploaded:!!row.file_id,fixture_cleaned:row.cleanup_state==="confirmed",
-    link_expires:row.link_expires,profile:row.profile,
+    link_expires:row.link_expires,profile:row.profile,export_verified:exportProof?.plaintext_verified===true,
+    encrypted_images:exportProof?.encrypted_images||0,decrypted_pages:exportProof?.decrypted_pages||0,plaintext_bytes:row.plaintext_bytes,
+    notification_confirmed:notice?.state==="sent",
     finished:row.finished_at!==null,fixture_verified:row.fixture_verified===1,
     publisher_run_id:lease?.publisher_run_id||null,cipher_sha256:lease?.cipher_sha256||null,ciphertext_cleared:!!lease&&lease.ciphertext===null&&lease.consumed_at!==null});
   }
