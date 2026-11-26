@@ -4,7 +4,8 @@ on:
     branches: [upgrade/managed-runtime-v0.2]
     paths:
       - 'deploy/managed/circleci/control*'
-      - 'deploy/managed/circleci/dispatch.mjs'
+      - 'deploy/managed/circleci/dispatch*'
+      - 'deploy/managed/circleci/oidc*'
       - 'deploy/managed/free-pilot/worker.mjs'
       - 'deploy/managed/circleci/cloud_inventory.py'
       - '.github/workflows/circleci-control-contracts.yml'
