@@ -9,6 +9,8 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
 
 ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT/"tools"))
@@ -38,6 +40,17 @@ class HistoryRecoveryTests(unittest.TestCase):
                     history.audit_valid(dict(value,**{key:bad}))
         with self.assertRaises(ValueError):
             history.audit_valid(dict(value,private_account="never accepted"))
+
+    def test_log_transport_captures_escapes_without_forwarding_private_key(self):
+        result=SimpleNamespace(returncode=0,stdout=b"\x1b[0m synthetic log")
+        with patch.dict("os.environ",{"GH_TOKEN":"synthetic-read-token",
+                                      "DELIVERY_AGE_IDENTITY":"synthetic-never-forwarded"}):
+            with patch.object(history.subprocess,"run",return_value=result) as child:
+                self.assertIn("synthetic log",history.gh("/actions/jobs/123/logs",True))
+                args=child.call_args
+                self.assertIn("--allow-escape-sequences",args.args[0])
+                self.assertTrue(args.kwargs["capture_output"])
+                self.assertNotIn("DELIVERY_AGE_IDENTITY",args.kwargs["env"])
 
     def test_failed_acceptance_is_evidence_not_relabelled_success(self):
         run,source,job,conclusion,schema,status=history.HISTORY[0]

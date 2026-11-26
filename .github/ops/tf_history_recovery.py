@@ -30,6 +30,12 @@ HISTORY=(
     (42714371079,"3620bca910a69c419cfb63d8d4623ceb5d5cc2d9",129491957022,"success","tf-worker-result-v1","encrypted_artifact_ready"),
 )
 
+STAGE="initialization"
+
+def checkpoint(value):
+    global STAGE
+    STAGE=value
+
 def need(value):
     if not value:
         raise ValueError("history_recovery_failed")
@@ -107,31 +113,48 @@ def history_valid(index,values):
 
 def gh(path,text=False):
     env={k:os.environ[k] for k in ("PATH","HOME","LANG","GH_TOKEN") if k in os.environ}
-    result=subprocess.run(["gh","api","repos/"+REPO+path],capture_output=True,timeout=60,env=env)
+    command=["gh","api"]
+    if text:
+        # gh protects terminals from CI log escape sequences. Capture bytes only;
+        # never print raw logs or forward them to an interactive terminal.
+        command.append("--allow-escape-sequences")
+    command.append("repos/"+REPO+path)
+    result=subprocess.run(command,capture_output=True,timeout=60,env=env)
     need(result.returncode==0 and len(result.stdout)<=32*1024*1024)
     return result.stdout.decode() if text else json.loads(result.stdout)
 
 def collect():
+    checkpoint("audit_metadata")
     run_valid(gh("/actions/runs/"+str(AUDIT_RUN)),AUDIT_RUN,AUDIT_SOURCE,"success",
               ".github/workflows/tf-ledger-source-audit.yml","upgrade/managed-runtime-v0.2")
+    checkpoint("audit_jobs")
     jobs=gh("/actions/runs/"+str(AUDIT_RUN)+"/jobs?per_page=100")
     need(any(j.get("id")==AUDIT_JOB and j.get("name")=="source" and j.get("conclusion")=="success"
              for j in jobs["jobs"]))
+    checkpoint("audit_log")
     audit=receipts(gh("/actions/jobs/"+str(AUDIT_JOB)+"/logs",True),"ipa-tf-source-audit-v1")
+    checkpoint("audit_receipt")
     need(len(audit)==1)
     audit_valid(audit[0])
     for index,(identifier,source,job,conclusion,schema,status) in enumerate(HISTORY):
         path=".github/workflows/"+("testflight-private-delivery.yml" if index==2 else "testflight-virtual.yml")
+        checkpoint("history_metadata_"+str(index))
         run_valid(gh("/actions/runs/"+str(identifier)),identifier,source,conclusion,path)
+        checkpoint("history_jobs_"+str(index))
         jobs=gh("/actions/runs/"+str(identifier)+"/jobs?per_page=100")["jobs"]
         need(any(j.get("id")==job and j.get("conclusion")==conclusion for j in jobs))
-        history_valid(index,receipts(gh("/actions/jobs/"+str(job)+"/logs",True),schema))
+        checkpoint("history_log_"+str(index))
+        values=receipts(gh("/actions/jobs/"+str(job)+"/logs",True),schema)
+        checkpoint("history_receipt_"+str(index))
+        history_valid(index,values)
     # Fail on newer production or research history rather than assuming no new accepts.
+    checkpoint("history_inventory")
     for workflow,count in (("testflight-private-delivery.yml",1),("testflight-virtual.yml",59)):
         runs=gh("/actions/workflows/"+workflow+"/runs?per_page=100")
         need(runs["total_count"]==count and len(runs["workflow_runs"])==count)
         expected=EXPECTED_RESEARCH_RUNS if count==59 else [42714371079]
         need(sorted(r["id"] for r in runs["workflow_runs"])==expected)
+    checkpoint("intent_blob")
     info=gh("/contents/"+INTENT_PATH+"?ref="+AUDIT_SOURCE)
     need(info.get("sha")==INTENT_BLOB and info.get("encoding")=="base64")
     packet=json.loads(base64.b64decode(info["content"]))
@@ -167,21 +190,28 @@ def main():
             key.write_text(os.environ["DELIVERY_AGE_IDENTITY"])
             key.chmod(0o600)
             public={k:os.environ[k] for k in ("PATH","HOME","LANG") if k in os.environ}
+            checkpoint("delivery_identity")
             actual=subprocess.run(["age-keygen","-y",str(key)],capture_output=True,timeout=20,env=public)
             need(actual.returncode==0 and actual.stdout.decode().strip()==RECIPIENT)
+            checkpoint("intent_decryption")
             decrypted=subprocess.run(["age","-d","-i",str(key)],
                 input=base64.b64decode(packet["ciphertext_b64"]),capture_output=True,timeout=20,env=public)
             need(decrypted.returncode==0 and 0<len(decrypted.stdout)<=4096)
+            checkpoint("intent_binding")
             packet_valid(packet,json.loads(decrypted.stdout))
+            checkpoint("candidate")
             ledger=candidate(root)
+            checkpoint("encryption")
             encrypted=root/"acceptance.sqlite.age"
             result=subprocess.run(["age","-r",RECIPIENT,"-o",str(encrypted),str(ledger)],
                                   capture_output=True,timeout=20,env=public)
             need(result.returncode==0 and encrypted.is_file())
+            checkpoint("roundtrip")
             restored=root/"restored.sqlite"
             result=subprocess.run(["age","-d","-i",str(key),"-o",str(restored),str(encrypted)],
                                   capture_output=True,timeout=20,env=public)
             need(result.returncode==0 and restored.read_bytes()==ledger.read_bytes())
+            checkpoint("publication")
             output=Path("tf-history-recovery-out")
             output.mkdir(mode=0o700)
             cipher=encrypted.read_bytes()
@@ -200,7 +230,7 @@ def main():
             print(data,end="")
         return 0
     except Exception:
-        print("history_recovery_failed",file=sys.stderr)
+        print(json.dumps({"schema":"ipa-tf-history-recovery-v1","status":"history_recovery_failed","stage":STAGE}),file=sys.stderr)
         return 2
 
 if __name__=="__main__":
