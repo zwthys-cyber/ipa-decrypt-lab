@@ -16,7 +16,7 @@ ORIGIN="https://ipazake-free-control-pilot.hahayesadd.workers.dev"
 def need(ok,code):
  if not ok:raise ValueError(code)
 def call(path,token=None,value=None):
- need(path in ("ready","init","admit-fixture","admit-drive-fixture","status","canary/install","canary/revoke","admit-export","owner-cancel","owner-get"),"runtime_cloud_endpoint")
+ need(path in ("ready","init","admit-fixture","admit-drive-fixture","status","canary/install","canary/revoke","admit-export","owner-cancel","owner-get","recovery/stage","recovery/seal","recovery/status"),"runtime_cloud_endpoint")
  headers={"User-Agent":"ipa-decrypt-managed-deployer/0.2","Accept":"application/json"}
  if token:headers["X-Ipazake-Control-Token"]=token
  if value is not None:

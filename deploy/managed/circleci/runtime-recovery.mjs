@@ -143,11 +143,13 @@ export async function offlineEntry(env,now=Math.floor(Date.now()/1000)){
 }
 export async function recoveryStatus(env){
  const row=await env.DB.prepare("SELECT * FROM runtime_offline_handoff WHERE owner_id=?").bind(env.RUNTIME_OWNER_ID).first();
- if(!row)return {ok:true,staged:false};
+ const key=env.RUNTIME_TF_HMAC_KEY||"";
+ const keyHash=/^[a-f0-9]{64}$/.test(key)?await sha(key):null;
+ if(!row)return {ok:true,staged:false,hmac_key_sha256:keyHash};
  const records=await verifyImported(env,row);
  const tf=await env.DB.prepare("SELECT ready,sealed_at FROM circleci_tf_handoff WHERE owner_id=?").bind(env.RUNTIME_OWNER_ID).first();
  const delivery=await env.DB.prepare("SELECT j.state,j.finished_at,j.file_id,n.state notice FROM runtime_jobs j LEFT JOIN runtime_notifications n ON n.job_id=j.job_id WHERE j.job_id='pilot_267d28bb7688af8bbc132595f7009a07'").first();
- return {ok:true,staged:true,sealed:!!row.sealed_at,records_readback_verified:true,legacy_rows:row.legacy_rows,held_rows:row.held_rows,
+ return {ok:true,staged:true,hmac_key_sha256:keyHash,sealed:!!row.sealed_at,records_readback_verified:true,legacy_rows:row.legacy_rows,held_rows:row.held_rows,
   update_rows:records.updates.length,metadata_rows:records.metadata.length,private_return_rows:records.private_returns.length,
   tf_sealed:tf?.ready===1&&!!tf.sealed_at,activated_at:row.activated_at,last_cron_tick_at:row.last_cron_tick_at,
   fence_live:row.fence_live===1,token_bound:row.token_sha256===await sha(env.TELEGRAM_BOT_TOKEN),

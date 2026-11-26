@@ -1,0 +1,104 @@
+name: Offline managed runtime cutover
+on:
+  push:
+    branches: [upgrade/managed-runtime-v0.2]
+    paths:
+      - 'deploy/managed/circleci/*offline_cutover.py'
+      - '.github/workflows/circleci-offline-cutover.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: circleci-production-cutover
+  cancel-in-progress: false
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - working-directory: deploy/managed/circleci
+        run: |
+          python3 test_offline_cutover.py -v
+          python3 test_offline_recovery.py -v
+          python3 -m py_compile offline_cutover.py
+  cutover:
+    needs: contracts
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/upgrade/managed-runtime-v0.2' && github.run_attempt == 1 && github.actor_id == '246379322'
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Require the exact successful signed control contracts
+        id: control
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json,os,subprocess
+          data=json.loads(subprocess.check_output(["gh","api","repos/zwthys-cyber/ipa-decrypt-lab/actions/workflows/circleci-control-contracts.yml/runs?branch=upgrade%2Fmanaged-runtime-v0.2&per_page=30"]))
+          valid=[r for r in data["workflow_runs"] if r["head_sha"]==os.environ["GITHUB_SHA"] and r["event"] in ("push","workflow_dispatch") and r["status"]=="completed" and r["conclusion"]=="success"]
+          if not valid:raise SystemExit("matching_control_contracts_not_ready")
+          with open(os.environ["GITHUB_OUTPUT"],"a") as output:output.write("run="+str(valid[0]["id"])+"\n")
+          PY
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.control.outputs.run }}
+          name: circleci-control-candidate-${{ github.sha }}
+          path: circleci-control-dist
+      - name: Verify exact source and bundle
+        working-directory: circleci-control-dist
+        run: |
+          sha256sum -c SHA256SUMS
+          test "$(cat BUILDINFO)" = "source_commit=$GITHUB_SHA"
+      - name: Install age on GitHub only
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends age
+      - name: Import verified offline state and activate the isolated same-bot entry
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_READ_TOKEN: ${{ github.token }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_PILOT_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_PILOT_API_TOKEN }}
+          CIRCLECI_API_TOKEN: ${{ secrets.CIRCLECI_API_TOKEN }}
+          RUNTIME_GH_TOKEN: ${{ secrets.VPS_GH_TOKEN }}
+          RUNTIME_OWNER_ID: ${{ secrets.TELEGRAM_OWNER_ID }}
+          MANAGED_TELEGRAM_BOT_TOKEN: ${{ secrets.MANAGED_TELEGRAM_BOT_TOKEN }}
+          MANAGED_TF_HMAC_KEY: ${{ secrets.MANAGED_TF_HMAC_KEY }}
+          DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
+          CIRCLECI_CANARY_45866115288_INDEX: ${{ secrets.CIRCLECI_CANARY_45866115288_INDEX }}
+          CIRCLECI_CANARY_45866115288_01: ${{ secrets.CIRCLECI_CANARY_45866115288_01 }}
+          CIRCLECI_CANARY_45866115288_02: ${{ secrets.CIRCLECI_CANARY_45866115288_02 }}
+          CIRCLECI_CANARY_45866115288_03: ${{ secrets.CIRCLECI_CANARY_45866115288_03 }}
+          CIRCLECI_CANARY_45866115288_04: ${{ secrets.CIRCLECI_CANARY_45866115288_04 }}
+          CIRCLECI_CANARY_45866115288_05: ${{ secrets.CIRCLECI_CANARY_45866115288_05 }}
+          CIRCLECI_CANARY_45866115288_06: ${{ secrets.CIRCLECI_CANARY_45866115288_06 }}
+          CIRCLECI_CANARY_45866115288_07: ${{ secrets.CIRCLECI_CANARY_45866115288_07 }}
+          CIRCLECI_CANARY_45866115288_08: ${{ secrets.CIRCLECI_CANARY_45866115288_08 }}
+          CIRCLECI_CANARY_45866115288_09: ${{ secrets.CIRCLECI_CANARY_45866115288_09 }}
+          CIRCLECI_CANARY_45866115288_10: ${{ secrets.CIRCLECI_CANARY_45866115288_10 }}
+          CIRCLECI_CANARY_45866115288_11: ${{ secrets.CIRCLECI_CANARY_45866115288_11 }}
+          CIRCLECI_CANARY_45866115288_12: ${{ secrets.CIRCLECI_CANARY_45866115288_12 }}
+          CIRCLECI_CANARY_45866115288_13: ${{ secrets.CIRCLECI_CANARY_45866115288_13 }}
+          CIRCLECI_CANARY_45866115288_14: ${{ secrets.CIRCLECI_CANARY_45866115288_14 }}
+          CIRCLECI_CANARY_45866115288_15: ${{ secrets.CIRCLECI_CANARY_45866115288_15 }}
+          CIRCLECI_CANARY_45866115288_16: ${{ secrets.CIRCLECI_CANARY_45866115288_16 }}
+          CIRCLECI_CANARY_45866115288_17: ${{ secrets.CIRCLECI_CANARY_45866115288_17 }}
+          CIRCLECI_CANARY_45866115288_18: ${{ secrets.CIRCLECI_CANARY_45866115288_18 }}
+          CIRCLECI_CANARY_45866115288_19: ${{ secrets.CIRCLECI_CANARY_45866115288_19 }}
+          CIRCLECI_CANARY_45866115288_20: ${{ secrets.CIRCLECI_CANARY_45866115288_20 }}
+        run: python3 deploy/managed/circleci/offline_cutover.py --bundle circleci-control-dist/worker.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: offline-cutover-${{ github.run_id }}
+          path: offline-cutover-out/
+          retention-days: 7
+          if-no-files-found: warn
