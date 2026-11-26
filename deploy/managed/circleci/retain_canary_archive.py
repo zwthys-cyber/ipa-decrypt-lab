@@ -4,7 +4,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import subprocess
 import sys
 REPO="zwthys-cyber/ipa-decrypt-lab"
 BRANCH="upgrade/managed-runtime-v0.2"
@@ -50,36 +49,17 @@ def assemble(index,env):
     need(raw.startswith(b"age-encryption.org/v1\n") and hashlib.sha256(raw).hexdigest()==DIGEST and index==manifest(raw))
     return raw
 
-def put(name,value,env):
-    child={key:env[key] for key in ("PATH","HOME","GH_TOKEN") if key in env}
-    result=subprocess.run(["gh","secret","set",name,"--repo",REPO],input=value,
-        capture_output=True,timeout=30,env=child)
-    need(result.returncode==0)
-
 def main():
     try:
         env=os.environ
         need(env.get("GITHUB_ACTIONS")=="true" and env.get("GITHUB_REPOSITORY")==REPO and
             env.get("GITHUB_REF")=="refs/heads/"+BRANCH and env.get("GITHUB_RUN_ATTEMPT")=="1" and
             env.get("GITHUB_ACTOR_ID")=="246379322")
-        mode=sys.argv[1];need(mode in ("store","verify"))
-        if mode=="store":
-            path=Path("retained-download/source.tar.gz.age")
-            need(path.is_file() and not path.is_symlink() and path.stat().st_size<=CHUNK*20)
-            metadata=json.loads(Path("retained-artifact.json").read_text())
-            raw=validate(path.read_bytes(),metadata);index=manifest(raw)
-            # Commit the index last. A failed chunk write never advertises a complete backup.
-            for i,name in enumerate(index["chunks"]):
-                put(name,base64.b64encode(raw[i*CHUNK:(i+1)*CHUNK]),env)
-            put(PREFIX+"INDEX",json.dumps(index,sort_keys=True).encode(),env)
-            proof=dict(schema="circleci-canary-retention-v1",mode=mode,encrypted_copy_written=True,
-                source_run=RUN,archive_sha256=DIGEST,archive_bytes=len(raw),chunks=len(index["chunks"]),
-                readback_verified=False,permanent_handoff=False,apple_operation=False)
-        else:
-            index=json.loads(env[PREFIX+"INDEX"]);raw=assemble(index,env)
-            proof=dict(schema="circleci-canary-retention-v1",mode=mode,encrypted_copy_written=True,
-                source_run=RUN,archive_sha256=DIGEST,archive_bytes=len(raw),chunks=len(index["chunks"]),
-                readback_verified=True,permanent_handoff=False,apple_operation=False)
+        need(sys.argv[1:]==["verify"])
+        index=json.loads(env[PREFIX+"INDEX"]);raw=assemble(index,env)
+        proof=dict(schema="circleci-canary-retention-v1",mode="verify",encrypted_copy_written=True,
+            source_run=RUN,archive_sha256=DIGEST,archive_bytes=len(raw),chunks=len(index["chunks"]),
+            readback_verified=True,permanent_handoff=False,apple_operation=False)
         Path("canary-retention-proof.json").write_text(json.dumps(proof,sort_keys=True)+"\n")
         print(json.dumps(proof,sort_keys=True));return 0
     except Exception:
