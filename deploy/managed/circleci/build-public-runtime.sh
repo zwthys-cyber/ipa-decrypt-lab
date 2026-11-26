@@ -17,7 +17,7 @@ checkout_public() {
   local repo="$1" revision="$2" destination="native-source/$3"
   test ! -e "$destination"
   git init --quiet "$destination"
-  git -C "$destination" fetch --depth=1 --no-tags "https://github.com/$repo.git" "$revision"
+  git -C "$destination" fetch --quiet --depth=1 --no-tags "https://github.com/$repo.git" "$revision"
   git -C "$destination" checkout --quiet --detach FETCH_HEAD
   test "$(git -C "$destination" rev-parse HEAD)" = "$revision"
 }
@@ -25,6 +25,9 @@ checkout_public Lakr233/ApplePackage 391bfe6ee6598d73e4f94b88b38b50bd6f6ec67b Ap
 checkout_public DrWhax/unfairplay 26a099fcb2292eaacd9e0ce89793cdbc88e516d1 unfairplay
 checkout_public majd/ipatool d9c0247daea564d3ec7d04a9b015d0a29af66b04 ipatool
 checkout_public FiloSottile/age b74dce4cdbe35b5e5f66c06d9612b72f89028758 age
+if ! command -v go >/dev/null 2>&1; then
+  HOMEBREW_NO_AUTO_UPDATE=1 brew install go
+fi
 command -v go
 # Downloaded Go toolchains are authenticated by the Go checksum database.
 export GOTOOLCHAIN=go1.27.0
