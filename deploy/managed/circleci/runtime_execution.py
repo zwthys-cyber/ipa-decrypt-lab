@@ -1,11 +1,12 @@
 """Connect claimed real tasks to the existing fully verifying adapters and durable uploader."""
 import time
+import json
 from task_context import require,credentials
 from runtime_uploader import deliver
 
 class Checkpoint:
  def __init__(self,task,rpc,identity,clock=time.monotonic):
-  self.task=task;self.rpc=rpc;self.identity=identity;self.clock=clock;self.last=-100;self.stage="working"
+  self.task=task;self.rpc=rpc;self.identity=identity;self.clock=clock;self.last=-100;self.stage="working";self.last_report=None
  def __call__(self,stage="working",force=False):
   require(int(time.time())<self.task["deadline"],"managed_task_expired")
   if stage!="working":self.stage=stage
@@ -15,6 +16,9 @@ class Checkpoint:
    require(result.get("deadline")==self.task["deadline"],"managed_checkpoint_binding")
    if result.get("proceed") is not True:raise InterruptedError("cancelled")
    self.last=stamp
+  if stage!="working" and stage!=self.last_report:
+   print(json.dumps(dict(schema="circleci-task-progress-v1",job_id=self.task["job_id"],stage=stage)),flush=True)
+   self.last_report=stage
 
 def execute_export(task,values,root,env,rpc,origin,load_runtime):
  profile=task["profile"]

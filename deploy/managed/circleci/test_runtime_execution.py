@@ -67,4 +67,9 @@ class Tests(unittest.TestCase):
   self.assertEqual(len(self.calls),1)
   self.cancel=True
   with self.assertRaises(InterruptedError):checkpoint(force=True)
+ def test_expired_task_never_enters_another_network_request(self):
+  import managed_worker as manager
+  with patch.object(manager,"TASK_DEADLINE",time.time()-1),patch.object(manager,"rpc_once") as transport:
+   with self.assertRaises(InterruptedError):manager.rpc("checkpoint",{})
+   transport.assert_not_called()
 if __name__=="__main__":unittest.main()
