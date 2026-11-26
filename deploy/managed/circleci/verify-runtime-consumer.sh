@@ -5,8 +5,9 @@ source deploy/managed/circleci/public-build-common.sh
 brew update
 brew install cmake ninja pkgconf mbedtls@3 curl nlohmann-json libzip
 python3 deploy/managed/circleci/test_fetch_runtime.py -v
+mkdir -p circle-runtime-dist/consumer
 for variant in base cn testflight; do
-  python3 deploy/managed/circleci/fetch_runtime.py --variant "$variant" --output "fetched-circle-$variant"
+  python3 deploy/managed/circleci/fetch_runtime.py --variant "$variant" --output "fetched-circle-$variant" | tee "circle-runtime-dist/consumer/$variant.json"
 done
 test ! -e native-source/ApplePackage/.build
 test ! -e tf-sdk-build

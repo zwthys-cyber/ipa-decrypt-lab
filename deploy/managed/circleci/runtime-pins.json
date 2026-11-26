@@ -1,0 +1,44 @@
+{
+  "schema": "circleci-native-pins-v1",
+  "source": "fa258c072f246011079affe7cecd369422ecef0d",
+  "workflow_id": "ca2fe102-a78d-4284-a20f-321d5ccdfa1e",
+  "job_number": 40,
+  "variants": {
+    "base": {
+      "commit": "fa258c072f246011079affe7cecd369422ecef0d",
+      "workflow_id": "ca2fe102-a78d-4284-a20f-321d5ccdfa1e",
+      "job_number": "40",
+      "source_fingerprint": "643e153569fe9255b306da298aaa1eba3bb8e837124befd9cc228cf4431b0fef",
+      "xcode": "Xcode 26.5\nBuild version 17F42",
+      "swift": "Apple Swift version 6.3.2 (swiftlang-6.3.2.1.108 clang-2100.1.1.101)\nTarget: arm64-apple-macosx26.0",
+      "macos": "26.3.1",
+      "variant": "base",
+      "dependencies": "",
+      "archive_sha256": "4e79550a90fcd0cb510de671de19d053c1dcc2899454c8431d83dbc548409012"
+    },
+    "cn": {
+      "commit": "fa258c072f246011079affe7cecd369422ecef0d",
+      "workflow_id": "ca2fe102-a78d-4284-a20f-321d5ccdfa1e",
+      "job_number": "40",
+      "source_fingerprint": "643e153569fe9255b306da298aaa1eba3bb8e837124befd9cc228cf4431b0fef",
+      "xcode": "Xcode 26.5\nBuild version 17F42",
+      "swift": "Apple Swift version 6.3.2 (swiftlang-6.3.2.1.108 clang-2100.1.1.101)\nTarget: arm64-apple-macosx26.0",
+      "macos": "26.3.1",
+      "variant": "cn",
+      "dependencies": "",
+      "archive_sha256": "c5b1ab083f49f201dfc6be20d7ea0a0b5b9e97895d3d70579a833b79e28880b4"
+    },
+    "testflight": {
+      "commit": "fa258c072f246011079affe7cecd369422ecef0d",
+      "workflow_id": "ca2fe102-a78d-4284-a20f-321d5ccdfa1e",
+      "job_number": "40",
+      "source_fingerprint": "643e153569fe9255b306da298aaa1eba3bb8e837124befd9cc228cf4431b0fef",
+      "xcode": "Xcode 26.5\nBuild version 17F42",
+      "swift": "Apple Swift version 6.3.2 (swiftlang-6.3.2.1.108 clang-2100.1.1.101)\nTarget: arm64-apple-macosx26.0",
+      "macos": "26.3.1",
+      "variant": "testflight",
+      "dependencies": "cmake 4.5.1\ncurl 8.23.0\nlibzip 1.12.1\nmbedtls@3 3.6.8\nninja 1.13.2\nnlohmann-json 3.12.0",
+      "archive_sha256": "582ef7a08127af006089ea3643da8c69ca631b89f6a37f2ef2fcbe4279657c0d"
+    }
+  }
+}
