@@ -1,5 +1,14 @@
 # CircleCI on-demand migration candidate
 
+## 新运行包独立 ARM 加载与 macOS 适配验证通过（2026-11-26，最新）
+
+[CircleCI job61](https://app.circleci.com/workflow/b1d0deb7-f168-41a5-87f8-d5088f6d9023/job/02c0b8e6-ba26-4b9e-b38f-5c8b155a319d) 与 [GitHub 45839573020](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45839573020) 均成功，消费者源码 `92d8d4fbf9f7f4ec3aac48e0494fcc2f619f8fa3`。独立 ARM 主机实际下载 job60 的 base/CN/TF 三包并回读三份成功的 fetch receipt，核对固定摘要、源码输入、来源和 ABI；执行新的 TF 原生上下文自检，以及实际 macOS 上的13项默认/CN、6项TF虚构任务适配测试（真实 ZIP/age/进程取消）。消费者跳过 iOS 样例编译，断言没有 Swift/TF 构建树，不重新编译项目运行工具。新参数 `runtime_consumer: true` 显式选择该路径，普通推送保持不启动 macOS。
+
+job60 的21项基础 Swift、29项CN Swift、24项TF CTest、Go/Python/Node 与重定位检查均已从公开日志核对。三个新归档与 pins 相符：base `36fe7378fd311a0d0603a31874119113a76c69576150d6804819722189aaf76b`；CN `7233e062ab3a20a3de15c601ed2d0557b46f586224800418ee2183ddce2d77b0`；TF `f4942727f1265c7399bd6cede28bf1404f1f3ea4b0be589526e618f97b8ad7f8`。之前的 job40/42 为历史成功证据，后续消费者使用新 pins。
+
+独立的 [VPS 只读核查 45839765273](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45839765273) 未取得源状态，返回 source_audit_transport_failed；这不证明源服务停机或状态丢失。补充固定类别/退出码诊断后再次核查，不能以旧的 idle 观察替代新交接检查。未触碰原状态、没有安装候选账本、没有切换 Telegram 或开放真实 CircleCI 私密任务。当前执行适配/公共运行包已验证，真实凭据与源状态交接、任务入口和私有交付仍未完成。
+
+
 ## 默认/CN/TF 执行适配与新公共运行包（2026-11-26）
 
 [GitHub 45838198217](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45838198217) 通过 13 项默认/CN 适配测试、6 项 TF 测试、10 项实际 age 交接、8 项旧导出与22项归档校验。适配复用现有完整明文报告、逐图像/页数、版本、库存、CRC 与账号资料清理，改用标准 age 加密；登录、下载、解密与加密子进程收到各自最小环境。取消/超时终止整个进程组，最终发布前失败不保留输出。测试使用虚构原生返回与账号资料，实际 ZIP/age/子进程操作，不是实际 Apple 导出成功证明。

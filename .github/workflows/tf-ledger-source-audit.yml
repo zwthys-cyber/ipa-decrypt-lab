@@ -53,10 +53,12 @@ jobs:
           inspection_dir=$(mktemp -d)
           trap 'rm -rf -- "$inspection_dir"' EXIT
           printf '%s\n' "$VPS_KNOWN_HOSTS" > "$inspection_dir/known_hosts"
-          if ! sshpass -e ssh -4 -o "UserKnownHostsFile=$inspection_dir/known_hosts" -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 -o LogLevel=ERROR "root@$VPS_HOST" \
+          audit_ssh_status=0
+          sshpass -e ssh -4 -o "UserKnownHostsFile=$inspection_dir/known_hosts" -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 -o LogLevel=ERROR "root@$VPS_HOST" \
             'env LAB_RUNTIME=vps PYTHONDONTWRITEBYTECODE=1 python3 -' \
-            < .github/ops/tf_ledger_source_audit.py > "$inspection_dir/result" 2> "$inspection_dir/error"; then
-            AUDIT_ERROR="$inspection_dir/error" AUDIT_RESULT="$inspection_dir/result" python3 - <<'PY'
+            < .github/ops/tf_ledger_source_audit.py > "$inspection_dir/result" 2> "$inspection_dir/error" || audit_ssh_status=$?
+          if [ "$audit_ssh_status" -ne 0 ]; then
+            AUDIT_SSH_STATUS="$audit_ssh_status" AUDIT_ERROR="$inspection_dir/error" AUDIT_RESULT="$inspection_dir/result" python3 - <<'PY'
           import json,os,pathlib
           error=pathlib.Path(os.environ["AUDIT_ERROR"]).read_bytes()[:16384]
           code="source_audit_transport_failed"
@@ -64,10 +66,23 @@ jobs:
                                (b"Connection refused","source_audit_transport_refused"),
                                (b"Permission denied","source_audit_authentication_failed"),
                                (b"Host key verification failed","source_audit_host_key_failed"),
-                               (b"REMOTE HOST IDENTIFICATION HAS CHANGED","source_audit_host_key_failed")):
+                               (b"REMOTE HOST IDENTIFICATION HAS CHANGED","source_audit_host_key_failed"),
+                               (b"No route to host","source_audit_network_unreachable"),
+                               (b"Could not resolve hostname","source_audit_dns_failed"),
+                               (b"Address family for hostname not supported","source_audit_ip_family_unavailable"),
+                               (b"Network is unreachable","source_audit_network_unreachable"),
+                               (b"Connection reset","source_audit_connection_reset"),
+                               (b"Connection closed","source_audit_connection_closed"),
+                               (b"kex_exchange_identification","source_audit_handshake_failed"),
+                               (b"no matching host key","source_audit_algorithm_unavailable"),
+                               (b"Broken pipe","source_audit_connection_closed"),
+                               (b"Failed to run command","source_audit_local_client_failed")):
               if needle in error:
                   code=label
                   break
+          transport={"schema":"ipa-tf-source-transport-v1","status":code,
+                     "ssh_exit_code":int(os.environ["AUDIT_SSH_STATUS"]),"stderr_bytes":len(error),
+                     "result_bytes":pathlib.Path(os.environ["AUDIT_RESULT"]).stat().st_size}
           try:
               value=json.loads(pathlib.Path(os.environ["AUDIT_RESULT"]).read_bytes()[:4096])
               if (type(value) is dict and set(value)=={"schema","status","stage"} and
@@ -75,9 +90,9 @@ jobs:
                   value["stage"] in {"runtime","root","health","controller","session","acceptance","candidates","returns"}):
                   print(json.dumps(value,sort_keys=True))
               else:
-                  print(code)
+                  print(json.dumps(transport,sort_keys=True))
           except Exception:
-              print(code)
+              print(json.dumps(transport,sort_keys=True))
           PY
             exit 1
           fi
