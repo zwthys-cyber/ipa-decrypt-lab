@@ -31,6 +31,27 @@ class Tests(unittest.TestCase):
     self.assertEqual(actual.call_count,1);self.assertEqual(upload.call_count,1)
     self.assertEqual(self.calls[-1][0],"export-finish")
     self.assertEqual(upload.call_args.args[3]["worker_job_id"],self.task["worker_job_id"])
+ def test_catalog_only_metadata_adapter_and_finish_never_uploads_or_exports(self):
+  for profile in ("default","cn"):
+   self.task["profile"]=profile;self.calls=[]
+   values={key:"synthetic" for key in PROFILES[profile+"_catalog"]}
+   def adapter(task,actual,before,env,checkpoint,**kwargs):
+    self.assertEqual(actual,values);self.assertEqual(before,"223456789")
+    checkpoint("catalog_query")
+    return dict(rows=[dict(id="123456789")])
+   with patch("catalog_worker.query_catalog",side_effect=adapter),patch.object(worker,"deliver") as upload,patch("appstore_worker.export_task") as export:
+    result=worker.execute_catalog(self.task,values,"223456789",self.env,self.rpc,None)
+    self.assertEqual(result["rows"],[dict(id="123456789")]);upload.assert_not_called();export.assert_not_called()
+   self.assertEqual(self.calls[-1][0],"catalog-finish")
+   self.assertFalse(any(path in ("export-finish","tf-permit","upload-access") for path,value in self.calls))
+ def test_catalog_rejects_export_role_and_obeys_cancel(self):
+  with self.assertRaises(ValueError):worker.execute_catalog(self.task,self.values(),"",self.env,self.rpc,None)
+  self.assertEqual(self.calls,[])
+  self.cancel=True
+  values={key:"synthetic" for key in PROFILES["default_catalog"]}
+  with patch("catalog_worker.query_catalog") as query:
+   with self.assertRaises(InterruptedError):worker.execute_catalog(self.task,values,"",self.env,self.rpc,None)
+   query.assert_not_called()
  def test_tf_uses_saved_session_adapter_and_bound_acceptance_callback(self):
   self.task["profile"]="tf"
   def adapter(task,values,output,env,checkpoint,**kwargs):

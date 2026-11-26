@@ -62,7 +62,7 @@ export async function admitExport(env,value,now){
  const result=await env.DB.prepare(`INSERT INTO runtime_jobs
   (job_id,owner_id,request_id,profile,kind,target,version,source_sha,state,created_at,deadline)
   SELECT ?,?,?,?,'export',?,?,?,'waiting',?,?
-  WHERE ((SELECT count(*) FROM runtime_jobs WHERE owner_id=? AND kind='export' AND created_at>=? AND created_at<?)
+  WHERE ((SELECT count(*) FROM runtime_jobs WHERE owner_id=? AND kind='export' AND NOT EXISTS(SELECT 1 FROM runtime_catalog_specs s WHERE s.job_id=runtime_jobs.job_id) AND created_at>=? AND created_at<?)
    +(SELECT count(*) FROM runtime_legacy_tasks WHERE owner_id=? AND created_at>=? AND created_at<?)+?)<?
    AND (SELECT count(*) FROM runtime_jobs WHERE owner_id=? AND kind='export' AND state='waiting')<30
   ON CONFLICT DO NOTHING`).bind(id,env.RUNTIME_OWNER_ID,value.request_id,value.profile,value.target,value.version,

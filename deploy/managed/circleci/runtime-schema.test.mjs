@@ -11,7 +11,8 @@ test("the exact live initializer executes as independent SQLite statements and p
  "for sql in statements:db.execute(sql)\n"+
  "assert db.execute(\"SELECT state FROM runtime_jobs WHERE job_id='pilot_unknown'\").fetchone()==('dispatch_unknown',)\n"+
  "assert db.execute(\"SELECT name FROM sqlite_master WHERE name='runtime_canary_windows'\").fetchone()\n"+
- "assert db.execute(\"SELECT name FROM sqlite_master WHERE name='runtime_notifications'\").fetchone()\n";
+ "assert db.execute(\"SELECT name FROM sqlite_master WHERE name='runtime_notifications'\").fetchone()\n"+
+ "assert db.execute(\"SELECT name FROM sqlite_master WHERE name='runtime_catalog_specs'\").fetchone()\n";
  const run=spawnSync("python3",["-c",script],{input:JSON.stringify(schemaStatements()),encoding:"utf8"});
  assert.equal(run.status,0,run.stderr);
 });

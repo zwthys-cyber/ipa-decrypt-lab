@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {webcrypto} from "node:crypto";
 import {Miniflare} from "miniflare";
+import {CATALOG_SCHEMA} from "./runtime-catalog.mjs";
 import {RUNTIME_SCHEMA} from "./runtime-schema.mjs";
 import {TASK_SCHEMA,admitExport} from "./runtime-tasks.mjs";
 import {CANARY_SCHEMA,installCanary,canaryWindow,revokeCanary} from "./runtime-canary.mjs";
@@ -12,7 +13,7 @@ async function setup(){
  const mf=new Miniflare({modules:true,script:"export default {fetch(){return new Response('disabled')}}",
   compatibilityDate:"2026-07-30",cf:false,host:"127.0.0.1",port:0,d1Databases:{DB:"66666666-6666-4666-8666-666666666666"}});
  const DB=await mf.getD1Database("DB");
- for(const sql of (RUNTIME_SCHEMA+TASK_SCHEMA+CANARY_SCHEMA).split(";").map(s=>s.trim()).filter(Boolean))await DB.prepare(sql).run();
+ for(const sql of (RUNTIME_SCHEMA+TASK_SCHEMA+CANARY_SCHEMA+CATALOG_SCHEMA).split(";").map(s=>s.trim()).filter(Boolean))await DB.prepare(sql).run();
  return {env:{DB,RUNTIME_MODE:"staging",RUNTIME_EXPORT_ENABLED:"1",RUNTIME_OWNER_ID:owner,RUNTIME_SOURCE_SHA:source},close:()=>mf.dispose()};
 }
 async function packet(){

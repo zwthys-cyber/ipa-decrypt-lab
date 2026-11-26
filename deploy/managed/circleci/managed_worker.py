@@ -24,7 +24,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 def need(ok,code):
  if not ok:raise ValueError(code)
 def rpc_once(path,value):
- need(path in ("claim","lease-request","lease-read","finish","plaintext-proof","upload-access","upload-journal","upload-register","fixture-cleanup","checkpoint","lease-consumed","export-finish","worker-failed","tf-permit"),"managed_endpoint")
+ need(path in ("claim","lease-request","lease-read","finish","plaintext-proof","upload-access","upload-journal","upload-register","fixture-cleanup","checkpoint","lease-consumed","export-finish","worker-failed","tf-permit","catalog-finish"),"managed_endpoint")
  token=os.environ.get("CIRCLE_OIDC_TOKEN_V3","")
  need(token and len(token)<=16384,"managed_identity")
  request=urllib.request.Request(ORIGIN+"/v2/runtime/"+path,data=json.dumps(dict(value,_source=os.environ["MANAGED_SOURCE"])).encode(),method="POST",
@@ -67,8 +67,9 @@ def main():
  TASK_DEADLINE=task["deadline"]
  watchdog=threading.Timer(max(1,TASK_DEADLINE-time.time()),lambda:os.kill(os.getpid(),signal.SIGTERM))
  watchdog.daemon=True;watchdog.start()
- need(result["task_kind"] in ("fixture","export"),"managed_task_kind")
+ need(result["task_kind"] in ("fixture","export","catalog"),"managed_task_kind")
  fixture_task=result["task_kind"]=="fixture"
+ catalog_task=result["task_kind"]=="catalog"
  with tempfile.TemporaryDirectory(prefix="managed-task-") as directory:
   root=Path(directory);root.chmod(0o700)
   repo=Path(__file__).resolve().parents[3]
@@ -87,7 +88,7 @@ def main():
   subprocess.run(["age-keygen","-o",str(key)],capture_output=True,check=True,timeout=20,env=public_env(env))
   recipient=subprocess.check_output(["age-keygen","-y",str(key)],text=True,timeout=15,env=public_env(env)).strip()
   expected=context(dict(schema="circleci-credential-request-v1",job_id=task["job_id"],run_id=task["run_id"],
-   worker_job_id=task["worker_job_id"],source_sha=task["source_sha"],profile="synthetic" if fixture_task else task["profile"],recipient=recipient,
+   worker_job_id=task["worker_job_id"],source_sha=task["source_sha"],profile="synthetic" if fixture_task else task["profile"]+("_catalog" if catalog_task else ""),recipient=recipient,
    nonce=os.urandom(16).hex(),expires_at=int(time.time())+600))
   consumer(actual_env,expected)
   answer=rpc("lease-request",dict(identity,recipient=recipient,nonce=expected["nonce"],expires_at=expected["expires_at"]))
@@ -110,7 +111,10 @@ def main():
   rpc("lease-consumed",identity)
   uploaded=False;cleaned=False
   real_receipt=None
-  if not fixture_task:
+  if catalog_task:
+   from runtime_execution import execute_catalog
+   catalog_receipt=execute_catalog(task,values,result["catalog_before"],actual_env,rpc,load_runtime)
+  if not fixture_task and not catalog_task:
    from runtime_execution import execute_export
    real_receipt=execute_export(task,values,root,actual_env,rpc,ORIGIN,load_runtime)
    uploaded=True
@@ -137,7 +141,10 @@ def main():
   if fixture_task:rpc("finish",dict(identity,fixture_verified=True))
   proof=dict(schema="circleci-managed-task-proof-v1",job_id=task["job_id"],source_sha=task["source_sha"],
    run_id=task["run_id"],worker_job_id=task["worker_job_id"],fixture_verified=fixture_task,cipher_sha256=digest,
-   production=not fixture_task,apple_operation=not fixture_task,file_upload=uploaded,fixture_cleaned=cleaned,decryption_proven=not fixture_task,telegram_send=False)
+   production=not fixture_task,apple_operation=not fixture_task,file_upload=uploaded,fixture_cleaned=cleaned,decryption_proven=not fixture_task and not catalog_task,telegram_send=False)
+  if catalog_task:
+   proof.update(task_kind="catalog",catalog_rows=len(catalog_receipt["rows"]),
+    telegram_send=catalog_receipt.get("_notification_confirmed") is True)
   if real_receipt is not None:
    proof.update(encrypted_images=real_receipt["encrypted_images"],decrypted_pages=real_receipt["decrypted_pages"],
     plaintext_bytes=real_receipt["plaintext_bytes"],telegram_send=real_receipt.get("_notification_confirmed") is True)

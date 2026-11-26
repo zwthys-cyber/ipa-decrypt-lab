@@ -45,3 +45,15 @@ def execute_export(task,values,root,env,rpc,origin,load_runtime):
  require(receipt.get("private_delivery") and receipt["private_delivery"].get("file_id"),"managed_delivery_unconfirmed")
  finished=rpc("export-finish",dict(identity,receipt=receipt))
  return dict(receipt,_notification_confirmed=finished.get("notification_confirmed") is True)
+
+def execute_catalog(task,values,before,env,rpc,load_runtime):
+ from catalog_worker import query_catalog
+ require(task["profile"] in ("default","cn"),"managed_catalog_profile")
+ values=credentials(task["profile"]+"_catalog",values)
+ identity=dict(job_id=task["job_id"],worker_job_id=task["worker_job_id"])
+ checkpoint=Checkpoint(task,rpc,identity)
+ checkpoint("loading_runtime",force=True)
+ receipt=query_catalog(task,values,before,env,checkpoint,load_runtime=load_runtime)
+ checkpoint("catalog_ready",force=True)
+ finished=rpc("catalog-finish",dict(identity,receipt=receipt))
+ return dict(receipt,_notification_confirmed=finished.get("notification_confirmed") is True)

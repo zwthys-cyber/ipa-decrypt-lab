@@ -6,7 +6,7 @@ export async function requestRuntimeLease(db,task,value,now){
   /^[a-f0-9]{32}$/.test(value.nonce||"")&&Number.isSafeInteger(value.expires_at)&&
   now<value.expires_at&&value.expires_at<=now+600,"runtime_lease_request");
  const context={schema:"circleci-credential-request-v1",job_id:task.job_id,run_id:task.run_id,
-  worker_job_id:task.worker_job_id,source_sha:task.source_sha,profile:task.kind==="fixture"?"synthetic":task.profile,
+  worker_job_id:task.worker_job_id,source_sha:task.source_sha,profile:task.kind==="fixture"?"synthetic":task.profile+(task.kind==="catalog"?"_catalog":""),
   recipient:value.recipient,nonce:value.nonce,expires_at:value.expires_at};
  const encoded=canonical(context);
  const result=await db.prepare(`INSERT INTO runtime_credential_leases(job_id,context_json,expires_at)

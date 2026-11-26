@@ -1,4 +1,5 @@
 // Staged managed-runtime API. Real exports and Telegram admission remain disabled until handoff.
+import {CATALOG_SCHEMA,catalogTask,openCatalog,catalogAction,saveCatalog,completeCatalogNotices} from "./runtime-catalog.mjs";
 import {CANARY_SCHEMA,installCanary,revokeCanary} from "./runtime-canary.mjs";
 import {NOTIFY_SCHEMA,notifyOwner} from "./runtime-notify.mjs";
 import {TASK_SCHEMA,requireEntry,admitExport,saveExportProof,verifyFinishedExport} from "./runtime-tasks.mjs";
@@ -10,7 +11,7 @@ import {DRIVE_FIXTURE,FIXTURE_SCHEMA} from "./runtime-fixture.mjs";
 import {uploadAccess,verifyOwnedUpload,cleanupFixture} from "./runtime-drive.mjs";
 import {need,UUID,publicJSON,circleIdentity,githubIdentity} from "./runtime-auth.mjs";
 import {requestRuntimeLease,pendingRuntimeLease,publishRuntimeLease,readRuntimeLease,closeRuntimeLease} from "./runtime-lease.mjs";
-export const schemaStatements=()=>[RUNTIME_SCHEMA,UPLOAD_SCHEMA,FIXTURE_SCHEMA,TASK_SCHEMA,TF_SCHEMA,NOTIFY_SCHEMA,CANARY_SCHEMA].flatMap(sql=>sql.split(";")).map(sql=>sql.trim()).filter(Boolean);
+export const schemaStatements=()=>[RUNTIME_SCHEMA,UPLOAD_SCHEMA,FIXTURE_SCHEMA,TASK_SCHEMA,TF_SCHEMA,NOTIFY_SCHEMA,CANARY_SCHEMA,CATALOG_SCHEMA].flatMap(sql=>sql.split(";")).map(sql=>sql.trim()).filter(Boolean);
 const PREFIX="/v2/runtime/";
 const JOB=/^pilot_[a-f0-9]{32}$/,SHA=/^[a-f0-9]{40}$/;
 const ORIGIN="https://ipazake-free-control-pilot.hahayesadd.workers.dev";
@@ -41,7 +42,7 @@ async function task(env,id,currentSource=true){
   .bind(id,env.RUNTIME_OWNER_ID).first();
  need(value&&(!currentSource||value.source_sha===env.RUNTIME_SOURCE_SHA),"runtime_job_binding");
  const fixture=await env.DB.prepare("SELECT * FROM runtime_drive_fixtures WHERE job_id=?").bind(id).first();
- return {...value,drive_fixture:fixture?1:0,fixture_authorized:fixture?.authorized||0,cleanup_state:fixture?.cleanup_state||null};
+ return {...await catalogTask(env.DB,value),drive_fixture:fixture?1:0,fixture_authorized:fixture?.authorized||0,cleanup_state:fixture?.cleanup_state||null};
 }
 async function sendAPI(send,url,token,data){
  return send(url,{method:"POST",redirect:"manual",signal:AbortSignal.timeout(15000),
@@ -76,6 +77,8 @@ export async function dispatchNative(env,id,now,send){
 }
 async function promoteNext(env,now,send){
  await requireEntry(env);
+ const finished=await env.DB.prepare("SELECT * FROM runtime_jobs WHERE owner_id=? AND finished_at IS NOT NULL AND state IN ('running','uploading','link_ready')").bind(env.RUNTIME_OWNER_ID).all();
+ for(const row of finished.results||[])await reconcileFixture(env,row,send);
  await env.DB.prepare("UPDATE runtime_jobs SET state='closed' WHERE owner_id=? AND kind='export' AND state='waiting' AND deadline<=?").bind(env.RUNTIME_OWNER_ID,now).run();
  const next=await env.DB.prepare("SELECT job_id FROM runtime_jobs WHERE owner_id=? AND source_sha=? AND kind='export' AND state='waiting' AND deadline>? ORDER BY created_at,job_id LIMIT 1")
   .bind(env.RUNTIME_OWNER_ID,env.RUNTIME_SOURCE_SHA,now).first();
@@ -99,6 +102,7 @@ async function dispatchPublisher(env,row,context,now,send){
 }
 
 async function reconcileFixture(env,row,send){
+ row=await catalogTask(env.DB,row);
  if(!row.run_id||!["submitted","running","uploading","link_ready","cancel_intent","cancel_pending","failed_pending"].includes(row.state))return;
  const run=(await publicJSON(send,"https://circleci.com/api/v3/runs/"+row.run_id)).data;
  const refs=run?.references,vcs=refs?.event?.attributes?.vcs;
@@ -107,7 +111,7 @@ async function reconcileFixture(env,row,send){
   vcs?.target_repository_url==="https://"+TRUST.source&&vcs?.branch===TRUST.ref.slice(11),"runtime_terminal_binding");
  if(run?.attributes?.phase!=="ended")return;
  if(run.attributes.current_outcome==="succeeded"&&row.finished_at!==null&&
-  (row.kind==="fixture"?row.fixture_verified===1:!!row.file_id)){
+  (row.kind==="fixture"?row.fixture_verified===1:row.kind==="catalog"?!!row.catalog.result_json:!!row.file_id)){
   await env.DB.prepare("UPDATE runtime_jobs SET state='completed' WHERE job_id=? AND state IN ('running','uploading','link_ready')").bind(row.job_id).run();
  }else if(["failed","canceled","cancelled","error"].includes(run.attributes.current_outcome)||row.state==="failed_pending"||["cancel_intent","cancel_pending"].includes(row.state)){
   // Only a known, ended, credential-free validation. Original ID, nonce and history are retained.
@@ -134,7 +138,7 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
    const count=exists?await env.DB.prepare("SELECT count(*) n FROM runtime_jobs WHERE state NOT IN ('completed','cancelled','closed')").first():{n:0};
    return reply(200,{ok:true,source_sha:env.RUNTIME_SOURCE_SHA,active:count.n>0});
   }
-  if(["init","admit-fixture","admit-drive-fixture","admit-export","status","owner-cancel","owner-get","canary/install","canary/revoke"].includes(path)){
+  if(["init","admit-fixture","admit-drive-fixture","admit-export","catalog-open","catalog-action","status","owner-cancel","owner-get","canary/install","canary/revoke"].includes(path)){
    await admin(request,env);
    if(path==="init"){
     await body(request,[]);
@@ -162,6 +166,12 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
     await dispatchNative(env,id,now,send);
     const row=await task(env,id);return reply(200,{ok:true,job_id:id,state:row.state,run_id:row.run_id});
    }
+   if(path==="catalog-open"||path==="catalog-action"){
+    const value=await body(request,path==="catalog-open"?["request_id","profile","target"]:["request_id","view_id","message_id","action","version_id"]);
+    delete value._source;
+    const result=path==="catalog-open"?await openCatalog(env,value,now,send):await catalogAction(env,value,now,send);
+    await promoteNext(env,now,send);return reply(200,result);
+   }
    if(path==="admit-export"){
     const value=await body(request,["request_id","profile","target","version"]);delete value._source;
     const row=await admitExport(env,value,now);
@@ -171,11 +181,11 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
    }
    const value=await body(request,["job_id"]);let row=await task(env,value.job_id,false);
    await reconcileFixture(env,row,send);row=await task(env,row.job_id,false);
-   if(path==="status"&&row.kind==="export")await promoteNext(env,now,send);
+   if(path==="status"&&["export","catalog"].includes(row.kind))await promoteNext(env,now,send);
    if(path==="owner-cancel"){
-    need(row.kind==="export","runtime_cancel_export_only");
+    need(["export","catalog"].includes(row.kind),"runtime_cancel_export_only");
     if(["completed","closed","cancelled"].includes(row.state))return reply(200,{ok:true,state:row.state});
-    if(row.finished_at!==null&&row.file_id)return reply(200,{ok:true,state:"completed"});
+    if(row.finished_at!==null&&(row.file_id||row.catalog?.result_json))return reply(200,{ok:true,state:"completed"});
     if(row.state==="waiting"){
      const stopped=await env.DB.prepare("UPDATE runtime_jobs SET state='cancelled' WHERE job_id=? AND state='waiting'").bind(row.job_id).run();
      need(stopped.success===true,"runtime_cancel_storage");
@@ -213,7 +223,7 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
    const lease=await env.DB.prepare("SELECT cipher_sha256,consumed_at,ciphertext,publisher_run_id FROM runtime_credential_leases WHERE job_id=?").bind(row.job_id).first();
    return reply(200,{ok:true,job_id:row.job_id,state:row.state,run_id:row.run_id,claimed:!!row.worker_job_id,
     drive_fixture:row.drive_fixture===1,drive_uploaded:!!row.file_id,fixture_cleaned:row.cleanup_state==="confirmed",
-    link_expires:row.link_expires,profile:row.profile,export_verified:exportProof?.plaintext_verified===true,
+    link_expires:row.link_expires,profile:row.profile,task_kind:row.kind,catalog_ready:!!row.catalog?.result_json,export_verified:exportProof?.plaintext_verified===true,
     encrypted_images:exportProof?.encrypted_images||0,decrypted_pages:exportProof?.decrypted_pages||0,plaintext_bytes:row.plaintext_bytes,
     notification_confirmed:notice?.state==="sent",
     finished:row.finished_at!==null,fixture_verified:row.fixture_verified===1,
@@ -228,19 +238,19 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
    if(publish)return reply(200,{ok:true,cipher_sha256:await publishRuntimeLease(env.DB,row,value.publisher_run_id,value,now)});
    return reply(200,{ok:true,...await pendingRuntimeLease(env.DB,row,value.publisher_run_id,now)});
   }
-  if(!["claim","lease-request","lease-read","finish","plaintext-proof","upload-access","upload-journal","upload-register","fixture-cleanup","checkpoint","lease-consumed","export-finish","worker-failed","tf-permit"].includes(path))return reply(404);
+  if(!["claim","lease-request","lease-read","finish","plaintext-proof","upload-access","upload-journal","upload-register","fixture-cleanup","checkpoint","lease-consumed","export-finish","worker-failed","tf-permit","catalog-finish"].includes(path))return reply(404);
   const fields=path==="lease-request"?["job_id","worker_job_id","recipient","nonce","expires_at"]:
    path==="plaintext-proof"?["job_id","worker_job_id","receipt"]:
    path==="upload-journal"?["job_id","worker_job_id","action","state"]:
    path==="upload-register"?["job_id","worker_job_id","record"]:
    path==="checkpoint"?["job_id","worker_job_id","stage"]:
-   path==="export-finish"?["job_id","worker_job_id","receipt"]:
+   ["export-finish","catalog-finish"].includes(path)?["job_id","worker_job_id","receipt"]:
    path==="tf-permit"?["job_id","worker_job_id","action","args"]:
    path==="finish"?["job_id","worker_job_id","fixture_verified"]:["job_id","worker_job_id"];
   const value=await body(request,fields,path==="upload-journal"?8192:4096),row=await task(env,value.job_id);
   const identity=await circleIdentity(request,env,row,value.worker_job_id,now,send);
   if(path==="claim"){
-   if(row.kind==="export")await requireEntry(env);else need(env.RUNTIME_MODE==="staging","runtime_fixture_only");
+   if(["export","catalog"].includes(row.kind))await requireEntry(env);else need(env.RUNTIME_MODE==="staging","runtime_fixture_only");
    const result=await env.DB.prepare(`UPDATE runtime_jobs SET state='running',worker_job_id=?,workflow_id=?
     WHERE job_id=? AND state IN ('submitted','running') AND (worker_job_id IS NULL OR worker_job_id=?)`)
     .bind(identity.job_id,identity.workflow_id,row.job_id,identity.job_id).run();
@@ -248,14 +258,14 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
    return reply(200,{ok:true,task:{schema:"circleci-export-request-v1",job_id:row.job_id,request_id:row.request_id,
     run_id:row.run_id,worker_job_id:identity.job_id,source_sha:row.source_sha,profile:row.profile,target:row.target,
     version:row.version,recipient:"age1cp0tv9wcxjqpvcmwt6eh6yqxqg25a2msnelc3mxlj9xqcu6fz4cqekfq5d",
-    deadline:row.deadline},task_kind:row.kind,drive_fixture:row.drive_fixture===1,fixture_binding:row.drive_fixture===1?DRIVE_FIXTURE:null});
+    deadline:row.deadline},task_kind:row.kind,catalog_before:row.catalog?.before_id||"",drive_fixture:row.drive_fixture===1,fixture_binding:row.drive_fixture===1?DRIVE_FIXTURE:null});
   }
   need(row.worker_job_id===identity.job_id,"runtime_claim_required");
   if(path==="checkpoint"){
    need(typeof value.stage==="string"&&/^[a-z_]{1,40}$/.test(value.stage),"runtime_stage");
    const stages=["metadata","loading_runtime","preparing_public_resources","authenticating","auth_retry","resolving_version",
     "downloading","auditing","decrypting","verifying","encrypting","uploading_private","publishing_ciphertext","ciphertext_verified",
-    "finalizing_ciphertext","artifact_ready","restoring_saved_session","checking_acceptance_permit","working"];
+    "finalizing_ciphertext","artifact_ready","restoring_saved_session","checking_acceptance_permit","catalog_query","catalog_ready","working"];
    need(stages.includes(value.stage),"runtime_stage");
    const proceed=["running","uploading","link_ready"].includes(row.state)&&row.deadline>now;
    if(proceed&&value.stage!=="working")await env.DB.prepare("INSERT INTO runtime_task_progress(job_id,stage,updated_at) VALUES(?,?,?) ON CONFLICT(job_id) DO UPDATE SET stage=excluded.stage,updated_at=excluded.updated_at").bind(row.job_id,value.stage,now).run();
@@ -268,6 +278,13 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
   }
   need(["running","uploading","link_ready"].includes(row.state)&&row.deadline>now,"runtime_claim_required");
   if(path==="lease-consumed"){await closeRuntimeLease(env.DB,row,now);return reply(200,{ok:true});}
+  if(path==="catalog-finish"){
+   need(row.kind==="catalog","runtime_catalog_only");
+   await saveCatalog(env,row,value.receipt,now);await closeRuntimeLease(env.DB,row,now);
+   const confirmed=await completeCatalogNotices(env,row,now,send);
+   return reply(200,{ok:true,notification_confirmed:confirmed});
+  }
+  if(row.kind==="catalog")need(["lease-request","lease-read"].includes(path),"runtime_catalog_metadata_only");
   if(path==="tf-permit"){
    await requireEntry(env);need(row.kind==="export"&&row.profile==="tf","runtime_tf_task");
    const args=value.args,request={invite:row.target,request_id:row.request_id,run_id:row.run_id,source_commit:row.source_sha};
@@ -346,4 +363,11 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
   const code=/^[a-z_]{1,60}$/.test(error?.message||"")?error.message:"runtime_unavailable";
   return reply(409,{ok:false,code});
  }
+}
+
+export async function runtimeTick(env,now=Math.floor(Date.now()/1000),send=(url,init)=>globalThis.fetch(url,init)){
+ await requireEntry(env);
+ const rows=await env.DB.prepare("SELECT * FROM runtime_jobs WHERE owner_id=? AND state IN ('submitted','running','uploading','link_ready','cancel_intent','cancel_pending','failed_pending')").bind(env.RUNTIME_OWNER_ID).all();
+ for(const row of rows.results||[])await reconcileFixture(env,row,send);
+ await promoteNext(env,now,send);
 }
