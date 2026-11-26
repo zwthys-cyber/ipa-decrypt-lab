@@ -1,5 +1,16 @@
 # CircleCI on-demand migration candidate
 
+## 三包构建与独立加载已验证（2026-11-26，最新）
+
+同源码公共构建 [CircleCI job 40](https://app.circleci.com/workflow/ca2fe102-a78d-4284-a20f-321d5ccdfa1e/job/1e3c2e16-037e-47cd-8166-3096fc4cb817) 已成功，源码 `fa258c072f246011079affe7cecd369422ecef0d`，macOS 26.3.1 / ARM64 / Xcode 26.5。base 21 项 Swift、CN 29 项 Swift、TF 24 项 CTest，以及 Go/Python/Node 检查、三包库存/摘要与迁移后运行验证通过。base/CN 各 82 个文件，TF 12 个文件；版本与归档摘要已固定在 `deploy/managed/circleci/runtime-pins.json`。此前失败的部分产物不是这些已固定的成功包。
+
+独立全新 CircleCI 机器上的 [job 42](https://app.circleci.com/workflow/e7d74048-1f20-4aa3-92c8-8ee2bad6bfb2/job/acbd80db-9744-4fde-b097-f103bc4a0309) 也成功，验证源码 `00ede25676b1e98aae9cc99b5660eb170295c55e`。未编译本项目，实际下载三包，核对成功 job/workflow/run、项目与源码、原生输入 Git 对象、固定 SHA-256、包内逐文件摘要及当前主机 ABI，再运行默认/CN CLI 与 TF 自检；三份 consumer JSON 已从 CircleCI 公开产物回读核对。
+
+加载器拒绝失败/未结束/来源不符的 producer、原生输入变更、错误包类型、非许可下载地址、摘要不符或依赖版本变化。文档及独立消费者修改不强制重新编译；原生输入变化必须更新经过验证的 producer/pins。加载器对公开 CircleCI 仅作无令牌读取，运行前保留 CircleCI/ARM 主机门禁，不伪装 GitHub 环境。[GitHub run 45825545108](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45825545108) 通过 13 项包测试、8 项加载器测试和所有相关 shell 语法检查。
+
+CircleCI API/真实 OIDC 身份及 D1 8 项恢复验证见下方历史检查点。这些底座已验证，**生产迁移尚未完成**：任务入口、凭据/加密会话与 TF 历史账本交接、取消和未知结果闭环、真实私有 Drive 上传与端到端交付、费用门禁及单一机器人入口切换仍需完成。没有切换线上机器人、操作新的 Apple 邀请或重复历史文件发送。当前服务器没有执行本项目编译或测试。
+
+
 The owner uses this project personally and does not require a 24-hour worker. Production remains on the VPS until a verified single-controller handover. See [current status](../../../docs/PROJECT-STATUS.md) for completed and pending evidence.
 
 ## Public native producers
@@ -13,7 +24,13 @@ The macOS 26 / Xcode 26.5 / M4 Pro Medium producer builds pinned public sources 
 
 Artifacts use `public-arm64-native-runtime/<variant>/native-runtime.tar.gz` and `build-receipt.json`. Schema v2 requires the exact variant, source fingerprint, successful CircleCI source/workflow/job, ARM64 platform, toolchain and TF dependency versions. It rejects unexpected members, escaping paths, links, duplicate entries and digest changes. Every variant must pass relocation with its original build directory hidden. Failed jobs' partial artifacts are ineligible for production.
 
-A future consumer must authenticate the successful job through CircleCI and compare the expected source contract and current runner ABI before executing any binary. The manifest cannot authenticate itself. Production fetching is not implemented yet. Existing GitHub Intel runtime schemas and guards are preserved; never spoof `GITHUB_ACTIONS=true` on CircleCI.
+A future consumer must authenticate the successful job through CircleCI and compare the expected source contract and current runner ABI before executing any binary. The manifest cannot authenticate itself. Source-pinned CLI fetching and fresh-runner validation are implemented; production task entry points remain unconnected. Existing GitHub Intel runtime schemas and guards are preserved; never spoof `GITHUB_ACTIONS=true` on CircleCI.
+
+## Runtime consumption
+
+The reviewed `runtime-pins.json` selects the successful producer and exact archives. A consumer commit marker `[circleci-runtime-consumer]` selects `verify-runtime-consumer.sh`; no project compilation occurs in this mode. Public Homebrew dependencies are installed and must match the pinned ABI before binaries are executed. A runtime that expires or no longer matches must be renewed explicitly; ordinary tasks do not silently compile or substitute another package.
+
+`fetch_runtime.py` compares native input Git objects with the pinned producer, authenticates successful source/project/run/workflow/job through public CircleCI metadata, checks the fixed archive digest and safely extracts through the variant-specific verifier. Redirects stay on approved HTTPS artifact hosts; no API/account credential is sent to download hosts. The current native input contract intentionally excludes documentation and standalone consumer code.
 
 ## API and job identity
 
@@ -31,7 +48,7 @@ The D1 intent precedes the sole external POST. Owner/job/source/request binding,
 
 ## Remaining production work
 
-Finish TF ARM validation, authenticated runtime consumption, production entry points and state/credential handover, durable TF acceptance/cancellation/unknown-result records, private Drive upload receipts and limits, account credit bounds and single-poller/webhook cutover. Preserve App Store default/CN, available historical versions and owner-only TF. No new enrollment/security upgrade, historical invitation replay or old file resend is part of public builds.
+Complete production entry points and state/credential handover, durable TF acceptance/cancellation/unknown-result records, private Drive upload receipts and limits, account credit bounds and single-poller/webhook cutover. Preserve App Store default/CN, available historical versions and owner-only TF. No new enrollment/security upgrade, historical invitation replay or old file resend is part of public builds.
 
 References: [CircleCI API](https://circleci.com/docs/api/v3), [OIDC](https://circleci.com/docs/guides/permissions-authentication/openid-connect-tokens/).
 
