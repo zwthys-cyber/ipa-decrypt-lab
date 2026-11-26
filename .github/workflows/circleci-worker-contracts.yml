@@ -1,0 +1,40 @@
+name: CircleCI actual worker adapter contracts
+on:
+  push:
+    branches: [upgrade/managed-runtime-v0.2]
+    paths:
+      - 'deploy/managed/circleci/appstore_worker.py'
+      - 'deploy/managed/circleci/verified_export.py'
+      - 'deploy/managed/circleci/task_context.py'
+      - 'deploy/managed/circleci/private_process.py'
+      - 'deploy/managed/circleci/cn_profile.py'
+      - 'deploy/managed/circleci/test_appstore_worker.py'
+      - 'deploy/managed/circleci/credential_envelope.py'
+      - '.github/workflows/circleci-worker-contracts.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: circleci-worker-contracts
+  cancel-in-progress: false
+jobs:
+  synthetic-worker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install standard age transport without account credentials
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends age
+      - name: Verify CircleCI identities, saved CN session, cancellation, ZIP proofs and real encryption
+        working-directory: deploy/managed/circleci
+        run: |
+          python3 test_appstore_worker.py -v
+          python3 test_credential_envelope.py -v
+      - name: Preserve existing full plaintext and archive validators
+        run: |
+          python3 -m unittest discover -s tests -p test_private_export.py -v
+          python3 -m unittest discover -s tests -p test_ipa_audit.py -v
