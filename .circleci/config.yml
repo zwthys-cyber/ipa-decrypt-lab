@@ -89,13 +89,18 @@ jobs:
           command: |
             set -euo pipefail
             if [ "<< pipeline.parameters.build_native_runtime >>" != true ] &&
-               ! git log -1 --format=%B | grep -Fq '[circleci-runtime-build]'; then
+               ! git log -1 --format=%B | grep -Eq '\[circleci-(tf-)?runtime-build\]'; then
               circleci-agent step halt
             fi
       - run:
           name: Build and relocate the credential-free ARM64 runtime
           no_output_timeout: 20m
-          command: bash deploy/managed/circleci/build-public-runtime.sh
+          command: |
+            if git log -1 --format=%B | grep -Fq '[circleci-tf-runtime-build]'; then
+              bash deploy/managed/circleci/build-public-tf-runtime.sh
+            else
+              bash deploy/managed/circleci/build-public-runtime.sh
+            fi
       - store_artifacts:
           path: circle-runtime-dist
           destination: public-arm64-native-runtime
