@@ -1,6 +1,7 @@
 """Read-only source inventory for TF migration; no Apple, Telegram or helper execution."""
 from contextlib import closing
 import json
+import hashlib
 import os
 from pathlib import Path
 import sqlite3
@@ -11,6 +12,7 @@ import time
 MAX_DB_BYTES=128*1024*1024
 MAX_SCAN_ENTRIES=4096
 KNOWN_INVITE="yoNuHexZ"
+PROMOTED_CIPHER_SHA256="8349899c8806e2481edfc6f8f532d6aaa855f32c241b86951a03ea62df799765"
 
 def need(value):
     if not value:
@@ -65,12 +67,21 @@ def inspect(root,now=None,report=None):
     private(root,True)
     report["stage"]="health"
     health_path=root/"health.json"
-    need(private(health_path).st_size<=16384)
-    health=json.loads(health_path.read_bytes())
+    health_info=health_path.lstat()
+    need(stat.S_ISREG(health_info.st_mode) and health_info.st_size<=16384)
+    fd=os.open(health_path,os.O_RDONLY|os.O_NOFOLLOW)
+    with os.fdopen(fd,"rb") as stream:
+        raw=stream.read(16385)
+    need(len(raw)<=16384)
+    health=json.loads(raw)
     now=int(time.time() if now is None else now)
-    need(health.get("state")=="ready" and health.get("task_active") is False)
-    need(type(health.get("at")) is int and 0<=now-health["at"]<120)
-    report["service_idle_observed"]=True
+    need(type(health) is dict and type(health.get("at")) is int
+         and type(health.get("task_active")) is bool)
+    report["health_recent"]=0<=now-health["at"]<120
+    report["service_idle_observed"]=(health.get("state")=="ready"
+        and health["task_active"] is False and report["health_recent"])
+    # Inventory is observational, using independent read-only SQLite transactions.
+    # A stale/busy heartbeat cannot authorize reconstruction or a cutover.
     report["stage"]="controller"
     with closing(database(root/"state.sqlite3")) as db:
         states=db.execute("""SELECT state,count(*) FROM tasks
@@ -86,8 +97,11 @@ def inspect(root,now=None,report=None):
     cipher=state/"session.age"
     info=private(cipher)
     need(22<info.st_size<=256*1024)
-    with cipher.open("rb") as stream:
-        need(stream.read(22)==b"age-encryption.org/v1\n")
+    fd=os.open(cipher,os.O_RDONLY|os.O_NOFOLLOW)
+    with os.fdopen(fd,"rb") as stream:
+        ciphertext=stream.read(256*1024+1)
+    need(22<len(ciphertext)<=256*1024 and ciphertext.startswith(b"age-encryption.org/v1\n"))
+    report["session_matches_promoted_ciphertext"]=hashlib.sha256(ciphertext).hexdigest()==PROMOTED_CIPHER_SHA256
     report["session_ciphertext_present"]=True
     report["stage"]="acceptance"
     acceptance=state/"acceptance.sqlite"

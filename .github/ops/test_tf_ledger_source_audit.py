@@ -52,6 +52,7 @@ class SourceAuditTests(unittest.TestCase):
         self.assertFalse(result["acceptance_ledger_present"])
         self.assertEqual(result["acceptance_candidates"],0)
         self.assertEqual(result["tf_tasks_total"],1)
+        self.assertFalse(result["session_matches_promoted_ciphertext"])
         self.assertEqual(before,{p.relative_to(self.root):p.read_bytes() for p in self.root.rglob("*") if p.is_file()})
         public=json.dumps(result)
         for private in (str(self.root),"tf_private_request","private-return","synthetic-private-payload"):
@@ -102,16 +103,18 @@ class SourceAuditTests(unittest.TestCase):
             self.assertEqual(result["tf_tasks_total"],2)
             self.assertEqual(result["tf_tasks_unfinished"],1)
 
-    def test_busy_stale_or_malformed_health_is_rejected(self):
+    def test_busy_or_stale_health_is_observed_without_claiming_idle(self):
         path=self.root/"health.json"
         for data in ({"state":"ready","task_active":True,"at":100},
                      {"state":"ready","task_active":False,"at":-21},
-                     {"state":"failed","task_active":False,"at":100},
-                     {"state":"ready","task_active":False,"at":True}):
+                     {"state":"failed","task_active":False,"at":100}):
             with self.subTest(data=data):
                 path.write_text(json.dumps(data))
-                with self.assertRaises(ValueError):
-                    self.read()
+                path.chmod(0o644)
+                self.assertFalse(self.read()["service_idle_observed"])
+        path.write_text(json.dumps({"state":"ready","task_active":False,"at":True}))
+        with self.assertRaises(ValueError):
+            self.read()
 
     def test_links_permissions_and_malformed_ledger_rejected(self):
         path=self.root/"testflight/acceptance.sqlite"

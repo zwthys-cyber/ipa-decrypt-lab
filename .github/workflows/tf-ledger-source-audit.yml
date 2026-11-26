@@ -83,8 +83,8 @@ jobs:
           fi
           AUDIT_RESULT="$inspection_dir/result" python3 - <<'PY'
           import json,os,pathlib
-          keys={"schema","status","stage","service_idle_observed","tf_tasks_total","tf_tasks_unfinished",
-                "session_ciphertext_present","acceptance_ledger_present","acceptance_ledger_valid",
+          keys={"schema","status","stage","health_recent","service_idle_observed","tf_tasks_total","tf_tasks_unfinished",
+                "session_ciphertext_present","session_matches_promoted_ciphertext","acceptance_ledger_present","acceptance_ledger_valid",
                 "known_acceptance_confirmed","acceptance_rows","unresolved_acceptance_rows",
                 "acceptance_candidates","private_return_rows","private_return_unknown"}
           try:
