@@ -66,8 +66,8 @@ cp tests/delivery_crypto_test.go native-source/age/cmd/lab-delivery-crypt/main_t
 python3 deploy/managed/circleci/runtime.py pack-and-verify
 mv native-source/ApplePackage/.build native-source/ApplePackage/.build-hidden
 relocated-circle-base-runtime/ApplePackageTool --help
-relocated-circle-runtime/offline-engine --help
-otool -L relocated-circle-runtime/ApplePackageTool
+relocated-circle-base-runtime/offline-engine --help
+otool -L relocated-circle-base-runtime/ApplePackageTool
 # Runtime archives are public and contain no credentials, models or third-party IPAs.
 
 # Reuse only the just-tested public Swift build, before any credentials exist.

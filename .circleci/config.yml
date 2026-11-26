@@ -53,6 +53,7 @@ jobs:
       - run:
           name: Run the archive verifier tests
           command: |
+            set -euo pipefail
             python3 deploy/managed/free-pilot/test_archive_verify.py -v
             python3 deploy/managed/circleci/test_runtime.py -v
       - run:
