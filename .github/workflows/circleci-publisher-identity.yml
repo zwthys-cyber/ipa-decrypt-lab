@@ -1,0 +1,40 @@
+name: Verify GitHub publisher identity
+on:
+  push:
+    branches: [upgrade/managed-runtime-v0.2]
+    paths:
+      - 'deploy/managed/circleci/github-oidc*'
+      - 'deploy/managed/circleci/publisher-identity-probe.mjs'
+      - '.github/workflows/circleci-publisher-identity.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - run: node --test deploy/managed/circleci/github-oidc.test.mjs
+  real-identity:
+    needs: contracts
+    if: github.ref == 'refs/heads/upgrade/managed-runtime-v0.2'
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify the real signed identity without account credentials
+        run: node deploy/managed/circleci/publisher-identity-probe.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: github-publisher-identity-${{ github.run_id }}
+          path: publisher-identity-proof.json
+          retention-days: 1
+          if-no-files-found: error
