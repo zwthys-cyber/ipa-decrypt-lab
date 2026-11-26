@@ -116,3 +116,39 @@ export async function finishPermit(db,ownerId,hash,request,nonce,outcome,now){
     current.source_sha===request.source_commit&&current.nonce===nonce&&current.state===state,"tf_outcome_immutable");
   return {ok:true,outcome};
 }
+
+export async function normalizeSource(rows,ownerId,pepper,observedAt){
+  owner(ownerId);
+  require(Array.isArray(rows)&&rows.length<=20&&Number.isSafeInteger(observedAt)&&observedAt>0,"tf_source_snapshot");
+  const ordered=[],normalized=[],seen=new Set();
+  for(const r of rows){
+    require(r&&Object.keys(r).sort().join(",")==="created,invite,nonce,request_id,run_id,source_commit,state"&&
+      /^[A-Za-z0-9_-]{6,80}$/.test(r.invite||"")&&!seen.has(r.invite)&&
+      /^[1-9][0-9]{0,19}$/.test(r.run_id||"")&&SHA.test(r.source_commit||"")&&
+      Number.isSafeInteger(r.created)&&r.created>=0&&r.created<=observedAt&&
+      ["membership_verified","intent","outcome_unknown"].includes(r.state),"tf_source_row");
+    seen.add(r.invite);
+    const canonical={invite:r.invite,request_id:r.request_id,run_id:r.run_id,source_commit:r.source_commit,
+      nonce:r.nonce,created:r.created,state:r.state};
+    const historical=r.request_id==="historical";
+    if(historical)require(r.invite==="yoNuHexZ"&&r.run_id==="42692803345"&&
+      r.source_commit==="688b5356aa33a9653517f62445856a08c72819c4"&&r.nonce===""&&
+      r.created===0&&r.state==="membership_verified","tf_historical_provenance");
+    else require(/^tf_[a-f0-9]{32}$/.test(r.request_id||"")&&HEX.test(r.nonce||""),"tf_source_request");
+    const hashed=await inviteHash(r.invite,ownerId,pepper);
+    const tag=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",
+      new TextEncoder().encode("historical-import\0"+ownerId+"\0"+JSON.stringify(canonical)))),
+      v=>v.toString(16).padStart(2,"0")).join("");
+    normalized.push({invite_hash:hashed,state:{"membership_verified":"confirmed",intent:"intent",outcome_unknown:"unknown"}[r.state],
+      request_id:historical?"tf_"+tag.slice(0,32):r.request_id,run_id:r.run_id,source_sha:r.source_commit,
+      nonce:historical?tag.slice(32):r.nonce,created_at:r.created,updated_at:observedAt});
+    ordered.push(canonical);
+  }
+  require(ordered.some(r=>r.invite==="yoNuHexZ"&&r.request_id==="historical"&&r.state==="membership_verified"),
+    "tf_known_history_missing");
+  ordered.sort((a,b)=>a.invite<b.invite?-1:a.invite>b.invite?1:0);
+  const sourceDigest=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",
+    new TextEncoder().encode(JSON.stringify(ordered)))),v=>v.toString(16).padStart(2,"0")).join("");
+  // Historical synthetic IDs are migration identifiers only, never authorization permits.
+  return {rows:normalized,source_sha256:sourceDigest};
+}
