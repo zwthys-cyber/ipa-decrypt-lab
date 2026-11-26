@@ -5,6 +5,10 @@ parameters:
     type: boolean
     default: false
 
+  validate_arm64_archive:
+    type: boolean
+    default: false
+
   dispatch_probe:
     type: boolean
     default: false
@@ -128,6 +132,10 @@ workflows:
       - dispatch-contract-probe
   arm64-archive-validation:
     when:
-      not: << pipeline.parameters.dispatch_probe >>
+      and:
+        - not: << pipeline.parameters.dispatch_probe >>
+        - or:
+            - << pipeline.parameters.build_native_runtime >>
+            - << pipeline.parameters.validate_arm64_archive >>
     jobs:
       - arm64-ios-archive

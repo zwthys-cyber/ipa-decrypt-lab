@@ -10,6 +10,7 @@ on:
       - 'deploy/managed/free-pilot/worker.mjs'
       - 'deploy/managed/circleci/cloud_inventory.py'
       - '.github/workflows/circleci-control-contracts.yml'
+      - '.circleci/config.yml'
   workflow_dispatch:
 permissions:
   contents: read

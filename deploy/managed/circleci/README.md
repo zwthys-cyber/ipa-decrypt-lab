@@ -1,5 +1,16 @@
 # CircleCI on-demand migration candidate
 
+## 真实临时加密交接已验证（2026-11-26，最新）
+
+[GitHub 45834580675](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45834580675) 与 [CircleCI job 59](https://app.circleci.com/workflow/d6244a39-80f3-4f7c-a860-6613f9e3a520/job/a1f2c487-96b5-4ae2-8da7-6b9890f8584b) 均成功，源码 `021d212332810cae3962298ac18a43f208951388`。逻辑任务 `pilot_d32d8ee76ec8e4f32ced07ac249aaf39`，run `d6a6a2d1-91a6-48d4-ac6f-9cb749eb9013`。CircleCI 真实 OIDC 领取任务后生成临时 age 密钥，GitHub 将虚构凭据加密给该任务；控制端只存放密文，绑定 job/run/worker/source/recipient/nonce/期限，拒绝替换请求或密文。CircleCI 解密并检查完整上下文后回报完成。两端独立回读密文 SHA-256 均为 `94b94afd17fc80fc04cce453bcf92026263a77021422449d4be806b8594ddcbd`，D1 完成记录与密文清除标记均确认。bundle SHA-256 为 `47200f063a246ef10841808c41a1243612df9682ac5fe3aacbc22baa35ea6c56`。
+
+CI 通过 6 项真实 workerd 路由/D1/OIDC 集成、6 项不透明密文状态测试、8 项调度恢复、8 项 OIDC 和 6 项部署检查，保留旧入口回归；独立 [age 契约 45834580742](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45834580742) 再次通过 10 项实际加密测试。公有产物和日志仅含脱敏证明，不保留临时私钥、明文或密文凭据包。完成时清除 D1 密文；过期读取会拒绝并清除密文，不能将其描述为无人访问时也会准时执行的定时清理。
+
+此入口严格限定 `synthetic`，尚未启用真实 Apple 凭据交接或三类实际导出任务，生产切换仍未完成。下一步需要 CircleCI 原生适配现有 GitHub 专用导出/TF 会话与加密门禁，保持完整明文证明，不能通过伪装 `GITHUB_ACTIONS` 绕过。随后还需历史账本/会话交接、持久上传与取消/未知结果闭环、真实私有交付和单一机器人入口切换。VPS 仍是唯一线上机器人；没有 Apple 操作、重新接受历史邀请或重复发送历史文件。
+
+后续普通推送默认不启动 macOS 样例；仅显式设置 `validate_arm64_archive: true` 或 `build_native_runtime: true` 才选择 ARM 工作流。已有运行期构建/消费者 marker 仅在显式选择 ARM 后生效。Linux 签名探针仍独立选择，不能启动 macOS。此门禁减少无关构建消耗，不证明账户当前配额、账单或自动充值设置已核实。
+
+
 ## 真实云端签名调度闭环已验证（2026-11-26）
 
 [GitHub 45833846829](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45833846829) 在源码 `61e9bfa2ffd63814799b00943c537e369c4d9bf4` 通过 workerd/D1、OIDC 与旧入口回归，并部署独立控制探针。Cloudflare Worker 使用私有 CircleCI 调度令牌提交一次任务，CircleCI [job 57](https://app.circleci.com/workflow/864a2051-adc9-4a64-be61-5b4bb82593e7/job/417fd373-ae51-41ba-a781-75cbed05dcf2) 用真实 V3 OIDC 身份领取并完成回调；控制端从 CircleCI API 确认同源码 run `0e8fa45d-81b7-4ac2-b44e-3ad74a25def9` 成功结束，D1 持久完成记录已回读。逻辑任务 `pilot_5b2dfa4b32bc4414f788e6558eb69c55`，公共 bundle SHA-256 `fc2375da1dc6b586b74dc6a5fc06dbebadce93f22bc1a235bded367b48da1581`。
