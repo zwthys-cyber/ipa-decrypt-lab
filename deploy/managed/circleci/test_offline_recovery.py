@@ -120,4 +120,23 @@ class RecoveryTests(unittest.TestCase):
             with self.assertRaises(ValueError):recovery.verify_replacement(old,new,transport)
         with self.assertRaises(ValueError):recovery.verify_replacement(self.old,"987654321:"+"C"*36,self.transport())
 
+    def test_legacy_fence_requires_disabled_workflows_and_complete_terminal_inventory(self):
+        class Reply(io.BytesIO):
+            status=200
+        def transport(active=False,unfinished=False,incomplete=False):
+            def execute(request,timeout):
+                name=request.full_url
+                if name.endswith("/runs?per_page=100"):
+                    value=dict(total_count=2 if incomplete else 1,workflow_runs=[dict(status="in_progress" if unfinished else "completed")])
+                else:
+                    identifier=int(name.rsplit("/",1)[1])
+                    filename=dict(recovery.LEGACY_WORKFLOWS)[identifier]
+                    value=dict(id=identifier,path=".github/workflows/"+filename,state="active" if active else "disabled_manually")
+                return Reply(json.dumps(value).encode())
+            return execute
+        receipt=recovery.legacy_fence("synthetic-token-only",transport())
+        self.assertEqual(len(receipt["workflows"]),5)
+        for args in (dict(active=True),dict(unfinished=True),dict(incomplete=True)):
+            with self.assertRaises(ValueError):recovery.legacy_fence("synthetic-token-only",transport(**args))
+
 if __name__=="__main__":unittest.main()

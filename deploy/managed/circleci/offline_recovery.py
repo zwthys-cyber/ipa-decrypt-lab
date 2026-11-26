@@ -176,6 +176,31 @@ def verify_replacement(old,new,execute=None):
     return dict(old_token_rejected=True,replacement_same_bot_verified=True,
         replacement_token_sha256=hashlib.sha256(new.encode()).hexdigest())
 
+LEGACY_WORKFLOWS=(
+    (407064604,"private-delivery.yml"),(411713917,"china-private-delivery.yml"),
+    (412609354,"testflight-private-delivery.yml"),(407542960,"version-catalog.yml"),
+    (412705779,"china-version-catalog.yml"),
+)
+def legacy_fence(token,execute=None):
+    need(type(token) is str and len(token)>=16)
+    client=execute or urllib.request.build_opener(NoRedirect()).open
+    def get(path):
+        request=urllib.request.Request("https://api.github.com/repos/"+REPO+path,
+            headers={"Authorization":"Bearer "+token,"User-Agent":"ipa-offline-recovery/0.2","Accept":"application/vnd.github+json"})
+        with client(request,timeout=15) as response:
+            need(response.status==200);raw=response.read(2*1024*1024+1);need(len(raw)<=2*1024*1024)
+        return json.loads(raw)
+    rows=[]
+    for identifier,name in LEGACY_WORKFLOWS:
+        value=get("/actions/workflows/"+str(identifier))
+        need(value.get("id")==identifier and value.get("path")==".github/workflows/"+name and value.get("state")=="disabled_manually")
+        runs=get("/actions/workflows/"+str(identifier)+"/runs?per_page=100")
+        need(type(runs.get("total_count")) is int and type(runs.get("workflow_runs")) is list and
+            0<=runs["total_count"]==len(runs["workflow_runs"])<=100 and
+            all(run.get("status")=="completed" for run in runs["workflow_runs"]))
+        rows.append(dict(id=identifier,path=value["path"],state=value["state"],active_runs=0))
+    return dict(verified_at=int(time.time()),workflows=rows)
+
 def main():
     os.umask(0o077)
     try:
@@ -193,6 +218,10 @@ def main():
             probe=(lambda old:verify_replacement(old,replacement)) if replacement else None
             value,proof=plan(compressed,root,env["RUNTIME_OWNER_ID"],index,token_probe=probe)
             proof["replacement_token_present"]=bool(replacement)
+            stage("legacy_dispatch_fence")
+            fence=legacy_fence(env["GITHUB_READ_TOKEN"])
+            value["legacy_dispatch_fence"]=fence
+            proof.update(legacy_workflows_disabled=True,legacy_workflow_count=len(fence["workflows"]))
             stage("encrypt_plan")
             child={key:env[key] for key in ("PATH","HOME","LANG") if key in env}
             raw=json.dumps(value,sort_keys=True,ensure_ascii=False).encode()
