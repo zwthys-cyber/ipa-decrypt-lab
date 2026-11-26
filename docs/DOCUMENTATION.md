@@ -1,6 +1,6 @@
 # 项目文档索引
 
-更新于 2026-11-25。公开成品为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)，生产机器人仍在 VPS。v0.2 和 CircleCI 的当前进度见[项目状态](PROJECT-STATUS.md)。
+更新于 2026-11-26。公开成品为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)，生产机器人仍在 VPS。v0.2 和 CircleCI 的当前进度见[项目状态](PROJECT-STATUS.md)。
 
 ## 使用与部署
 
@@ -20,6 +20,8 @@
 | [仓库约束](../AGENTS.md) | 构建环境、凭据保护及验证约束 |
 
 ## v0.2 与持续集成
+
+[迁移运行环境与来源证据](MIGRATION-READINESS.md)：零费用托管复核、真实源审计与加密历史恢复候选。
 
 | 文档 | 用途 |
 | --- | --- |

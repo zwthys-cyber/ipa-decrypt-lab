@@ -8,6 +8,14 @@
 - **私有交付试验**完成了项目自有 ARM64 样例的 Drive 存取和[一次 Telegram 私聊链接发送](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45644694693)，接收人确认可打开。生产 webhook 切换和真实 10 GB 网盘传输仍待验证。详见[零费用试验记录](ZERO-COST.md)。
 - **主仓库 CircleCI** 的[首跑](https://app.circleci.com/workflow/7fcc4b73-7caa-4de2-8f16-763288eb34e2)通过 84 项测试，三个 Smarter Testing 套件均通过 Doctor。[CircleCI M4 Pro](https://app.circleci.com/workflow/40131029-8872-4661-8351-f1b0fd0034ba/job/c35d0d9a-2113-4b8a-b3fe-07db03f99967) 另通过了项目自有 iOS 样例的构建和归档校验。指定 `cimg/base:stable` 当前为 Linux amd64，glibc 2.31；workerd 集成仍由 GitHub Actions 验证。
 
+## 迁移来源审计与历史恢复候选（2026-11-26）
+
+[源审计 45811165425](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45811165425) 在 8 项公共测试通过后，经固定主机指纹和 IPv4 只读检查 VPS。心跳新鲜、当时空闲；TF 任务共 1 条、未完成 0 条；会话密文与原推广摘要一致；接受库及扫描范围内旧候选均不存在；原私有发送回执 1 条、未知发送 0 条。此轮没有停止服务、调用 Apple/Telegram、初始化或修改源记录库。Linux 运行器先前连接超时，Intel macOS 出口最终成功。
+
+原接受意图 Git blob 与首次提交一致；59 次保留研究运行中只有原作业出现接受步骤。原接受作业失败与后续只读成员确认成功分别核实，不能将失败记录改写成成功。[恢复候选 45812495918](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45812495918) 源码 `00dca9f` 通过 6 项公共测试、真实历史日志及意图包来源校验，生成带来源表的单条已确认历史记录库，并验证加密后的解密回读。只保留一天的密文、闭合收据和摘要；`production_installed=false`，安装前仍需重新核对完整源状态。
+
+已知历史来源现已可核验，恢复候选已经产出；没有将空库或未校验的初始化当作迁移完成。生产目标仍未落实：本轮官方资料复核发现 Fly.io 新 Free plan 用尽额度后自动转按量付费，Cloudflare Containers 需要付费计划；其他已查候选也未满足当前全部条件。详见[迁移运行环境与来源证据](MIGRATION-READINESS.md)。完整切换尚未执行。
+
 ## 迁移源快照预检（2026-11-26）
 
 源码 [`82a7d4c`](https://github.com/zwthys-cyber/ipa-decrypt-lab/commit/82a7d4c2c119ade3f4780bd4e00868881be98cc6) 为离线迁移工具增加 `--inspect-source`：无需准备目标目录，就能分别报告控制器与 TestFlight 状态快照的结构有效性。输出仅有固定 schema 和三个布尔值；缺失接受记录库时失败退出，不创建替代库。三目录比对同样加强了接受表字段、邀请主键、状态及未完成 Telegram 更新的检查。

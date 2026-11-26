@@ -1,6 +1,6 @@
 # Managed runtime pilot (v0.2)
 
-The v0.2 pilot was still a draft on 2026-11-25. The VPS remains the production controller. The [latest managed contracts](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45663099506) passed native ARM64 image builds, independent import and volume checks. The owner requires zero cost. See [the project status](PROJECT-STATUS.md) and [zero-cost constraints](ZERO-COST.md).
+The v0.2 pilot remains a draft on 2026-11-26. The VPS remains the production controller. The [latest managed contracts](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45663099506) passed native ARM64 image builds, independent import and volume checks. The owner requires zero cost. See [the project status](PROJECT-STATUS.md) and [zero-cost constraints](ZERO-COST.md).
 
 The Linux controller can run as a single non-root managed container without SSH or systemd. The existing systemd path remains the default. A managed container is **not** a scale-to-zero Worker: it needs continuous availability for Telegram polling, persistent private storage and enough disk for local file handling. Use a provider that permits this workload and supports the required memory, storage, and private networking. Do not use GitHub Actions as a permanent service host. Use only authorized inputs and distribution.
 
@@ -110,3 +110,20 @@ requires reconciliation against verified history; never create an empty
 replacement to obtain a passing report. A passing source report also does not
 establish a hosting destination, TestFlight compatibility or permission to cut
 over. Do not execute the tool on live state or in the editing workspace.
+
+### Verified historical recovery candidate (2026-11-26)
+
+The [source audit](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45811165425)
+confirmed the original session ciphertext, one completed TF task, the preserved
+private return ledger and absence of an acceptance database in the inspected
+locations. The [historical recovery build](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45812495918)
+then checked the original encrypted intent, failed acceptance and successful
+read-only membership receipts, and produced an encrypted one-record recovery
+candidate with a provenance table and successful decryption readback.
+
+This is evidence-based staging, not installation of a replacement ledger.
+The candidate must not overwrite existing or newly created records. Its receipt
+requires a fresh source check before any installation; preserve the full source
+and rollback data at an idle, consistent cutover. It does not enable TF in the
+managed pilot, provision a production host or change the VPS. See
+[the detailed evidence and current hosting decision](MIGRATION-READINESS.md).
