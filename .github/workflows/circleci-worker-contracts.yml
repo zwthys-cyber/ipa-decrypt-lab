@@ -25,6 +25,7 @@ on:
       - '.github/ops/tf_task_native.cpp'
       - '.github/ops/tf_virtual_client.cpp'
       - '.github/workflows/circleci-worker-contracts.yml'
+      - '.github/workflows/circleci-owner-task.yml'
   workflow_dispatch:
 permissions:
   contents: read

@@ -1,6 +1,12 @@
 name: CircleCI bounded owner task
 run-name: CircleCI owner canary ${{ inputs.app_id }}
 on:
+  push:
+    branches: [upgrade/managed-runtime-v0.2]
+    paths:
+      - '.github/workflows/circleci-owner-task.yml'
+      - 'deploy/managed/circleci/owner_canary.py'
+      - 'deploy/managed/circleci/pause_source.py'
   workflow_dispatch:
     inputs:
       app_id:
@@ -14,8 +20,18 @@ concurrency:
   group: circleci-signed-control
   cancel-in-progress: false
 jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify bounded source operations without runtime credentials
+        run: python3 deploy/managed/circleci/test_owner_canary.py -v
   owner-task:
-    if: github.ref == 'refs/heads/upgrade/managed-runtime-v0.2' && github.run_attempt == 1 && github.actor_id == '246379322'
+    needs: contracts
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/upgrade/managed-runtime-v0.2' && github.run_attempt == 1 && github.actor_id == '246379322'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
