@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import signal
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -21,7 +22,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 def need(ok,code):
  if not ok:raise ValueError(code)
 def rpc_once(path,value):
- need(path in ("claim","lease-request","lease-read","finish","plaintext-proof","upload-access","upload-journal","upload-register","fixture-cleanup"),"managed_endpoint")
+ need(path in ("claim","lease-request","lease-read","finish","plaintext-proof","upload-access","upload-journal","upload-register","fixture-cleanup","checkpoint","lease-consumed","export-finish","worker-failed","tf-permit"),"managed_endpoint")
  token=os.environ.get("CIRCLE_OIDC_TOKEN_V3","")
  need(token and len(token)<=16384,"managed_identity")
  request=urllib.request.Request(ORIGIN+"/v2/runtime/"+path,data=json.dumps(dict(value,_source=os.environ["MANAGED_SOURCE"])).encode(),method="POST",
@@ -59,18 +60,27 @@ def main():
  task=result["task"]
  need(task["run_id"]==env["MANAGED_RUN_ID"] and task["source_sha"]==env["MANAGED_SOURCE"],"managed_run_binding")
  actual_env=dict(env,RUNTIME_RUN_ID=task["run_id"]);validate(task,actual_env)
- need(result["task_kind"]=="fixture","managed_private_execution_disabled")
+ need(result["task_kind"] in ("fixture","export"),"managed_task_kind")
+ fixture_task=result["task_kind"]=="fixture"
  with tempfile.TemporaryDirectory(prefix="managed-task-") as directory:
   root=Path(directory);root.chmod(0o700)
   repo=Path(__file__).resolve().parents[3]
   pins=json.loads(Path(__file__).with_name("runtime-pins.json").read_text())
-  loaded=fetch_runtime.fetch(repo,pins,"base",root/"runtime")
+  variants=("base",) if fixture_task or task["profile"]=="default" else ("cn","testflight") if task["profile"]=="tf" else ("cn",)
+  preloaded={}
+  for variant in variants:
+   destination=root/("public-"+variant)
+   preloaded[variant]=(destination,fetch_runtime.fetch(repo,pins,variant,destination))
+  loaded=preloaded[variants[0]][1]
+  def load_runtime(unused_repo,unused_pins,variant,output):
+   need(variant in preloaded,"managed_runtime_variant")
+   path,proof=preloaded[variant];shutil.copytree(path,output);return dict(proof)
   print(json.dumps(dict(stage="public_runtime_verified",job_id=task["job_id"],variant=loaded["variant"])),flush=True)
   key=root/"identity.txt"
   subprocess.run(["age-keygen","-o",str(key)],capture_output=True,check=True,timeout=20,env=public_env(env))
   recipient=subprocess.check_output(["age-keygen","-y",str(key)],text=True,timeout=15,env=public_env(env)).strip()
   expected=context(dict(schema="circleci-credential-request-v1",job_id=task["job_id"],run_id=task["run_id"],
-   worker_job_id=task["worker_job_id"],source_sha=task["source_sha"],profile="synthetic",recipient=recipient,
+   worker_job_id=task["worker_job_id"],source_sha=task["source_sha"],profile="synthetic" if fixture_task else task["profile"],recipient=recipient,
    nonce=os.urandom(16).hex(),expires_at=int(time.time())+600))
   consumer(actual_env,expected)
   answer=rpc("lease-request",dict(identity,recipient=recipient,nonce=expected["nonce"],expires_at=expected["expires_at"]))
@@ -84,13 +94,19 @@ def main():
     digest=hashlib.sha256(cipher).hexdigest()
     need(digest==answer.get("cipher_sha256"),"managed_lease_digest")
     values=open_envelope(cipher,key,expected,actual_env)
-    need(values=={"fixture":"synthetic-private-fixture"},"managed_fixture")
+    if fixture_task:need(values=={"fixture":"synthetic-private-fixture"},"managed_fixture")
     break
    if time.monotonic()-last_print>=30:
     print(json.dumps(dict(stage="waiting_for_credentials",job_id=task["job_id"])),flush=True);last_print=time.monotonic()
    time.sleep(3)
   else:raise ValueError("managed_lease_timed_out")
+  rpc("lease-consumed",identity)
   uploaded=False;cleaned=False
+  real_receipt=None
+  if not fixture_task:
+   from runtime_execution import execute_export
+   real_receipt=execute_export(task,values,root,actual_env,rpc,ORIGIN,load_runtime)
+   uploaded=True
   if result.get("drive_fixture") is True:
    from runtime_uploader import deliver
    binding=result["fixture_binding"]
@@ -111,10 +127,13 @@ def main():
    deliver(sample,fixture,rpc,identity,ORIGIN,checkpoint,fixture=True);uploaded=True
    cleaned=rpc("fixture-cleanup",identity).get("cleaned") is True
    need(cleaned,"managed_fixture_cleanup")
-  rpc("finish",dict(identity,fixture_verified=True))
+  if fixture_task:rpc("finish",dict(identity,fixture_verified=True))
   proof=dict(schema="circleci-managed-task-proof-v1",job_id=task["job_id"],source_sha=task["source_sha"],
-   run_id=task["run_id"],worker_job_id=task["worker_job_id"],fixture_verified=True,cipher_sha256=digest,
-   production=False,apple_operation=False,file_upload=uploaded,fixture_cleaned=cleaned,decryption_proven=False,telegram_send=False)
+   run_id=task["run_id"],worker_job_id=task["worker_job_id"],fixture_verified=fixture_task,cipher_sha256=digest,
+   production=not fixture_task,apple_operation=not fixture_task,file_upload=uploaded,fixture_cleaned=cleaned,decryption_proven=not fixture_task,telegram_send=False)
+  if real_receipt is not None:
+   proof.update(encrypted_images=real_receipt["encrypted_images"],decrypted_pages=real_receipt["decrypted_pages"],
+    plaintext_bytes=real_receipt["plaintext_bytes"])
   out=Path("managed-runtime-out");out.mkdir(mode=0o700,exist_ok=True)
   (out/"receipt.json").write_text(json.dumps(proof,sort_keys=True)+"\n")
   print(json.dumps(proof,sort_keys=True),flush=True)
@@ -123,6 +142,10 @@ def entry():
  signal.signal(signal.SIGTERM,stop);signal.signal(signal.SIGINT,stop)
  try:main();return 0
  except BaseException as error:
+  try:
+   if re.fullmatch(r"pilot_[a-f0-9]{32}",os.environ.get("MANAGED_JOB","")):
+    rpc("worker-failed",dict(job_id=os.environ["MANAGED_JOB"],worker_job_id=os.environ["CIRCLE_WORKFLOW_JOB_ID"]))
+  except BaseException:pass
   code=str(error) if isinstance(error,ValueError) and re.fullmatch(r"[a-z_]{1,60}",str(error)) else "managed_worker_failed"
   print(code,file=sys.stderr);return 2
 if __name__=="__main__":raise SystemExit(entry())

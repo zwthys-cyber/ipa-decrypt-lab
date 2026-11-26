@@ -17,7 +17,7 @@ export async function circleIdentity(request,env,task,worker,now,send){
  const token=request.headers.get("x-ipazake-job-token")||"";
  need(/^[A-Za-z0-9_.-]{100,16384}$/.test(token)&&UUID.test(worker||"")&&UUID.test(task.run_id||"")&&
   task.source_sha===env.RUNTIME_SOURCE_SHA&&task.deadline>now&&
-  ["submitted","running","uploading","link_ready"].includes(task.state),"runtime_task_closed");
+  ["submitted","running","uploading","link_ready","cancel_intent","cancel_pending","failed_pending"].includes(task.state),"runtime_task_closed");
  const identity=await verifyCircleJWT(token,{run:task.run_id,job:worker},await fetchKeys(send),now);
  const data=(await publicJSON(send,"https://circleci.com/api/v3/runs/"+task.run_id)).data;
  const refs=data?.references,vcs=refs?.event?.attributes?.vcs;

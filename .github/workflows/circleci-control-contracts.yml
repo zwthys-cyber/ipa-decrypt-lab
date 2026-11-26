@@ -10,6 +10,8 @@ on:
       - 'deploy/managed/circleci/tf-acceptance*'
       - 'deploy/managed/circleci/runtime-*'
       - 'deploy/managed/circleci/runtime_uploader.py'
+      - 'deploy/managed/circleci/runtime_execution.py'
+      - 'deploy/managed/circleci/test_runtime_execution.py'
       - 'deploy/managed/circleci/github-oidc*'
       - 'deploy/managed/circleci/managed_worker.py'
       - 'deploy/managed/circleci/runtime_cloud.py'
@@ -42,7 +44,8 @@ jobs:
         run: |
           python3 test_control_cloud.py -v
           python3 test_runtime_uploader.py -v
-          python3 -m py_compile credential_probe.py credential_envelope.py managed_worker.py runtime_cloud.py runtime_uploader.py
+          python3 test_runtime_execution.py -v
+          python3 -m py_compile credential_probe.py credential_envelope.py managed_worker.py runtime_cloud.py runtime_uploader.py runtime_execution.py
           node --check control-probe.mjs
           timeout 180s node --test control.integration.mjs dispatch.integration.mjs oidc.test.mjs credential-broker.integration.mjs tf-acceptance.integration.mjs runtime-upload.integration.mjs runtime-drive.test.mjs runtime-api.integration.mjs github-oidc.test.mjs
           node --test ../free-pilot/worker.test.mjs ../free-pilot/private-link.test.mjs ../free-pilot/drive-auth.test.mjs

@@ -1,4 +1,6 @@
 // Staged managed-runtime API. Real exports and Telegram admission remain disabled until handoff.
+import {TASK_SCHEMA,requireEntry,admitExport,saveExportProof,verifyFinishedExport} from "./runtime-tasks.mjs";
+import {SCHEMA as TF_SCHEMA,claimPermit,finishPermit,inviteHash} from "./tf-acceptance.mjs";
 import {TRUST} from "./oidc.mjs";
 import {RUNTIME_SCHEMA} from "./runtime-schema.mjs";
 import {UPLOAD_SCHEMA,readUploadJournal,writeUploadJournal,confirmUploadRegistration} from "./runtime-upload.mjs";
@@ -43,12 +45,13 @@ async function sendAPI(send,url,token,data){
   headers:{"user-agent":"ipa-decrypt-managed-runtime/0.2",authorization:"Bearer "+token,accept:"application/json",
    "content-type":"application/json"},body:JSON.stringify(data)});
 }
-async function dispatchNative(env,id,now,send){
+export async function dispatchNative(env,id,now,send){
  const nonce=crypto.randomUUID().replaceAll("-","");
  const result=await env.DB.prepare(`UPDATE runtime_jobs SET state='dispatch_intent',dispatch_nonce=?
   WHERE job_id=? AND owner_id=? AND state='waiting'
-   AND NOT EXISTS(SELECT 1 FROM runtime_jobs WHERE state IN ('dispatch_intent','dispatch_unknown','submitted','running','uploading','link_ready'))`)
-  .bind(nonce,id,env.RUNTIME_OWNER_ID).run();
+   AND deadline>? AND source_sha=?
+   AND NOT EXISTS(SELECT 1 FROM runtime_jobs WHERE state IN ('dispatch_intent','dispatch_unknown','submitted','running','uploading','link_ready','cancel_intent','cancel_pending','failed_pending'))`)
+  .bind(nonce,id,env.RUNTIME_OWNER_ID,now,env.RUNTIME_SOURCE_SHA).run();
  need(result.success===true,"runtime_dispatch_storage");
  if(result.meta?.changes!==1)return;
  try{
@@ -68,6 +71,13 @@ async function dispatchNative(env,id,now,send){
    .bind(id,nonce).run();
  }
 }
+async function promoteNext(env,now,send){
+ await requireEntry(env);
+ await env.DB.prepare("UPDATE runtime_jobs SET state='closed' WHERE owner_id=? AND kind='export' AND state='waiting' AND deadline<=?").bind(env.RUNTIME_OWNER_ID,now).run();
+ const next=await env.DB.prepare("SELECT job_id FROM runtime_jobs WHERE owner_id=? AND source_sha=? AND kind='export' AND state='waiting' AND deadline>? ORDER BY created_at,job_id LIMIT 1")
+  .bind(env.RUNTIME_OWNER_ID,env.RUNTIME_SOURCE_SHA,now).first();
+ if(next)await dispatchNative(env,next.job_id,now,send);
+}
 async function dispatchPublisher(env,row,context,now,send){
  need(typeof env.RUNTIME_GH_TOKEN==="string"&&env.RUNTIME_GH_TOKEN.length>=16,"runtime_publisher_configuration");
  const saved=await env.DB.prepare(`INSERT INTO runtime_publisher_dispatches(job_id,state,created_at)
@@ -86,18 +96,19 @@ async function dispatchPublisher(env,row,context,now,send){
 }
 
 async function reconcileFixture(env,row,send){
- if(row.kind!=="fixture"||!row.run_id||!["submitted","running","uploading","link_ready"].includes(row.state))return;
+ if(!row.run_id||!["submitted","running","uploading","link_ready","cancel_intent","cancel_pending","failed_pending"].includes(row.state))return;
  const run=(await publicJSON(send,"https://circleci.com/api/v3/runs/"+row.run_id)).data;
  const refs=run?.references,vcs=refs?.event?.attributes?.vcs;
  need(run?.id===row.run_id&&refs?.project?.id===TRUST.project&&refs?.pipeline?.id===TRUST.definition&&
   vcs?.revision===row.source_sha&&vcs?.origin_repository_url==="https://"+TRUST.source&&
   vcs?.target_repository_url==="https://"+TRUST.source&&vcs?.branch===TRUST.ref.slice(11),"runtime_terminal_binding");
  if(run?.attributes?.phase!=="ended")return;
- if(run.attributes.current_outcome==="succeeded"&&row.finished_at!==null&&row.fixture_verified===1){
-  await env.DB.prepare("UPDATE runtime_jobs SET state='completed' WHERE job_id=? AND kind='fixture' AND state IN ('running','uploading','link_ready')").bind(row.job_id).run();
- }else if(["failed","canceled","cancelled","error"].includes(run.attributes.current_outcome)){
+ if(run.attributes.current_outcome==="succeeded"&&row.finished_at!==null&&
+  (row.kind==="fixture"?row.fixture_verified===1:!!row.file_id)){
+  await env.DB.prepare("UPDATE runtime_jobs SET state='completed' WHERE job_id=? AND state IN ('running','uploading','link_ready')").bind(row.job_id).run();
+ }else if(["failed","canceled","cancelled","error"].includes(run.attributes.current_outcome)||row.state==="failed_pending"||["cancel_intent","cancel_pending"].includes(row.state)){
   // Only a known, ended, credential-free validation. Original ID, nonce and history are retained.
-  await env.DB.prepare("UPDATE runtime_jobs SET state='closed' WHERE job_id=? AND kind='fixture' AND state IN ('submitted','running','uploading','link_ready')")
+  await env.DB.prepare("UPDATE runtime_jobs SET state='closed' WHERE job_id=? AND state IN ('submitted','running','uploading','link_ready','cancel_intent','cancel_pending','failed_pending')")
    .bind(row.job_id).run();
   await closeRuntimeLease(env.DB,row,Math.floor(Date.now()/1000));
  }
@@ -107,29 +118,30 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
  const url=new URL(request.url),path=url.pathname.slice(PREFIX.length);
  if(url.search||!url.pathname.startsWith(PREFIX))return reply(404);
  if(request.method!=="POST"&&!(request.method==="GET"&&path==="ready"))return reply(404);
- if(env.RUNTIME_MODE!=="staging"||env.RUNTIME_CONTROL_ORIGIN!==ORIGIN||url.origin!==ORIGIN||
+ if(!["staging","production"].includes(env.RUNTIME_MODE)||env.RUNTIME_CONTROL_ORIGIN!==ORIGIN||url.origin!==ORIGIN||
   !SHA.test(env.RUNTIME_SOURCE_SHA||"")||!/^[1-9][0-9]{0,15}$/.test(env.RUNTIME_OWNER_ID||"")||!env.DB?.prepare)return reply(503);
  try{
   if(request.method==="POST")need(request.headers.get("x-ipazake-source-sha")===env.RUNTIME_SOURCE_SHA,"runtime_source_not_ready");
   if(path==="ready"){
    const exists=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='runtime_jobs'").first();
    if(exists){
-    const rows=await env.DB.prepare("SELECT * FROM runtime_jobs WHERE kind='fixture' AND state IN ('submitted','running','uploading','link_ready')").all();
+    const rows=await env.DB.prepare("SELECT * FROM runtime_jobs WHERE state IN ('submitted','running','uploading','link_ready','cancel_intent','cancel_pending','failed_pending')").all();
     for(const row of rows.results||[])await reconcileFixture(env,row,send);
    }
    const count=exists?await env.DB.prepare("SELECT count(*) n FROM runtime_jobs WHERE state NOT IN ('completed','cancelled','closed')").first():{n:0};
    return reply(200,{ok:true,source_sha:env.RUNTIME_SOURCE_SHA,active:count.n>0});
   }
-  if(["init","admit-fixture","admit-drive-fixture","status"].includes(path)){
+  if(["init","admit-fixture","admit-drive-fixture","admit-export","status","owner-cancel","owner-get"].includes(path)){
    await admin(request,env);
    if(path==="init"){
     await body(request,[]);
-    const sql=(RUNTIME_SCHEMA+"\n"+UPLOAD_SCHEMA+"\n"+FIXTURE_SCHEMA).split(";").map(x=>x.trim()).filter(Boolean);
+    const sql=(RUNTIME_SCHEMA+"\n"+UPLOAD_SCHEMA+"\n"+FIXTURE_SCHEMA+"\n"+TASK_SCHEMA+"\n"+TF_SCHEMA).split(";").map(x=>x.trim()).filter(Boolean);
     const result=await env.DB.batch(sql.map(x=>env.DB.prepare(x)));
     need(result.every(x=>x.success===true),"runtime_schema");
     return reply(200,{ok:true,source_sha:env.RUNTIME_SOURCE_SHA});
    }
    if(["admit-fixture","admit-drive-fixture"].includes(path)){
+    need(env.RUNTIME_MODE==="staging","runtime_fixture_only");
     const value=await body(request,["probe_id"]);need(/^[a-f0-9]{32}$/.test(value.probe_id||""),"runtime_fixture_id");
     const id="pilot_"+value.probe_id;
     const inserted=await env.DB.prepare(`INSERT INTO runtime_jobs
@@ -145,11 +157,51 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
     await dispatchNative(env,id,now,send);
     const row=await task(env,id);return reply(200,{ok:true,job_id:id,state:row.state,run_id:row.run_id});
    }
+   if(path==="admit-export"){
+    const value=await body(request,["request_id","profile","target","version"]);delete value._source;
+    const row=await admitExport(env,value,now);
+    await promoteNext(env,now,send);
+    const current=await task(env,row.job_id);
+    return reply(200,{ok:true,job_id:row.job_id,state:current.state,run_id:current.run_id});
+   }
    const value=await body(request,["job_id"]);let row=await task(env,value.job_id);
    await reconcileFixture(env,row,send);row=await task(env,row.job_id);
+   if(path==="status"&&row.kind==="export")await promoteNext(env,now,send);
+   if(path==="owner-cancel"){
+    await requireEntry(env);need(row.kind==="export","runtime_cancel_export_only");
+    if(["completed","closed","cancelled"].includes(row.state))return reply(200,{ok:true,state:row.state});
+    if(row.state==="waiting"){
+     const stopped=await env.DB.prepare("UPDATE runtime_jobs SET state='cancelled' WHERE job_id=? AND state='waiting'").bind(row.job_id).run();
+     need(stopped.success===true,"runtime_cancel_storage");
+     if(stopped.meta?.changes===1)return reply(200,{ok:true,state:"cancelled"});
+     row=await task(env,row.job_id);
+    }
+    const intent=await env.DB.prepare("INSERT INTO runtime_cancel_intents(job_id,created_at,outcome) VALUES(?,?,'intent') ON CONFLICT DO NOTHING").bind(row.job_id,now).run();
+    need(intent.success===true,"runtime_cancel_storage");
+    await env.DB.prepare("UPDATE runtime_jobs SET state='cancel_pending' WHERE job_id=? AND state NOT IN ('completed','closed','cancelled')").bind(row.job_id).run();
+    await closeRuntimeLease(env.DB,row,now);
+    if(intent.meta?.changes===1&&row.workflow_id){
+     let outcome="unknown";
+     try{
+      const response=await send("https://circleci.com/api/v2/workflow/"+row.workflow_id+"/cancel",{
+       method:"POST",redirect:"manual",signal:AbortSignal.timeout(10000),headers:{"Circle-Token":env.CIRCLECI_API_TOKEN,accept:"application/json"}});
+      if(response.status===202)outcome="submitted";
+      if(response.body)await response.body.cancel();
+     }catch{}
+     await env.DB.prepare("UPDATE runtime_cancel_intents SET outcome=? WHERE job_id=? AND outcome='intent'").bind(outcome,row.job_id).run();
+    }
+    return reply(200,{ok:true,state:"cancel_pending"});
+   }
+   if(path==="owner-get"){
+    await requireEntry(env);need(row.kind==="export"&&row.state==="completed"&&row.file_id&&row.link_expires>now,"runtime_link_unavailable");
+    const record={file_id:row.file_id,filename:row.filename,bytes:row.plaintext_bytes,sha256:row.plaintext_sha256};
+    await verifyOwnedUpload({...row,recipient_email:env.PILOT_DRIVE_RECIPIENT_EMAIL,control_origin:ORIGIN},record,env,send);
+    return reply(200,{ok:true,...record,url:"https://drive.google.com/file/d/"+encodeURIComponent(row.file_id)+"/view",expires_at:row.link_expires});
+   }
    const lease=await env.DB.prepare("SELECT cipher_sha256,consumed_at,ciphertext,publisher_run_id FROM runtime_credential_leases WHERE job_id=?").bind(row.job_id).first();
    return reply(200,{ok:true,job_id:row.job_id,state:row.state,run_id:row.run_id,claimed:!!row.worker_job_id,
     drive_fixture:row.drive_fixture===1,drive_uploaded:!!row.file_id,fixture_cleaned:row.cleanup_state==="confirmed",
+    link_expires:row.link_expires,profile:row.profile,
     finished:row.finished_at!==null,fixture_verified:row.fixture_verified===1,
     publisher_run_id:lease?.publisher_run_id||null,cipher_sha256:lease?.cipher_sha256||null,ciphertext_cleared:!!lease&&lease.ciphertext===null&&lease.consumed_at!==null});
   }
@@ -162,16 +214,19 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
    if(publish)return reply(200,{ok:true,cipher_sha256:await publishRuntimeLease(env.DB,row,value.publisher_run_id,value,now)});
    return reply(200,{ok:true,...await pendingRuntimeLease(env.DB,row,value.publisher_run_id,now)});
   }
-  if(!["claim","lease-request","lease-read","finish","plaintext-proof","upload-access","upload-journal","upload-register","fixture-cleanup"].includes(path))return reply(404);
+  if(!["claim","lease-request","lease-read","finish","plaintext-proof","upload-access","upload-journal","upload-register","fixture-cleanup","checkpoint","lease-consumed","export-finish","worker-failed","tf-permit"].includes(path))return reply(404);
   const fields=path==="lease-request"?["job_id","worker_job_id","recipient","nonce","expires_at"]:
    path==="plaintext-proof"?["job_id","worker_job_id","receipt"]:
    path==="upload-journal"?["job_id","worker_job_id","action","state"]:
    path==="upload-register"?["job_id","worker_job_id","record"]:
+   path==="checkpoint"?["job_id","worker_job_id","stage"]:
+   path==="export-finish"?["job_id","worker_job_id","receipt"]:
+   path==="tf-permit"?["job_id","worker_job_id","action","args"]:
    path==="finish"?["job_id","worker_job_id","fixture_verified"]:["job_id","worker_job_id"];
   const value=await body(request,fields,path==="upload-journal"?8192:4096),row=await task(env,value.job_id);
   const identity=await circleIdentity(request,env,row,value.worker_job_id,now,send);
   if(path==="claim"){
-   need(row.kind==="fixture","runtime_production_disabled");
+   if(row.kind==="export")await requireEntry(env);else need(env.RUNTIME_MODE==="staging","runtime_fixture_only");
    const result=await env.DB.prepare(`UPDATE runtime_jobs SET state='running',worker_job_id=?,workflow_id=?
     WHERE job_id=? AND state IN ('submitted','running') AND (worker_job_id IS NULL OR worker_job_id=?)`)
     .bind(identity.job_id,identity.workflow_id,row.job_id,identity.job_id).run();
@@ -181,8 +236,48 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
     version:row.version,recipient:"age1cp0tv9wcxjqpvcmwt6eh6yqxqg25a2msnelc3mxlj9xqcu6fz4cqekfq5d",
     deadline:row.deadline},task_kind:row.kind,drive_fixture:row.drive_fixture===1,fixture_binding:row.drive_fixture===1?DRIVE_FIXTURE:null});
   }
-  need(row.worker_job_id===identity.job_id&&["running","uploading","link_ready"].includes(row.state)&&row.deadline>now,"runtime_claim_required");
+  need(row.worker_job_id===identity.job_id,"runtime_claim_required");
+  if(path==="checkpoint"){
+   need(typeof value.stage==="string"&&/^[a-z_]{1,40}$/.test(value.stage),"runtime_stage");
+   const stages=["metadata","loading_runtime","preparing_public_resources","authenticating","auth_retry","resolving_version",
+    "downloading","auditing","decrypting","verifying","encrypting","uploading_private","publishing_ciphertext","ciphertext_verified",
+    "finalizing_ciphertext","artifact_ready","restoring_saved_session","checking_acceptance_permit","working"];
+   need(stages.includes(value.stage),"runtime_stage");
+   const proceed=["running","uploading","link_ready"].includes(row.state)&&row.deadline>now;
+   if(proceed&&value.stage!=="working")await env.DB.prepare("INSERT INTO runtime_task_progress(job_id,stage,updated_at) VALUES(?,?,?) ON CONFLICT(job_id) DO UPDATE SET stage=excluded.stage,updated_at=excluded.updated_at").bind(row.job_id,value.stage,now).run();
+   return reply(200,{ok:true,proceed,deadline:row.deadline});
+  }
+  if(path==="worker-failed"){
+   await closeRuntimeLease(env.DB,row,now);
+   await env.DB.prepare("UPDATE runtime_jobs SET state='failed_pending' WHERE job_id=? AND state IN ('running','uploading','link_ready') AND finished_at IS NULL").bind(row.job_id).run();
+   return reply(200,{ok:true});
+  }
+  need(["running","uploading","link_ready"].includes(row.state)&&row.deadline>now,"runtime_claim_required");
+  if(path==="lease-consumed"){await closeRuntimeLease(env.DB,row,now);return reply(200,{ok:true});}
+  if(path==="tf-permit"){
+   await requireEntry(env);need(row.kind==="export"&&row.profile==="tf","runtime_tf_task");
+   const args=value.args,request={invite:row.target,request_id:row.request_id,run_id:row.run_id,source_commit:row.source_sha};
+   need(args&&Object.entries(request).every(([key,item])=>args[key]===item)&&
+    ["claim","finish"].includes(value.action)&&Object.keys(args).sort().join(",")===
+    [...Object.keys(request),...(value.action==="finish"?["nonce","outcome"]:[])].sort().join(","),"runtime_tf_request_binding");
+   need(/^[a-f0-9]{64}$/.test(env.RUNTIME_TF_HMAC_KEY||""),"runtime_tf_handoff_required");
+   const pepper=Uint8Array.from(env.RUNTIME_TF_HMAC_KEY.match(/../g),x=>parseInt(x,16));
+   const hash=await inviteHash(row.target,row.owner_id,pepper);
+   return reply(200,value.action==="claim"?{ok:true,...await claimPermit(env.DB,row.owner_id,hash,request,now)}:
+    {ok:true,...await finishPermit(env.DB,row.owner_id,hash,request,args.nonce,args.outcome,now)});
+  }
+  if(path==="export-finish"){
+   await requireEntry(env);need(row.kind==="export","runtime_export_only");
+   await verifyFinishedExport(env.DB,row,value.receipt);
+   await closeRuntimeLease(env.DB,row,now);
+   const result=await env.DB.prepare("UPDATE runtime_jobs SET finished_at=COALESCE(finished_at,?) WHERE job_id=? AND state='link_ready' AND worker_job_id=?").bind(now,row.job_id,identity.job_id).run();
+   need(result.success===true&&result.meta?.changes===1,"runtime_export_finish_storage");
+   return reply(200,{ok:true});
+  }
   if(path==="plaintext-proof"){
+   if(row.kind==="export"){
+    await requireEntry(env);await saveExportProof(env.DB,row,value.receipt);return reply(200,{ok:true});
+   }
    need(row.kind==="fixture"&&row.drive_fixture===1,"runtime_production_disabled");
    const proof=value.receipt,expected={schema:"circleci-private-upload-fixture-v1",job_id:row.job_id,
     run_id:row.run_id,worker_job_id:row.worker_job_id,source_commit:row.source_sha,fixture_authorized:true,
@@ -211,11 +306,11 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
    const verified=await verifyOwnedUpload(uploadTask,value.record,env,send);
    await confirmUploadRegistration(env.DB,uploadTask,verified.file_id,now);
    const result=await env.DB.batch([
-    env.DB.prepare("UPDATE runtime_jobs SET state='link_ready',file_id=? WHERE job_id=? AND state IN ('uploading','link_ready') AND (file_id IS NULL OR file_id=?)")
-     .bind(verified.file_id,row.job_id,verified.file_id),
+    env.DB.prepare("UPDATE runtime_jobs SET state='link_ready',file_id=?,link_expires=COALESCE(link_expires,?) WHERE job_id=? AND state IN ('uploading','link_ready') AND (file_id IS NULL OR file_id=?)")
+     .bind(verified.file_id,now+86400,row.job_id,verified.file_id),
     env.DB.prepare("UPDATE runtime_drive_fixtures SET file_id=? WHERE job_id=? AND (file_id IS NULL OR file_id=?)")
      .bind(verified.file_id,row.job_id,verified.file_id)]);
-   need(result.every(x=>x.success===true),"runtime_upload_registration_storage");return reply(200,{ok:true,verified:true});
+   need(result.every(x=>x.success===true)&&result[0].meta?.changes===1,"runtime_upload_registration_storage");return reply(200,{ok:true,verified:true});
   }
   if(path==="fixture-cleanup")return reply(200,{ok:true,cleaned:await cleanupFixture(uploadTask,env,now,send)});
   if(path==="lease-request"){

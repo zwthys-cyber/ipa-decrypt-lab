@@ -4,7 +4,7 @@ const EMAIL=/^[^\s@]{1,128}@[^\s@]{1,128}$/;
 function allowed(task,env){
  const fixture=env.RUNTIME_MODE==="staging"&&task.kind==="fixture"&&task.drive_fixture===1&&task.fixture_authorized===1;
  const real=env.RUNTIME_MODE==="production"&&task.kind==="export";
- need((fixture||real)&&["uploading","link_ready"].includes(task.state)&&
+ need((fixture||real)&&["uploading","link_ready","completed"].includes(task.state)&&
   /^[a-f0-9]{64}$/.test(task.plaintext_sha256||"")&&Number.isSafeInteger(task.plaintext_bytes)&&
   task.plaintext_bytes>0&&task.plaintext_bytes<=2000000000&&EMAIL.test(env.PILOT_DRIVE_RECIPIENT_EMAIL||""),
   "runtime_drive_not_authorized");
@@ -20,7 +20,7 @@ function decimal(value){
  const result=Number(value);need(Number.isSafeInteger(result),"runtime_drive_quota");return result;
 }
 export async function uploadAccess(task,env,now,send){
- allowed(task,env);const token=await accessForRequest(env,send);
+ allowed(task,env);need(["uploading","link_ready"].includes(task.state),"runtime_drive_write_closed");const token=await accessForRequest(env,send);
  const about=await get("about?fields=storageQuota(limit,usage),user(emailAddress)",token,send);
  need(typeof about?.user?.emailAddress==="string"&&
   about.user.emailAddress.toLowerCase()===env.PILOT_DRIVE_RECIPIENT_EMAIL.toLowerCase(),"runtime_drive_owner");
