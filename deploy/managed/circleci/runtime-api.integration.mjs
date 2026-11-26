@@ -119,10 +119,11 @@ async function setup(bindings={}){
   bindings:{RUNTIME_MODE:"staging",RUNTIME_CONTROL_ORIGIN:origin,RUNTIME_SOURCE_SHA:source,RUNTIME_OWNER_ID:owner,
    CIRCLECI_CONTROL_TOKEN:secret,CIRCLECI_API_TOKEN:"synthetic-circle-token",RUNTIME_GH_TOKEN:"synthetic-github-token",PILOT_DRIVE_RECIPIENT_EMAIL:"fixture@example.invalid",PILOT_DRIVE_ACCESS_TOKEN:"T".repeat(32),...bindings}});
  const db=await mf.getD1Database("DB");
+ const requestSource=bindings.RUNTIME_SOURCE_SHA||source;
  const request=(path,value={},kind="admin",token=secret,extra={})=>mf.dispatchFetch(origin+"/v2/runtime/"+path,{
-  method:"POST",headers:{"content-type":"application/json","x-ipazake-source-sha":source,
+  method:"POST",headers:{"content-type":"application/json","x-ipazake-source-sha":requestSource,
    [kind==="circle"?"x-ipazake-job-token":kind==="github"?"x-ipazake-github-token":"x-ipazake-control-token"]:token,...extra},
-  body:JSON.stringify({...value,_source:source})});
+  body:JSON.stringify({...value,_source:requestSource})});
  const close=async()=>{await mf.dispose();await rm(base,{recursive:true,force:true});};
  return {mf,db,request,close};
 }
@@ -334,5 +335,19 @@ test("owner webhook deduplicates links and rejects consumed or foreign updates",
   for(let i=0;i<3;i++)assert.equal((await post(message(101))).status,200);
   assert.equal((await s.db.prepare("SELECT count(*) n FROM runtime_jobs").first()).n,1);
   assert.equal((await s.mf.dispatchFetch(origin+"/fixture-count").then(r=>r.json())).nativePosts,1);
+ }finally{await s.close();}
+});
+
+test("owner retrieval survives source upgrades while worker identity remains source-bound",{timeout:60000},async()=>{
+ const s=await setup({RUNTIME_MODE:"production",RUNTIME_EXPORT_ENABLED:"1",RUNTIME_SOURCE_SHA:"b".repeat(40)});
+ try{
+  assert.equal((await s.request("init")).status,200);await handoff(s);
+  const p=exportProof(job);
+  await s.db.prepare("INSERT INTO runtime_jobs(job_id,owner_id,request_id,profile,kind,target,version,source_sha,state,created_at,deadline,plaintext_sha256,plaintext_bytes,filename,file_id,link_expires,finished_at) VALUES(?,?,?,'default','export','123456','',?,'completed',?,?,?,?,?,'FIXTURE_FILE_12345',?,?)")
+   .bind(job,owner,realRequest.request_id,source,now-100,now+100,p.plaintext_sha256,p.plaintext_bytes,p.filename,now+1000,now-90).run();
+  const link=await s.request("owner-get",{job_id:job});assert.equal(link.status,200,await link.text());
+  const status=await (await s.request("status",{job_id:job})).json();assert.equal(status.state,"completed");
+  const c=await signed("circle");
+  assert.equal((await s.request("claim",{job_id:job,worker_job_id:worker},"circle",c)).status,409);
  }finally{await s.close();}
 });

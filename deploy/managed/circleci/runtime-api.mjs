@@ -32,11 +32,11 @@ async function admin(request,env){
  let difference=0;for(let i=0;i<a.length;i++)difference|=a[i]^b[i];
  need(difference===0,"runtime_admin_authentication");
 }
-async function task(env,id){
+async function task(env,id,currentSource=true){
  need(JOB.test(id||""),"runtime_job_id");
  const value=await env.DB.prepare("SELECT * FROM runtime_jobs WHERE job_id=? AND owner_id=?")
   .bind(id,env.RUNTIME_OWNER_ID).first();
- need(value&&value.source_sha===env.RUNTIME_SOURCE_SHA,"runtime_job_binding");
+ need(value&&(!currentSource||value.source_sha===env.RUNTIME_SOURCE_SHA),"runtime_job_binding");
  const fixture=await env.DB.prepare("SELECT * FROM runtime_drive_fixtures WHERE job_id=?").bind(id).first();
  return {...value,drive_fixture:fixture?1:0,fixture_authorized:fixture?.authorized||0,cleanup_state:fixture?.cleanup_state||null};
 }
@@ -161,11 +161,11 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
     const value=await body(request,["request_id","profile","target","version"]);delete value._source;
     const row=await admitExport(env,value,now);
     await promoteNext(env,now,send);
-    const current=await task(env,row.job_id);
+    const current=await task(env,row.job_id,false);
     return reply(200,{ok:true,job_id:row.job_id,state:current.state,run_id:current.run_id});
    }
-   const value=await body(request,["job_id"]);let row=await task(env,value.job_id);
-   await reconcileFixture(env,row,send);row=await task(env,row.job_id);
+   const value=await body(request,["job_id"]);let row=await task(env,value.job_id,false);
+   await reconcileFixture(env,row,send);row=await task(env,row.job_id,false);
    if(path==="status"&&row.kind==="export")await promoteNext(env,now,send);
    if(path==="owner-cancel"){
     await requireEntry(env);need(row.kind==="export","runtime_cancel_export_only");
@@ -174,7 +174,7 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
      const stopped=await env.DB.prepare("UPDATE runtime_jobs SET state='cancelled' WHERE job_id=? AND state='waiting'").bind(row.job_id).run();
      need(stopped.success===true,"runtime_cancel_storage");
      if(stopped.meta?.changes===1)return reply(200,{ok:true,state:"cancelled"});
-     row=await task(env,row.job_id);
+     row=await task(env,row.job_id,false);
     }
     const intent=await env.DB.prepare("INSERT INTO runtime_cancel_intents(job_id,created_at,outcome) VALUES(?,?,'intent') ON CONFLICT DO NOTHING").bind(row.job_id,now).run();
     need(intent.success===true,"runtime_cancel_storage");

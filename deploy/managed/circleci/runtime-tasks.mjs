@@ -65,7 +65,7 @@ export async function admitExport(env,value,now){
  need(result.success===true,"runtime_admission_storage");
  const row=await env.DB.prepare("SELECT * FROM runtime_jobs WHERE request_id=? AND owner_id=?").bind(value.request_id,env.RUNTIME_OWNER_ID).first();
  need(row,"runtime_daily_or_queue_limit");
- need(row.job_id===id&&row.kind==="export"&&row.source_sha===env.RUNTIME_SOURCE_SHA&&
+ need(row.job_id===id&&row.kind==="export"&&(row.source_sha===env.RUNTIME_SOURCE_SHA||["completed","closed","cancelled"].includes(row.state))&&
   ["profile","target","version"].every(key=>row[key]===value[key]),"runtime_request_immutable");
  return row;
 }
