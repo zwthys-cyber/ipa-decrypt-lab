@@ -7,6 +7,7 @@ on:
       - 'deploy/managed/circleci/dispatch*'
       - 'deploy/managed/circleci/oidc*'
       - 'deploy/managed/circleci/*credential*'
+      - 'deploy/managed/circleci/tf-acceptance*'
       - 'deploy/managed/free-pilot/worker.mjs'
       - 'deploy/managed/circleci/cloud_inventory.py'
       - '.github/workflows/circleci-control-contracts.yml'
@@ -37,7 +38,7 @@ jobs:
           python3 test_control_cloud.py -v
           python3 -m py_compile credential_probe.py credential_envelope.py
           node --check control-probe.mjs
-          node --test control.integration.mjs dispatch.integration.mjs oidc.test.mjs credential-broker.integration.mjs
+          node --test control.integration.mjs dispatch.integration.mjs oidc.test.mjs credential-broker.integration.mjs tf-acceptance.integration.mjs
           node --test ../free-pilot/worker.test.mjs ../free-pilot/private-link.test.mjs ../free-pilot/drive-auth.test.mjs
       - name: Bundle only the source-tested disabled control candidate
         run: |
