@@ -1,5 +1,6 @@
 """Offline frozen-snapshot comparison; never copies, edits or prints private state."""
 import argparse
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -27,6 +28,18 @@ def digest(path):
         for data in iter(lambda:stream.read(1024*1024),b""):h.update(data)
     return h.hexdigest()
 
+def check_acceptance(db):
+    # Inspect only: connect() would initialize a missing ledger and seed history.
+    columns=db.execute("PRAGMA table_info(invitations)").fetchall()
+    need({row[1] for row in columns}==
+         {"invite","request_id","run_id","source_commit","nonce","expires","state"})
+    need([row[1] for row in columns if row[5]]==["invite"])
+    # A view is not the durable, uniquely keyed acceptance ledger.
+    need(db.execute("SELECT type FROM sqlite_master WHERE name='invitations'").fetchall()==[("table",)])
+    need(db.execute("""SELECT count(*) FROM invitations
+        WHERE invite IS NULL OR state IS NULL OR
+              state NOT IN ('intent','membership_verified','outcome_unknown')""").fetchone()==(0,))
+
 def check_db(root,name,controller=False):
     path=root/name
     private(path)
@@ -34,10 +47,15 @@ def check_db(root,name,controller=False):
     for suffix in ("-wal","-shm","-journal"):
         side=Path(str(path)+suffix)
         need(not side.exists() and not side.is_symlink())
-    with sqlite3.connect(path.resolve().as_uri()+"?mode=ro&immutable=1",uri=True) as db:
+    with closing(sqlite3.connect(path.resolve().as_uri()+"?mode=ro&immutable=1",uri=True)) as db:
         need(db.execute("PRAGMA quick_check").fetchall()==[("ok",)])
+        if name in STATE_DBS:
+            check_acceptance(db)
         if controller:
-            need(db.execute("SELECT count(*) FROM tasks WHERE state IN ('pending','sending')").fetchone()==(0,))
+            need(db.execute("""SELECT count(*) FROM tasks
+                WHERE state IS NULL OR state NOT IN ('delivered','cancelled','closed')""").fetchone()==(0,))
+            if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='updates'").fetchone():
+                need(db.execute("SELECT count(*) FROM updates WHERE done IS NULL OR done!=1").fetchone()==(0,))
             if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='metadata'").fetchone():
                 for (value,) in db.execute("SELECT value FROM metadata WHERE name='version_browser'"):
                     need(isinstance(value, str) and len(value) <= 2 * 1024 * 1024)
@@ -72,6 +90,19 @@ def inventory(root,kind):
                 "cipher":digest(cipher)}
     raise ValueError("migration_check_failed")
 
+def inspect_source(source):
+    """Structural readiness only; no destination, provenance or cutover approval."""
+    result={"schema":"ipa-migration-source-v1"}
+    for kind in ("controller","state"):
+        try:
+            inventory(source,kind)
+        except Exception:
+            result[kind+"_snapshot_valid"]=False
+        else:
+            result[kind+"_snapshot_valid"]=True
+    result["snapshot_valid"]=all(result[kind+"_snapshot_valid"] for kind in ("controller","state"))
+    return result
+
 def compare(source,controller,state):
     # These are separate OFFLINE volumes or staging snapshots; no running processes.
     roots=[p.resolve(strict=True) for p in (source,controller,state)]
@@ -83,8 +114,20 @@ def compare(source,controller,state):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    for name in ("source","controller","state"):parser.add_argument("--"+name,type=Path,required=True)
+    parser.add_argument("--source",type=Path,required=True)
+    parser.add_argument("--controller",type=Path)
+    parser.add_argument("--state",type=Path)
+    parser.add_argument("--inspect-source",action="store_true",
+                        help="inspect an offline source without destination copies")
     args=parser.parse_args()
+    if args.inspect_source:
+        if args.controller is not None or args.state is not None:
+            parser.error("--inspect-source cannot be combined with destination roots")
+        result=inspect_source(args.source)
+        print(json.dumps(result,sort_keys=True))
+        return 0 if result["snapshot_valid"] else 2
+    if args.controller is None or args.state is None:
+        parser.error("--controller and --state are required for comparison")
     try:compare(args.source,args.controller,args.state)
     except Exception:
         print("migration_check_failed",file=sys.stderr);return 2

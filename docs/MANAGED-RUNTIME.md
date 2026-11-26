@@ -79,3 +79,34 @@ docker run --rm --network none \
 ```
 
 The check requires a mounted, owner-only, writable filesystem with at least 8,147,483,648 available bytes. It checks local lock contention, SQLite WAL support and committed journal readback in a temporary directory on the volume. It removes the temporary files and does not read existing controller records or require credentials. Success prints `managed_controller_volume_ready`. The lock check covers the local mount. Keep one controller replica.
+
+### Offline source snapshot inspection
+
+Before preparing destination copies, a CI-verified tool can inspect an already
+frozen private source snapshot on the approved migration infrastructure:
+
+```sh
+python3 tools/managed_migration.py --source "$FROZEN_SOURCE" --inspect-source
+```
+
+The report contains only the fixed schema `ipa-migration-source-v1` and three
+booleans: `controller_snapshot_valid`, `state_snapshot_valid` and
+`snapshot_valid`. An incomplete or invalid snapshot exits with status 2.
+The tool never initializes a missing acceptance ledger, writes source data or
+prints paths, identities, checksums, exceptions or database contents. The
+existing three-root comparison remains available and applies the same checks.
+
+Both modes reject unsupported or null controller task states, unfinished
+Telegram update records, and acceptance databases without the expected
+invitations table, invite primary key or supported states. Existing acceptance
+`intent` and `outcome_unknown` rows remain valid durable blockers and must be
+copied byte for byte; their age does not permit a retry. CI exercises this with
+the real acceptance helper on synthetic data.
+
+These are structural checks of offline data. A valid schema, including an
+empty table, cannot establish the provenance or completeness of historical
+acceptances. The missing production ledger recorded on November 25 still
+requires reconciliation against verified history; never create an empty
+replacement to obtain a passing report. A passing source report also does not
+establish a hosting destination, TestFlight compatibility or permission to cut
+over. Do not execute the tool on live state or in the editing workspace.
