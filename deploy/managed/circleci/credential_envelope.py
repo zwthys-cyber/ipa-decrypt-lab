@@ -14,6 +14,8 @@ MAX_CIPHER = 262144
 FIELDS = {"schema","job_id","run_id","worker_job_id","source_sha","recipient","nonce","expires_at","profile"}
 PROFILES = {
     "synthetic": {"fixture"},
+    "default_catalog": {"APPLE_ID","APPLE_PASSWORD"},
+    "cn_catalog": {"APPLE_CN_ID","APPLE_CN_GUID","APPLE_CN_SESSION_B64"},
     "default": {"APPLE_ID","APPLE_PASSWORD","FAIRPLAY_MODEL_B64"},
     "cn": {"APPLE_CN_ID","APPLE_CN_GUID","APPLE_CN_SESSION_B64","FAIRPLAY_CN_MODEL_B64","FAIRPLAY_CN_STATE_B64"},
     "tf": {"TF_SAVED_SESSION_B64","FAIRPLAY_CN_MODEL_B64"},

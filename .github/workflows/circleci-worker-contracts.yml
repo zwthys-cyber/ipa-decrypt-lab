@@ -4,6 +4,8 @@ on:
     branches: [upgrade/managed-runtime-v0.2]
     paths:
       - 'deploy/managed/circleci/appstore_worker.py'
+      - 'deploy/managed/circleci/catalog_worker.py'
+      - 'deploy/managed/circleci/test_catalog_worker.py'
       - 'deploy/managed/circleci/runtime_uploader.py'
       - 'deploy/managed/circleci/runtime_execution.py'
       - 'deploy/managed/circleci/managed_worker.py'
@@ -50,6 +52,7 @@ jobs:
           python3 test_runtime_uploader.py -v
           python3 test_runtime_execution.py -v
           python3 test_appstore_worker.py -v
+          python3 test_catalog_worker.py -v
           python3 test_tf_worker.py -v
           python3 test_credential_envelope.py -v
       - name: Preserve existing full plaintext and archive validators

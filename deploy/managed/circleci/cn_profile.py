@@ -13,8 +13,8 @@ from store_account_summary import validate_session
 import private_fairplay_state as checkpoint
 UA="Configurator/2.21 (Macintosh; OS X 15.2; 24C5089c) AppleWebKit/0620.1.16.11.6"
 
-def decode(values,now=None):
-    values=credentials("cn",values)
+def decode_session(values,now=None):
+    values=credentials("cn_catalog",values)
     now=int(time.time()) if now is None else now
     raw=checkpoint.decode_bytes(values["APPLE_CN_SESSION_B64"],32768)
     value=json.loads(raw)
@@ -30,6 +30,12 @@ def decode(values,now=None):
     require(type(front) is str and front.startswith("143465-"),"cn_storefront")
     validate_session(dict(dsid=account.get("directoryServicesIdentifier"),guid=guid,
         token=account.get("passwordToken"),user_agent=UA,storefront=front,cookies=account.get("cookie")))
+    return value
+
+def decode(values,now=None):
+    values=credentials("cn",values)
+    value=decode_session({key:values[key] for key in ("APPLE_CN_ID","APPLE_CN_GUID","APPLE_CN_SESSION_B64")},now)
+    guid=value["guid"]
     hardware,_=checkpoint.validate(checkpoint.decode_bytes(values["FAIRPLAY_CN_STATE_B64"],checkpoint.LIMIT))
     require(hardware.hex().upper()==guid,"cn_checkpoint_guid")
     model=checkpoint.decode_bytes(values["FAIRPLAY_CN_MODEL_B64"],8192)
@@ -37,15 +43,16 @@ def decode(values,now=None):
         struct.unpack_from("<II",model,8)==(2,len(model)),"cn_model_format")
     return value
 
-def bound(path,value,values):
+def bound(path,value,values,metadata_only=False):
     require(path.is_file() and not path.is_symlink() and path.stat().st_size<=32768,"cn_account_cache")
     current=dict(value,account=json.loads(path.read_bytes()))
-    decode(dict(values,APPLE_CN_SESSION_B64=base64.b64encode(json.dumps(current).encode()).decode()))
+    validator=decode_session if metadata_only else decode
+    validator(dict(values,APPLE_CN_SESSION_B64=base64.b64encode(json.dumps(current).encode()).decode()))
     return current
 
 @contextmanager
-def saved_session(binary,helper,values,env,home,runner):
-    value=decode(values)
+def saved_session(binary,helper,values,env,home,runner,metadata_only=False):
+    value=(decode_session if metadata_only else decode)(values)
     folder=home/".ipatool"/hashlib.md5(value["email"].lower().encode()).hexdigest()
     folder.mkdir(mode=0o700,parents=True,exist_ok=False)
     path=folder/"account.json"
@@ -55,9 +62,9 @@ def saved_session(binary,helper,values,env,home,runner):
             json.dump(value["account"],stream)
         result=runner(binary,["resume-cn",value["email"],"--guid",value["guid"]],child,300)
         require(result.returncode==0,"cn_session_requires_maintenance")
-        bound(path,value,values)
+        bound(path,value,values,metadata_only=metadata_only)
         yield value,child,path
-        bound(path,value,values)
+        bound(path,value,values,metadata_only=metadata_only)
     finally:
         import shutil
         shutil.rmtree(home/".ipatool",ignore_errors=True)

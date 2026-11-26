@@ -19,6 +19,12 @@ Last reviewed 2026-11-26. Use [the current project status](docs/PROJECT-STATUS.m
 
 - Telegram integration resumed on 2026-11-04. Implement bounded GitHub-hosted bot sessions and verified private delivery; the later explicit authorization permits finished-service execution on the VPS, but never permanent Actions hosting.
 
+## Catalog migration checkpoint (2026-11-26 23:15 UTC)
+
+- catalog_worker.py is a metadata-only CircleCI adapter with dedicated default_catalog / cn_catalog credential roles and model-free CN session validation. It is not yet wired into the permanent controller queue or Telegram menus. Keep these roles distinct from export credentials; do not attach models or checkpoint secrets to catalog publisher jobs.
+- GitHub source audit45908023150 timed out over SSH (exit255, zero result bytes). This does not prove the VPS service stopped. Final snapshot, offset/browser/acceptance handoff and single-poller cutover remain pending source access. Do not activate webhook against stale canary snapshots.
+- Run the new catalog and encryption regressions on GitHub only. Do not execute source locally or on the VPS.
+
 ## Managed runtime real-task checkpoint (2026-11-26)
 
 - Real owner-requested Go Club 6739782103 completed on CircleCI job72 / run bc58f448-c0fc-438e-936e-46ecd97797dd, source f3451dd2ba31ac9d9524da4ed7b6ad8f22c1346a. GitHub45866115288 and default issuer45866462237 succeeded: 6 encrypted images, 8000 pages, 73172295 cleaned bytes, owner-only Drive verification and confirmed owner-private Telegram link notice. No installation/runtime claim.

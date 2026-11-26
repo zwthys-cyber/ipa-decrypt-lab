@@ -32,6 +32,16 @@ class EnvelopeTests(unittest.TestCase):
     def open(self,cipher,context=None):
         return lease.open_envelope(cipher,self.key,context or self.context,self.consumer,self.now)
 
+    def test_catalog_roles_real_age_roundtrip_and_cross_role_rejection(self):
+        for role in ("default_catalog","cn_catalog"):
+            self.context["profile"]=role
+            self.values={key:"synthetic-private-"+key for key in lease.PROFILES[role]}
+            cipher=self.seal()
+            self.assertEqual(self.open(cipher),self.values)
+            for value in self.values.values():self.assertNotIn(value.encode(),cipher)
+            other=dict(self.context,profile="cn_catalog" if role=="default_catalog" else "default_catalog")
+            with self.assertRaisesRegex(ValueError,"packet_binding"):self.open(cipher,other)
+
     def test_real_age_roundtrip_and_no_plaintext_cipher(self):
         cipher=self.seal()
         self.assertNotIn(self.values["fixture"].encode(),cipher)

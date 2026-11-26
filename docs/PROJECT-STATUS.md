@@ -1,5 +1,13 @@
 # 项目进展
 
+## 版本目录迁移推进（2026-11-26 23:15 UTC）
+
+新增 CircleCI 历史版本元数据执行器，复用已验证的原生运行包与目录分页解析器；按来源、任务、工作机、账号区域和游标绑定结果。查询最多10条版本记录，拒绝游标倒退、异常包文件及会话区域变化。普通账号密码仅传登录子进程；国区仅恢复既有会话，失效即要求维护。目录角色 default_catalog / cn_catalog 仅领取所需账号字段，不领取 FairPlay 模型、检查点、交付密钥或 Drive 凭据；独立 GitHub 签发作业保持最小 Secrets 范围。该执行器尚未接入正式控制端排队与 Telegram 分页按钮，不能据此声称目录全链路完成。
+
+新增 GitHub 合成测试覆盖模型隔离、账号区域变化、会话维护失败、取消清理、异常下载、游标与运行包摘要。等待本次分支 CI 验证；无当前服务器编译或项目测试。
+
+最新[只读源状态检查45908023150](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45908023150)的公开检查通过，但源检查 SSH 超时（exit255、结果0字节）；尚不能取得最终冻结状态或停用旧轮询。旧服务器是否再次暂停需核实，不能把超时视为已完成停机交接。此前 Go Club 成功任务和确认通知保持原记录，不重复执行。
+
 ## Go Club 真实 CircleCI 任务与私有交付通过（2026-11-26 17:20 UTC）
 
 用户本次提供的美区 Go Club 链接对应 App ID `6739782103`。成功源码 `f3451dd2ba31ac9d9524da4ed7b6ad8f22c1346a`；[GitHub 验收 45866115288](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45866115288)、[默认账号签发 45866462237](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45866462237)、[CircleCI job72](https://app.circleci.com/workflow/aa787787-32bb-4c8f-a9de-5776666cc997/job/ef34d39f-955e-45a9-aee8-a6b60bb4a0ba) 均成功。逻辑任务 `pilot_267d28bb7688af8bbc132595f7009a07`，run `bc58f448-c0fc-438e-936e-46ecd97797dd`。
