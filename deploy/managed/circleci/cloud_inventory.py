@@ -31,7 +31,13 @@ def api(account, token, path, data=None):
                 raise ValueError("cloud_request_rejected")
             return value["result"]
     except urllib.error.HTTPError as error:
-        raise ValueError("cloud_http_" + str(error.code)) from None
+        codes = []
+        try:
+            codes = [str(x.get("code")) for x in json.loads(error.read(16384)).get("errors", [])
+                     if type(x.get("code")) is int]
+        except Exception:
+            pass
+        raise ValueError("cloud_http_" + str(error.code) + ("_codes_" + "_".join(codes) if codes else "")) from None
 
 def inventory():
     if os.environ.get("GITHUB_ACTIONS") != "true":
@@ -40,18 +46,23 @@ def inventory():
     if not token:
         raise ValueError("cloud_token_missing")
     settings = api(account, token, "/workers/scripts/" + WORKER + "/settings")
+    print("cloud_worker_settings_read", flush=True)
     bindings = {x.get("name"):x for x in settings.get("bindings", [])}
     db = bindings.get("DB", {})
     if db.get("type") != "d1" or not re.fullmatch(r"[a-f0-9-]{36}", db.get("id", "")):
         raise ValueError("pilot_d1_binding_missing")
+    print("cloud_d1_binding_validated", flush=True)
     subdomain = api(account, token, "/workers/subdomain").get("subdomain", "")
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", subdomain):
         raise ValueError("cloud_subdomain_invalid")
+    print("cloud_account_subdomain_read", flush=True)
     exposed = api(account, token, "/workers/scripts/" + WORKER + "/subdomain")
+    print("cloud_worker_exposure_read", flush=True)
     result = api(account, token, "/d1/database/" + db["id"] + "/query",
         dict(sql="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('pilot_jobs','pilot_links','circleci_dispatches','circleci_control_jobs','circleci_claims')", params=[]))
     if not isinstance(result, list) or len(result) != 1 or result[0].get("success") is not True:
         raise ValueError("pilot_schema_read_failed")
+    print("cloud_d1_schema_read", flush=True)
     tables = sorted(row["name"] for row in result[0].get("results", []))
     flag = lambda name: bindings.get(name, {}).get("text") == "1"
     private = lambda name: bindings.get(name, {}).get("type") == "secret_text"
