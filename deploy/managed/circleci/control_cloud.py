@@ -51,7 +51,8 @@ def public_call(origin, token, path, value):
             and path in ("/v1/runtime/probe-init", "/v1/runtime/probe-submit", "/v1/runtime/probe-status"),
             "control_origin_invalid")
     req = urllib.request.Request(origin + path, data=json.dumps(value).encode(),
-        headers={"Authorization":"Bearer " + token, "Content-Type":"application/json"}, method="POST")
+        headers={"Authorization":"Bearer " + token, "Content-Type":"application/json",
+                 "User-Agent":"ipa-decrypt-control-probe/0.2"}, method="POST")
     with urllib.request.build_opener(NoRedirect()).open(req, timeout=25) as response:
         raw = response.read(16385)
         require(len(raw) <= 16384, "control_response_limit")

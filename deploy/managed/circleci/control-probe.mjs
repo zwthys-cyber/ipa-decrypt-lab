@@ -11,7 +11,7 @@ if(!origin&&!job){
     const body=JSON.stringify({job_id:job,worker_job_id:process.env.CIRCLE_WORKFLOW_JOB_ID});
     async function call(path){
       const result=await fetch(origin+path,{method:"POST",redirect:"error",signal:AbortSignal.timeout(15000),
-        headers:{"content-type":"application/json",authorization:"Bearer "+process.env.CIRCLE_OIDC_TOKEN_V3},body});
+        headers:{"user-agent":"ipa-decrypt-circleci-runtime/0.2","content-type":"application/json",authorization:"Bearer "+process.env.CIRCLE_OIDC_TOKEN_V3},body});
       if(![200,409,503].includes(result.status))throw Error("control_probe_response");
       if(result.status!==200)return null;
       return result.json();
