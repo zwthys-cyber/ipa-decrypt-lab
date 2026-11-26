@@ -4,6 +4,16 @@
 
 The owner explicitly selected CircleCI for personal link-triggered use; 24-hour worker availability is not a requirement. This supersedes earlier hosting comparisons that treated an always-on worker as necessary. Target: Telegram webhook → Cloudflare Worker/D1 durable state → bounded CircleCI macOS worker → private Drive link. Keep App Store default/CN, available historical versions and owner-only TestFlight in migration scope.
 
+
+### Verified public ARM producer — 2026-11-26
+
+CircleCI workflow [ec99aa78-a31d-4cff-983b-e0fc4abac4c0, job 17](https://app.circleci.com/workflow/ec99aa78-a31d-4cff-983b-e0fc4abac4c0/job/1145ceb4-77f3-42d7-8ef4-8502428c2290) succeeded at source `b3ed18c5f7850d223e030a8ee84b75930f2f3700`. Actual host: macOS 26.3.1 ARM64, Xcode 26.5 build 17F42, Swift 6.3.2. Go/Python/Node checks, 21 selected Swift tests, allowlist/digest verification and relocated CLI execution passed. The initial job 16 failed because the image lacked Go; the successful source installs the bootstrap toolchain inside CircleCI.
+
+The public archive has 53 files; SHA-256 `7f3ffb80d5e2f20018b403d24533672e33e74238dd62cfee5cdbe6c3694b2c2c`, source fingerprint `b78dc6c819bff0735398f01e0533c10a465e0956d5b4374fde5180fc2fc602e3`. CircleCI artifacts list both `public-arm64-native-runtime/native-runtime.tar.gz` and `build-receipt.json`; the latter was read back and matched the source/workflow/job/toolchain and 53-file inventory. No independent consumer download/ABI execution or private account operation is claimed.
+
+GitHub [bundle contract run 45816912649](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45816912649) passed 9 focused tests and shell syntax checks; [managed runtime contracts 45816922963](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45816922963) passed. Compilation and project tests ran only in CI.
+
+
 The existing GitHub App integration already triggers CircleCI from this branch. The new public ARM64 producer is gated by the boolean pipeline parameter `build_native_runtime` or an explicit `[circleci-runtime-build]` commit marker. Ordinary pushes still run the existing owned-sample check, but do not rebuild the native runtime. The producer receives no account secrets and emits only public binaries/resources/licenses with source, architecture, CircleCI workflow/job and toolchain provenance. Relocation and fixture checks must pass before reuse. CircleCI packages use a separate schema; existing GitHub Intel producer guards and production fingerprints are preserved.
 
 This is a staged implementation, not a production cutover. Public artifact verification is not Apple acquisition/decryption evidence. CN/TF runtime variants, authenticated worker claims, durable acceptance/upload/cancellation handling, source-bound runtime fetching, bounded credits and actual owner-private delivery remain necessary. A CircleCI personal API token/account connection is still missing; do not place it in chat or pipeline parameters. Existing VPS polling and all historical state remain in place until a separately verified handover; never activate a webhook concurrently with that poller.
