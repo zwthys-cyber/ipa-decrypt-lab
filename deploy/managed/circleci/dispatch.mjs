@@ -33,7 +33,7 @@ async function read(response){
   if(text.length>65536)throw Error("dispatch_response_limit");
   return JSON.parse(text);
 }
-export async function dispatchSynthetic(db,config,send=fetch){
+export async function dispatchSynthetic(db,config,send=(url,init)=>globalThis.fetch(url,init)){
   if(!valid(config))return {state:"disabled"};
   const request=crypto.randomUUID().replaceAll("-","");
   // A committed intent precedes the only external POST. An uncertain commit sends nothing.
@@ -78,7 +78,7 @@ export async function dispatchSynthetic(db,config,send=fetch){
     return {state:"unknown"};
   }
 }
-export async function finishSynthetic(db,config,send=fetch){
+export async function finishSynthetic(db,config,send=(url,init)=>globalThis.fetch(url,init)){
   if(!valid(config))return {state:"disabled"};
   const row=await db.prepare(DISPATCH_SQL.get).bind(config.job,config.owner).first();
   if(!row||row.state!=="submitted"||row.source_sha!==config.source||!UUID.test(row.run_id||""))

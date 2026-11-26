@@ -46,18 +46,44 @@ def multipart(metadata, source):
                        content_type + "\r\n\r\n").encode() + raw + b"\r\n")
     return b"".join(chunks) + ("--" + boundary + "--\r\n").encode(), "multipart/form-data; boundary=" + boundary
 
-def public_call(origin, token, path, value):
+def public_call_once(origin, token, path, value):
     require(re.fullmatch(r"https://ipazake-free-control-pilot\.[a-z0-9][a-z0-9-]{0,62}\.workers\.dev", origin)
             and path in ("/v1/runtime/probe-init", "/v1/runtime/probe-submit", "/v1/runtime/probe-status",
                          "/v1/runtime/probe-diagnostics", "/v1/runtime/probe-retire"),
             "control_origin_invalid")
     req = urllib.request.Request(origin + path, data=json.dumps(value).encode(),
-        headers={"Authorization":"Bearer " + token, "Content-Type":"application/json",
+        headers={"X-Ipazake-Control-Token":token, "Content-Type":"application/json",
                  "User-Agent":"ipa-decrypt-control-probe/0.2"}, method="POST")
-    with urllib.request.build_opener(NoRedirect()).open(req, timeout=25) as response:
-        raw = response.read(16385)
-        require(len(raw) <= 16384, "control_response_limit")
-        return json.loads(raw)
+    try:
+        with urllib.request.build_opener(NoRedirect()).open(req, timeout=25) as response:
+            raw = response.read(16385)
+            require(len(raw) <= 16384, "control_response_limit")
+            return json.loads(raw)
+    except urllib.error.HTTPError as error:
+        code = "request_rejected"
+        try:
+            value = json.loads(error.read(16384))
+            if isinstance(value.get("code"), str) and re.fullmatch(r"[a-z_]{1,40}", value["code"]):
+                code = value["code"]
+        except Exception:
+            pass
+        raise ControlHTTPError(error.code, code) from None
+
+class ControlHTTPError(ValueError):
+    def __init__(self, status, code):
+        self.status = status
+        super().__init__("control_http_" + str(status) + "_" + code)
+
+def public_call(origin, token, path, value):
+    # These retries read or initialize the same record; run submission is never retried.
+    attempts = 1 if path == "/v1/runtime/probe-submit" else 8
+    for attempt in range(attempts):
+        try:
+            return public_call_once(origin, token, path, value)
+        except ControlHTTPError as error:
+            if attempt+1 == attempts or error.status not in (401, 404, 503):
+                raise
+            time.sleep(2)
 
 def deploy(bundle):
     require(os.environ.get("GITHUB_ACTIONS") == "true" and
@@ -116,9 +142,9 @@ def deploy(bundle):
                 break
             initialized = None
             time.sleep(2)
-        except urllib.error.HTTPError as error:
-            if error.code not in (401, 404, 503):
-                raise ValueError("control_init_http_" + str(error.code)) from None
+        except ControlHTTPError as error:
+            if error.status not in (401, 404, 503):
+                raise
             time.sleep(2)
     require(initialized and initialized.get("ok") is True, "control_init_failed")
     diagnostic = public_call(origin, control, "/v1/runtime/probe-diagnostics", {})
@@ -138,7 +164,7 @@ def deploy(bundle):
         submitted = public_call(origin, control, "/v1/runtime/probe-submit", dict(probe_id=probe_id))
         require(submitted.get("ok") is True and submitted.get("job_id") == logical_job,
                 "control_submit_unconfirmed")
-    except (urllib.error.URLError, TimeoutError):
+    except (urllib.error.URLError, ControlHTTPError, TimeoutError):
         pass
     deadline = time.monotonic() + 420
     while time.monotonic() < deadline:
@@ -161,7 +187,7 @@ def main():
         deploy(args.bundle)
         return 0
     except Exception as error:
-        reason = str(error) if type(error) is ValueError and re.fullmatch(r"[a-z0-9_]+", str(error)) else "cloud_control_probe_failed"
+        reason = str(error) if isinstance(error, ValueError) and re.fullmatch(r"[a-z0-9_]+", str(error)) else "cloud_control_probe_failed"
         print(reason, file=sys.stderr)
         return 1
 

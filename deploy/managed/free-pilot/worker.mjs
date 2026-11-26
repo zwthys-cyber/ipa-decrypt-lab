@@ -75,7 +75,7 @@ function actor(update,owner,now){
   return {id:m.from.id,text:m.text.trim(),update:update.update_id,date:m.date};
 }
 const HELP="免费控制层试验版：仅登记任务，不自动下载。发送 App Store 链接或数字 App ID；/status 查看最近任务；/cancel 任务编号 取消；/get 任务编号 领取已核对的私有网盘链接（需配置）。每天最多登记 3 次，最多 30 个等待任务。不支持 TestFlight。";
-export async function handle(request,env,now=Math.floor(Date.now()/1000),send=googleFetch,runtimeSend=fetch){
+export async function handle(request,env,now=Math.floor(Date.now()/1000),send=googleFetch,runtimeSend=(url,init)=>globalThis.fetch(url,init)){
   const url=new URL(request.url);
   if(url.pathname.startsWith("/v1/runtime/"))return handleRuntime(request,env,now,runtimeSend);
   if(request.method!=="POST"||!["/telegram","/v1/link-register","/v1/link-retire"].includes(url.pathname)||url.search)return response(404,{ok:false});

@@ -19,7 +19,7 @@ function object(value){
   require(parsed&&typeof parsed==="object"&&!Array.isArray(parsed),"jwt_object");
   return parsed;
 }
-export async function fetchKeys(send=fetch){
+export async function fetchKeys(send=(url,init)=>globalThis.fetch(url,init)){
   const response=await send("https://oidc.circleci.com/org/"+TRUST.org+"/.well-known/jwks-pub.json",
     {redirect:"error",headers:{accept:"application/json"}});
   require(response.status===200,"jwks_unavailable");

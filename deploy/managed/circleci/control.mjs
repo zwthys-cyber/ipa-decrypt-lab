@@ -82,7 +82,8 @@ async function context(env,job){
   return row;
 }
 async function authenticated(request,env,value,now,send){
-  const token=request.headers.get("authorization")||"";
+  const jobToken=request.headers.get("x-ipazake-job-token");
+  const token=jobToken!==null?"Bearer "+jobToken:(request.headers.get("authorization")||"");
   require(/^Bearer [A-Za-z0-9_.-]{100,16384}$/.test(token),"invalid_authorization");
   const row=await context(env,value.job_id);
   require(row.pilot_state==="waiting_for_runtime"&&row.dispatch_state==="submitted"&&UUID.test(row.run_id||""),
@@ -124,7 +125,7 @@ async function initialize(env){
       result.results[0].pk===1,"schema_mismatch");
   }
 }
-export async function handleRuntime(request,env,now=Math.floor(Date.now()/1000),send=fetch){
+export async function handleRuntime(request,env,now=Math.floor(Date.now()/1000),send=(url,init)=>globalThis.fetch(url,init)){
   const url=new URL(request.url),path=url.pathname;
   const paths=["/v1/runtime/probe-init","/v1/runtime/probe-submit","/v1/runtime/probe-status","/v1/runtime/probe-diagnostics","/v1/runtime/probe-retire",
     "/v1/runtime/claim","/v1/runtime/probe-finish"];
@@ -135,7 +136,10 @@ export async function handleRuntime(request,env,now=Math.floor(Date.now()/1000),
       require(SECRET.test(env.CIRCLECI_CONTROL_TOKEN||"")&&
         ![env.TELEGRAM_WEBHOOK_SECRET,env.PILOT_LINK_ISSUER_TOKEN,env.CIRCLECI_API_TOKEN].includes(env.CIRCLECI_CONTROL_TOKEN),
         "control_configuration");
-      if(!await same(request.headers.get("authorization")||"","Bearer "+env.CIRCLECI_CONTROL_TOKEN))return response(401);
+      const dedicated=request.headers.get("x-ipazake-control-token");
+      const supplied=dedicated!==null?"Bearer "+dedicated:(request.headers.get("authorization")||"");
+      if(!await same(supplied,"Bearer "+env.CIRCLECI_CONTROL_TOKEN))
+        return response(401,{ok:false,code:"control_authentication"});
       if(path==="/v1/runtime/probe-init"){
         await body(request,[]);await initialize(env);return response(200,{ok:true,schema:"circleci-control-init-v1",source_sha:env.CIRCLECI_SOURCE_SHA});
       }
