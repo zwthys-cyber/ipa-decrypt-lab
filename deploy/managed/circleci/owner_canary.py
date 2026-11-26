@@ -132,7 +132,7 @@ def run(bundle,app):
   (output/"receipt.json").write_text(json.dumps(proof,sort_keys=True)+"\n")
   print(json.dumps(proof,sort_keys=True),flush=True)
  save();prepared=deploy(bundle,prepare_only=True);token=prepared["control_token"]
- nonce=secrets.token_hex(16);known=None;paused=False;terminal=False;deadline=0;installed=False
+ nonce=secrets.token_hex(16);known=None;paused=False;terminal=False;deadline=0;installed=False;admission_attempted=False
  with tempfile.TemporaryDirectory(prefix="owner-canary-private-") as directory:
   root=Path(directory);raw=build_transport(root)
   # Prepare trusted host keys before attempting a pause so finally can restore even if streaming fails.
@@ -150,6 +150,7 @@ def run(bundle,app):
     dict(name="TELEGRAM_BOT_TOKEN",type="secret_text",text=bot),method="PUT")
    mode(env,bundle,True)
    request=dict(request_id=packet["request_id"],profile="default",target=app,version="")
+   admission_attempted=True
    for attempt in range(30):
     try:
      admitted=call("admit-export",token,request);need(admitted.get("job_id"),"canary_admission");break
@@ -178,7 +179,7 @@ def run(bundle,app):
    finally:
     if paused:
      # A stalled worker is killed by its independent deadline watchdog before source admission resumes.
-     if not terminal and deadline:
+     if admission_attempted and not terminal and deadline:
       while time.time()<deadline+30:time.sleep(min(10,deadline+30-time.time()))
      restore_source(env,known,raw,nonce);proof["source_restored"]=True;save()
   need(proof.get("decryption_proven") is True,"canary_not_verified")
