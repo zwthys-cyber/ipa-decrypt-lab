@@ -33,7 +33,7 @@ async function token(id=workerJob,changes={}){
 async function setup(){
   const folder=await mkdtemp(join(tmpdir(),"circle-control-"));await mkdir(join(folder,"free-pilot"));await mkdir(join(folder,"circleci"));
   await Promise.all(["worker.mjs","private-link.mjs","drive-auth.mjs"].map(name=>copyFile(new URL(name,base),join(folder,"free-pilot",name))));
-  await Promise.all(["control.mjs","control-schema.mjs","dispatch.mjs","oidc.mjs"].map(name=>copyFile(new URL(name,import.meta.url),join(folder,"circleci",name))));
+  await Promise.all(["control.mjs","control-schema.mjs","dispatch.mjs","oidc.mjs","credential-broker.mjs"].map(name=>copyFile(new URL(name,import.meta.url),join(folder,"circleci",name))));
   const entry=join(folder,"entry.mjs");
   await writeFile(entry,`
     import {handle} from "./free-pilot/worker.mjs";
@@ -102,10 +102,21 @@ test("real workerd: signed claim, idempotent callback and verified terminal read
     assert.deepEqual(await result.json(),{ok:true,schema:"circleci-control-task-v1",kind:"synthetic_noop",
       job_id:job,run_id:run,worker_job_id:workerJob,source_sha:source});
     assert.equal((await s.request("/v1/runtime/claim",body,jwt)).status,200);
+    const leaseBody={...body,recipient:"age1"+"q".repeat(58),nonce:"c".repeat(32),expires_at:now+240};
+    assert.equal((await s.request("/v1/runtime/lease-request",leaseBody,secret)).status,409);
+    const requested=await s.request("/v1/runtime/lease-request",leaseBody,jwt);
+    assert.equal(requested.status,200);
+    const leaseContext=(await requested.json()).context;
+    assert.equal((await s.request("/v1/runtime/probe-lease-pending",{job_id:job},jwt)).status,401);
+    assert.equal((await s.request("/v1/runtime/probe-lease-pending",{job_id:job})).status,200);
+    const cipher=btoa("age-encryption.org/v1\nsynthetic-ciphertext");
+    assert.equal((await s.request("/v1/runtime/probe-lease-publish",{job_id:job,context:leaseContext,ciphertext:cipher})).status,200);
+    assert.equal((await s.request("/v1/runtime/lease-read",body,secret)).status,409);
+    assert.equal((await (await s.request("/v1/runtime/lease-read",body,jwt)).json()).ciphertext,cipher);
     assert.equal((await s.request("/v1/runtime/probe-finish",body,jwt)).status,200);
     assert.equal((await s.request("/v1/runtime/probe-finish",body,jwt)).status,200);
     result=await s.request("/v1/runtime/probe-status",{job_id:job},secret,{"x-fixture-terminal":"1"});
-    assert.deepEqual(await result.json(),{ok:true,job_id:job,state:"finished",diagnostic:null,claimed:true,probe_finished:true});
+    assert.deepEqual(await result.json(),{ok:true,job_id:job,state:"finished",credential_fixture_consumed:true,diagnostic:null,claimed:true,probe_finished:true});
     assert.equal((await s.request("/v1/runtime/claim",body,jwt)).status,409);
     assert.equal((await s.db.prepare("SELECT count(*) n FROM circleci_claims").first()).n,1);
     assert.equal((await s.request("/telegram")).status,503);

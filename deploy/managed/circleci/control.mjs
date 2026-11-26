@@ -2,6 +2,7 @@
 import {dispatchSynthetic,finishSynthetic} from "./dispatch.mjs";
 import {TRUST,fetchKeys,verifyCircleJWT} from "./oidc.mjs";
 import {CONTROL_SCHEMA} from "./control-schema.mjs";
+import {LEASE_SCHEMA,requestLease,pendingLease,publishLease,readLease,closeLease} from "./credential-broker.mjs";
 const UUID=/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 const JOB=/^pilot_[a-f0-9]{32}$/,HEX=/^[a-f0-9]{32}$/,SHA=/^[a-f0-9]{40}$/;
 const OWNER=/^[1-9][0-9]{0,15}$/,SECRET=/^[A-Za-z0-9_-]{43,128}$/;
@@ -43,14 +44,14 @@ async function same(left,right){
   const [a,b]=await Promise.all([hash(left),hash(right)]);
   let n=0;for(let i=0;i<a.length;i++)n|=a[i]^b[i];return n===0;
 }
-async function body(request,keys){
+async function body(request,keys,limit=2048){
   require(request.headers.get("content-type")==="application/json"&&request.body,"request_body");
   const reader=request.body.getReader(),chunks=[];let size=0;
   try{
     for(;;){
       const item=await reader.read();if(item.done)break;
       size+=item.value.byteLength;
-      require(size<=2048,"request_limit");chunks.push(item.value);
+      require(size<=limit,"request_limit");chunks.push(item.value);
     }
   }finally{try{await reader.cancel();}catch{}reader.releaseLock();}
   const raw=new Uint8Array(size);let at=0;
@@ -111,14 +112,15 @@ async function authenticated(request,env,value,now,send){
 async function initialize(env){
   const names=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('pilot_jobs','pilot_links')").all();
   require(names.success===true&&names.results?.length===2,"pilot_schema_missing");
-  const queries=CONTROL_SCHEMA.replace(/^--.*$/gm,"").split(";").map(x=>x.trim()).filter(Boolean);
+  const queries=(CONTROL_SCHEMA+"\n"+LEASE_SCHEMA).replace(/^--.*$/gm,"").split(";").map(x=>x.trim()).filter(Boolean);
   const result=await env.DB.batch(queries.map(x=>env.DB.prepare(x)));
   require(result.every(x=>x.success===true),"schema_initialization");
   const required={circleci_dispatches:["job_id","owner_id","request_id","source_sha","state","run_id","created_at","updated_at"],
     circleci_control_jobs:["job_id","source_sha","kind","created_at"],
     circleci_claims:["job_id","run_id","worker_job_id","claimed_at","finished_at"],
     circleci_probe_resolutions:["job_id","source_sha","reason","resolved_at"],
-    circleci_dispatch_diagnostics:["job_id","code","recorded_at"]};
+    circleci_dispatch_diagnostics:["job_id","code","recorded_at"],
+    circleci_credential_leases:["job_id","context_json","expires_at","ciphertext","cipher_sha256","published_at","consumed_at"]};
   for(const [table,columns] of Object.entries(required)){
     const result=await env.DB.prepare("PRAGMA table_info("+table+")").all();
     require(result.success===true&&result.results?.map(x=>x.name).join(",")===columns.join(",")&&
@@ -128,7 +130,8 @@ async function initialize(env){
 export async function handleRuntime(request,env,now=Math.floor(Date.now()/1000),send=(url,init)=>globalThis.fetch(url,init)){
   const url=new URL(request.url),path=url.pathname;
   const paths=["/v1/runtime/probe-init","/v1/runtime/probe-submit","/v1/runtime/probe-status","/v1/runtime/probe-diagnostics","/v1/runtime/probe-retire",
-    "/v1/runtime/claim","/v1/runtime/probe-finish"];
+    "/v1/runtime/claim","/v1/runtime/probe-finish","/v1/runtime/lease-request","/v1/runtime/lease-read",
+    "/v1/runtime/probe-lease-pending","/v1/runtime/probe-lease-publish"];
   if(request.method!=="POST"||url.search||!paths.includes(path))return response(404);
   if(!configured(env,request))return response(503);
   try{
@@ -181,15 +184,24 @@ export async function handleRuntime(request,env,now=Math.floor(Date.now()/1000),
         const dispatched=await dispatchSynthetic(env.DB,config(env,job,now),send);
         return response(dispatched.state==="submitted"?201:409,{ok:dispatched.state==="submitted",job_id:job,...dispatched});
       }
+      if(path==="/v1/runtime/probe-lease-pending"||path==="/v1/runtime/probe-lease-publish"){
+        const publish=path.endsWith("-publish");
+        const value=await body(request,publish?["job_id","context","ciphertext"]:["job_id"],publish?360000:2048);
+        const task=await context(env,value.job_id);
+        return response(200,publish?await publishLease(env.DB,task,value,now):await pendingLease(env.DB,task,now));
+      }
       const value=await body(request,["job_id"]),row=await context(env,value.job_id);
       if(row.dispatch_state==="submitted"&&row.finished_at!==null&&row.worker_job_id)
         await finishSynthetic(env.DB,config(env,value.job_id,now),send);
       const latest=await context(env,value.job_id);
       const diagnostic=await env.DB.prepare("SELECT code FROM circleci_dispatch_diagnostics WHERE job_id=?").bind(value.job_id).first();
+      const lease=await env.DB.prepare("SELECT ciphertext,consumed_at FROM circleci_credential_leases WHERE job_id=?").bind(value.job_id).first();
       return response(200,{ok:true,job_id:value.job_id,state:latest.dispatch_state,
+        ...(lease?{credential_fixture_consumed:lease.ciphertext===null&&Number.isSafeInteger(lease.consumed_at)}:{}),
         diagnostic:diagnostic?.code||null,claimed:!!latest.worker_job_id,probe_finished:Number.isSafeInteger(latest.finished_at)});
     }
-    const value=await body(request,["job_id","worker_job_id"]);
+    const leaseRequest=path==="/v1/runtime/lease-request";
+    const value=await body(request,leaseRequest?["job_id","worker_job_id","recipient","nonce","expires_at"]:["job_id","worker_job_id"]);
     const {row,identity}=await authenticated(request,env,value,now,send);
     if(path==="/v1/runtime/claim"){
       const result=await env.DB.prepare(CONTROL_SQL.claim).bind(identity.job_id,now,row.job_id,
@@ -201,6 +213,9 @@ export async function handleRuntime(request,env,now=Math.floor(Date.now()/1000),
         job_id:row.job_id,run_id:row.run_id,worker_job_id:identity.job_id,source_sha:row.source_sha});
     }
     require(row.worker_job_id===identity.job_id,"claim_required");
+    if(leaseRequest)return response(200,await requestLease(env.DB,row,value,now));
+    if(path==="/v1/runtime/lease-read")return response(200,await readLease(env.DB,row,now));
+    await closeLease(env.DB,row.job_id,now);
     const result=await env.DB.prepare(CONTROL_SQL.finish).bind(now,row.job_id,row.run_id,identity.job_id).run();
     require(result.success===true,"finish_storage");
     return response(200,{ok:true,schema:"circleci-control-probe-finished-v1"});

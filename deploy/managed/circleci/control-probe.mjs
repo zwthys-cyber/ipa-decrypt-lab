@@ -1,5 +1,6 @@
 // Invoked inside the credential-free Linux job. Never log the authorization header.
 import {writeFileSync} from "node:fs";
+import {execFileSync} from "node:child_process";
 const origin=process.env.PROBE_CONTROL_URL||"",job=process.env.PROBE_CONTROL_JOB||"";
 if(!origin&&!job){
   console.log(JSON.stringify({schema:"circleci-control-probe-v1",skipped:true}));
@@ -29,7 +30,16 @@ if(!origin&&!job){
     if(!task||task.kind!=="synthetic_noop"||task.job_id!==job||task.source_sha!==process.env.CIRCLE_SHA1||
        task.run_id!==process.env.PROBE_PIPELINE||task.worker_job_id!==process.env.CIRCLE_WORKFLOW_JOB_ID)
       throw Error("control_probe_claim");
-    // A synthetic task intentionally has no Apple operation, file upload or Telegram send.
+    // Only synthetic fixture values are transported; no Apple credentials are requested.
+    const childEnv={};
+    for(const key of ["PATH","HOME","LANG","TMPDIR","CIRCLECI","CIRCLE_BRANCH","CIRCLE_SHA1",
+      "CIRCLE_WORKFLOW_JOB_ID","PROBE_PIPELINE","PROBE_CONTROL_URL","CIRCLE_OIDC_TOKEN_V3"])
+      if(process.env[key]!==undefined)childEnv[key]=process.env[key];
+    const proof=JSON.parse(execFileSync("python3",["deploy/managed/circleci/credential_probe.py"],
+      {input:JSON.stringify(task),encoding:"utf8",env:childEnv,timeout:220000,stdio:["pipe","pipe","pipe"]}));
+    if(proof.verified!==true||proof.apple_credentials!==false||proof.job_id!==job)
+      throw Error("control_probe_credential_fixture");
+    console.log(JSON.stringify(proof));
     let done;
     for(let attempt=0;attempt<3&&!done;attempt++){
       if(attempt)await new Promise(resolve=>setTimeout(resolve,1000));
@@ -37,7 +47,7 @@ if(!origin&&!job){
     }
     if(done?.ok!==true||done.schema!=="circleci-control-probe-finished-v1")throw Error("control_probe_finish");
     const receipt={schema:"circleci-control-probe-v1",skipped:false,claimed:true,finished:true,
-      production:false,apple_operation:false,file_upload:false,telegram_send:false,
+      credential_fixture_verified:true,production:false,apple_operation:false,file_upload:false,telegram_send:false,
       job_id:job,run_id:process.env.PROBE_PIPELINE,source_commit:process.env.CIRCLE_SHA1};
     writeFileSync("dispatch-probe-out/control-receipt.json",JSON.stringify(receipt)+"\n",{mode:0o600});
     console.log(JSON.stringify(receipt));

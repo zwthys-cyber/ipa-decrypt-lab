@@ -1,5 +1,6 @@
 """Deploy only the CI-tested isolated probe and verify a signed, no-op cloud roundtrip."""
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -11,6 +12,7 @@ import time
 import urllib.error
 import urllib.request
 from cloud_inventory import api, NoRedirect, WORKER
+from credential_envelope import context as lease_context, seal
 
 OWNER = re.compile(r"[1-9][0-9]{0,15}")
 SHA = re.compile(r"[a-f0-9]{40}")
@@ -49,7 +51,8 @@ def multipart(metadata, source):
 def public_call_once(origin, token, path, value):
     require(re.fullmatch(r"https://ipazake-free-control-pilot\.[a-z0-9][a-z0-9-]{0,62}\.workers\.dev", origin)
             and path in ("/v1/runtime/probe-init", "/v1/runtime/probe-submit", "/v1/runtime/probe-status",
-                         "/v1/runtime/probe-diagnostics", "/v1/runtime/probe-retire"),
+                         "/v1/runtime/probe-diagnostics", "/v1/runtime/probe-retire",
+                         "/v1/runtime/probe-lease-pending", "/v1/runtime/probe-lease-publish"),
             "control_origin_invalid")
     req = urllib.request.Request(origin + path, data=json.dumps(value).encode(),
         headers={"X-Ipazake-Control-Token":token, "Content-Type":"application/json",
@@ -167,11 +170,28 @@ def deploy(bundle):
                 "control_submit_unconfirmed")
     except (urllib.error.URLError, ControlHTTPError, TimeoutError):
         pass
+    lease_published = False
     deadline = time.monotonic() + 420
     while time.monotonic() < deadline:
         value = public_call(origin, control, "/v1/runtime/probe-status", dict(job_id=logical_job))
+        if value.get("state") == "submitted" and value.get("claimed") is True and not lease_published:
+            pending = public_call(origin, control, "/v1/runtime/probe-lease-pending", dict(job_id=logical_job))
+            if pending.get("context"):
+                expected = lease_context(pending["context"])
+                require(expected["job_id"] == logical_job and expected["source_sha"] == source and
+                        expected["profile"] == "synthetic", "lease_publisher_binding")
+                cipher = seal(expected, dict(fixture="synthetic-private-fixture"))
+                digest = hashlib.sha256(cipher).hexdigest()
+                published = public_call(origin, control, "/v1/runtime/probe-lease-publish",
+                    dict(job_id=logical_job, context=expected, ciphertext=base64.b64encode(cipher).decode()))
+                require(published.get("cipher_sha256") == digest, "lease_publisher_digest")
+                lease_published = True
+                receipt.update(credential_fixture_published=True, credential_cipher_sha256=digest)
+                save()
         if value.get("state") == "finished" and value.get("claimed") is True and value.get("probe_finished") is True:
-            receipt.update(status="verified", signed_claim_verified=True, durable_completion_verified=True)
+            require(lease_published and value.get("credential_fixture_consumed") is True, "lease_fixture_not_verified")
+            receipt.update(status="verified", signed_claim_verified=True, durable_completion_verified=True,
+                           credential_fixture_verified=True, credential_ciphertext_cleared=True)
             save()
             return
         if value.get("state") in ("unknown", "intent"):

@@ -57,11 +57,11 @@ class DeploymentTests(unittest.TestCase):
                 seen.append(request.full_url)
                 return Reply()
         with patch.object(cloud.urllib.request,"build_opener",return_value=Client()):
-            for path in ("probe-init","probe-submit","probe-status","probe-diagnostics","probe-retire"):
+            for path in ("probe-init","probe-submit","probe-status","probe-diagnostics","probe-retire","probe-lease-pending","probe-lease-publish"):
                 self.assertTrue(cloud.public_call(self.origin,"synthetic-control-token","/v1/runtime/"+path,{})["ok"])
             with self.assertRaises(ValueError):
                 cloud.public_call(self.origin,"synthetic-control-token","/v1/runtime/credentials",{})
-        self.assertEqual(len(seen),5)
+        self.assertEqual(len(seen),7)
         self.assertTrue(all(value.startswith(self.origin+"/v1/runtime/") for value in seen))
 
     def test_admin_token_never_sent_to_arbitrary_origin(self):

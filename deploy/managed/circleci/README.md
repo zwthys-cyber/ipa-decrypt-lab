@@ -1,5 +1,16 @@
 # CircleCI on-demand migration candidate
 
+## 真实云端签名调度闭环已验证（2026-11-26）
+
+[GitHub 45833846829](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45833846829) 在源码 `61e9bfa2ffd63814799b00943c537e369c4d9bf4` 通过 workerd/D1、OIDC 与旧入口回归，并部署独立控制探针。Cloudflare Worker 使用私有 CircleCI 调度令牌提交一次任务，CircleCI [job 57](https://app.circleci.com/workflow/864a2051-adc9-4a64-be61-5b4bb82593e7/job/417fd373-ae51-41ba-a781-75cbed05dcf2) 用真实 V3 OIDC 身份领取并完成回调；控制端从 CircleCI API 确认同源码 run `0e8fa45d-81b7-4ac2-b44e-3ad74a25def9` 成功结束，D1 持久完成记录已回读。逻辑任务 `pilot_5b2dfa4b32bc4414f788e6558eb69c55`，公共 bundle SHA-256 `fc2375da1dc6b586b74dc6a5fc06dbebadce93f22bc1a235bded367b48da1581`。
+
+修复了 Workers 不支持 `redirect: "error"` 导致请求构造失败的问题：出站请求使用 `manual`，严格拒绝非预期 HTTP 状态，不跟随重定向；workerd 模拟接口先实际构造 Request，JWKS 重定向也有拒绝检查。早期无凭据空探针的不明确提交记录保留原始 unknown 意图，仅为该固定任务增加审计解决记录，未重置或重复提交旧任务。
+
+[GitHub 45833797131](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45833797131) 通过 10 项实际 age 加密测试：一次性私钥、任务/run/worker/source/nonce/期限绑定、篡改/错误密钥/额外凭据拒绝、最小子进程环境。后续 opaque lease 集成仍只允许 synthetic 配置，真实跨云加密交接的通过证据需单独记录。
+
+现有 Google 私有绑定、D1 及关闭的 Telegram/链接开关保持不变；VPS 仍是唯一生产机器人。本检查点没有 Apple 操作、IPA 上传、消息发送或生产切换。仍需完成三类实际任务的 CircleCI 适配、真实凭据/加密会话与 TF 历史账本交接、取消/未知结果闭环、私有 Drive 交付、费用门禁及单一入口交接。当前服务器未编译或执行项目测试。
+
+
 ## 三包构建与独立加载已验证（2026-11-26，最新）
 
 同源码公共构建 [CircleCI job 40](https://app.circleci.com/workflow/ca2fe102-a78d-4284-a20f-321d5ccdfa1e/job/1e3c2e16-037e-47cd-8166-3096fc4cb817) 已成功，源码 `fa258c072f246011079affe7cecd369422ecef0d`，macOS 26.3.1 / ARM64 / Xcode 26.5。base 21 项 Swift、CN 29 项 Swift、TF 24 项 CTest，以及 Go/Python/Node 检查、三包库存/摘要与迁移后运行验证通过。base/CN 各 82 个文件，TF 12 个文件；版本与归档摘要已固定在 `deploy/managed/circleci/runtime-pins.json`。此前失败的部分产物不是这些已固定的成功包。

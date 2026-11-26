@@ -105,7 +105,7 @@ test("workerd D1: registered Drive link is returned only in the owner's private 
     await mkdir(join(folder,"free-pilot"));await mkdir(join(folder,"circleci"));
     await Promise.all(["worker.mjs","private-link.mjs","drive-auth.mjs"].map(name=>
       copyFile(new URL("./"+name,import.meta.url),join(folder,"free-pilot",name))));
-    await Promise.all(["control.mjs","control-schema.mjs","dispatch.mjs","oidc.mjs"].map(name=>
+    await Promise.all(["control.mjs","control-schema.mjs","dispatch.mjs","oidc.mjs","credential-broker.mjs"].map(name=>
       copyFile(new URL("../circleci/"+name,import.meta.url),join(folder,"circleci",name))));
     await writeFile(entry,`
       import {handle} from "./free-pilot/worker.mjs";
