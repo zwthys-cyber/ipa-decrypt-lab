@@ -5,7 +5,36 @@ parameters:
     type: boolean
     default: false
 
+  dispatch_probe:
+    type: boolean
+    default: false
+  probe_source:
+    type: string
+    default: ""
+  probe_id:
+    type: string
+    default: ""
+
 jobs:
+  dispatch-contract-probe:
+    docker:
+      - image: cimg/python:3.13
+    resource_class: small
+    steps:
+      - checkout
+      - run:
+          name: Validate the source-bound synthetic dispatch
+          environment:
+            PROBE_SOURCE: << pipeline.parameters.probe_source >>
+            PROBE_ID: << pipeline.parameters.probe_id >>
+            PROBE_PIPELINE: << pipeline.id >>
+          command: |
+            set -euo pipefail
+            python3 deploy/managed/circleci/test_probe.py -v
+            python3 deploy/managed/circleci/probe.py worker
+      - store_artifacts:
+          path: dispatch-probe-out
+          destination: synthetic-dispatch-probe
   arm64-ios-archive:
     macos:
       xcode: "26.5"
@@ -69,6 +98,12 @@ jobs:
           destination: public-arm64-native-runtime
 
 workflows:
+  synthetic-dispatch-probe:
+    when: << pipeline.parameters.dispatch_probe >>
+    jobs:
+      - dispatch-contract-probe
   arm64-archive-validation:
+    when:
+      not: << pipeline.parameters.dispatch_probe >>
     jobs:
       - arm64-ios-archive

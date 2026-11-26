@@ -1,0 +1,35 @@
+name: Verify CircleCI API dispatch
+on:
+  push:
+    branches: [upgrade/managed-runtime-v0.2]
+    paths:
+      - '.github/workflows/circleci-connection-probe.yml'
+      - 'deploy/managed/circleci/probe.py'
+      - 'deploy/managed/circleci/test_probe.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: circleci-api-dispatch-probe
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/upgrade/managed-runtime-v0.2'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Test safe endpoint, source binding and definition selection
+        run: python3 deploy/managed/circleci/test_probe.py -v
+      - name: Trigger exactly one credential-free Linux probe and verify completion
+        env:
+          CIRCLECI_API_TOKEN: ${{ secrets.CIRCLECI_API_TOKEN }}
+        run: python3 deploy/managed/circleci/probe.py github
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: circleci-dispatch-probe-${{ github.sha }}
+          path: circleci-probe-receipt.json
+          retention-days: 1
+          if-no-files-found: error
