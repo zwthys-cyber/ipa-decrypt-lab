@@ -1,0 +1,56 @@
+name: Recover verified historical TestFlight state candidate
+on:
+  push:
+    branches: ['upgrade/managed-runtime-v0.2']
+    paths:
+      - '.github/ops/tf_history_recovery.py'
+      - '.github/ops/test_tf_history_recovery.py'
+      - '.github/workflows/tf-history-recovery.yml'
+  pull_request:
+    paths:
+      - '.github/ops/tf_history_recovery.py'
+      - '.github/ops/test_tf_history_recovery.py'
+      - '.github/workflows/tf-history-recovery.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: tf-history-recovery-candidate
+  cancel-in-progress: false
+jobs:
+  public:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify historical evidence and blocked replay without credentials
+        run: python3 -m unittest discover -s .github/ops -p 'test_tf_history_recovery.py' -v
+  recover:
+    needs: public
+    if: >-
+      github.run_attempt == 1 &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/upgrade/managed-runtime-v0.2') &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'push' && contains(github.event.head_commit.message, '[tf-history-recovery]')))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install envelope encryption on GitHub only
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends age
+      - name: Reconcile exact historical receipts and build an encrypted candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
+        run: python3 .github/ops/tf_history_recovery.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: tf-history-recovery-${{ github.run_id }}
+          path: tf-history-recovery-out/
+          retention-days: 1
+          if-no-files-found: error
