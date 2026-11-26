@@ -27,9 +27,9 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 def api(token, path, data=None):
-    require(path.startswith(("/project/", "/projects/", "/pipeline/", "/workflow/"))
+    require((path == "/me" or path.startswith(("/project/", "/projects/", "/pipeline/", "/workflow/")))
             and ".." not in path and "?" not in path, "invalid_api_path")
-    headers = {"Circle-Token": token, "Accept": "application/json"}
+    headers = {"Authorization": "Bearer " + token, "Accept": "application/json"}
     raw = None if data is None else json.dumps(data).encode()
     if raw is not None:
         headers["Content-Type"] = "application/json"
@@ -86,9 +86,14 @@ def github_probe():
             and os.environ.get("GITHUB_REF") == "refs/heads/" + BRANCH, "github_branch_required")
     token = os.environ.get("CIRCLECI_API_TOKEN", "")
     require(bool(token) and "\n" not in token and "\r" not in token, "circleci_token_missing")
+    _, identity = api(token, "/me")
+    require(uuid(identity.get("id")), "token_identity_invalid")
+    print("circleci_token_authenticated", flush=True)
     _, project = api(token, "/project/" + SLUG)
     require(project.get("id") == PROJECT and project.get("slug") == SLUG, "project_mismatch")
+    print("circleci_project_verified", flush=True)
     _, definitions = api(token, "/projects/" + PROJECT + "/pipeline-definitions")
+    print("circleci_definitions_read", flush=True)
     definition = select_definition(definitions)
     commit, request_id = os.environ["GITHUB_SHA"], secrets.token_hex(16)
     request = payload(definition, commit, request_id)
