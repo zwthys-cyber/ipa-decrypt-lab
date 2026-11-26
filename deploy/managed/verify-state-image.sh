@@ -6,7 +6,7 @@ volume=$(docker volume create "ipazake-state-check-$$-$RANDOM")
 container=
 cleanup() {
   if [[ -n "$container" ]]; then
-    docker stop --time 2 "$container" >/dev/null 2>&1 || true
+    docker rm --force "$container" >/dev/null 2>&1 || true
   fi
   docker volume rm "$volume" >/dev/null
 }
@@ -44,7 +44,7 @@ TF_STATE_API_TOKEN=$(python3 -c 'import secrets; print(secrets.token_urlsafe(32)
 export TF_STATE_API_TOKEN
 
 verify_state() {
-  container=$(docker run --rm --detach --network none --mount "$mount" \
+  container=$(docker run --detach --network none --mount "$mount" \
     -e TF_STATE_API_TOKEN "$image")
   docker exec -i "$container" /usr/bin/python3 - <<'PY'
 import hashlib
@@ -85,6 +85,8 @@ assert result["bytes"] == len(fixture), result
 print("Mounted state is ready and status requires authorization")
 PY
   docker stop --time 2 "$container" >/dev/null
+  # Explicit removal completes before the mounted volume is removed on EXIT.
+  docker rm "$container" >/dev/null
   container=
 }
 
