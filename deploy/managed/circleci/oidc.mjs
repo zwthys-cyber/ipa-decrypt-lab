@@ -51,9 +51,9 @@ export async function verifyCircleJWT(token,expected,keys,now=Math.floor(Date.no
     claim.exp-claim.iat<=3600&&
     (claim.nbf===undefined||(Number.isSafeInteger(claim.nbf)&&claim.nbf<=now+30)),"jwt_time");
   const field=name=>claim["oidc.circleci.com/"+name];
-  require(field("org-id")===TRUST.org&&field("project-id")===TRUST.project&&
-    field("pipeline-id")===TRUST.definition&&field("run-id")===expected.run&&
-    field("job-id")===expected.job&&field("ssh-rerun")===false,"jwt_job_identity");
+  for(const [name,value] of Object.entries({"org-id":TRUST.org,"project-id":TRUST.project,
+    "pipeline-id":TRUST.definition,"run-id":expected.run,"job-id":expected.job,"ssh-rerun":false}))
+    require(field(name)===value,"jwt_claim_"+name.replaceAll("-","_"));
   require(field("checkout-source")===TRUST.source&&field("config-source")===TRUST.source&&
     field("checkout-ref")===TRUST.ref&&field("config-ref")===TRUST.ref,"jwt_source");
   const subject="org:"+TRUST.org+":project:"+TRUST.project+":user:"+TRUST.user+

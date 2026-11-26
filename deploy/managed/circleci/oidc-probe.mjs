@@ -10,6 +10,8 @@ try{
   }
   writeFileSync("dispatch-probe-out/oidc-receipt.json",JSON.stringify(result)+"\n",{mode:0o600});
   console.log(JSON.stringify(result));
-}catch{
-  console.error("circleci_oidc_probe_failed");process.exitCode=1;
+}catch(error){
+  const reason=typeof error?.message==="string"&&/^(jwt_[a-z_]+|jwks_[a-z_]+|expected_identity)$/.test(error.message)
+    ?error.message:"circleci_oidc_probe_failed";
+  console.error(reason);process.exitCode=1;
 }
