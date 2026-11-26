@@ -57,8 +57,16 @@ test("key fetch uses fixed public origin, no authentication and no redirects",as
   let called=false;
   const value=await fetchKeys(async(url,options)=>{
     called=true;assert.equal(url,"https://oidc.circleci.com/org/"+TRUST.org+"/.well-known/jwks-pub.json");
-    assert.equal(options.redirect,"error");assert.deepEqual(options.headers,{accept:"application/json"});
+    assert.equal(options.redirect,"manual");assert.deepEqual(options.headers,{accept:"application/json"});
     return new Response(JSON.stringify(keys));
   });
   assert.ok(called);assert.equal(value.keys.length,1);
+});
+
+test("key fetch rejects redirects without following them",async()=>{
+  let calls=0;
+  await assert.rejects(fetchKeys(async()=>{
+    calls++;return new Response(null,{status:302,headers:{location:"https://untrusted.invalid/keys"}});
+  }),/jwks_unavailable/);
+  assert.equal(calls,1);
 });
