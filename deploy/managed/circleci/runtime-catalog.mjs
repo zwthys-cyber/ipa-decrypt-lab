@@ -3,7 +3,7 @@ import {need} from "./runtime-auth.mjs";
 import {requireEntry,exportRequest,admitExport} from "./runtime-tasks.mjs";
 export const CATALOG_SCHEMA=[
  "CREATE TABLE IF NOT EXISTS runtime_catalog_specs(job_id TEXT PRIMARY KEY REFERENCES runtime_jobs(job_id),before_id TEXT NOT NULL,page_index INTEGER NOT NULL,result_json TEXT)",
- "CREATE TABLE IF NOT EXISTS runtime_catalog_requests(request_id TEXT PRIMARY KEY,owner_id TEXT NOT NULL,profile TEXT NOT NULL,target TEXT NOT NULL,before_id TEXT NOT NULL,parent_view TEXT NOT NULL,force_refresh INTEGER NOT NULL,job_id TEXT NOT NULL REFERENCES runtime_jobs(job_id),created_at INTEGER NOT NULL)",
+ "CREATE TABLE IF NOT EXISTS runtime_catalog_requests(request_id TEXT PRIMARY KEY,owner_id TEXT NOT NULL,profile TEXT NOT NULL,target TEXT NOT NULL,before_id TEXT NOT NULL,parent_view TEXT NOT NULL,family_id TEXT NOT NULL,force_refresh INTEGER NOT NULL,job_id TEXT NOT NULL REFERENCES runtime_jobs(job_id),created_at INTEGER NOT NULL)",
  "CREATE TABLE IF NOT EXISTS runtime_catalog_views(view_id TEXT PRIMARY KEY,request_id TEXT NOT NULL UNIQUE,owner_id TEXT NOT NULL,job_id TEXT NOT NULL,parent_view TEXT NOT NULL,family_id TEXT NOT NULL,created_at INTEGER NOT NULL,expires_at INTEGER NOT NULL,state TEXT NOT NULL,message_id INTEGER,selected_id TEXT,export_request_id TEXT)"
 ].join(";")+";";
 const VID=/^[a-f0-9]{32}$/,EXT=/^[1-9][0-9]{5,19}$/;
@@ -29,15 +29,18 @@ async function requestResult(db,id,owner){
 async function open(env,value,now){
  await entry(env);input(value);
  const {DB:db,RUNTIME_OWNER_ID:owner}=env;
+ const legacy=await db.prepare("SELECT request_id FROM runtime_legacy_tasks WHERE owner_id=? AND request_id=?").bind(owner,value.request_id).first();
+ need(!legacy,"runtime_historical_request_held");
  let saved=await requestResult(db,value.request_id,owner);
  const immutable=row=>need(row&&row.profile===value.profile&&row.target===value.target&&row.before_id===value.before&&
   row.parent_view===value.parent_view&&row.force_refresh===Number(value.force),"runtime_catalog_request_immutable");
  if(saved){immutable(saved);return saved;}
- let page=0;
+ let page=0,family="";
  if(value.parent_view){
   const parent=await db.prepare("SELECT v.*,s.result_json,s.page_index,j.profile,j.target FROM runtime_catalog_views v JOIN runtime_catalog_specs s ON s.job_id=v.job_id JOIN runtime_jobs j ON j.job_id=v.job_id WHERE v.view_id=? AND v.owner_id=?").bind(value.parent_view,owner).first();
   need(parent&&parent.state==="sent"&&parent.expires_at>now&&parent.selected_id===null&&
    parent.profile===value.profile&&parent.target===value.target,"runtime_catalog_view_expired");
+  family=parent.family_id;
   if(value.before){
    need(JSON.parse(parent.result_json).next_before===value.before&&parent.page_index<19,"runtime_catalog_page_limit");
    page=parent.page_index+1;
@@ -62,8 +65,8 @@ async function open(env,value,now){
   need(row.request_id===value.request_id&&row.profile===value.profile&&row.target===value.target&&
    row.before_id===value.before&&row.page_index===page&&row.source_sha===env.RUNTIME_SOURCE_SHA,"runtime_catalog_request_immutable");
  }
- const stored=await db.prepare("INSERT INTO runtime_catalog_requests(request_id,owner_id,profile,target,before_id,parent_view,force_refresh,job_id,created_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING")
-  .bind(value.request_id,owner,value.profile,value.target,value.before,value.parent_view,Number(value.force),row.job_id,now).run();
+ const stored=await db.prepare("INSERT INTO runtime_catalog_requests(request_id,owner_id,profile,target,before_id,parent_view,family_id,force_refresh,job_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING")
+  .bind(value.request_id,owner,value.profile,value.target,value.before,value.parent_view,family,Number(value.force),row.job_id,now).run();
  need(stored.success===true,"runtime_catalog_storage");
  saved=await requestResult(db,value.request_id,owner);immutable(saved);return saved;
 }
@@ -104,7 +107,7 @@ export async function notifyCatalog(env,request,now,send){
  const job=await db.prepare("SELECT j.*,s.result_json,s.page_index FROM runtime_jobs j JOIN runtime_catalog_specs s ON s.job_id=j.job_id WHERE j.job_id=? AND j.owner_id=?").bind(request.job_id,env.RUNTIME_OWNER_ID).first();
  if(!job?.result_json||job.finished_at===null||!["completed","link_ready"].includes(job.state))return false;
  const id=await hash("catalog-view\0"+env.RUNTIME_OWNER_ID+"\0"+request.request_id);
- let family=id;
+ let family=request.family_id||id;
  if(request.parent_view){
   const parent=await db.prepare("SELECT family_id,selected_id FROM runtime_catalog_views WHERE view_id=? AND owner_id=?").bind(request.parent_view,env.RUNTIME_OWNER_ID).first();
   need(parent,"runtime_catalog_view_expired");if(parent.selected_id!==null)return false;family=parent.family_id;
@@ -117,7 +120,7 @@ export async function notifyCatalog(env,request,now,send){
  need(created.success===true,"runtime_catalog_storage");if(created.meta?.changes!==1)return false;
  const result=JSON.parse(job.result_json),buttons=result.rows.map(row=>[{text:row.version+" · "+row.date,callback_data:"cv:"+id+":v:"+row.id}]);
  const navigation=[];
- if(request.parent_view)navigation.push({text:"上一页",callback_data:"cv:"+id+":p"});
+ if(request.parent_view&&job.page_index>0)navigation.push({text:"上一页",callback_data:"cv:"+id+":p"});
  if(result.next_before&&job.page_index<19)navigation.push({text:"下一页",callback_data:"cv:"+id+":n"});
  if(navigation.length)buttons.push(navigation);
  buttons.push([{text:"刷新",callback_data:"cv:"+id+":r"}]);
@@ -170,16 +173,16 @@ export async function catalogAction(env,value,now,send){
  need(value.version_id===""&&view.selected_id===null,"runtime_catalog_already_selected");
  let record;
  if(value.action==="p"){
-  need(VID.test(view.parent_view||""),"runtime_catalog_page_limit");
+  need(view.page_index>0&&VID.test(view.parent_view||""),"runtime_catalog_page_limit");
   const parent=await env.DB.prepare("SELECT * FROM runtime_catalog_views WHERE view_id=? AND owner_id=?").bind(view.parent_view,env.RUNTIME_OWNER_ID).first();
   need(parent&&parent.expires_at>now&&parent.selected_id===null,"runtime_catalog_view_expired");
   // Reopen only an acknowledged, owner-bound previous page. No account query.
   const source=await requestResult(env.DB,parent.request_id,env.RUNTIME_OWNER_ID);
-  const stored=await env.DB.prepare("INSERT INTO runtime_catalog_requests(request_id,owner_id,profile,target,before_id,parent_view,force_refresh,job_id,created_at) VALUES(?,?,?,?,?,?,0,?,?) ON CONFLICT DO NOTHING")
-   .bind(value.request_id,env.RUNTIME_OWNER_ID,view.profile,view.target,source.before_id,parent.parent_view,parent.job_id,now).run();
+  const stored=await env.DB.prepare("INSERT INTO runtime_catalog_requests(request_id,owner_id,profile,target,before_id,parent_view,family_id,force_refresh,job_id,created_at) VALUES(?,?,?,?,?,?,?,0,?,?) ON CONFLICT DO NOTHING")
+   .bind(value.request_id,env.RUNTIME_OWNER_ID,view.profile,view.target,source.before_id,parent.parent_view,view.family_id,parent.job_id,now).run();
   need(stored.success===true,"runtime_catalog_storage");
   record=await requestResult(env.DB,value.request_id,env.RUNTIME_OWNER_ID);
-  need(record?.job_id===parent.job_id&&record.parent_view===parent.parent_view,"runtime_catalog_request_immutable");
+  need(record?.job_id===parent.job_id&&record.parent_view===parent.parent_view&&record.family_id===view.family_id,"runtime_catalog_request_immutable");
  }else{
   if(value.action==="n")need(result.next_before,"runtime_catalog_page_limit");
   record=await open(env,{request_id:value.request_id,profile:view.profile,target:view.target,

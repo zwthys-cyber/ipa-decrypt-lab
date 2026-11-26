@@ -73,9 +73,10 @@ async function setup(bindings={}){
     const used=await env.DB.prepare("SELECT job_id FROM runtime_jobs WHERE run_id=?").bind(run).first();
     return Response.json({data:{id:!used?run:"12345678-1234-1234-1234-"+String(nativePosts).padStart(12,"0")}},{status:201});
    }
-   if(url==="https://circleci.com/api/v3/runs/"+run){
-    const terminal=request.headers.get("x-fixture-terminal")==="1";
-    return Response.json({data:{id:run,attributes:{phase:terminal?"ended":"started",current_outcome:terminal?(request.headers.get("x-fixture-failed")==="1"?"failed":"succeeded"):null},
+   if(url.startsWith("https://circleci.com/api/v3/runs/")){
+    const currentRun=url.split("/").at(-1);
+    const terminal=currentRun===run&&request.headers.get("x-fixture-terminal")==="1";
+    return Response.json({data:{id:currentRun,attributes:{phase:terminal?"ended":"started",current_outcome:terminal?(request.headers.get("x-fixture-failed")==="1"?"failed":"succeeded"):null},
      references:{project:{id:C.project},pipeline:{id:C.definition},event:{attributes:{vcs:{
       origin_repository_url:"https://"+C.source,target_repository_url:"https://"+C.source,branch:C.ref.slice(11),
       revision:request.headers.get("x-fixture-wrong-source")==="1"?"b".repeat(40):${JSON.stringify(source)}
@@ -516,7 +517,10 @@ test("the scheduled reconciler releases a known ended catalog and dispatches its
   await s.db.prepare("UPDATE runtime_jobs SET state='link_ready',run_id=?,worker_job_id=?,workflow_id=? WHERE job_id=?").bind(run,worker,workflow,seeded.id).run();
   const admitted=await (await s.request("admit-export",realRequest)).json();assert.equal(admitted.state,"waiting");
   assert.equal((await s.mf.dispatchFetch(origin+"/fixture-count").then(r=>r.json())).nativePosts,0);
-  for(let i=0;i<2;i++)assert.equal((await s.mf.dispatchFetch(origin+"/fixture-tick",{headers:{"x-fixture-terminal":"1"}})).status,200);
+  for(let i=0;i<2;i++){
+   const result=await s.mf.dispatchFetch(origin+"/fixture-tick",{headers:{"x-fixture-terminal":"1"}});
+   assert.equal(result.status,200,await result.text());
+  }
   const old=await s.db.prepare("SELECT state FROM runtime_jobs WHERE job_id=?").bind(seeded.id).first();
   const next=await s.db.prepare("SELECT state,run_id FROM runtime_jobs WHERE job_id=?").bind(admitted.job_id).first();
   assert.equal(old.state,"completed");assert.equal(next.state,"submitted");assert.notEqual(next.run_id,run);
