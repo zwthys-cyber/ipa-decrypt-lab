@@ -8,6 +8,8 @@ on:
       - 'deploy/managed/circleci/oidc*'
       - 'deploy/managed/circleci/*credential*'
       - 'deploy/managed/circleci/tf-acceptance*'
+      - 'deploy/managed/circleci/runtime-*'
+      - 'deploy/managed/circleci/github-oidc*'
       - 'deploy/managed/free-pilot/worker.mjs'
       - 'deploy/managed/circleci/cloud_inventory.py'
       - '.github/workflows/circleci-control-contracts.yml'
@@ -38,13 +40,13 @@ jobs:
           python3 test_control_cloud.py -v
           python3 -m py_compile credential_probe.py credential_envelope.py
           node --check control-probe.mjs
-          node --test control.integration.mjs dispatch.integration.mjs oidc.test.mjs credential-broker.integration.mjs tf-acceptance.integration.mjs
+          node --test control.integration.mjs dispatch.integration.mjs oidc.test.mjs credential-broker.integration.mjs tf-acceptance.integration.mjs runtime-upload.integration.mjs runtime-api.integration.mjs github-oidc.test.mjs
           node --test ../free-pilot/worker.test.mjs ../free-pilot/private-link.test.mjs ../free-pilot/drive-auth.test.mjs
       - name: Bundle only the source-tested disabled control candidate
         run: |
           root=deploy/managed/circleci
           mkdir circleci-control-dist
-          "$root/node_modules/.bin/esbuild" deploy/managed/free-pilot/worker.mjs --bundle --platform=browser --format=esm --target=es2022 --outfile=circleci-control-dist/worker.mjs
+          "$root/node_modules/.bin/esbuild" deploy/managed/circleci/runtime-worker.mjs --bundle --platform=browser --format=esm --target=es2022 --outfile=circleci-control-dist/worker.mjs
           node --check circleci-control-dist/worker.mjs
           printf 'source_commit=%s\n' "$GITHUB_SHA" > circleci-control-dist/BUILDINFO
           cd circleci-control-dist
