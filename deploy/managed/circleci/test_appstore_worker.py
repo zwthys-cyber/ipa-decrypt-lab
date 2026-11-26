@@ -54,7 +54,7 @@ class WorkerTests(unittest.TestCase):
             source_sha="c"*40,profile="default",target="123456",version="",recipient=context.RECIPIENT,
             deadline=int(time.time())+1800)
         self.env=dict(PATH=os.environ["PATH"],LANG="C.UTF-8",CIRCLECI="true",CIRCLE_PROJECT_USERNAME="zwthys-cyber",
-            CIRCLE_PROJECT_REPONAME="ipa-decrypt-lab",CIRCLE_BRANCH=context.BRANCH,CIRCLE_SHA1=self.task["source_sha"],
+            CIRCLE_PROJECT_REPONAME="ipa-decrypt-lab",CIRCLE_PROJECT_ID="04ca0b08-bd33-434c-a59c-5f4ca8d18688",CIRCLE_BRANCH=context.BRANCH,CIRCLE_SHA1=self.task["source_sha"],
             CIRCLE_WORKFLOW_JOB_ID=self.task["worker_job_id"],RUNTIME_RUN_ID=self.task["run_id"])
         self.values=dict(APPLE_ID="fixture@example.invalid",APPLE_PASSWORD="synthetic-password",FAIRPLAY_MODEL_B64=model())
         self.calls=[];self.stages=[];self.bad_proof=False;self.bad_version=False;self.mutate_cn=False;self.runtime_bad=False
@@ -171,7 +171,7 @@ class WorkerTests(unittest.TestCase):
 
     def test_task_rejects_wrong_source_run_worker_owner_profile_and_github_spoof(self):
         for key,value in (("CIRCLE_SHA1","d"*40),("RUNTIME_RUN_ID",self.task["worker_job_id"]),
-            ("CIRCLE_WORKFLOW_JOB_ID",self.task["run_id"]),("CIRCLE_PROJECT_USERNAME","other"),
+            ("CIRCLE_WORKFLOW_JOB_ID",self.task["run_id"]),("CIRCLE_PROJECT_ID","other"),
             ("GITHUB_ACTIONS","true")):
             with self.assertRaisesRegex(ValueError,"task_circleci_context"):
                 context.validate(self.task,dict(self.env,**{key:value}),host=("Darwin","arm64"))

@@ -30,7 +30,7 @@ def validate(value,env=None,now=None,host=None):
     require(value["recipient"]==RECIPIENT and type(value["deadline"]) is int and
         now<value["deadline"]<=now+3600,"task_deadline_or_recipient")
     require(env.get("CIRCLECI")=="true" and not env.get("GITHUB_ACTIONS") and
-        env.get("CIRCLE_PROJECT_USERNAME")=="zwthys-cyber" and env.get("CIRCLE_PROJECT_REPONAME")=="ipa-decrypt-lab" and
+        env.get("CIRCLE_PROJECT_ID")=="04ca0b08-bd33-434c-a59c-5f4ca8d18688" and
         env.get("CIRCLE_BRANCH")==BRANCH and env.get("CIRCLE_SHA1")==value["source_sha"] and
         env.get("CIRCLE_WORKFLOW_JOB_ID")==value["worker_job_id"] and
         (env.get("RUNTIME_RUN_ID") or env.get("PROBE_PIPELINE"))==value["run_id"],"task_circleci_context")

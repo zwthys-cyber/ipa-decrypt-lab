@@ -61,7 +61,7 @@ def export_task(task,values,output,env=None,checkpoint=lambda stage:None,accepta
         with os.fdopen(os.open(request_path,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o600),"w") as stream:
             json.dump(request,stream)
         child=minimal_env(env,home)
-        child.update({key:env[key] for key in ("CIRCLECI","CIRCLE_PROJECT_USERNAME","CIRCLE_PROJECT_REPONAME",
+        child.update({key:env[key] for key in ("CIRCLECI","CIRCLE_PROJECT_ID",
             "CIRCLE_BRANCH","CIRCLE_SHA1","CIRCLE_WORKFLOW_JOB_ID")})
         child["RUNTIME_RUN_ID"]=task["run_id"]
         def run(binary,args,environment,timeout):

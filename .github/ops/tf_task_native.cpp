@@ -54,7 +54,7 @@ void request_binding(const Json& request,const std::function<std::string(const c
         const auto now=static_cast<std::int64_t>(std::time(nullptr));
         netdetail::require(request.at("schema")=="tf-worker-request-circleci-v1" && request.size()==8 &&
             env("CIRCLECI")=="true" && env("GITHUB_ACTIONS").empty() &&
-            env("CIRCLE_PROJECT_USERNAME")=="zwthys-cyber" && env("CIRCLE_PROJECT_REPONAME")=="ipa-decrypt-lab" &&
+            env("CIRCLE_PROJECT_ID")=="04ca0b08-bd33-434c-a59c-5f4ca8d18688" &&
             env("CIRCLE_BRANCH")=="upgrade/managed-runtime-v0.2" &&
             request.at("run_id")==env("RUNTIME_RUN_ID") && match(request.at("run_id"),uuid) &&
             request.at("worker_job_id")==env("CIRCLE_WORKFLOW_JOB_ID") && match(request.at("worker_job_id"),uuid) &&
@@ -149,13 +149,13 @@ APPLE_AUTH_CLIENT_EXPORT int lab_tf_task_contract() {
             {"invite","SYNTH123"},{"run_id","12345678-1234-1234-1234-123456789abc"},
             {"worker_job_id","23456789-1234-1234-1234-123456789abc"},{"source_commit",std::string(40,'b')},
             {"job_id","pilot_"+std::string(32,'c')},{"deadline",std::time(nullptr)+300}};
-        std::map<std::string,std::string> circle={{"CIRCLECI","true"},{"CIRCLE_PROJECT_USERNAME","zwthys-cyber"},
-            {"CIRCLE_PROJECT_REPONAME","ipa-decrypt-lab"},{"CIRCLE_BRANCH","upgrade/managed-runtime-v0.2"},
+        std::map<std::string,std::string> circle={{"CIRCLECI","true"},{"CIRCLE_PROJECT_ID","04ca0b08-bd33-434c-a59c-5f4ca8d18688"},
+            {"CIRCLE_BRANCH","upgrade/managed-runtime-v0.2"},
             {"CIRCLE_SHA1",cir.at("source_commit")},{"CIRCLE_WORKFLOW_JOB_ID",cir.at("worker_job_id")},
             {"RUNTIME_RUN_ID",cir.at("run_id")}};
         const auto lookup=[&](const char* key) {const auto it=circle.find(key);return it==circle.end()?std::string():it->second;};
         request_binding(cir,lookup);
-        for(const auto* key:{"GITHUB_ACTIONS","CIRCLE_PROJECT_USERNAME","CIRCLE_BRANCH","CIRCLE_SHA1",
+        for(const auto* key:{"GITHUB_ACTIONS","CIRCLE_PROJECT_ID","CIRCLE_BRANCH","CIRCLE_SHA1",
                 "CIRCLE_WORKFLOW_JOB_ID","RUNTIME_RUN_ID"}) {
             const auto saved=lookup(key);circle[key]="invalid";bool denied=false;
             try{request_binding(cir,lookup);}catch(...){denied=true;}
