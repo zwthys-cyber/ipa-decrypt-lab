@@ -1,12 +1,20 @@
 # 项目进展
 
-## 当前状态（2026-11-25）
+## 当前状态（2026-11-26）
 
 - **公开发行**为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。11 月 9 日刷新了公开附件，源码以 `BUILDINFO.json` 为准。国区历史版本属于之后的线上部署。详见[发布说明](RELEASES.md)。
 - **线上控制器**最近一次成功部署为 [42727462163](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42727462163)。11 月 25 日的[只读检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45638716965)记录服务健康、当时没有活动任务，仍采用 VPS 轮询。当天的[加密备份](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45637494802)包含控制器、Telegram 状态、TestFlight 会话密文和回执库；检查时标准路径中缺少可核验的 TestFlight 接受记录。
-- **v0.2** 仍是[草稿 PR](https://github.com/zwthys-cyber/ipa-decrypt-lab/pull/1)。最新[托管运行时验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45663099506)通过 ARM64 镜像构建、独立导入、持久卷预检、状态服务重启，以及双架构合成 ZIP64 全量读取。Drive 上传校验新增了媒体类型改标回归，仍核对大小、SHA-256、归属与权限。
+- **v0.2** 仍是[草稿 PR](https://github.com/zwthys-cyber/ipa-decrypt-lab/pull/1)。最新[托管运行时验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45808213138)通过 ARM64 镜像构建、独立导入、持久卷预检、状态服务重启，以及双架构合成 ZIP64 全量读取。Drive 上传校验新增了媒体类型改标回归，仍核对大小、SHA-256、归属与权限。
 - **私有交付试验**完成了项目自有 ARM64 样例的 Drive 存取和[一次 Telegram 私聊链接发送](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45644694693)，接收人确认可打开。生产 webhook 切换和真实 10 GB 网盘传输仍待验证。详见[零费用试验记录](ZERO-COST.md)。
 - **主仓库 CircleCI** 的[首跑](https://app.circleci.com/workflow/7fcc4b73-7caa-4de2-8f16-763288eb34e2)通过 84 项测试，三个 Smarter Testing 套件均通过 Doctor。[CircleCI M4 Pro](https://app.circleci.com/workflow/40131029-8872-4661-8351-f1b0fd0034ba/job/c35d0d9a-2113-4b8a-b3fe-07db03f99967) 另通过了项目自有 iOS 样例的构建和归档校验。指定 `cimg/base:stable` 当前为 Linux amd64，glibc 2.31；workerd 集成仍由 GitHub Actions 验证。
+
+## 迁移源快照预检（2026-11-26）
+
+源码 [`82a7d4c`](https://github.com/zwthys-cyber/ipa-decrypt-lab/commit/82a7d4c2c119ade3f4780bd4e00868881be98cc6) 为离线迁移工具增加 `--inspect-source`：无需准备目标目录，就能分别报告控制器与 TestFlight 状态快照的结构有效性。输出仅有固定 schema 和三个布尔值；缺失接受记录库时失败退出，不创建替代库。三目录比对同样加强了接受表字段、邀请主键、状态及未完成 Telegram 更新的检查。
+
+[托管运行时验证 45808213138](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45808213138) 已成功：amd64/ARM64 各通过 18 项 managed 测试，其中 9 项为迁移专项，覆盖错误库结构、源数据只读、脱敏输出、退出码、未完成更新及未知接受结果在复制后仍拒绝重试。workerd/D1、双架构 10 GB 合成归档、ARM64 镜像/持久卷/重启/独立导入均通过。同提交的 [push 原生检查 45808202663](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45808202663) 在 Linux、macOS Intel 和 Apple silicon 三平台通过。
+
+此轮仅使用 GitHub API 修改源码、由 GitHub Actions 编译测试，没有在编辑服务器执行项目测试，也没有调用 Apple、读取生产私有状态、创建托管服务或发送 Telegram 消息。预检不能证明接受历史的来源或完整性；11 月 25 日发现的缺失记录库仍需核对来源。符合零费用及无 VPS 要求的生产运行环境、兼容且获授权的处理链路、生产切换和真实 10 GB 网盘传输仍未完成。操作方式见[迁移说明](MANAGED-RUNTIME.md#offline-source-snapshot-inspection)。
 
 以下记录以原验证日期为准。
 
