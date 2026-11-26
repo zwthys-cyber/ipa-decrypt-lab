@@ -19,6 +19,14 @@ Last reviewed 2026-11-26. Use [the current project status](docs/PROJECT-STATUS.m
 
 - Telegram integration resumed on 2026-11-04. Implement bounded GitHub-hosted bot sessions and verified private delivery; the later explicit authorization permits finished-service execution on the VPS, but never permanent Actions hosting.
 
+## Managed runtime real-task checkpoint (2026-11-26)
+
+- Real owner-requested Go Club 6739782103 completed on CircleCI job72 / run bc58f448-c0fc-438e-936e-46ecd97797dd, source f3451dd2ba31ac9d9524da4ed7b6ad8f22c1346a. GitHub45866115288 and default issuer45866462237 succeeded: 6 encrypted images, 8000 pages, 73172295 cleaned bytes, owner-only Drive verification and confirmed owner-private Telegram link notice. No installation/runtime claim.
+- Do not repeat this download or resend its confirmed notice just because the owner says continue. Preserve completed runtime_jobs, runtime_notifications and the real Drive file. Fixture cleanup is never valid for an export.
+- This was a bounded canary, not permanent cutover: old service was paused with an authenticated frozen snapshot, 29 legacy rows preserved with 2 pending held, then restored. Canary authorization was revoked and the control returned to staging/export-off/Telegram-entry-off. Source audit45867033676 confirmed fresh health, idle state, original TF carrier and private-return ledger. VPS remains the sole daily poller.
+- The first attempt45864907910 / job71 stopped at public prewarm before Apple login/download. Fixed caller uses the existing LAB_KBSYNC_CHILD=1 contract only for the helper, exactly as the Swift bridge does; no fake GITHUB_ACTIONS or new native build. Keep the strengthened helper-gate regression and deadline watchdog.
+- Frozen snapshot artifact15139574335 is authenticated age ciphertext; archive SHA25628654b814e6f38c7dddd0fdb79d5d2202aa8915c23db840c9792e6c2ed4b16dd. Its canary pause is over and it is not a permanent handoff seal. Existing baseline encrypted Secrets remain intact. Final ledger/offset/browser handoff and single-entry activation still remain; do not silently enable the new webhook or replay held legacy work.
+
 ## Operational snapshot (2026-11-10)
 - Live VPS controller: b70d0f3730651ebcc03c8d4ca31e9e5d4bd84c51 / deployment42727462163, healthy. CN free historical catalog/paging/selection/exact-version delivery is now integrated using full /cn/ links. TF owner-only; App Store CN/foreign routes and ordinary white-list users retained. New TF files have Beta in filename.
 - Fresh CapyPlayer request42714371079 proved46 images/17724 pages; user screenshot confirms private file receipt. No installation/runtime or universal model compatibility proof. CN-exclusive Douyin license issue remains unresolved.

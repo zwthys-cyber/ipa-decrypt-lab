@@ -1,5 +1,22 @@
 # CircleCI on-demand migration candidate
 
+## Go Club 真实 CircleCI 任务与私有交付通过（2026-11-26 17:20 UTC）
+
+用户本次提供的美区 Go Club 链接对应 App ID `6739782103`。成功源码 `f3451dd2ba31ac9d9524da4ed7b6ad8f22c1346a`；[GitHub 验收 45866115288](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45866115288)、[默认账号签发 45866462237](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45866462237)、[CircleCI job72](https://app.circleci.com/workflow/aa787787-32bb-4c8f-a9de-5776666cc997/job/ef34d39f-955e-45a9-aee8-a6b60bb4a0ba) 均成功。逻辑任务 `pilot_267d28bb7688af8bbc132595f7009a07`，run `bc58f448-c0fc-438e-936e-46ecd97797dd`。
+
+真实 macOS ARM 工作机完成默认账号登录、下载、解密、完整明文/归档验证、账号资料清理和私有 Drive 上传：**6 个加密镜像、8000 页、73,172,295 字节**。Cloudflare 独立核对 Drive 摘要、大小、名称与仅本人可见权限；机器人私聊链接取得 Telegram 回执，`telegram_notification_confirmed:true`。一次性凭据密文已清除；该凭据包 SHA-256 为 `1f765215b37e3ede8ddab9d2bb3a634c00400d1607771fd94a5e12a6a70cfd79`，不是应用文件摘要。公开产物仅有脱敏证明和加密的源状态快照，没有应用明文、模型、账号缓存或私有下载链接。真实用户文件保留在本人 Drive，未执行示例文件清理。此结果证明完整明文与私有交付，不是安装/运行或其他应用兼容性证明。
+
+验收前实际暂停空闲旧服务并保存一致快照，29 条历史任务完整导入只读验收记录，其中 2 条 pending 保持 held，未重放。快照密文 SHA-256 `28654b814e6f38c7dddd0fdb79d5d2202aa8915c23db840c9792e6c2ed4b16dd`，加密备份及脱敏收据位于该 GitHub 验收的 artifact `15139574335`。执行窗口仅授权本次默认账号/最新版本/精确请求与目标，最长15分钟，工作机有独立截止看门狗；旧机另有20分钟兜底恢复。结束后验收授权已撤销、Cloudflare 恢复 staging 并关闭新导出/Telegram 入口，旧服务已恢复。**没有执行永久 webhook 切换。**
+
+[恢复后只读检查 45867033676](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45867033676) 成功：健康记录新鲜、服务空闲、TF未完任务0、原会话密文匹配、原私有回传1条且未知0；源接受账本仍不存在，未初始化或重新接受历史邀请。
+
+已接通的代码包含 owner-private 链接入口、默认/CN/TF 分流、手动精确版本、幂等提交、工作机凭据领取、完整证明、持久上传、取消与终态确认、跨源码版本的本人历史领取，以及一次性完成通知。三类执行接线与拒绝边界通过 GitHub 合成集成测试；本次真实业务验收仅证明默认账号 Go Club。新阶段仅更新 Python/控制端，复用已验证 job62 的原生包，无项目本地编译/测试，也无每任务原生编译。
+
+首轮 [45864907910](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45864907910) / CircleCI job71 在公共资源预热时退出，尚未进入登录/下载。原生助手要求现有 `LAB_KBSYNC_CHILD=1` 子进程接口，单独预热调用曾遗漏；修复仅向该助手的最小环境设置此标记，未伪装 GitHub 环境或修改原生二进制。测试桩现复现真实门禁，并检查标记不泄漏给其他子进程。原失败记录保留，旧服务在两次验收后均恢复。
+
+剩余迁移：永久冻结状态和历史接受账本交接、完整版本目录/按钮迁移、单一机器人日常入口切换。旧 VPS 仍是日常生产入口；这次有时限验收不代表永久迁移完成。**不得自动重复 Go Club 下载或重发此已确认通知；后续继续工作应推进剩余交接。**
+
+
 ## 当前迁移状态（2026-11-26）
 
 自动任务与凭据签发已完成真实云端验证：[控制端/工作机证明 45851572093](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45851572093)，[一次性签发 45851926514](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45851926514)。源码 `07701765cd5b7a011e9d27ae98dfbfb2eec24da8`，CircleCI run `edb6e561-752e-4e0d-b487-c425b37bca3d`。真实 macOS ARM 工作机下载固定公共运行包、领取并解开仅属于本任务的虚构凭据，服务端回读确认密文清除；SHA-256 `5e870ff3be84a7fe3a17bef9a6135be82bcd3d293ee8ba0517556d5670763e01`。没有 Apple 操作、上传或 Telegram 发送。已修复 GitHub App 项目名称误当仓库身份、签发者元数据读取，以及部署传播期间的源码版本绑定问题。同一逻辑任务的内部请求可恢复，外部派发意图只提交一次。
