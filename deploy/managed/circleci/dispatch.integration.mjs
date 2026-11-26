@@ -141,3 +141,19 @@ test("malformed or rejected trigger outcome remains blocked without automatic PO
     await assert.rejects(db.prepare("UPDATE circleci_dispatches SET state='retry'").run());
   }finally{await mf.dispose();}
 });
+
+test("trigger timeout records unknown and does not dispatch a second request",{timeout:60000},async()=>{
+  const mf=make();try{
+    const db=await setup(mf);let calls=0;
+    const send=async(url,options)=>{
+      calls++;
+      assert.ok(options.signal instanceof AbortSignal);
+      return new Promise((resolve,reject)=>options.signal.addEventListener("abort",
+        ()=>reject(options.signal.reason),{once:true}));
+    };
+    assert.equal((await dispatchSynthetic(db,config,send)).state,"unknown");
+    assert.equal((await row(db)).state,"unknown");
+    assert.equal((await dispatchSynthetic(db,config,send)).state,"blocked");
+    assert.equal(calls,1);
+  }finally{await mf.dispose();}
+});

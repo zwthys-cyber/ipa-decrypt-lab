@@ -45,7 +45,7 @@ export async function dispatchSynthetic(db,config,send=fetch){
   try{
     const parameters={dispatch_probe:true,probe_source:config.source,probe_id:request,build_native_runtime:false};
     const response=await send("https://circleci.com/api/v3/runs",{
-      method:"POST",redirect:"error",
+      method:"POST",redirect:"error",signal:AbortSignal.timeout(15000),
       headers:{authorization:"Bearer "+config.token,"content-type":"application/json",accept:"application/json"},
       body:JSON.stringify({data:{attributes:{config:{branch:TRUST.ref.slice(11)},
         checkout:{branch:TRUST.ref.slice(11)},parameters},references:{pipeline:{id:TRUST.definition}}}})
@@ -68,7 +68,7 @@ export async function finishSynthetic(db,config,send=fetch){
     return {state:"blocked"};
   // Readback may be repeated for the same known ID; it never dispatches another run.
   const response=await send("https://circleci.com/api/v3/runs/"+row.run_id,{
-    method:"GET",redirect:"error",headers:{authorization:"Bearer "+config.token,accept:"application/json"}});
+    method:"GET",redirect:"error",signal:AbortSignal.timeout(15000),headers:{authorization:"Bearer "+config.token,accept:"application/json"}});
   if(response.status!==200)return {state:"pending"};
   const value=await read(response),run=value?.data,refs=run?.references;
   const vcs=refs?.event?.attributes?.vcs;
