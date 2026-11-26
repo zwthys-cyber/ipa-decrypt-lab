@@ -1,6 +1,6 @@
 # Project constraints
 
-Last reviewed 2026-11-26. Use [the current project status](docs/PROJECT-STATUS.md) for release, production and CI evidence. The v0.2 work is a draft, and the VPS remains the production Telegram poller. Historical sections below apply to their stated dates.
+Last reviewed 2026-11-26. Use [the current project status](docs/PROJECT-STATUS.md) for release, production and CI evidence. The v0.2 work is a draft. The VPS remains the configured legacy Telegram poller; its provider currently suspends access, and permanent cutover has not occurred. Historical sections below apply to their stated dates.
 
 - The owner selected CircleCI on 2026-11-26 for personal, link-triggered on-demand workers; no 24-hour worker is required. Public ARM runtime producer development and CircleCI validation are authorized. Preserve durable state and do not claim cutover until authenticated dispatch, runtime and private-delivery checks pass.
 - Build and validate official release and VPS artifacts on GitHub-hosted Actions. The user also authorized isolated CircleCI validation of the project-owned iOS sample and the Linux archive audit and free-pilot tests. The VPS runs CI-verified finished services.
@@ -21,9 +21,12 @@ Last reviewed 2026-11-26. Use [the current project status](docs/PROJECT-STATUS.m
 
 ## Catalog migration checkpoint (2026-11-26 23:03 UTC)
 
-- catalog_worker.py is a metadata-only CircleCI adapter with dedicated default_catalog / cn_catalog credential roles and model-free CN session validation. It is not yet wired into the permanent controller queue or Telegram menus. Keep these roles distinct from export credentials; do not attach models or checkpoint secrets to catalog publisher jobs.
+- Catalog queue, owner-private /versions, cached paging/refresh and exact-version selection are now connected in candidate source5b25f0298ff0e16ddfd10d084fcac0cf3ab632d6. Control45910022331 passed81 integration +16 legacy entry tests; Python execution9, catalog10 and credential11 passed45909860642. The actual deployed control remains the previous disabled candidate; no new Apple/catalog operations or repeat Go Club download were performed.
+- runtime_catalog_specs declares an additive catalog subtype without rebuilding runtime_jobs or removing historical exports. Catalog jobs share serial dispatch but do not consume export quota; credential roles default_catalog / cn_catalog remain model-free and cannot call upload/export endpoints. Keep source/profile/app/cursor and acknowledged private bot message bindings,6h menus, one selection across all pages, immutable requests and unknown notification intents.
+- runtimeTick and the Worker scheduled handler now reconcile known terminal runs and promote waiting jobs. No production cron trigger has been installed. Install and verify that trigger only with the final sealed state/single-entry activation; never advertise automatic unattended queue progress based on an unregistered handler.
 - User KiwiVM screenshot confirms temporary restoration cannot be repeated (721104). GitHub source audit45908023150 timed out over SSH (exit255, zero result bytes). This does not prove the VPS service stopped. Final snapshot, offset/browser/acceptance handoff and single-poller cutover remain pending source access. Do not activate webhook against stale canary snapshots.
 - Catalog10 and credential11 regressions passed on GitHub45908601584; control45908601586 passed. Retained latest canary ciphertext (378022 bytes, SHA28654b814e6f38c7dddd0fdb79d5d2202aa8915c23db840c9792e6c2ed4b16dd) in separate CIRCLECI_CANARY_45866115288_01..13 + INDEX Secrets; independent readback45908994642 verified all chunks. Original artifact expires Dec3 before shown Dec5 bandwidth reset. Do not overwrite baseline Secrets or treat this previously restored canary snapshot as final handoff. Keep old poller restart after bandwidth reset as an unresolved cutover condition.
+- State-container cleanup now explicitly removes the stopped test container before its volume; managed contracts45910269227 at eb5acb39259cb79db959192ab01759088a7b23c6 passed, including ARM restart/auth, image import and dual-architecture bundles.
 - Run the new catalog and encryption regressions on GitHub only. Do not execute source locally or on the VPS.
 
 ## Managed runtime real-task checkpoint (2026-11-26)

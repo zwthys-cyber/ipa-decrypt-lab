@@ -1,5 +1,11 @@
 # CircleCI on-demand migration candidate
 
+## 最新候选：版本目录与分页接线通过 GitHub 验证（2026-11-26）
+
+/versions 的目录排队、默认/CN元数据专用凭据、缓存与分页、刷新、本人私聊消息绑定、整份列表单次选择和精确版本下载接线已实现。[控制端45910022331](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45910022331)通过81项集成与16项既有入口测试；Python接线9项、目录10项、凭据11项亦通过。目录任务不能领取模型、访问上传或调用导出接口。大版本ID保持文本/BigInt校验，避免JavaScript数字精度损失；旧任务表与真实交付记录不重建、不清理。
+
+这是未部署到正式入口的候选代码与合成验证。Worker scheduled队列核对处理器已写好，最终切换时仍需安装并验证定时触发器。旧VPS当前被服务商暂停且不能再次临时恢复；最新加密快照已另存13段GitHub Secrets并独立读回，不能用曾恢复过旧服务的快照冒充最终交接。仍需最终状态/offset/历史浏览器及接受账本交接、旧poller永久停用、单入口激活和真实任务验收；正式入口仍关闭，未重复Go Club任务。最新证据见[项目状态](../../../docs/PROJECT-STATUS.md)。下方各节是其所标时点的历史证据。
+
 ## Go Club 真实 CircleCI 任务与私有交付通过（2026-11-26 17:20 UTC）
 
 用户本次提供的美区 Go Club 链接对应 App ID `6739782103`。成功源码 `f3451dd2ba31ac9d9524da4ed7b6ad8f22c1346a`；[GitHub 验收 45866115288](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45866115288)、[默认账号签发 45866462237](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45866462237)、[CircleCI job72](https://app.circleci.com/workflow/aa787787-32bb-4c8f-a9de-5776666cc997/job/ef34d39f-955e-45a9-aee8-a6b60bb4a0ba) 均成功。逻辑任务 `pilot_267d28bb7688af8bbc132595f7009a07`，run `bc58f448-c0fc-438e-936e-46ecd97797dd`。
