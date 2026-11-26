@@ -19,6 +19,8 @@ on:
       - 'deploy/managed/circleci/test_runtime_execution.py'
       - 'deploy/managed/circleci/github-oidc*'
       - 'deploy/managed/circleci/managed_worker.py'
+      - 'deploy/managed/circleci/appstore_worker.py'
+      - 'deploy/managed/circleci/test_appstore_worker.py'
       - 'deploy/managed/circleci/runtime_cloud.py'
       - 'deploy/managed/free-pilot/worker.mjs'
       - 'deploy/managed/circleci/cloud_inventory.py'

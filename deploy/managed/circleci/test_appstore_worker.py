@@ -69,6 +69,8 @@ class WorkerTests(unittest.TestCase):
     def execute(self,binary,args,env,timeout,root,checkpoint):
         checkpoint();args=list(map(str,args));self.calls.append((Path(binary).name,args,dict(env)))
         self.assertNotIn("GITHUB_ACTIONS",env)
+        if args==["--prewarm"]:
+            return subprocess.CompletedProcess([],0 if env.get("LAB_KBSYNC_CHILD")=="1" else 2,"","")
         if Path(binary).name=="age":
             with zipfile.ZipFile(args[-1]) as z:
                 self.assertFalse(any("SC_Info" in n or n=="iTunesMetadata.plist" for n in z.namelist()))
@@ -112,6 +114,7 @@ class WorkerTests(unittest.TestCase):
         self.assertTrue((out/"package.ipa.age").read_bytes().startswith(b"age-encryption.org/v1\n"))
         for name,args,env in self.calls:
             self.assertEqual("APPLEPACKAGE_PASSWORD" in env,args[0]=="login")
+            self.assertEqual(env.get("LAB_KBSYNC_CHILD")=="1",name=="lab-kbsync" and args==["--prewarm"])
             self.assertFalse(any(k.startswith("FAIRPLAY_") or k.startswith("GITHUB_") or k.endswith("_TOKEN") for k in env))
         self.assertEqual((out/"receipt.json").stat().st_mode&0o777,0o600)
 

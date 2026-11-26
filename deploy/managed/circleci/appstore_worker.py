@@ -51,7 +51,8 @@ def export_task(task,values,output,env=None,checkpoint=lambda stage:None,
             return execute(binary,args,child,min(timeout,remaining),root,lambda:stage("working"))
         child=minimal_env(env,home);child["LAB_KBSYNC_HELPER"]=str(helper)
         stage("preparing_public_resources")
-        require(run(helper,["--prewarm"],minimal_env(env,home),240).returncode==0,"public_assets_unavailable")
+        warm_env=minimal_env(env,home);warm_env["LAB_KBSYNC_CHILD"]="1"
+        require(run(helper,["--prewarm"],warm_env,240).returncode==0,"public_assets_unavailable")
         original=root/"source.ipa"
         def download(email,child,guid=None):
             child=dict(child)
