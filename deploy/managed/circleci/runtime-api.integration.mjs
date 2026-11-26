@@ -98,9 +98,9 @@ async function setup(){
    CIRCLECI_CONTROL_TOKEN:secret,CIRCLECI_API_TOKEN:"synthetic-circle-token",RUNTIME_GH_TOKEN:"synthetic-github-token"}});
  const db=await mf.getD1Database("DB");
  const request=(path,value={},kind="admin",token=secret,extra={})=>mf.dispatchFetch(origin+"/v2/runtime/"+path,{
-  method:"POST",headers:{"content-type":"application/json",
+  method:"POST",headers:{"content-type":"application/json","x-ipazake-source-sha":source,
    [kind==="circle"?"x-ipazake-job-token":kind==="github"?"x-ipazake-github-token":"x-ipazake-control-token"]:token,...extra},
-  body:JSON.stringify(value)});
+  body:JSON.stringify({...value,_source:source})});
  const close=async()=>{await mf.dispose();await rm(folder,{recursive:true,force:true});};
  return {mf,db,request,close};
 }
@@ -165,5 +165,15 @@ test("known failed fixtures close without rearming the original job or dispatch 
   const after=await s.db.prepare("SELECT dispatch_nonce,run_id FROM runtime_jobs WHERE job_id=?").bind(job).first();
   assert.deepEqual(after,before);
   assert.equal((await s.mf.dispatchFetch(origin+"/fixture-count").then(r=>r.json())).nativePosts,1);
+ }finally{await s.close();}
+});
+
+test("a stale deployment rejects admission before creating any native intent",{timeout:60000},async()=>{
+ const s=await setup();try{
+  await s.request("init");
+  const result=await s.request("admit-fixture",{probe_id:probe},"admin",secret,{"x-ipazake-source-sha":"b".repeat(40)});
+  assert.equal(result.status,409);assert.equal((await result.json()).code,"runtime_source_not_ready");
+  assert.equal((await s.db.prepare("SELECT count(*) n FROM runtime_jobs").first()).n,0);
+  assert.equal((await s.mf.dispatchFetch(origin+"/fixture-count").then(r=>r.json())).nativePosts,0);
  }finally{await s.close();}
 });

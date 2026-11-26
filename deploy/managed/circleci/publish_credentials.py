@@ -32,8 +32,8 @@ def identity_token(env):
     return token
 def call(path,value,token):
     need(path in ("/v2/runtime/publisher/pending","/v2/runtime/publisher/publish"))
-    request=urllib.request.Request(ORIGIN+path,data=json.dumps(value,separators=(",",":")).encode(),method="POST",
-        headers={"X-Ipazake-Github-Token":token,"Content-Type":"application/json",
+    request=urllib.request.Request(ORIGIN+path,data=json.dumps(dict(value,_source=os.environ["GITHUB_SHA"]),separators=(",",":")).encode(),method="POST",
+        headers={"X-Ipazake-Github-Token":token,"X-Ipazake-Source-Sha":os.environ["GITHUB_SHA"],"Content-Type":"application/json",
             "User-Agent":"ipa-decrypt-publisher/0.2"})
     try:
         with urllib.request.build_opener(NoRedirect).open(request,timeout=20) as response:
@@ -65,11 +65,11 @@ def main():
         stage="identity";token=identity_token(env)
         binding=dict(job_id=job,publisher_run_id=env["GITHUB_RUN_ID"])
         stage="pending"
-        for attempt in range(8):
+        for attempt in range(30):
             try:
                 pending=call("/v2/runtime/publisher/pending",binding,token);break
             except ValueError as error:
-                if "runtime_provider_pending" not in str(error) or attempt==7:raise
+                if not any(code in str(error) for code in ("runtime_provider_pending","runtime_fields","runtime_source_not_ready","publisher_http_503","publisher_http_404","runtime_job_binding")) or attempt==29:raise
                 time.sleep(2)
         expected=context(pending["context"])
         need(expected["job_id"]==job and expected["profile"]==profile and expected["source_sha"]==source,"publisher_task_binding")

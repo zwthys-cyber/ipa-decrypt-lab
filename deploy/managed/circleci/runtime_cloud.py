@@ -19,6 +19,9 @@ def call(path,token=None,value=None):
  need(path in ("ready","init","admit-fixture","status"),"runtime_cloud_endpoint")
  headers={"User-Agent":"ipa-decrypt-managed-deployer/0.2","Accept":"application/json"}
  if token:headers["X-Ipazake-Control-Token"]=token
+ if value is not None:
+  headers["X-Ipazake-Source-Sha"]=os.environ["GITHUB_SHA"]
+  value=dict(value,_source=os.environ["GITHUB_SHA"])
  raw=None if value is None else json.dumps(value).encode()
  if raw is not None:headers["Content-Type"]="application/json"
  request=urllib.request.Request(ORIGIN+"/v2/runtime/"+path,data=raw,headers=headers)
@@ -49,8 +52,7 @@ def deploy(bundle):
  if "RUNTIME_MODE" in old:
   for attempt in range(31):
    readiness=call("ready")
-   need(readiness.get("source_sha")==old.get("RUNTIME_SOURCE_SHA",{}).get("text"),"runtime_existing_source_mismatch")
-   if readiness.get("active") is False:break
+   if readiness.get("source_sha")==old.get("RUNTIME_SOURCE_SHA",{}).get("text") and readiness.get("active") is False:break
    if attempt==30:raise ValueError("runtime_active_deployment_refused")
    time.sleep(10)
  need(api(account,token,path+"/subdomain").get("enabled") is True,"runtime_existing_endpoint_required")
@@ -84,12 +86,19 @@ def deploy(bundle):
    initialized=call("init",control,{})
    if initialized.get("source_sha")==source:break
   except ValueError as error:
-   if not any(x in str(error) for x in ("runtime_admin_authentication","http_503","http_404")):raise
+   if not any(x in str(error) for x in ("runtime_admin_authentication","http_503","http_404","runtime_fields","runtime_source_not_ready")):raise
   time.sleep(2)
  else:raise ValueError("runtime_deployment_not_ready")
  probe=secrets.token_hex(16);job="pilot_"+probe;receipt.update(status="admitted_once",job_id=job);save()
- try:call("admit-fixture",control,dict(probe_id=probe))
- except (ValueError,urllib.error.URLError,TimeoutError):pass
+ # Reuse the same logical ID only; the durable dispatch CAS permits one external POST.
+ for attempt in range(30):
+  try:
+   admitted=call("admit-fixture",control,dict(probe_id=probe))
+   need(admitted.get("job_id")==job,"runtime_admission_binding")
+   break
+  except (ValueError,urllib.error.URLError,TimeoutError):
+   if attempt==29:raise
+   time.sleep(2)
  deadline=time.monotonic()+900
  while time.monotonic()<deadline:
   try:

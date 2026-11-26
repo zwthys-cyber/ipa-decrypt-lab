@@ -17,7 +17,7 @@ async function body(request,fields,limit=4096){
  const raw=new Uint8Array(size);let at=0;for(const part of chunks){raw.set(part,at);at+=part.byteLength;}
  const value=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(raw));
  need(value&&typeof value==="object"&&!Array.isArray(value)&&
-  Object.keys(value).sort().join(",")===[...fields].sort().join(","),"runtime_fields");return value;
+  Object.keys(value).sort().join(",")===["_source",...fields].sort().join(","),"runtime_fields");need(value._source===request.headers.get("x-ipazake-source-sha"),"runtime_source_not_ready");return value;
 }
 async function admin(request,env){
  const supplied=request.headers.get("x-ipazake-control-token")||"";
@@ -106,6 +106,7 @@ export async function handleRuntimeV2(request,env,now=Math.floor(Date.now()/1000
  if(env.RUNTIME_MODE!=="staging"||env.RUNTIME_CONTROL_ORIGIN!==ORIGIN||url.origin!==ORIGIN||
   !SHA.test(env.RUNTIME_SOURCE_SHA||"")||!/^[1-9][0-9]{0,15}$/.test(env.RUNTIME_OWNER_ID||"")||!env.DB?.prepare)return reply(503);
  try{
+  if(request.method==="POST")need(request.headers.get("x-ipazake-source-sha")===env.RUNTIME_SOURCE_SHA,"runtime_source_not_ready");
   if(path==="ready"){
    const exists=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='runtime_jobs'").first();
    if(exists){

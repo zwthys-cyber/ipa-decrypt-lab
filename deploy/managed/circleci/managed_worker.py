@@ -20,12 +20,12 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
  def redirect_request(self,*args,**kwargs):return None
 def need(ok,code):
  if not ok:raise ValueError(code)
-def rpc(path,value):
+def rpc_once(path,value):
  need(path in ("claim","lease-request","lease-read","finish"),"managed_endpoint")
  token=os.environ.get("CIRCLE_OIDC_TOKEN_V3","")
  need(token and len(token)<=16384,"managed_identity")
- request=urllib.request.Request(ORIGIN+"/v2/runtime/"+path,data=json.dumps(value).encode(),method="POST",
-  headers={"X-Ipazake-Job-Token":token,"Content-Type":"application/json","User-Agent":"ipa-decrypt-managed-worker/0.2"})
+ request=urllib.request.Request(ORIGIN+"/v2/runtime/"+path,data=json.dumps(dict(value,_source=os.environ["MANAGED_SOURCE"])).encode(),method="POST",
+  headers={"X-Ipazake-Job-Token":token,"X-Ipazake-Source-Sha":os.environ["MANAGED_SOURCE"],"Content-Type":"application/json","User-Agent":"ipa-decrypt-managed-worker/0.2"})
  try:
   with urllib.request.build_opener(NoRedirect).open(request,timeout=25) as response:
    need(response.status==200,"managed_response")
@@ -38,18 +38,24 @@ def rpc(path,value):
   except Exception:pass
   raise ValueError(code) from None
  value=json.loads(raw);need(value.get("ok") is True,"managed_response");return value
+def rpc(path,value):
+ # Every mutation is keyed by the same committed job/context; external dispatches use durable CAS intents.
+ for attempt in range(30):
+  try:return rpc_once(path,value)
+  except ValueError as error:
+   warm=("runtime_source_not_ready","runtime_fields","runtime_provider_pending","runtime_job_binding")
+   if not any(code in str(error) for code in warm) or attempt==29:raise
+  except (urllib.error.URLError,TimeoutError):
+   if attempt==29:raise
+  time.sleep(2)
+ raise ValueError("managed_runtime_not_ready")
 def main():
  env=os.environ
  need(env.get("CIRCLECI")=="true" and not env.get("GITHUB_ACTIONS") and
   env.get("MANAGED_ORIGIN")==ORIGIN and env.get("MANAGED_SOURCE")==env.get("CIRCLE_SHA1") and
   re.fullmatch(r"pilot_[a-f0-9]{32}",env.get("MANAGED_JOB","")),"managed_context")
  identity=dict(job_id=env["MANAGED_JOB"],worker_job_id=env["CIRCLE_WORKFLOW_JOB_ID"])
- result=None
- for attempt in range(12):
-  try:result=rpc("claim",identity);break
-  except (ValueError,urllib.error.URLError):
-   if attempt==11:raise
-   time.sleep(2)
+ result=rpc("claim",identity)
  task=result["task"]
  need(task["run_id"]==env["MANAGED_RUN_ID"] and task["source_sha"]==env["MANAGED_SOURCE"],"managed_run_binding")
  actual_env=dict(env,RUNTIME_RUN_ID=task["run_id"]);validate(task,actual_env)
