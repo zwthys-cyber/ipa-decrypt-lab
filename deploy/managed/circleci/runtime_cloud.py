@@ -47,9 +47,12 @@ def deploy(bundle):
  before=api(account,token,path+"/settings");old={x["name"]:x for x in before["bindings"]}
  need(old.get("RUNTIME_MODE",{}).get("text")!="production","runtime_live_deployment_refused")
  if "RUNTIME_MODE" in old:
-  readiness=call("ready")
-  need(readiness.get("source_sha")==old.get("RUNTIME_SOURCE_SHA",{}).get("text") and readiness.get("active") is False,
-    "runtime_active_deployment_refused")
+  for attempt in range(31):
+   readiness=call("ready")
+   need(readiness.get("source_sha")==old.get("RUNTIME_SOURCE_SHA",{}).get("text"),"runtime_existing_source_mismatch")
+   if readiness.get("active") is False:break
+   if attempt==30:raise ValueError("runtime_active_deployment_refused")
+   time.sleep(10)
  need(api(account,token,path+"/subdomain").get("enabled") is True,"runtime_existing_endpoint_required")
  subdomain=api(account,token,"/workers/subdomain").get("subdomain")
  need(ORIGIN=="https://"+WORKER+"."+str(subdomain)+".workers.dev","runtime_cloud_origin")
@@ -87,9 +90,13 @@ def deploy(bundle):
  probe=secrets.token_hex(16);job="pilot_"+probe;receipt.update(status="admitted_once",job_id=job);save()
  try:call("admit-fixture",control,dict(probe_id=probe))
  except (ValueError,urllib.error.URLError,TimeoutError):pass
- deadline=time.monotonic()+1100
+ deadline=time.monotonic()+900
  while time.monotonic()<deadline:
-  status=call("status",control,dict(job_id=job))
+  try:
+   status=call("status",control,dict(job_id=job))
+  except ValueError as error:
+   if "runtime_provider_pending" not in str(error):raise
+   time.sleep(3);continue
   if status.get("state")=="completed":
    need(status.get("fixture_verified") is True and status.get("ciphertext_cleared") is True and
     re.fullmatch(r"[1-9][0-9]{0,19}",status.get("publisher_run_id") or "") and

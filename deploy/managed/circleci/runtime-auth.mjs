@@ -2,9 +2,14 @@ import {TRUST,verifyCircleJWT,fetchKeys} from "./oidc.mjs";
 import {GITHUB_TRUST,verifyGithubJWT,fetchGithubKeys} from "./github-oidc.mjs";
 export const UUID=/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 export function need(ok,code){if(!ok)throw Error(code);}
-export async function publicJSON(send,url){
+export async function publicJSON(send,url,githubToken=null){
+ const headers={"user-agent":"ipa-decrypt-managed-runtime/0.2",accept:"application/json"};
+ if(githubToken){
+  need(url.startsWith("https://api.github.com/repos/"+GITHUB_TRUST.repository+"/actions/runs/"),"runtime_github_endpoint");
+  headers.authorization="Bearer "+githubToken;
+ }
  const reply=await send(url,{method:"GET",redirect:"manual",signal:AbortSignal.timeout(10000),
-  headers:{"user-agent":"ipa-decrypt-managed-runtime/0.2",accept:"application/json"}});
+  headers});
  need(reply.status===200,"runtime_provider_pending");
  const text=await reply.text();need(text.length<=262144,"runtime_provider_limit");return JSON.parse(text);
 }
@@ -32,7 +37,7 @@ export async function githubIdentity(request,env,task,run,now,send){
  need(/^[A-Za-z0-9_.-]{100,16384}$/.test(token)&&task.source_sha===env.RUNTIME_SOURCE_SHA&&
   task.deadline>now&&task.worker_job_id&&["running","uploading"].includes(task.state),"publisher_task_closed");
  const identity=await verifyGithubJWT(token,{source:task.source_sha,run,role:"lease"},await fetchGithubKeys(send),now);
- const value=await publicJSON(send,"https://api.github.com/repos/"+GITHUB_TRUST.repository+"/actions/runs/"+run);
+ const value=await publicJSON(send,"https://api.github.com/repos/"+GITHUB_TRUST.repository+"/actions/runs/"+run,env.RUNTIME_GH_TOKEN);
  need(value.id===Number(run)&&value.repository?.id===Number(GITHUB_TRUST.repository_id)&&
   value.actor?.id===Number(GITHUB_TRUST.owner_id)&&value.event==="workflow_dispatch"&&value.run_attempt===1&&
   value.head_sha===task.source_sha&&value.head_branch===TRUST.ref.slice(11)&&value.status==="in_progress"&&
