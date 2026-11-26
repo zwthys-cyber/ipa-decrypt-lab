@@ -1,0 +1,27 @@
+{
+  "schema": "circleci-preserved-source-v1",
+  "source_run": 45842375113,
+  "collector_source": "fba2f2dfe151a0b170be43447a0cac303cf7cb9e",
+  "frozen": false,
+  "cutover_approved": false,
+  "archive_bytes": 377552,
+  "archive_sha256": "3ec6f97fc70ca3e1aa187046a5d3f6bd76a23fd34b077af43de3b867eb23bc29",
+  "chunks": [
+    "CIRCLECI_MIGRATION_45842375113_01",
+    "CIRCLECI_MIGRATION_45842375113_02",
+    "CIRCLECI_MIGRATION_45842375113_03",
+    "CIRCLECI_MIGRATION_45842375113_04",
+    "CIRCLECI_MIGRATION_45842375113_05",
+    "CIRCLECI_MIGRATION_45842375113_06",
+    "CIRCLECI_MIGRATION_45842375113_07",
+    "CIRCLECI_MIGRATION_45842375113_08",
+    "CIRCLECI_MIGRATION_45842375113_09",
+    "CIRCLECI_MIGRATION_45842375113_10",
+    "CIRCLECI_MIGRATION_45842375113_11",
+    "CIRCLECI_MIGRATION_45842375113_12",
+    "CIRCLECI_MIGRATION_45842375113_13"
+  ],
+  "session_secret": "TF_SAVED_SESSION_AGE_B64",
+  "session_sha256": "8349899c8806e2481edfc6f8f532d6aaa855f32c241b86951a03ea62df799765",
+  "recipient": "age1cp0tv9wcxjqpvcmwt6eh6yqxqg25a2msnelc3mxlj9xqcu6fz4cqekfq5d"
+}
