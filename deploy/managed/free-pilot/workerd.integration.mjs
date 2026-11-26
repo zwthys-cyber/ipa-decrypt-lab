@@ -1,7 +1,7 @@
 // Run only on the CI runner with synthetic bindings; no remote D1, real bot or Apple account.
 import test from "node:test";
 import assert from "node:assert/strict";
-import {readFile,mkdtemp,copyFile,writeFile,rm} from "node:fs/promises";
+import {readFile,mkdtemp,mkdir,copyFile,writeFile,rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -17,7 +17,7 @@ function send(mf,id,text="123456",uid=owner,token=secret){
 }
 test("workerd D1: isolated auth, concurrent quota, deduplication, cancellation and restart",{timeout:60000},async()=>{
   const folder=await mkdtemp(join(tmpdir(),"ipazake-d1-"));
-  const make=()=>new Miniflare({modules:true,scriptPath:fileURLToPath(new URL("./worker.mjs",import.meta.url)),
+  const make=()=>new Miniflare({modules:true,modulesRoot:fileURLToPath(new URL("../",import.meta.url)),scriptPath:fileURLToPath(new URL("./worker.mjs",import.meta.url)),
     compatibilityDate:config.compatibility_date,cf:false,host:"127.0.0.1",port:0,
     d1Databases:{DB:"11111111-1111-4111-8111-111111111111"},d1Persist:folder,
     bindings:{PILOT_ENABLED:"1",PILOT_OWNER_ID:String(owner),TELEGRAM_WEBHOOK_SECRET:secret}});
@@ -53,7 +53,7 @@ test("workerd D1: isolated auth, concurrent quota, deduplication, cancellation a
 });
 
 test("workerd D1: 10 GB migration preserves old metadata and exact large integers",{timeout:60000},async()=>{
-  const mf=new Miniflare({modules:true,scriptPath:fileURLToPath(new URL("./worker.mjs",import.meta.url)),
+  const mf=new Miniflare({modules:true,modulesRoot:fileURLToPath(new URL("../",import.meta.url)),scriptPath:fileURLToPath(new URL("./worker.mjs",import.meta.url)),
     compatibilityDate:config.compatibility_date,cf:false,host:"127.0.0.1",port:0,
     d1Databases:{DB:"22222222-2222-4222-8222-222222222222"}});
   try{
@@ -102,10 +102,13 @@ test("workerd D1: registered Drive link is returned only in the owner's private 
   const entry=join(folder,"test-entry.mjs");
   let mf;
   try{
+    await mkdir(join(folder,"free-pilot"));await mkdir(join(folder,"circleci"));
     await Promise.all(["worker.mjs","private-link.mjs","drive-auth.mjs"].map(name=>
-      copyFile(new URL("./"+name,import.meta.url),join(folder,name))));
+      copyFile(new URL("./"+name,import.meta.url),join(folder,"free-pilot",name))));
+    await Promise.all(["control.mjs","control-schema.mjs","dispatch.mjs","oidc.mjs"].map(name=>
+      copyFile(new URL("../circleci/"+name,import.meta.url),join(folder,"circleci",name))));
     await writeFile(entry,`
-      import {handle} from "./worker.mjs";
+      import {handle} from "./free-pilot/worker.mjs";
       const fileId=${JSON.stringify(fileId)};
       const record=${JSON.stringify(fixture)};
       async function drive(url,init){

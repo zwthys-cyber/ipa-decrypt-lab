@@ -44,6 +44,12 @@ export async function dispatchSynthetic(db,config,send=fetch){
   if(!claimed)return {state:"blocked"};
   try{
     const parameters={dispatch_probe:true,probe_source:config.source,probe_id:request,build_native_runtime:false};
+    if(config.controlOrigin!==undefined){
+      if(!/^https:\/\/ipazake-free-control-pilot\.[a-z0-9][a-z0-9-]{0,62}\.workers\.dev$/.test(config.controlOrigin))
+        throw Error("dispatch_control_origin");
+      parameters.control_probe_url=config.controlOrigin;
+      parameters.control_probe_job=config.job;
+    }
     const response=await send("https://circleci.com/api/v3/runs",{
       method:"POST",redirect:"error",signal:AbortSignal.timeout(15000),
       headers:{authorization:"Bearer "+config.token,"content-type":"application/json",accept:"application/json"},

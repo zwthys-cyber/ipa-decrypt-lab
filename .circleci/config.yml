@@ -15,6 +15,13 @@ parameters:
     type: string
     default: ""
 
+  control_probe_url:
+    type: string
+    default: ""
+  control_probe_job:
+    type: string
+    default: ""
+
 jobs:
   dispatch-contract-probe:
     docker:
@@ -28,12 +35,15 @@ jobs:
             PROBE_SOURCE: << pipeline.parameters.probe_source >>
             PROBE_ID: << pipeline.parameters.probe_id >>
             PROBE_PIPELINE: << pipeline.id >>
+            PROBE_CONTROL_URL: << pipeline.parameters.control_probe_url >>
+            PROBE_CONTROL_JOB: << pipeline.parameters.control_probe_job >>
           command: |
             set -euo pipefail
             python3 deploy/managed/circleci/test_probe.py -v
             python3 deploy/managed/circleci/probe.py worker
             node --test deploy/managed/circleci/oidc.test.mjs
             node deploy/managed/circleci/oidc-probe.mjs
+            node deploy/managed/circleci/control-probe.mjs
       - store_artifacts:
           path: dispatch-probe-out
           destination: synthetic-dispatch-probe

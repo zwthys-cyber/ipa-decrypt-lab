@@ -58,12 +58,20 @@ def inventory():
     print("cloud_account_subdomain_read", flush=True)
     exposed = api(account, token, "/workers/scripts/" + WORKER + "/subdomain")
     print("cloud_worker_exposure_read", flush=True)
-    result = api(account, token, "/d1/database/" + db["id"] + "/query",
-        dict(sql="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('pilot_jobs','pilot_links','circleci_dispatches','circleci_control_jobs','circleci_claims')", params=[]))
-    if not isinstance(result, list) or len(result) != 1 or result[0].get("success") is not True:
-        raise ValueError("pilot_schema_read_failed")
-    print("cloud_d1_schema_read", flush=True)
-    tables = sorted(row["name"] for row in result[0].get("results", []))
+    d1_readable = True
+    tables = []
+    try:
+        result = api(account, token, "/d1/database/" + db["id"] + "/query",
+            dict(sql="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('pilot_jobs','pilot_links','circleci_dispatches','circleci_control_jobs','circleci_claims')", params=[]))
+        if not isinstance(result, list) or len(result) != 1 or result[0].get("success") is not True:
+            raise ValueError("pilot_schema_read_failed")
+        print("cloud_d1_schema_read", flush=True)
+        tables = sorted(row["name"] for row in result[0].get("results", []))
+    except ValueError as error:
+        if str(error) != "cloud_http_403_codes_7403":
+            raise
+        # Existing Worker bindings provide runtime D1 access independently of this admin API scope.
+        d1_readable = False
     flag = lambda name: bindings.get(name, {}).get("text") == "1"
     private = lambda name: bindings.get(name, {}).get("type") == "secret_text"
     receipt = dict(schema="circleci-cloud-inventory-v1", read_only=True, worker=WORKER,
@@ -71,7 +79,7 @@ def inventory():
         workers_dev_enabled=exposed.get("enabled") is True,
         pilot_enabled=flag("PILOT_ENABLED"), link_enabled=flag("PILOT_LINK_ENABLED"),
         runtime_enabled=bindings.get("PILOT_RUNTIME_MODE", {}).get("text") in ("probe", "production"),
-        d1_tables=tables,
+        d1_tables=tables, d1_api_readable=d1_readable,
         google_refresh_configured=all(private(name) for name in
             ("PILOT_DRIVE_CLIENT_ID","PILOT_DRIVE_CLIENT_SECRET","PILOT_DRIVE_REFRESH_TOKEN")),
         google_recipient_configured=private("PILOT_DRIVE_RECIPIENT_EMAIL"),

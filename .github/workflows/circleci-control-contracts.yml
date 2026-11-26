@@ -1,0 +1,51 @@
+name: CircleCI signed control contracts
+on:
+  push:
+    branches: [upgrade/managed-runtime-v0.2]
+    paths:
+      - 'deploy/managed/circleci/control*'
+      - 'deploy/managed/circleci/dispatch.mjs'
+      - 'deploy/managed/free-pilot/worker.mjs'
+      - 'deploy/managed/circleci/cloud_inventory.py'
+      - '.github/workflows/circleci-control-contracts.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: circleci-signed-control
+  cancel-in-progress: false
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      CLOUDFLARE_CF_FETCH_ENABLED: 'false'
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install pinned public simulator and bundler
+        working-directory: deploy/managed/circleci
+        run: npm install --no-save --package-lock=false --no-audit --no-fund miniflare@4.20260730.0 esbuild@0.28.2
+      - name: Verify actual workerd claims, legacy routes, OIDC and restart guards
+        working-directory: deploy/managed/circleci
+        run: |
+          node --check control-probe.mjs
+          node --test control.integration.mjs dispatch.integration.mjs oidc.test.mjs
+          node --test ../free-pilot/worker.test.mjs ../free-pilot/private-link.test.mjs ../free-pilot/drive-auth.test.mjs
+      - name: Bundle only the source-tested disabled control candidate
+        run: |
+          root=deploy/managed/circleci
+          mkdir circleci-control-dist
+          "$root/node_modules/.bin/esbuild" deploy/managed/free-pilot/worker.mjs --bundle --platform=browser --format=esm --target=es2022 --outfile=circleci-control-dist/worker.mjs
+          node --check circleci-control-dist/worker.mjs
+          printf 'source_commit=%s\n' "$GITHUB_SHA" > circleci-control-dist/BUILDINFO
+          cd circleci-control-dist
+          sha256sum worker.mjs BUILDINFO > SHA256SUMS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: circleci-control-candidate-${{ github.sha }}
+          path: circleci-control-dist/
+          retention-days: 7
+          if-no-files-found: error
