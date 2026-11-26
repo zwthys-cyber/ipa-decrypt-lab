@@ -16,7 +16,7 @@ PROFILES = {
     "synthetic": {"fixture"},
     "default": {"APPLE_ID","APPLE_PASSWORD","FAIRPLAY_MODEL_B64"},
     "cn": {"APPLE_CN_ID","APPLE_CN_GUID","APPLE_CN_SESSION_B64","FAIRPLAY_CN_MODEL_B64","FAIRPLAY_CN_STATE_B64"},
-    "tf": {"DELIVERY_AGE_IDENTITY","FAIRPLAY_CN_MODEL_B64"},
+    "tf": {"TF_SAVED_SESSION_B64","FAIRPLAY_CN_MODEL_B64"},
 }
 
 def require(value, reason):

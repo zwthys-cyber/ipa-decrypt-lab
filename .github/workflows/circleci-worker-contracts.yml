@@ -10,6 +10,10 @@ on:
       - 'deploy/managed/circleci/cn_profile.py'
       - 'deploy/managed/circleci/test_appstore_worker.py'
       - 'deploy/managed/circleci/credential_envelope.py'
+      - 'deploy/managed/circleci/tf_worker.py'
+      - 'deploy/managed/circleci/test_tf_worker.py'
+      - '.github/ops/tf_task_native.cpp'
+      - '.github/ops/tf_virtual_client.cpp'
       - '.github/workflows/circleci-worker-contracts.yml'
   workflow_dispatch:
 permissions:
@@ -33,8 +37,30 @@ jobs:
         working-directory: deploy/managed/circleci
         run: |
           python3 test_appstore_worker.py -v
+          python3 test_tf_worker.py -v
           python3 test_credential_envelope.py -v
       - name: Preserve existing full plaintext and archive validators
         run: |
           python3 -m unittest discover -s tests -p test_private_export.py -v
           python3 -m unittest discover -s tests -p test_ipa_audit.py -v
+
+  public-native-producer:
+    needs: synthetic-worker
+    if: github.ref == 'refs/heads/upgrade/managed-runtime-v0.2' && contains(github.event.head_commit.message, '[circleci-runtime-build]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 43
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Request exactly one credential-free producer after adapter verification
+        env:
+          CIRCLECI_API_TOKEN: ${{ secrets.CIRCLECI_API_TOKEN }}
+        run: python3 deploy/managed/circleci/native_request.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: circleci-native-producer-request-${{ github.sha }}
+          path: circleci-native-request.json
+          retention-days: 1
+          if-no-files-found: error

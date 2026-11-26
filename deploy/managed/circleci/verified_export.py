@@ -54,11 +54,13 @@ def export_original(task,engine,age,root,original,info,model,output,env,runner,s
     receipt=dict(schema="circleci-private-delivery-v1",status="encrypted_artifact_ready",provider="circleci",
         job_id=task["job_id"],request_id=task["request_id"],run_id=task["run_id"],
         worker_job_id=task["worker_job_id"],source_commit=task["source_sha"],account_profile=task["profile"],
-        app_id=task["target"],requested_version=task["version"],resolved_version=resolved_version,
+        app_id=str(info.get("trackId",task["target"])),requested_version=task["version"],resolved_version=resolved_version,
         external_version_id=version_id,plaintext_verified=True,runtime_verified=False,
         account_data_removed=True,plaintext_published=False,encrypted_images=images,decrypted_pages=pages,
         plaintext_bytes=plain_size,plaintext_sha256=plain_digest,ciphertext_bytes=sealed.stat().st_size,
         ciphertext_sha256=digest(sealed),recipient=RECIPIENT)
+    if task["profile"]=="tf":
+        receipt.update(target_type="testflight",testflight_invite=task["target"])
     stage("publishing_ciphertext")
     created=False
     try:
