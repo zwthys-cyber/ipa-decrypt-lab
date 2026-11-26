@@ -43,6 +43,9 @@ async function setup(){
       const u=new URL(request.url);
       if(u.pathname==="/fixture-count")return Response.json({posts});
       async function provider(url,init){
+        // Exercise workerd Request construction before mocking provider responses.
+        new Request(url,init);
+        if(init.redirect!=="manual")throw Error("provider_redirect_policy");
         if(url==="https://oidc.circleci.com/org/"+trust.org+"/.well-known/jwks-pub.json")
           return Response.json({keys:[${JSON.stringify(jwk)}]});
         if(url==="https://circleci.com/api/v2/me")return Response.json({id:trust.user});

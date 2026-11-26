@@ -53,7 +53,7 @@ export async function dispatchSynthetic(db,config,send=(url,init)=>globalThis.fe
       parameters.control_probe_job=config.job;
     }
     const response=await send("https://circleci.com/api/v3/runs",{
-      method:"POST",redirect:"error",signal:AbortSignal.timeout(15000),
+      method:"POST",redirect:"manual",signal:AbortSignal.timeout(15000),
       headers:{"user-agent":"ipa-decrypt-control-plane/0.2",authorization:"Bearer "+config.token,"content-type":"application/json",accept:"application/json"},
       body:JSON.stringify({data:{attributes:{config:{branch:TRUST.ref.slice(11)},
         checkout:{branch:TRUST.ref.slice(11)},parameters},references:{pipeline:{id:TRUST.definition}}}})
@@ -85,7 +85,7 @@ export async function finishSynthetic(db,config,send=(url,init)=>globalThis.fetc
     return {state:"blocked"};
   // Readback may be repeated for the same known ID; it never dispatches another run.
   const response=await send("https://circleci.com/api/v3/runs/"+row.run_id,{
-    method:"GET",redirect:"error",signal:AbortSignal.timeout(15000),headers:{"user-agent":"ipa-decrypt-control-plane/0.2",authorization:"Bearer "+config.token,accept:"application/json"}});
+    method:"GET",redirect:"manual",signal:AbortSignal.timeout(15000),headers:{"user-agent":"ipa-decrypt-control-plane/0.2",authorization:"Bearer "+config.token,accept:"application/json"}});
   if(response.status!==200)return {state:"pending"};
   const value=await read(response),run=value?.data,refs=run?.references;
   const vcs=refs?.event?.attributes?.vcs;

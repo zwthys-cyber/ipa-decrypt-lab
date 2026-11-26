@@ -137,7 +137,7 @@ def deploy(bundle):
     initialized = None
     for attempt in range(20):
         try:
-            initialized = public_call(origin, control, "/v1/runtime/probe-init", {})
+            initialized = public_call_once(origin, control, "/v1/runtime/probe-init", {})
             if initialized.get("source_sha") == source:
                 break
             initialized = None
@@ -147,6 +147,7 @@ def deploy(bundle):
                 raise
             time.sleep(2)
     require(initialized and initialized.get("ok") is True, "control_init_failed")
+    print(json.dumps(dict(stage="control_initialized_source_confirmed", source_sha=source)), flush=True)
     diagnostic = public_call(origin, control, "/v1/runtime/probe-diagnostics", {})
     print(json.dumps(dict(stage="circleci_provider_identity", **diagnostic)), flush=True)
     require(diagnostic.get("owner_authenticated") is True, "cloud_circleci_identity_unavailable")

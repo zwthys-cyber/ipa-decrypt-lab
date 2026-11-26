@@ -21,7 +21,7 @@ function object(value){
 }
 export async function fetchKeys(send=(url,init)=>globalThis.fetch(url,init)){
   const response=await send("https://oidc.circleci.com/org/"+TRUST.org+"/.well-known/jwks-pub.json",
-    {redirect:"error",headers:{accept:"application/json"}});
+    {redirect:"manual",headers:{accept:"application/json"}});
   require(response.status===200,"jwks_unavailable");
   const raw=await response.text();
   require(raw.length<=65536,"jwks_limit");

@@ -61,7 +61,7 @@ async function body(request,keys){
   return value;
 }
 async function get(send,url){
-  const result=await send(url,{method:"GET",redirect:"error",signal:AbortSignal.timeout(10000),
+  const result=await send(url,{method:"GET",redirect:"manual",signal:AbortSignal.timeout(10000),
     headers:{"user-agent":"ipa-decrypt-control-plane/0.2",accept:"application/json"}});
   require(result.status===200,"provider_pending");
   const raw=await result.text();require(raw.length<=1048576,"provider_limit");return JSON.parse(raw);
@@ -145,7 +145,7 @@ export async function handleRuntime(request,env,now=Math.floor(Date.now()/1000),
       }
       if(path==="/v1/runtime/probe-diagnostics"){
         await body(request,[]);
-        const result=await send(BASE+"/me",{method:"GET",redirect:"error",signal:AbortSignal.timeout(10000),
+        const result=await send(BASE+"/me",{method:"GET",redirect:"manual",signal:AbortSignal.timeout(10000),
           headers:{"user-agent":"ipa-decrypt-control-plane/0.2",authorization:"Bearer "+env.CIRCLECI_API_TOKEN,
             accept:"application/json"}});
         let actor;

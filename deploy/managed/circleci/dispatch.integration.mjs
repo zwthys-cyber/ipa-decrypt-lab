@@ -31,7 +31,7 @@ async function setup(mf){
 }
 function acknowledgement(url,options){
   assert.equal(url,"https://circleci.com/api/v3/runs");
-  assert.equal(options.method,"POST");assert.equal(options.redirect,"error");
+  assert.equal(options.method,"POST");assert.equal(options.redirect,"manual");
   const value=JSON.parse(options.body);
   assert.equal(value.data.references.pipeline.id,TRUST.definition);
   assert.equal(value.data.attributes.config.branch,TRUST.ref.slice(11));
