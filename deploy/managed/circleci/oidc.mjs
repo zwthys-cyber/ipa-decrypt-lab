@@ -20,7 +20,7 @@ function object(value){
   return parsed;
 }
 export async function fetchKeys(send=fetch){
-  const response=await send("https://oidc.circleci.com/org/"+TRUST.org+"/.well-known/jwks.json",
+  const response=await send("https://oidc.circleci.com/org/"+TRUST.org+"/.well-known/jwks-pub.json",
     {redirect:"error",headers:{accept:"application/json"}});
   require(response.status===200,"jwks_unavailable");
   const raw=await response.text();

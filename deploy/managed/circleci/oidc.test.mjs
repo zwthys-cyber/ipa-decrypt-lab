@@ -56,7 +56,7 @@ test("wrong subject and malformed token refused",async()=>{
 test("key fetch uses fixed public origin, no authentication and no redirects",async()=>{
   let called=false;
   const value=await fetchKeys(async(url,options)=>{
-    called=true;assert.equal(url,"https://oidc.circleci.com/org/"+TRUST.org+"/.well-known/jwks.json");
+    called=true;assert.equal(url,"https://oidc.circleci.com/org/"+TRUST.org+"/.well-known/jwks-pub.json");
     assert.equal(options.redirect,"error");assert.deepEqual(options.headers,{accept:"application/json"});
     return new Response(JSON.stringify(keys));
   });
