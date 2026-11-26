@@ -12,15 +12,15 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):
         return None
 
-def api(account, token, path, data=None):
+def api(account, token, path, data=None, method=None, content_type=None):
     if not re.fullmatch(r"[a-f0-9]{32}", account) or not path.startswith(("/workers/", "/d1/")) or ".." in path:
         raise ValueError("invalid_cloud_path")
     headers = {"Authorization":"Bearer " + token, "Accept":"application/json"}
-    raw = None if data is None else json.dumps(data).encode()
+    raw = None if data is None else (data if isinstance(data, bytes) else json.dumps(data).encode())
     if raw is not None:
-        headers["Content-Type"] = "application/json"
+        headers["Content-Type"] = content_type or "application/json"
     request = urllib.request.Request("https://api.cloudflare.com/client/v4/accounts/" + account + path,
-                                     data=raw, headers=headers)
+                                     data=raw, headers=headers, method=method)
     try:
         with urllib.request.build_opener(NoRedirect()).open(request, timeout=30) as response:
             content = response.read(1048577)
