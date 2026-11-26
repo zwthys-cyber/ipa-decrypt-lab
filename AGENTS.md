@@ -19,10 +19,11 @@ Last reviewed 2026-11-26. Use [the current project status](docs/PROJECT-STATUS.m
 
 - Telegram integration resumed on 2026-11-04. Implement bounded GitHub-hosted bot sessions and verified private delivery; the later explicit authorization permits finished-service execution on the VPS, but never permanent Actions hosting.
 
-## Catalog migration checkpoint (2026-11-26 23:15 UTC)
+## Catalog migration checkpoint (2026-11-26 23:03 UTC)
 
 - catalog_worker.py is a metadata-only CircleCI adapter with dedicated default_catalog / cn_catalog credential roles and model-free CN session validation. It is not yet wired into the permanent controller queue or Telegram menus. Keep these roles distinct from export credentials; do not attach models or checkpoint secrets to catalog publisher jobs.
-- GitHub source audit45908023150 timed out over SSH (exit255, zero result bytes). This does not prove the VPS service stopped. Final snapshot, offset/browser/acceptance handoff and single-poller cutover remain pending source access. Do not activate webhook against stale canary snapshots.
+- User KiwiVM screenshot confirms temporary restoration cannot be repeated (721104). GitHub source audit45908023150 timed out over SSH (exit255, zero result bytes). This does not prove the VPS service stopped. Final snapshot, offset/browser/acceptance handoff and single-poller cutover remain pending source access. Do not activate webhook against stale canary snapshots.
+- Catalog10 and credential11 regressions passed on GitHub45908601584; control45908601586 passed. Retained latest canary ciphertext (378022 bytes, SHA28654b814e6f38c7dddd0fdb79d5d2202aa8915c23db840c9792e6c2ed4b16dd) in separate CIRCLECI_CANARY_45866115288_01..13 + INDEX Secrets; independent readback45908994642 verified all chunks. Original artifact expires Dec3 before shown Dec5 bandwidth reset. Do not overwrite baseline Secrets or treat this previously restored canary snapshot as final handoff. Keep old poller restart after bandwidth reset as an unresolved cutover condition.
 - Run the new catalog and encryption regressions on GitHub only. Do not execute source locally or on the VPS.
 
 ## Managed runtime real-task checkpoint (2026-11-26)
