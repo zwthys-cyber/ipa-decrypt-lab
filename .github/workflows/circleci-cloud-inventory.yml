@@ -1,0 +1,28 @@
+name: Inspect existing CircleCI cloud control prerequisites
+on:
+  push:
+    branches: [upgrade/managed-runtime-v0.2]
+    paths: ['deploy/managed/circleci/cloud_inventory.py', '.github/workflows/circleci-cloud-inventory.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  read-only:
+    if: github.ref == 'refs/heads/upgrade/managed-runtime-v0.2'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Read only the isolated pilot configuration and schema names
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_PILOT_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_PILOT_API_TOKEN }}
+        run: python3 deploy/managed/circleci/cloud_inventory.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: circleci-cloud-inventory-${{ github.sha }}
+          path: circleci-cloud-inventory.json
+          retention-days: 1
+          if-no-files-found: error
