@@ -1,5 +1,13 @@
 # 项目进展
 
+## 国区真实任务与会话诊断（2026-11-27）
+
+生产切换45915238970已成功，当前运行源码73c62183dc61984869ebaec98349a32ba99331df；用户08:16:32→08:16:33的/status截图确认约1秒回复。该运行分支保持不变，以下诊断改进只在维护分支准备。
+
+用户实际发送红果漫剧6745890963后，CircleCI73成功取得cn角色凭据（GitHub45916424720），在resume-cn阶段失败，未开始下载、解密或上传。cn_session_requires_maintenance只是通用退出错误，不能单独证明会话过期或验证码挑战。随后只读检查[45916808829](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45916808829)验证了保存会话结构与国区绑定，但Apple返回HTTP401；未登录、使用验证码、授权/撤销电脑、下载或更新Secret。需要维护原会话，不能自动重放这次失败任务。
+
+维护候选增加原生退出结果的固定词汇分类及私有缓存目录权限，原始stdout/stderr、账号、路径和链接均不公开；分类仍不能把ambiguous_bad_login说成明确验证码挑战。回归覆盖一次失败后不重试、不调用login/download、清除缓存和脱敏输出。会话替换须获得单独授权，保留原GUID、模型、checkpoint与历史意图；未获授权前不执行登录维护。
+
 ## 生产切换及真实消息验收（2026-11-27）
 
 [离线生产切换45913375750](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45913375750)已成功，初次运行源码aaa2278038b7f2d22bed459b647cccb0cba3e93f，脱敏收据artifact15161451437。完整读回29条历史任务、89条updates、14条metadata，2条pending保持held；原Go Club已完成任务、私有文件和确认通知保留。原TF历史邀请按pinned接受/确认记录构造防重tombstone并seal，未重新接受。新Token属于原机器人，旧Token已失效，5个旧派发/目录工作流保持disabled；新webhook和真实cron触发均取得回读，production_cutover:true。

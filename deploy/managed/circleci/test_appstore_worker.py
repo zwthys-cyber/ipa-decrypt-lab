@@ -229,4 +229,45 @@ class WorkerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"environment"):
             private_process.run(sys.executable,["-c","pass"],dict(env,GH_TOKEN="synthetic"),1,self.root)
 
+    def test_cn_resume_diagnostic_never_discloses_private_native_output(self):
+        private="fixture-owner@example.invalid https://private.invalid/file?token=secret"
+        for message,reason in (
+            ("apple_auth_ambiguous_bad_login","ambiguous_bad_login"),
+            ("IPA_CN_AUTH:verification_pending","verification_input_required"),
+            ("HTTP 401","session_access_denied"),
+            ("unknown option --synthetic","client_argument_rejected"),
+            ("No such file or directory","account_cache_unavailable"),
+            ("store_device_provisioning_failed","native_device_proof_failed"),
+            ("connection reset by peer","transport_failed"),
+            ("unrecognized private response","unclassified"),
+        ):
+            value=cn_profile.resume_diagnostic(subprocess.CompletedProcess([],2,message,private))
+            self.assertEqual(value,dict(schema="cn-session-diagnostic-v1",reason=reason,
+                retrying=False,password_fallback=False,download_started=False))
+            self.assertNotIn(private,json.dumps(value))
+        # BadLogin remains ambiguous even if the same output later prompts for a code.
+        result=subprocess.CompletedProcess([],2,"apple_auth_ambiguous_bad_login\nIPA_CN_AUTH:verification_pending","")
+        self.assertEqual(cn_profile.resume_diagnostic(result)["reason"],"ambiguous_bad_login")
+
+    def test_cn_failed_resume_is_attempted_once_without_download_and_cache_is_erased(self):
+        self.make_cn()
+        original_execute=self.execute
+        def rejected(binary,args,env,timeout,root,checkpoint):
+            if args[0]=="resume-cn":
+                self.calls.append((Path(binary).name,args,dict(env)))
+                folder=next(Path(env["HOME"]).glob(".ipatool/*"))
+                self.assertEqual(folder.parent.stat().st_mode&0o777,0o700)
+                self.assertEqual(folder.stat().st_mode&0o777,0o700)
+                return subprocess.CompletedProcess([],2,"HTTP 401","private@example.invalid")
+            return original_execute(binary,args,env,timeout,root,checkpoint)
+        with patch.object(self,"execute",side_effect=rejected):
+            with self.assertRaisesRegex(ValueError,"cn_session_requires_maintenance"):
+                self.export()
+        commands=[args[0] for _,args,_ in self.calls]
+        self.assertEqual(commands.count("resume-cn"),1)
+        self.assertNotIn("download",commands)
+        self.assertNotIn("login",commands)
+        for _,_,env in self.calls:
+            self.assertFalse(Path(env["HOME"]).exists())
+
 if __name__=="__main__":unittest.main()

@@ -50,17 +50,46 @@ def bound(path,value,values,metadata_only=False):
     validator(dict(values,APPLE_CN_SESSION_B64=base64.b64encode(json.dumps(current).encode()).decode()))
     return current
 
+
+def resume_diagnostic(result):
+    """Return fixed labels only; native output can contain private account data."""
+    text=((result.stdout or "")+"\n"+(result.stderr or ""))[:16*1024*1024].lower()
+    reason="unclassified"
+    if "unknown option" in text or "unexpected argument" in text:
+        reason="client_argument_rejected"
+    elif "no such file" in text or "file doesn’t exist" in text or "file doesn't exist" in text:
+        reason="account_cache_unavailable"
+    elif "cn session binding failed" in text or "cn refreshed session binding failed" in text:
+        reason="account_binding_rejected"
+    elif "apple_auth_ambiguous_bad_login" in text:
+        reason="ambiguous_bad_login"
+    elif "ipa_cn_auth:verification_pending" in text:
+        reason="verification_input_required"
+    elif "store_device_provisioning_failed" in text:
+        reason="native_device_proof_failed"
+    elif re.search(r"\bhttp\s+(401|403)\b|request failed with status (401|403)\b",text):
+        reason="session_access_denied"
+    elif re.search(r"\bhttp\s+429\b|request failed with status 429\b",text):
+        reason="rate_limited"
+    elif any(term in text for term in ("readtimeout","connecttimeout","timed out","connection reset","dns resolution failed")):
+        reason="transport_failed"
+    return dict(schema="cn-session-diagnostic-v1",reason=reason,
+        retrying=False,password_fallback=False,download_started=False)
+
 @contextmanager
 def saved_session(binary,helper,values,env,home,runner,metadata_only=False):
     value=(decode_session if metadata_only else decode)(values)
     folder=home/".ipatool"/hashlib.md5(value["email"].lower().encode()).hexdigest()
-    folder.mkdir(mode=0o700,parents=True,exist_ok=False)
+    folder.parent.mkdir(mode=0o700,exist_ok=True)
+    folder.mkdir(mode=0o700,exist_ok=False)
     path=folder/"account.json"
     child=minimal_env(env,home);child["LAB_KBSYNC_HELPER"]=str(helper)
     try:
         with os.fdopen(os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o600),"w") as stream:
             json.dump(value["account"],stream)
         result=runner(binary,["resume-cn",value["email"],"--guid",value["guid"]],child,300)
+        if result.returncode:
+            print(json.dumps(resume_diagnostic(result)),flush=True)
         require(result.returncode==0,"cn_session_requires_maintenance")
         bound(path,value,values,metadata_only=metadata_only)
         yield value,child,path
