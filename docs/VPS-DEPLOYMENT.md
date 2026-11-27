@@ -1,6 +1,6 @@
 # VPS部署档案（已退出当前派发）
 
-2026-11-27旧VPS不可用，已通过原bot新Token、旧Token拒绝及5个旧工作流停用完成离线切换。当前入口为Cloudflare/D1和按需CircleCI，部署见[操作手册](OPERATIONS.md)。下文只保留alpha.5/VPS旧架构的构建、配置和历史恢复方法，不是重启旧poller的操作指令；不要重启旧入口、重新启用退休工作流或覆盖新Token。未观察到旧机物理停机，source_disabled_verified仍为false。
+2026-11-27原运行环境不可用，已通过原bot新Token、旧Token拒绝及5个旧工作流停用完成离线切换。当前入口为Cloudflare/D1和按需CircleCI，部署见[操作手册](OPERATIONS.md)。下文只保留alpha.5/VPS旧架构的构建、配置和历史恢复方法，不是重启旧poller的操作指令；不要重启旧入口、重新启用退休工作流或覆盖新Token。未观察到旧机物理停机，source_disabled_verified仍为false。
 
 编译和测试都在 GitHub 上执行，VPS 只运行验证过的成品。服务器负责 Telegram、任务记录和文件交付；Apple 下载及 FairPlay 解密仍由 GitHub macOS 处理。
 
@@ -99,7 +99,7 @@ main 新增流程步骤比例、真实下载字节计数和完整耗时。VPS �
 
 ## 后端导出提速（2026-11-08）
 
-[运行包 42445031389](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42445031389) 加入仅限 GitHub 的 raw ZIP 成员复制清理，替代导出阶段的 Python 全包重复压缩；[实际 X 导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42445425200) 通过全部检查。它不改变 VPS 的解密、恢复或 Telegram 发送协议，无需为此重启当前服务。旧 VPS 的 delivery-crypt 继续使用 decrypt 命令，新 scrub 命令在 VPS 模式下被拒绝。源码指纹校验仍生效，不能混用不匹配的包。
+[运行包 42445031389](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42445031389) 加入仅限 GitHub 的 raw ZIP 成员复制清理，替代导出阶段的 Python 全包重复压缩；[实际 X 导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42445425200) 通过全部检查。它不改变 VPS 的解密、恢复或 Telegram 发送协议，无需为此重启当前服务。原运行环境 的 delivery-crypt 继续使用 decrypt 命令，新 scrub 命令在 VPS 模式下被拒绝。源码指纹校验仍生效，不能混用不匹配的包。
 
 ## 白名单版本升级
 

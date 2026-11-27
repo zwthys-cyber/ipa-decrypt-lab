@@ -1,4 +1,4 @@
-# 多用户白名单（旧VPS历史功能）
+# 多用户白名单（原运行环境历史功能）
 
 2026-11-27当前Cloudflare/CircleCI入口仅接受配置主人的私聊，没有迁入/allow、/deny、/users、/id或其他用户权限。下文是2026-11-25之前VPS版的白名单实现与验证档案，不能用来给新入口授权用户。当前指令见[Telegram](TELEGRAM.md)，运行范围见[操作手册](OPERATIONS.md)。
 

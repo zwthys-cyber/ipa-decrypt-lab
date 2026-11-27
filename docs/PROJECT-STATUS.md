@@ -42,11 +42,11 @@
 
 ## 离线恢复与原机器人 Token 交接（2026-11-26 23:38 UTC）
 
-用户明确旧VPS无法使用，迁移改用保全的加密备份，不再等待SSH恢复；用户选择保留原机器人并更换Token。新Token仅存MANAGED_TELEGRAM_BOT_TOKEN，不覆盖旧工作流的TELEGRAM_BOT_TOKEN。
+用户明确原运行环境无法使用，迁移改用保全的加密备份，不再等待SSH恢复；用户选择保留原机器人并更换Token。新Token仅存MANAGED_TELEGRAM_BOT_TOKEN，不覆盖旧工作流的TELEGRAM_BOT_TOKEN。
 
 [离线恢复45912001065](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45912001065)在源码bbf92311d908916834c27555d2df120a3cf4a5b4成功：重新认证并读回同一份378022字节源密文，完整保存29条任务（closed7/delivered20/pending2）、89条updates（unfinished0）、14条metadata，包括offset与version_browser，以及6个Telegram状态文件的索引。原私有回传1条confirmed、未知0，原接受账本仍不存在。恢复清单加密后再解密比对，SHA-256为675f966d71e0dd432a19f6a585d5fef637bc6da0c478a7e02ba74104887448da；artifact15160242814仅包含加密计划和脱敏收据。原加密源仍长期保存在独立13段Secrets，计划可从其重新生成。7项公开合成测试覆盖篡改/账号绑定、未知更新和接受结果保留、Token更换与旧工作流退役边界。
 
-真实Bot API只读身份检查已确认replacement_same_bot_verified:true、old_token_rejected:true；未发送消息，未提交新的Apple任务。5个旧工作流已在确认无运行任务后停用，并由独立GitHub运行重新核对disabled_manually、active_runs0：private-delivery.yml、china-private-delivery.yml、testflight-private-delivery.yml、version-catalog.yml、china-version-catalog.yml。已核对旧VPS实际安装源码b70d0f3730651ebcc03c8d4ca31e9e5d4bd84c51：启动时先要求private-delivery.yml active，再启动本地Bot API与恢复任务；同时停用所有旧派发入口，防止旧机继续提交下载。未撤销共用GitHub派发凭据，未停用新CircleCI签发/验证工作流，未清除历史记录。退役清单见deploy/managed/circleci/legacy-dispatch-retirement.json，启用前仍需新鲜读回。
+真实Bot API只读身份检查已确认replacement_same_bot_verified:true、old_token_rejected:true；未发送消息，未提交新的Apple任务。5个旧工作流已在确认无运行任务后停用，并由独立GitHub运行重新核对disabled_manually、active_runs0：private-delivery.yml、china-private-delivery.yml、testflight-private-delivery.yml、version-catalog.yml、china-version-catalog.yml。已核对原运行环境实际安装源码b70d0f3730651ebcc03c8d4ca31e9e5d4bd84c51：启动时先要求private-delivery.yml active，再启动本地Bot API与恢复任务；同时停用所有旧派发入口，防止旧机继续提交下载。未撤销共用GitHub派发凭据，未停用新CircleCI签发/验证工作流，未清除历史记录。退役清单见deploy/managed/circleci/legacy-dispatch-retirement.json，启用前仍需新鲜读回。
 
 这是离线恢复准备与凭据更换验证，尚未写入正式D1交接、安装新webhook或启用生产。旧机是否停机仍未证明，恢复清单正确保留source_disabled_verified:false、telegram_isolation_verified:false、permanent_handoff:false。上次快照后旧服务曾恢复，无法保证其后全部变化可取回；缺口必须明确保留，两个pending及未知操作不重放。后续应实现独立的离线交接凭证（新Token/旧工作流隔离、历史数据逐项读回、旧消息隔离和后台调度），不能伪造旧机stopped_at或把有时限快照改成最终冻结证明。TF历史接受 tombstone 仍须按原公开证据重建后才能启用新接受权限。Go Club任务、文件和已确认通知不重复。
 
@@ -56,11 +56,11 @@
 
 控制器新增关联表记录目录子类型与不可变分页结果，不重建原runtime_jobs或删除已有Go Club任务、文件/通知记录。目录与导出共享串行调度；目录凭据只有登录/保存会话字段，不能访问模型、检查点、上传或解密路径。每日目录查询20次，初次/刷新间隔60秒、续页5秒；新鲜缓存24小时；每页最多10条、最多20页。菜单仅本人私聊，绑定机器人消息编号与6小时期限；选中后整组各页关闭；重复同一选择沿用固定导出请求；不同版本不能借旧列表再提交。通知先记意图，仅确认正确私聊回执后启用按钮；未知回执不自动重发，新命令可以重新打开缓存。
 
-增加runtimeTick与Worker scheduled处理器，核对已知CircleCI终态后推进等待队列。**当前未安装生产定时触发器、未部署本轮候选到正式入口、未setWebhook。**最终启用时仍需安装定时触发器并验证单入口，不能让无人点击/status时的等待队列停住。旧VPS仍被服务商暂停，最终冻结/状态差异/offset/历史浏览器及接受账本交接、旧poller永久停用仍未完成。不得把旧有时限快照作为最终交接凭证，也不得自动重跑Go Club或历史pending。
+增加runtimeTick与Worker scheduled处理器，核对已知CircleCI终态后推进等待队列。**当前未安装生产定时触发器、未部署本轮候选到正式入口、未setWebhook。**最终启用时仍需安装定时触发器并验证单入口，不能让无人点击/status时的等待队列停住。原运行环境仍被服务商暂停，最终冻结/状态差异/offset/历史浏览器及接受账本交接、旧poller永久停用仍未完成。不得把旧有时限快照作为最终交接凭证，也不得自动重跑Go Club或历史pending。
 
 附带修复 ARM 容器验证的清理竞争：原流程使用 detached --rm，停止返回时卷仍可能被异步删除中的容器引用；现在明确stop并rm本次测试容器，再删除自己的临时卷。GitHub [45910269227](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45910269227)（源码eb5acb39259cb79db959192ab01759088a7b23c6）全部通过，包括ARM状态服务两次启动/鉴权、镜像导入以及两个架构归档验证。没有在当前服务器或VPS上构建、安装测试依赖或执行项目测试。
 
-## 旧 VPS 停服与最新加密快照长期保留（2026-11-26 23:08 UTC）
+## 原运行环境 停服与最新加密快照长期保留（2026-11-26 23:08 UTC）
 
 用户截图显示 KiwiVM 无法再次临时恢复服务（721104），与最新 GitHub SSH 超时一致。旧机最后暂停快照的原 artifact15139574335 会在2026-12-03 17:19:40 UTC到期，早于旧页面显示的12月5日流量重置日。因此已将**同一份378,022字节 age 密文**另存到仓库 Secrets：CIRCLECI_CANARY_45866115288_01 至 _13，以及 _INDEX。通过 GitHub API 在内存中校验固定来源/归档和完整摘要后分段保存；未解密、未创建本地文件、未覆盖早期13段基线备份或 TF 原会话。
 
@@ -90,7 +90,7 @@
 
 首轮 [45864907910](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45864907910) / CircleCI job71 在公共资源预热时退出，尚未进入登录/下载。原生助手要求现有 `LAB_KBSYNC_CHILD=1` 子进程接口，单独预热调用曾遗漏；修复仅向该助手的最小环境设置此标记，未伪装 GitHub 环境或修改原生二进制。测试桩现复现真实门禁，并检查标记不泄漏给其他子进程。原失败记录保留，旧服务在两次验收后均恢复。
 
-剩余迁移：永久冻结状态和历史接受账本交接、完整版本目录/按钮迁移、单一机器人日常入口切换。旧 VPS 仍是日常生产入口；这次有时限验收不代表永久迁移完成。**不得自动重复 Go Club 下载或重发此已确认通知；后续继续工作应推进剩余交接。**
+剩余迁移：永久冻结状态和历史接受账本交接、完整版本目录/按钮迁移、单一机器人日常入口切换。原运行环境 仍是日常生产入口；这次有时限验收不代表永久迁移完成。**不得自动重复 Go Club 下载或重发此已确认通知；后续继续工作应推进剩余交接。**
 
 
 ## 当前迁移状态（2026-11-26）
@@ -107,7 +107,7 @@
 
 [新源只读核查 45854611541](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45854611541) 成功：健康记录新鲜、观察到服务空闲、TF未完任务0、私有回传1条且未知0、原会话与固定密文匹配、源接受账本依然不存在。这次观察没有停止服务或冻结状态，不能替代切换前的最终快照。
 
-尚未完成：真实任务入口与版本目录/取消闭环、历史状态与接受账本最终导入、冻结交接、费用限制核查、单一机器人入口切换，以及新链接的实际私有交付验收。控制端仍是 staging，真实 Apple 导出未开放；旧 VPS 保持唯一机器人。所有编译和测试均在 GitHub/CircleCI 执行。
+尚未完成：真实任务入口与版本目录/取消闭环、历史状态与接受账本最终导入、冻结交接、费用限制核查、单一机器人入口切换，以及新链接的实际私有交付验收。控制端仍是 staging，真实 Apple 导出未开放；原运行环境 保持唯一机器人。所有编译和测试均在 GitHub/CircleCI 执行。
 
 以下保留先前阶段的历史记录，后文“最新”仅指当时阶段。
 

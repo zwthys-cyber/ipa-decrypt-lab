@@ -1,6 +1,6 @@
 # 成品包下载
 
-2026-11-27当前机器人已按[运行手册](OPERATIONS.md)切换到Cloudflare/D1、CircleCI ARM64和私有Drive；不是下载本页旧VPS附件即可获得的新服务。最近验证的生产处理源码为`185a52110922e0f67ac2c7dff4e1fa85b3b4c98e`，成功切换45918215266。生产部署、CI运行包和公开Release是三种不同来源。
+2026-11-27当前机器人已按[运行手册](OPERATIONS.md)切换到Cloudflare/D1、CircleCI ARM64和私有Drive；不是下载本页原运行环境附件即可获得的新服务。最近验证的生产处理源码为`185a52110922e0f67ac2c7dff4e1fa85b3b4c98e`，成功切换45918215266。生产部署、CI运行包和公开Release是三种不同来源。
 
 最新公开发行版为 **v0.1.0-alpha.5**（2026-11-27核对，GitHub标记为预览版prerelease），下载入口是 [GitHub Releases](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。alpha.5 本次重打包增加主人专用 TestFlight 自动任务、持久会话与 `名称_Beta_版本.ipa` 命名，并保留 App Store 链接地区识别与独立中国区最新版下载，保留白名单、用户隔离、进度卡、完整计时和导出加速。alpha.2/alpha.3 保留为历史版本。旧版 `v0.1.0-alpha.1` 的公开 Release 和附件由本次发布替换，源码标签及历史发布说明保留。
 

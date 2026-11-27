@@ -33,7 +33,7 @@
 
 | 文档 | 范围 |
 | --- | --- |
-| [公开附件](RELEASES.md) | alpha.5预览版旧VPS/Intel快照，非当前生产架构 |
+| [公开附件](RELEASES.md) | alpha.5预览版原运行环境/Intel快照，非当前生产架构 |
 | [VPS部署](VPS-DEPLOYMENT.md) | 已退出派发的旧版本配置/构建/备份档案 |
 | [旧白名单](MULTI-USER.md) | VPS多用户实现；新入口仅主人 |
 | [free-pilot部署](../deploy/managed/free-pilot/DEPLOY.zh-CN.md) | 早期独立试验，不替代当前生产切换 |

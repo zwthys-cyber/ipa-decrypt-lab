@@ -1,6 +1,6 @@
 # 当前任务恢复与历史交接
 
-核对日期：2026-11-27。现网持久化位于Cloudflare D1，Apple处理在按需CircleCI工作机；不再依赖旧VPS私有SQLite或同机备份恢复日常任务。具体源码与发布顺序见[运行手册](OPERATIONS.md)。
+核对日期：2026-11-27。现网持久化位于Cloudflare D1，Apple处理在按需CircleCI工作机；不再依赖原运行环境私有SQLite或同机备份恢复日常任务。具体源码与发布顺序见[运行手册](OPERATIONS.md)。
 
 ## 新任务的恢复规则
 
@@ -11,7 +11,7 @@
 - /get仅在归属、完整文件证明、Drive私有权限和领取窗口都通过时返回链接；窗口当前为注册后24小时，不等于Drive权限自动撤销。
 - 失败后修复原因，再由主人发出新的真实输入；不自动重放失败、已取消、已完成或发送不明任务。
 
-## 不可用旧VPS的离线交接
+## 不可用原运行环境的离线交接
 
 [成功切换45918215266](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45918215266)对应生产处理源码`185a52110922e0f67ac2c7dff4e1fa85b3b4c98e`，验证已封存的29条旧任务、89条updates、14条metadata，原offset/browser和已知私有文件/通知保留。2条旧pending保持held；备份保全后无法取得的源变化仍是未知缺口，不宣称全量无缺口。
 

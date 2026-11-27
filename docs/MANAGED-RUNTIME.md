@@ -4,7 +4,7 @@
 
 截至2026-11-27，生产已切换到原机器人 + Cloudflare Workers/D1 + 按需CircleCI macOS ARM64 + 私有Drive交付。[成功切换45918215266](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45918215266)对应处理源码`185a52110922e0f67ac2c7dff4e1fa85b3b4c98e`。CircleCI75真实国区任务已完成下载、17镜像/120,976页严格验证、342,632,968字节私有上传及主人通知；新平台历史版本交付和新TF任务仍待分别真实验收。
 
-当前架构的使用及升级步骤集中在[操作手册](OPERATIONS.md)，[CircleCI维护说明](../deploy/managed/circleci/README.md)保留实现证据。当前公共base/CN/TF运行包固定为job62，准确来源及摘要以runtime-pins.json为准。早期job40/42和Linux容器/SSH状态卷是历史验证，不能用作当前生产来源或重启旧VPS的指令。
+当前架构的使用及升级步骤集中在[操作手册](OPERATIONS.md)，[CircleCI维护说明](../deploy/managed/circleci/README.md)保留实现证据。当前公共base/CN/TF运行包固定为job62，准确来源及摘要以runtime-pins.json为准。早期job40/42和Linux容器/SSH状态卷是历史验证，不能用作当前生产来源或重启原运行环境的指令。
 
 ## 下方资料的历史范围
 
@@ -82,7 +82,7 @@ Before production cutover:
 1. Replace TF SSH state transport with an authenticated, transactional private state service; migrate the encrypted session, acceptance-intent history and return ledger without resetting unknown outcomes.
 2. Prove synthetic restart, deduplication, quota, cancellation, secret isolation and provider storage behavior; test the isolated controller with an authorized synthetic workload.
 3. Establish a permitted production worker host and verify its integration. Validate local Bot API capacity and controlled migration of Telegram state. Never run two pollers with the same token.
-4. Stop the old service only when idle, back up all private state, perform an atomic migration, and verify delivery and recovery before decommissioning the old VPS. Preserve a rollback copy and existing delivery identity.
+4. Stop the old service only when idle, back up all private state, perform an atomic migration, and verify delivery and recovery before decommissioning the original runtime. Preserve a rollback copy and existing delivery identity.
 
 Do not remove existing VPS Secrets or data, perform new Apple authorization, or start a second production bot as part of this phase.
 

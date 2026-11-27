@@ -1,6 +1,6 @@
 # IPA Decrypt Lab
 
-截至 2026-11-27，原 Telegram 机器人已切换到 **Cloudflare Workers / D1 控制面 + 按需 CircleCI macOS ARM64 工作机 + 私有 Google Drive 交付**。旧 VPS 已退出派发，日常任务不依赖旧机，也无需常驻 macOS 工作机。
+截至 2026-11-27，原 Telegram 机器人已切换到 **Cloudflare Workers / D1 控制面 + 按需 CircleCI macOS ARM64 工作机 + 私有 Google Drive 交付**。原运行环境 已退出派发，日常任务不依赖旧机，也无需常驻 macOS 工作机。
 
 | 分支 | 当前用途 |
 | --- | --- |
@@ -23,7 +23,7 @@
 
 ## 当前使用
 
-仅接受配置主人的机器人私聊；不开放旧 VPS 白名单和收费入口。
+仅接受配置主人的机器人私聊；不开放原运行环境 白名单和收费入口。
 
 - 直接发送 App Store 链接或数字 App ID：提交最新版。完整 `/cn/` 链接使用独立国区账号，其余链接和数字 ID 使用默认外区账号。
 - `/versions AppStore链接或AppID`：请求历史列表；`/version AppStore链接或AppID 版本号`：指定版本，也支持 Apple 历史 ID。国区必须保留完整 `/cn/` 链接。
@@ -46,14 +46,14 @@ Cloudflare 接收 webhook、持久化任务/去重和定时核对；GitHub 负�
 - [文档索引](docs/DOCUMENTATION.md)：当前说明和历史资料。
 - [仓库整理审计](docs/REPOSITORY-AUDIT.md)：冗余候选、历史工作流及文档修订。
 - [发行附件](docs/RELEASES.md)：alpha.5 快照及校验。
-- [旧 VPS 部署档案](docs/VPS-DEPLOYMENT.md)：仅供旧版本追溯，不用于恢复现网入口。
+- [原运行环境 部署档案](docs/VPS-DEPLOYMENT.md)：仅供旧版本追溯，不用于恢复现网入口。
 
 保留了 29 条旧任务、89 条 updates、14 条 metadata 和已知 TF 接受/回传去重记录；2 条旧 pending 及源丢失后的未知变化保持隔离，不自动重放。保存的历史文件、邀请意图和稳定 HMAC 不得因清理仓库而重置。
 
-所有项目构建和测试只在 GitHub / 已授权的 CircleCI 执行；当前工作区和旧 VPS 不运行编译或测试。不依赖个人 iPhone 或第三方解密服务。零费用是配置约束，不代表供应商额度、排队和长期可用性的保证，见 [费用与历史评估](docs/ZERO-COST.md)。
+所有项目构建和测试只在 GitHub / 已授权的 CircleCI 执行；当前工作区和原运行环境 不运行编译或测试。不依赖个人 iPhone 或第三方解密服务。零费用是配置约束，不代表供应商额度、排队和长期可用性的保证，见 [费用与历史评估](docs/ZERO-COST.md)。
 
 ## 依赖与许可证
 
-下载客户端基于 [ApplePackage](https://github.com/Lakr233/ApplePackage)，辅助工具使用 [ipatool](https://github.com/majd/ipatool)，离线后端使用 [UnfairPlay](https://github.com/DrWhax/unfairplay)，传输加密使用 [age](https://github.com/FiloSottile/age)。旧 VPS 文件交付采用官方 [Bot API server](https://github.com/tdlib/telegram-bot-api)；当前新任务通过 Telegram 通知私有 Drive 链接。
+下载客户端基于 [ApplePackage](https://github.com/Lakr233/ApplePackage)，辅助工具使用 [ipatool](https://github.com/majd/ipatool)，离线后端使用 [UnfairPlay](https://github.com/DrWhax/unfairplay)，传输加密使用 [age](https://github.com/FiloSottile/age)。原运行环境 文件交付采用官方 [Bot API server](https://github.com/tdlib/telegram-bot-api)；当前新任务通过 Telegram 通知私有 Drive 链接。
 
 仓库许可证见 [LICENSE](LICENSE)，各依赖保留各自许可证。账号、模型、私钥、机器人 Token 和第三方 IPA 不随源码或发行附件提供。
