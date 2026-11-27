@@ -85,8 +85,9 @@ export async function handleManagedTelegram(request,env,invoke,now=Math.floor(Da
   }catch(error){
    if(["runtime_catalog_view_expired","runtime_catalog_already_selected","runtime_catalog_selection","runtime_catalog_page_limit"].includes(error?.message))
     return response(200,{method:"answerCallbackQuery",callback_query_id:callback.id,text:"列表已使用或已过期，请重新发送 /versions 链接。"});
-   if(["runtime_catalog_rate_limit","runtime_daily_or_queue_limit"].includes(error?.message))
-    return response(200,{method:"answerCallbackQuery",callback_query_id:callback.id,text:"已达到查询频率或任务上限，请稍后重试。"});
+   if(error?.message==="runtime_queue_limit")return response(200,{method:"answerCallbackQuery",callback_query_id:callback.id,text:"等待队列已满，请等现有任务完成后再提交。"});
+   if(error?.message==="runtime_catalog_rate_limit")return response(200,{method:"answerCallbackQuery",callback_query_id:callback.id,text:"版本查询较频繁，请稍后再试；也可先查看已缓存的列表。"});
+   if(error?.message==="runtime_daily_or_queue_limit")return response(200,{method:"answerCallbackQuery",callback_query_id:callback.id,text:"受控验证窗口的提交额度已用完。"});
    return response(503,{ok:false});
   }
  }
@@ -147,8 +148,9 @@ export async function handleManagedTelegram(request,env,invoke,now=Math.floor(Da
  }catch(error){
   if(["runtime_entry_disabled","runtime_handoff_required","runtime_tf_handoff_required"].includes(error?.message))
    return respond("迁移交接尚未完成，当前没有提交新的下载任务。");
-  if(error?.message==="runtime_catalog_rate_limit")return respond("已达到目录查询频率或每日上限，请稍后重试。");
-  if(error?.message==="runtime_daily_or_queue_limit")return respond("已达到每日或等待任务上限。");
+  if(error?.message==="runtime_catalog_rate_limit")return respond("版本查询较频繁，请稍后再试；也可先查看已缓存的列表。");
+  if(error?.message==="runtime_queue_limit")return respond("等待队列已满，请等现有任务完成后再提交。");
+  if(error?.message==="runtime_daily_or_queue_limit")return respond("受控验证窗口的提交额度已用完。");
   if(error?.message==="runtime_link_unavailable")return respond("文件尚未完成核验，或领取期限已过。");
   // A webhook retry reuses the same request ID; never invent a replacement task.
   return response(503,{ok:false});

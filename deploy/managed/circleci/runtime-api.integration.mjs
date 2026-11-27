@@ -517,7 +517,7 @@ test("uncertain catalog notification is never repeated; a new owner command may 
   assert.equal((await s.mf.dispatchFetch(origin+"/fixture-count").then(r=>r.json())).nativePosts,0);
  }finally{await s.close();}
 });
-test("catalog query budget is separate from export quota and staging never admits catalogs",{timeout:60000},async()=>{
+test("owner catalog requests bypass daily totals while staging still rejects them",{timeout:60000},async()=>{
  const disabled=await setup();try{
   await disabled.request("init");assert.equal((await disabled.request("catalog-open",catalogRequest())).status,409);
  }finally{await disabled.close();}
@@ -525,10 +525,11 @@ test("catalog query budget is separate from export quota and staging never admit
   await handoff(s);
   for(let i=0;i<20;i++){
    const id="pilot_"+i.toString(16).padStart(32,"0"),rid=i.toString(16).padStart(32,"0");
-   await s.db.prepare("INSERT INTO runtime_jobs(job_id,owner_id,request_id,profile,kind,target,version,source_sha,state,created_at,deadline) VALUES(?,?,?,'default','export','123456','',?,'closed',?,?)").bind(id,owner,rid,source,now-120,now+1000).run();
+   await s.db.prepare("INSERT INTO runtime_jobs(job_id,owner_id,request_id,profile,kind,target,version,source_sha,state,created_at,deadline) VALUES(?,?,?,'default','export','123456','',?,'closed',?,?)").bind(id,owner,rid,source,Math.floor(now/86400)*86400,now+1000).run();
    await s.db.prepare("INSERT INTO runtime_catalog_specs(job_id,before_id,page_index) VALUES(?,'',0)").bind(id).run();
   }
-  assert.equal((await (await s.request("catalog-open",catalogRequest("f","default"))).json()).code,"runtime_catalog_rate_limit");
+  const catalog=await s.request("catalog-open",catalogRequest("f","default"));assert.equal(catalog.status,200,await catalog.clone().text());
+  assert.equal((await s.db.prepare("SELECT count(*) n FROM runtime_catalog_specs").first()).n,21);
   assert.equal((await s.request("admit-export",realRequest)).status,200);
  }finally{await s.close();}
 });
@@ -592,5 +593,38 @@ test("task pages stay bounded, owner-private and below eight D1 calls without pr
   }
   const home=await (await post(message("/start"))).json();assert.ok(home.text.includes("\n\n"));assert.ok(home.reply_markup.inline_keyboard.length);
   assert.equal((await s.mf.dispatchFetch(origin+"/fixture-count").then(r=>r.json())).nativePosts,0);
+ }finally{await s.close();}
+});
+
+test("the configured owner can submit after daily success and failure totals are exhausted",{timeout:60000},async()=>{
+ const s=await production();try{
+  await handoff(s);
+  for(let i=0;i<24;i++){
+   const tag=(300+i).toString(16).padStart(32,"0");
+   await s.db.prepare("INSERT INTO runtime_jobs(job_id,owner_id,request_id,profile,kind,target,version,source_sha,state,created_at,deadline) VALUES(?,?,?,'default','export','123456','',?,?,?,?)")
+    .bind("pilot_"+tag,owner,tag,source,i%2?"closed":"completed",Math.floor(now/86400)*86400,now+1000).run();
+  }
+  const response=await s.request("admit-export",realRequest);assert.equal(response.status,200,await response.clone().text());
+  const row=await s.db.prepare("SELECT state FROM runtime_jobs WHERE owner_id=? AND request_id=?").bind(owner,realRequest.request_id).first();
+  assert.equal(row.state,"submitted");
+  assert.equal((await s.db.prepare("SELECT count(*) n FROM runtime_jobs WHERE owner_id=?").bind(owner).first()).n,25);
+  assert.equal((await s.mf.dispatchFetch(origin+"/fixture-count").then(r=>r.json())).nativePosts,1);
+ }finally{await s.close();}
+});
+test("owner daily exemption never bypasses the thirty-job waiting queue",{timeout:60000},async()=>{
+ const s=await production();try{
+  await handoff(s);
+  for(let i=0;i<30;i++){
+   const tag=(400+i).toString(16).padStart(32,"0");
+   await s.db.prepare("INSERT INTO runtime_jobs(job_id,owner_id,request_id,profile,kind,target,version,source_sha,state,created_at,deadline) VALUES(?,?,?,'default','export','123456','',?,'waiting',?,?)")
+    .bind("pilot_"+tag,owner,tag,source,now-120,now+1000).run();
+  }
+  const response=await s.request("admit-export",realRequest);assert.equal(response.status,409);
+  assert.equal((await response.json()).code,"runtime_queue_limit");
+  assert.equal((await s.db.prepare("SELECT count(*) n FROM runtime_jobs WHERE owner_id=?").bind(owner).first()).n,30);
+  assert.equal((await s.mf.dispatchFetch(origin+"/fixture-count").then(r=>r.json())).nativePosts,0);
+  const catalog=await s.request("catalog-open",catalogRequest("f","default"));assert.equal(catalog.status,409);
+  assert.equal((await catalog.json()).code,"runtime_queue_limit");
+  assert.equal((await s.db.prepare("SELECT count(*) n FROM runtime_jobs WHERE owner_id=?").bind(owner).first()).n,30);
  }finally{await s.close();}
 });

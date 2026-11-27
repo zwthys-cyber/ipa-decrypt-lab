@@ -53,8 +53,10 @@ export async function admitExport(env,value,now){
   const handoff=await env.DB.prepare("SELECT ready,sealed_at,snapshot_sha256,session_sha256 FROM circleci_tf_handoff WHERE owner_id=?").bind(env.RUNTIME_OWNER_ID).first();
   need(handoff?.ready===1&&handoff.sealed_at>0&&handoff.snapshot_sha256===entry.snapshot_sha256&&handoff.session_sha256===entry.session_sha256&&/^[a-f0-9]{64}$/.test(env.RUNTIME_TF_HMAC_KEY||""),"runtime_tf_handoff_required");
  }
- const limit=env.RUNTIME_DAILY_LIMIT===undefined?3:Number(env.RUNTIME_DAILY_LIMIT);
- need(Number.isSafeInteger(limit)&&limit>=1&&limit<=20,"runtime_quota_configuration");
+ // Admission is bound to the configured owner; callers cannot supply a privilege flag.
+ const ownerDailyExempt=!entry.canary;
+ const limit=ownerDailyExempt?0:(env.RUNTIME_DAILY_LIMIT===undefined?3:Number(env.RUNTIME_DAILY_LIMIT));
+ if(!ownerDailyExempt)need(Number.isSafeInteger(limit)&&limit>=1&&limit<=20,"runtime_quota_configuration");
  const legacy=await env.DB.prepare("SELECT request_id FROM runtime_legacy_tasks WHERE request_id=? AND owner_id=?").bind(value.request_id,env.RUNTIME_OWNER_ID).first();
  need(!legacy,"runtime_historical_request_held");
  const start=Math.floor(now/86400)*86400;
@@ -64,14 +66,14 @@ export async function admitExport(env,value,now){
  const result=await env.DB.prepare(`INSERT INTO runtime_jobs
   (job_id,owner_id,request_id,profile,kind,target,version,source_sha,state,created_at,deadline)
   SELECT ?,?,?,?,'export',?,?,?,'waiting',?,?
-  WHERE ((SELECT count(*) FROM runtime_jobs WHERE owner_id=? AND kind='export' AND NOT EXISTS(SELECT 1 FROM runtime_catalog_specs s WHERE s.job_id=runtime_jobs.job_id) AND created_at>=? AND created_at<?)
-   +(SELECT count(*) FROM runtime_legacy_tasks WHERE owner_id=? AND created_at>=? AND created_at<?)+?)<?
+  WHERE (?=1 OR ((SELECT count(*) FROM runtime_jobs WHERE owner_id=? AND kind='export' AND NOT EXISTS(SELECT 1 FROM runtime_catalog_specs s WHERE s.job_id=runtime_jobs.job_id) AND created_at>=? AND created_at<?)
+   +(SELECT count(*) FROM runtime_legacy_tasks WHERE owner_id=? AND created_at>=? AND created_at<?)+?)<?)
    AND (SELECT count(*) FROM runtime_jobs WHERE owner_id=? AND kind='export' AND state='waiting')<30
   ON CONFLICT DO NOTHING`).bind(id,env.RUNTIME_OWNER_ID,value.request_id,value.profile,value.target,value.version,
-   env.RUNTIME_SOURCE_SHA,now,Math.min(now+3600,entry.lease_deadline||now+3600),env.RUNTIME_OWNER_ID,start,start+86400,env.RUNTIME_OWNER_ID,start,start+86400,savedQuota.n,limit,env.RUNTIME_OWNER_ID).run();
+   env.RUNTIME_SOURCE_SHA,now,Math.min(now+3600,entry.lease_deadline||now+3600),ownerDailyExempt?1:0,env.RUNTIME_OWNER_ID,start,start+86400,env.RUNTIME_OWNER_ID,start,start+86400,savedQuota.n,limit,env.RUNTIME_OWNER_ID).run();
  need(result.success===true,"runtime_admission_storage");
  const row=await env.DB.prepare("SELECT * FROM runtime_jobs WHERE request_id=? AND owner_id=?").bind(value.request_id,env.RUNTIME_OWNER_ID).first();
- need(row,"runtime_daily_or_queue_limit");
+ need(row,entry.canary?"runtime_daily_or_queue_limit":"runtime_queue_limit");
  need(row.job_id===id&&row.kind==="export"&&(row.source_sha===env.RUNTIME_SOURCE_SHA||["completed","closed","cancelled"].includes(row.state))&&
   ["profile","target","version"].every(key=>row[key]===value[key]),"runtime_request_immutable");
  return row;

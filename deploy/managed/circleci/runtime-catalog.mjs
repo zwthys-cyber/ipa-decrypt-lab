@@ -54,14 +54,18 @@ async function open(env,value,now){
  if(!row){
   const id="pilot_"+await hash("managed-catalog\0"+owner+"\0"+value.request_id);
   const inserted=await db.batch([
-   db.prepare("INSERT INTO runtime_jobs(job_id,owner_id,request_id,profile,kind,target,version,source_sha,state,created_at,deadline) SELECT ?,?,?,?,'export',?,'',?,'waiting',?,? WHERE (SELECT count(*) FROM runtime_jobs j JOIN runtime_catalog_specs s ON s.job_id=j.job_id WHERE j.owner_id=? AND j.created_at>=? AND j.created_at<?)<20 AND NOT EXISTS(SELECT 1 FROM runtime_jobs j JOIN runtime_catalog_specs s ON s.job_id=j.job_id WHERE j.owner_id=? AND j.profile=? AND j.created_at>?) AND (SELECT count(*) FROM runtime_jobs WHERE owner_id=? AND state='waiting')<30 ON CONFLICT DO NOTHING")
-    .bind(id,owner,value.request_id,value.profile,value.target,env.RUNTIME_SOURCE_SHA,now,now+3600,owner,Math.floor(now/86400)*86400,Math.floor(now/86400)*86400+86400,owner,value.profile,now-(value.before?5:60),owner),
+   db.prepare("INSERT INTO runtime_jobs(job_id,owner_id,request_id,profile,kind,target,version,source_sha,state,created_at,deadline) SELECT ?,?,?,?,'export',?,'',?,'waiting',?,? WHERE NOT EXISTS(SELECT 1 FROM runtime_jobs j JOIN runtime_catalog_specs s ON s.job_id=j.job_id WHERE j.owner_id=? AND j.profile=? AND j.created_at>?) AND (SELECT count(*) FROM runtime_jobs WHERE owner_id=? AND state='waiting')<30 ON CONFLICT DO NOTHING")
+    .bind(id,owner,value.request_id,value.profile,value.target,env.RUNTIME_SOURCE_SHA,now,now+3600,owner,value.profile,now-(value.before?5:60),owner),
    db.prepare("INSERT INTO runtime_catalog_specs(job_id,before_id,page_index) SELECT job_id,?,? FROM runtime_jobs WHERE job_id=? AND owner_id=? AND request_id=? AND profile=? AND target=? AND source_sha=? AND state='waiting' ON CONFLICT DO NOTHING")
     .bind(value.before,page,id,owner,value.request_id,value.profile,value.target,env.RUNTIME_SOURCE_SHA)
   ]);
   need(inserted.every(r=>r.success===true),"runtime_catalog_storage");
   row=await db.prepare("SELECT j.*,s.before_id,s.page_index FROM runtime_jobs j JOIN runtime_catalog_specs s ON s.job_id=j.job_id WHERE j.job_id=? AND j.owner_id=?").bind(id,owner).first();
-  need(row,"runtime_catalog_rate_limit");
+  if(!row){
+   const queued=await db.prepare("SELECT count(*) n FROM runtime_jobs WHERE owner_id=? AND state='waiting'").bind(owner).first();
+   need(queued.n<30,"runtime_queue_limit");
+   need(false,"runtime_catalog_rate_limit");
+  }
   need(row.request_id===value.request_id&&row.profile===value.profile&&row.target===value.target&&
    row.before_id===value.before&&row.page_index===page&&row.source_sha===env.RUNTIME_SOURCE_SHA,"runtime_catalog_request_immutable");
  }
