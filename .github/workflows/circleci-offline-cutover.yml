@@ -43,8 +43,8 @@ jobs:
         run: |
           python3 - <<'PY'
           import json,os,subprocess
-          data=json.loads(subprocess.check_output(["gh","api","repos/zwthys-cyber/ipa-decrypt-lab/actions/workflows/circleci-control-contracts.yml/runs?branch=upgrade%2Fmanaged-runtime-v0.2&per_page=30"]))
-          valid=[r for r in data["workflow_runs"] if r["head_sha"]==os.environ["GITHUB_SHA"] and r["event"] in ("push","workflow_dispatch") and r["status"]=="completed" and r["conclusion"]=="success"]
+          data=json.loads(subprocess.check_output(["gh","api","repos/zwthys-cyber/ipa-decrypt-lab/actions/workflows/circleci-control-contracts.yml/runs?per_page=50"]))
+          valid=[r for r in data["workflow_runs"] if r["head_sha"]==os.environ["GITHUB_SHA"] and r["head_branch"] in ("upgrade/managed-runtime-v0.2","upgrade/managed-runtime-maintenance-v0.2") and r["event"] in ("push","workflow_dispatch") and r["status"]=="completed" and r["conclusion"]=="success"]
           if not valid:raise SystemExit("matching_control_contracts_not_ready")
           with open(os.environ["GITHUB_OUTPUT"],"a") as output:output.write("run="+str(valid[0]["id"])+"\n")
           PY

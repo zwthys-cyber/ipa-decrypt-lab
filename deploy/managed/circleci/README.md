@@ -1,4 +1,14 @@
-# CircleCI on-demand migration candidate
+# CircleCI on-demand migration
+
+## 生产切换及真实消息验收（2026-11-27）
+
+[离线生产切换45913375750](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45913375750)已成功，初次运行源码aaa2278038b7f2d22bed459b647cccb0cba3e93f，脱敏收据artifact15161451437。完整读回29条历史任务、89条updates、14条metadata，2条pending保持held；原Go Club已完成任务、私有文件和确认通知保留。原TF历史邀请按pinned接受/确认记录构造防重tombstone并seal，未重新接受。新Token属于原机器人，旧Token已失效，5个旧派发/目录工作流保持disabled；新webhook和真实cron触发均取得回读，production_cutover:true。
+
+用户随后提供IPAZaKe聊天截图：08:02:33发送/status，08:02:40收到Go Club“已核验，可用/get领取”和原失败任务“任务已结束”。真实入站及回复已确认，但约7秒延迟需优化。当前改为一次读取最新5条已提交状态，避免/status逐项调用完整核对与排队逻辑；外部终态由cron继续核对。新增真实workerd/D1查询预算回归，5条结果应在最多8次D1调用内完成，并隔离他人记录。每次源码升级也必须等该源码自己的cron观测回执，不能借上个版本的旧时间戳放行。
+
+**运行分支upgrade/managed-runtime-v0.2必须与Cloudflare.RUNTIME_SOURCE_SHA一致，不能在入口开启时直接推送。**CircleCI checkout和GitHub凭据签发都引用该分支HEAD。维护从独立upgrade/managed-runtime-maintenance-v0.2准备并验证，先用已验证的原运行包关闭空闲入口且保留旧source/DB/Secrets，再将同一已验证commit推进运行分支，执行Offline managed runtime cutover并等待新source的真实cron。上线后的新收据是最终运行源码依据，不再直接为补文档改动运行HEAD。
+
+旧机之后未保全的变化仍未知；不伪造物理停机或无缺口证明。旧offset/browser原样保留，切换前的消息持久隔离，不重放旧任务。计费入口保持关闭，无本地构建/项目测试或旧机SSH依赖。
 
 ## 最新决定：旧机不可用，转离线恢复（2026-11-26 23:38 UTC）
 

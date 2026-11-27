@@ -93,15 +93,16 @@ export async function handleManagedTelegram(request,env,invoke,now=Math.floor(Da
  try{
   if(["/start","/help"].includes(text))return say(owner,HELP);
   if(text==="/status"){
-   const rows=await env.DB.prepare("SELECT job_id FROM runtime_jobs WHERE owner_id=? AND kind='export' ORDER BY created_at DESC,job_id DESC LIMIT 5").bind(owner).all();
+   // Cron reconciles external runs. Status reads one committed snapshot and never calls providers.
+   const rows=await env.DB.prepare("SELECT j.job_id,j.state,j.finished_at,j.file_id,s.job_id catalog_job,s.result_json IS NOT NULL catalog_ready FROM runtime_jobs j LEFT JOIN runtime_catalog_specs s ON s.job_id=j.job_id WHERE j.owner_id=? AND j.kind='export' ORDER BY j.created_at DESC,j.job_id DESC LIMIT 5").bind(owner).all();
    const labels={waiting:"等待处理",dispatch_intent:"正在提交",dispatch_unknown:"提交结果待核对",submitted:"等待工作机",
     running:"处理中",uploading:"上传私有文件",link_ready:"等待最终确认",completed:"已核验，可用 /get 领取",
     closed:"任务已结束",cancelled:"已取消",cancel_pending:"取消结果待核对",failed_pending:"等待工作机结束确认"};
-   const lines=[];
-   for(const row of rows.results||[]){
-    const value=await invoke("status",{job_id:row.job_id});
-    lines.push(row.job_id+" · "+(value.task_kind==="catalog"&&value.catalog_ready?"版本查询已完成，可用 /versions 重新打开":labels[value.state]||"状态待核对"));
-   }
+   const lines=(rows.results||[]).map(row=>{
+    if(row.catalog_job&&row.catalog_ready)return row.job_id+" · 版本查询已完成，可用 /versions 重新打开";
+    const ready=row.finished_at!==null&&!!row.file_id&&["link_ready","completed"].includes(row.state);
+    return row.job_id+" · "+(ready?labels.completed:labels[row.state]||"状态待核对");
+   });
    return say(owner,lines.join("\n")||"暂无新任务。");
   }
   if(text.startsWith("/get ")||text.startsWith("/cancel ")){

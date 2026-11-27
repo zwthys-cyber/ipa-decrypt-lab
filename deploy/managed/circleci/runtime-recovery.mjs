@@ -4,6 +4,7 @@ import {normalizeSource,stageHandoff,sealHandoff} from "./tf-acceptance.mjs";
 export const RECOVERY_SCHEMA=[
  "CREATE TABLE IF NOT EXISTS runtime_offline_handoff(owner_id TEXT PRIMARY KEY,snapshot_sha256 TEXT NOT NULL,records_sha256 TEXT NOT NULL,token_sha256 TEXT NOT NULL,stage_source TEXT NOT NULL,captured_at INTEGER NOT NULL,created_at INTEGER NOT NULL,sealed_at INTEGER,activated_at INTEGER,fence_checked_at INTEGER,last_cron_tick_at INTEGER,fence_live INTEGER NOT NULL DEFAULT 0,legacy_rows INTEGER NOT NULL,held_rows INTEGER NOT NULL)",
  "CREATE TABLE IF NOT EXISTS runtime_offline_records(owner_id TEXT PRIMARY KEY,records_json TEXT NOT NULL)",
+ "CREATE TABLE IF NOT EXISTS runtime_cron_observations(owner_id TEXT PRIMARY KEY,source_sha TEXT NOT NULL,observed_at INTEGER NOT NULL)",
  "CREATE TABLE IF NOT EXISTS runtime_recovery_quarantine(owner_id TEXT NOT NULL,update_id INTEGER NOT NULL,source_json TEXT NOT NULL,created_at INTEGER NOT NULL,PRIMARY KEY(owner_id,update_id))"
 ].join(";")+";";
 export const SNAPSHOT="28654b814e6f38c7dddd0fdb79d5d2202aa8915c23db840c9792e6c2ed4b16dd";
@@ -130,11 +131,15 @@ export async function refreshRecoveryFence(env,now,send){
  }catch{}
  const result=await env.DB.prepare("UPDATE runtime_offline_handoff SET fence_live=?,fence_checked_at=?,last_cron_tick_at=? WHERE owner_id=?")
   .bind(live,now,now,env.RUNTIME_OWNER_ID).run();need(result.success===true,"runtime_recovery_storage");
+ const observed=await env.DB.prepare("INSERT INTO runtime_cron_observations(owner_id,source_sha,observed_at) VALUES(?,?,?) ON CONFLICT(owner_id) DO UPDATE SET source_sha=excluded.source_sha,observed_at=excluded.observed_at")
+  .bind(env.RUNTIME_OWNER_ID,env.RUNTIME_SOURCE_SHA,now).run();need(observed.success===true,"runtime_recovery_storage");
 }
 export async function offlineEntry(env,now=Math.floor(Date.now()/1000)){
  const row=await env.DB.prepare("SELECT * FROM runtime_offline_handoff WHERE owner_id=?").bind(env.RUNTIME_OWNER_ID).first();
+ const cron=await env.DB.prepare("SELECT source_sha,observed_at FROM runtime_cron_observations WHERE owner_id=?").bind(env.RUNTIME_OWNER_ID).first();
  need(row&&row.sealed_at&&row.snapshot_sha256===SNAPSHOT&&row.token_sha256===await sha(env.TELEGRAM_BOT_TOKEN)&&
   env.RUNTIME_BILLING_ENABLED==="0"&&row.activated_at<=now&&row.fence_live===1&&
+  cron?.source_sha===env.RUNTIME_SOURCE_SHA&&cron.observed_at>=row.sealed_at&&
   row.last_cron_tick_at>=row.sealed_at&&row.fence_checked_at>=now-180,"runtime_handoff_required");
  const count=await env.DB.prepare("SELECT count(*) n,COALESCE(sum(held),0) held FROM runtime_legacy_tasks").first();
  need(count.n===row.legacy_rows&&count.held===row.held_rows,"runtime_legacy_import_required");
@@ -147,11 +152,13 @@ export async function recoveryStatus(env){
  const keyHash=/^[a-f0-9]{64}$/.test(key)?await sha(key):null;
  if(!row)return {ok:true,staged:false,hmac_key_sha256:keyHash};
  const records=await verifyImported(env,row);
+ const cron=await env.DB.prepare("SELECT source_sha,observed_at FROM runtime_cron_observations WHERE owner_id=?").bind(env.RUNTIME_OWNER_ID).first();
  const tf=await env.DB.prepare("SELECT ready,sealed_at FROM circleci_tf_handoff WHERE owner_id=?").bind(env.RUNTIME_OWNER_ID).first();
  const delivery=await env.DB.prepare("SELECT j.state,j.finished_at,j.file_id,n.state notice FROM runtime_jobs j LEFT JOIN runtime_notifications n ON n.job_id=j.job_id WHERE j.job_id='pilot_267d28bb7688af8bbc132595f7009a07'").first();
  return {ok:true,staged:true,hmac_key_sha256:keyHash,sealed:!!row.sealed_at,records_readback_verified:true,legacy_rows:row.legacy_rows,held_rows:row.held_rows,
   update_rows:records.updates.length,metadata_rows:records.metadata.length,private_return_rows:records.private_returns.length,
   tf_sealed:tf?.ready===1&&!!tf.sealed_at,activated_at:row.activated_at,last_cron_tick_at:row.last_cron_tick_at,
+  cron_source_sha:cron?.source_sha||null,cron_observed_at:cron?.observed_at||null,
   fence_live:row.fence_live===1,token_bound:row.token_sha256===await sha(env.TELEGRAM_BOT_TOKEN),
   known_delivery_preserved:delivery?.state==="completed"&&!!delivery.finished_at&&!!delivery.file_id&&delivery.notice==="sent",
   source_disabled_verified:false,recovery_gap_held:true,automatic_replay:false};

@@ -1,6 +1,6 @@
 # Project constraints
 
-Last reviewed 2026-11-26. Use [the current project status](docs/PROJECT-STATUS.md) for release, production and CI evidence. The v0.2 work is a draft. The VPS remains the configured legacy Telegram poller; its provider currently suspends access, and permanent cutover has not occurred. Historical sections below apply to their stated dates.
+Last reviewed 2026-11-27. Use [the current project status](docs/PROJECT-STATUS.md) for release, production and CI evidence. The on-demand CircleCI/Cloudflare entry is now in production after verified offline cutover; the unusable VPS is retired from dispatch. Consult the latest successful Offline managed runtime cutover receipt for the exact running source. Historical sections below apply to their stated dates.
 
 - The owner selected CircleCI on 2026-11-26 for personal, link-triggered on-demand workers; no 24-hour worker is required. Public ARM runtime producer development and CircleCI validation are authorized. Preserve durable state and do not claim cutover until authenticated dispatch, runtime and private-delivery checks pass.
 - Build and validate official release and VPS artifacts on GitHub-hosted Actions. The user also authorized isolated CircleCI validation of the project-owned iOS sample and the Linux archive audit and free-pilot tests. The VPS runs CI-verified finished services.
@@ -18,6 +18,14 @@ Last reviewed 2026-11-26. Use [the current project status](docs/PROJECT-STATUS.m
 - Do not infer an enabled two-factor setting or a definite verification challenge from MZFinance.BadLogin.Configurator_message. Treat it as ambiguous until stronger response evidence is available.
 
 - Telegram integration resumed on 2026-11-04. Implement bounded GitHub-hosted bot sessions and verified private delivery; the later explicit authorization permits finished-service execution on the VPS, but never permanent Actions hosting.
+
+## Production and maintenance source contract (2026-11-27)
+
+- Initial production cutover45913375750 succeeded at aaa2278038b7f2d22bed459b647cccb0cba3e93f:29legacy rows/2held,89updates/14metadata, originalGoClub file/notice preserved, historicalTF tombstone sealed, webhook and actualcron verified. Artifact15161451437 is sanitized. Owner screenshot at08:02:40 confirms real/status reply. Keep the distinction from source physical stop: source_disabled_verified remains false and the lost-source gap remains held.
+- NEVER push upgrade/managed-runtime-v0.2 while its entry is open: Circle checkout and GitHub issuer dispatch resolve its HEAD, which must equal Cloudflare.RUNTIME_SOURCE_SHA. Work via upgrade/managed-runtime-maintenance-v0.2. First close only an idle entry using the exact already-running CI bundle/source; preserve DB/secrets and confirm closed. Promote the tested maintenance commit with a ref lease, then run Offline managed runtime cutover and require a cron observation for the new source. Do not append documentation commits to the open production ref.
+- /status has been optimized to one owner-bound snapshot query; it must not invoke full provider reconciliation once per listed job. The real screenshot measured approximately7s before this optimization. Keep a test budget of at most8 D1 calls for5 listed jobs (Free D1 limit50), and let scheduled reconciliation progress the queue.
+- MANAGED_TF_HMAC_KEY is a stable separately stored control secret. Preserve it across all deployments; historical confirmation hashes depend on it. MANAGED_TELEGRAM_BOT_TOKEN remains separate from the legacy token Secret. Never re-enable the5 retired workflows.
+- Every deployment must use its exact successful control artifact and same source-qualified ref. Later deployment receipts supersede the initial cutover source above. Pending legacy tasks, quarantined pre-cutover commands and original notifications never auto-replay. Only GitHub/CircleCI runs project code and tests.
 
 ## Offline recovery decision and bot token handoff (2026-11-26 23:38 UTC)
 

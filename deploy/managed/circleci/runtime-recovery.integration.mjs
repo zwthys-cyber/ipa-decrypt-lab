@@ -90,7 +90,12 @@ test("lost dispatch fencing, wrong webhook, stale cron or billing flag closes th
    s.controls[flag]=false;
   }
   await refreshRecoveryFence(s.env,now+22,s.send);
-  s.env.RUNTIME_BILLING_ENABLED="1";await assert.rejects(offlineEntry(s.env,now+22));
+  s.env.RUNTIME_SOURCE_SHA="b".repeat(40);
+  await assert.rejects(offlineEntry(s.env,now+22),/handoff_required/);
+  await refreshRecoveryFence(s.env,now+23,s.send);
+  await offlineEntry(s.env,now+23);
+  assert.equal((await recoveryStatus(s.env)).cron_source_sha,s.env.RUNTIME_SOURCE_SHA);
+  s.env.RUNTIME_BILLING_ENABLED="1";await assert.rejects(offlineEntry(s.env,now+23));
  }finally{await s.close();}
 });
 test("pre-cutover private updates are quarantined immutably and cannot start an export",{timeout:60000},async()=>{

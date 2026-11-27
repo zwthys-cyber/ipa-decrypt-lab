@@ -56,6 +56,16 @@ async function setup(bindings={}){
  let menus=[];let nativePosts=0,publisherPosts=0,notifications=0,deleted=false,managedJob="pilot_11111111111111111111111111111111";
  export default {async fetch(request,env){
   if(new URL(request.url).pathname==="/fixture-count")return Response.json({nativePosts,publisherPosts});
+  if(request.headers.get("x-fixture-query-budget")==="1"){
+   const rawDB=env.DB,originals=new WeakMap();let calls=0;
+   const use=()=>{if(++calls>8)throw Error("fixture_d1_query_budget");};
+   const wrap=statement=>{
+    const next={bind(...args){return wrap(statement.bind(...args));}};
+    for(const method of ["first","all","run","raw"])next[method]=(...args)=>{use();return statement[method](...args);};
+    originals.set(next,statement);return next;
+   };
+   env={...env,DB:{prepare(sql){return wrap(rawDB.prepare(sql));},batch(statements){use();return rawDB.batch(statements.map(s=>originals.get(s)||s));}}};
+  }
   async function provider(url,options){
    new Request(url,options);
    if(options.redirect!=="manual")throw Error("redirect_policy");
@@ -525,5 +535,24 @@ test("the scheduled reconciler releases a known ended catalog and dispatches its
   const next=await s.db.prepare("SELECT state,run_id FROM runtime_jobs WHERE job_id=?").bind(admitted.job_id).first();
   assert.equal(old.state,"completed");assert.equal(next.state,"submitted");assert.notEqual(next.run_id,run);
   assert.equal((await s.mf.dispatchFetch(origin+"/fixture-count").then(r=>r.json())).nativePosts,1);
+ }finally{await s.close();}
+});
+
+test("five status entries use one snapshot, stay below eight D1 calls and never query providers",{timeout:60000},async()=>{
+ const s=await production();try{
+  await handoff(s);
+  for(let i=0;i<6;i++){
+   const id="pilot_"+(100+i).toString(16).padStart(32,"0");
+   await s.db.prepare("INSERT INTO runtime_jobs(job_id,owner_id,request_id,profile,kind,target,version,source_sha,state,created_at,deadline,finished_at,file_id) VALUES(?,?,?,'default','export','123456','',?,'completed',?,?,?,'SYNTHETIC_FILE')")
+    .bind(id,i===5?"99999":owner,(100+i).toString(16).padStart(32,"0"),source,now-i,now+1000,now-10).run();
+  }
+  const body={update_id:101,message:{date:now,chat:{id:Number(owner),type:"private"},from:{id:Number(owner),is_bot:false},text:"/status"}};
+  const result=await s.mf.dispatchFetch(origin+"/telegram",{method:"POST",
+   headers:{"content-type":"application/json","x-telegram-bot-api-secret-token":"S".repeat(48),"x-fixture-query-budget":"1"},
+   body:JSON.stringify(body)});
+  assert.equal(result.status,200,await result.clone().text());
+  const answer=await result.json();assert.equal(answer.text.split("\n").length,5);
+  assert.ok(!answer.text.includes((105).toString(16).padStart(32,"0")));
+  assert.equal((await s.mf.dispatchFetch(origin+"/fixture-count").then(r=>r.json())).nativePosts,0);
  }finally{await s.close();}
 });

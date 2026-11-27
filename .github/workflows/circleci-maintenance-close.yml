@@ -1,0 +1,77 @@
+name: Close idle managed entry for maintenance
+on:
+  push:
+    branches: [upgrade/managed-runtime-maintenance-v0.2]
+    paths:
+      - 'deploy/managed/circleci/*maintenance_close.py'
+      - '.github/workflows/circleci-maintenance-close.yml'
+  workflow_dispatch:
+    inputs:
+      expected_source:
+        required: true
+        type: string
+      control_run:
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: circleci-production-cutover
+  cancel-in-progress: false
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - working-directory: deploy/managed/circleci
+        run: python3 test_maintenance_close.py -v
+  close:
+    needs: contracts
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/upgrade/managed-runtime-maintenance-v0.2' && github.run_attempt == 1 && github.actor_id == '246379322'
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify original live bundle provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SOURCE: ${{ inputs.expected_source }}
+          CONTROL_RUN: ${{ inputs.control_run }}
+        run: |
+          python3 - <<'PY'
+          import json,os,re,subprocess
+          source=os.environ["EXPECTED_SOURCE"];run=os.environ["CONTROL_RUN"]
+          assert re.fullmatch("[a-f0-9]{40}",source) and re.fullmatch("[1-9][0-9]{0,19}",run)
+          value=json.loads(subprocess.check_output(["gh","api","repos/zwthys-cyber/ipa-decrypt-lab/actions/runs/"+run]))
+          assert value["head_sha"]==source and value["conclusion"]=="success" and value["status"]=="completed"
+          assert value["path"]==".github/workflows/circleci-control-contracts.yml"
+          PY
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.control_run }}
+          name: circleci-control-candidate-${{ inputs.expected_source }}
+          path: live-control
+      - name: Verify old bundle checksum
+        working-directory: live-control
+        run: sha256sum -c SHA256SUMS
+      - name: Close only an idle entry while preserving its exact old source and database
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_PILOT_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_PILOT_API_TOKEN }}
+          EXPECTED_SOURCE: ${{ inputs.expected_source }}
+        run: python3 deploy/managed/circleci/maintenance_close.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: maintenance-close-${{ github.run_id }}
+          path: maintenance-closure.json
+          retention-days: 7
+          if-no-files-found: error

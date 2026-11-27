@@ -144,10 +144,10 @@ def run(bundle):
    need(info.get("url")==ORIGIN+"/telegram","offline_webhook_unconfirmed")
    stage("activate");activated=True;mode(bundle,env,True)
    stage("actual_cron_readback")
-   deadline=time.monotonic()+900
+   deadline=time.monotonic()+1200
    while time.monotonic()<deadline:
     state=call("recovery/status",control,{})
-    if (state.get("sealed") is True and state.get("tf_sealed") is True and state.get("fence_live") is True and
+    if (state.get("sealed") is True and state.get("tf_sealed") is True and state.get("fence_live") is True and state.get("cron_source_sha")==env["GITHUB_SHA"] and
        type(state.get("last_cron_tick_at")) is int and state["last_cron_tick_at"]>=state["activated_at"]):
      need(state.get("known_delivery_preserved") is True and state.get("records_readback_verified") is True)
      break

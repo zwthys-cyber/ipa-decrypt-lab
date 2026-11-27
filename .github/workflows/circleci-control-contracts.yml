@@ -56,6 +56,7 @@ jobs:
           python3 test_runtime_execution.py -v
           python3 test_owner_canary.py -v
           python3 test_offline_cutover.py -v
+          python3 test_maintenance_close.py -v
           python3 test_offline_recovery.py -v
           python3 -m py_compile credential_probe.py credential_envelope.py managed_worker.py runtime_cloud.py runtime_uploader.py runtime_execution.py owner_canary.py pause_source.py verify_preservation.py
           node --check control-probe.mjs
