@@ -1,25 +1,5 @@
-# 独立 Swift 认证对照
+# 原生商店研究
 
-> 文档范围更新（2026-11-27）：本页在main保留旧代码/研究/发行历史。当前生产处理源码来自upgrade/managed-runtime-v0.2，已切换Cloudflare/D1 + CircleCI ARM64 + 私有Drive；main仍用于账号维护和旧Intel发行。[当前对应说明](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/DOWNLOADER.md) · [运行手册](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/OPERATIONS.md) · [项目状态](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/PROJECT-STATUS.md)。不要按历史VPS说明重启旧poller或重新启用5个退休派发工作流。
+此专题的早期记录保存在[固定源码快照](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/a54c07693d2df7986101f510c6a3626023524fec/docs/NATIVE-STORE.md)，并由[历史档案目录](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/archive/README.md)统一索引。
 
-
-> 2026-11-09 文档复核：本文保留早期实验及其原始结果，不作为当前功能或下载入口。App Store 与主人专用 TF 自动任务、CapyPlayer 实际导出/用户收件截图和 Beta 命名部署见 [项目状态](PROJECT-STATUS.md)；当前成品与准确来源见 [发布文档](RELEASES.md)，操作入口见 [文档索引](DOCUMENTATION.md)。安装运行及全部应用兼容性仍未验证。
-
-
-> 历史阶段记录：本文描述早期认证与下载对照。后续已经完成真实 IPA 下载、模型恢复和跨运行器解密校验，当前结果及操作入口见 [项目状态与使用说明](PROJECT-STATUS.md)。
-
-从 Lakr233/ApplePackage 固定提交 391bfe6ee6598d73e4f94b88b38b50bd6f6ec67b（MIT许可）构建原生命令行客户端。它使用自己的 SAP 实现，区别于此前 Go 下载器的运行时/签名链路。依赖源码及其许可证仅在 GitHub Actions 检出。
-
-使用 Swift 6.2 的 macos-15 托管运行器，显式选择 Xcode 26.2。先运行上游实际签名请求测试，再构建客户端、运行本项目编排层测试。只有这些检查通过后才读取账号 Secrets，尝试一次登录和下载目标免费应用6599842047。
-
-为避免重复误判，将该库中同样的 generic BadLogin=>codeRequired 分支改成明确的通用拒绝；不修改认证地址、证书检查或 SAP 签名算法。错误消息和账号输出仅供内存中分类，不转发到公开日志；IPA 和候选不上传产物。密码通过子进程环境变量传入，不写入命令行。客户端会保存本次任务所需会话，finally 中尝试退出，运行器任务结束后销毁。
-
-SwiftPM依赖由固定主项目清单解析；该上游未提交Package.resolved，传递依赖并非完全锁定，后续生产化须补齐锁定与审查。本节对应早期受控诊断；后续登录、下载和解密校验证据见上方状态说明。
-
-## 已验证进展
-
-[首次独立客户端验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41727238337)：签名请求测试、程序构建和编排测试通过。真实运行返回 authenticated=true，随后 native_download_failed；因此已确认此账号在该认证实现中能登录，不需要验证码或安全升级。失败点已经转移到下载。
-
-出现的是可选的账号安全升级提示，当时选择了不升级。程序不会自动接受升级，也不会根据 generic BadLogin 就判断账号开启了双重认证。
-
-后续下载修正见 NATIVE-DOWNLOAD-FIX.md。首次诊断未保留具体下载错误类别，不能断言首次失败必定由缺许可或重复认证造成；源码中的这两处流程缺口已分别修正，需以后续真实运行验证效果。
+当前说明见[对应指南](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/DOWNLOADER.md)。

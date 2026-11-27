@@ -1,18 +1,5 @@
-# 原生下载流程修正
+# 原生下载修复记录
 
-> 文档范围更新（2026-11-27）：本页在main保留旧代码/研究/发行历史。当前生产处理源码来自upgrade/managed-runtime-v0.2，已切换Cloudflare/D1 + CircleCI ARM64 + 私有Drive；main仍用于账号维护和旧Intel发行。[当前对应说明](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/AUTH-COMPATIBILITY.md) · [运行手册](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/OPERATIONS.md) · [项目状态](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/PROJECT-STATUS.md)。不要按历史VPS说明重启旧poller或重新启用5个退休派发工作流。
+此专题的早期记录保存在[固定源码快照](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/a54c07693d2df7986101f510c6a3626023524fec/docs/NATIVE-DOWNLOAD-FIX.md)，并由[历史档案目录](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/archive/README.md)统一索引。
 
-
-> 2026-11-09 文档复核：本文保留早期实验及其原始结果，不作为当前功能或下载入口。App Store 与主人专用 TF 自动任务、CapyPlayer 实际导出/用户收件截图和 Beta 命名部署见 [项目状态](PROJECT-STATUS.md)；当前成品与准确来源见 [发布文档](RELEASES.md)，操作入口见 [文档索引](DOCUMENTATION.md)。安装运行及全部应用兼容性仍未验证。
-
-
-这是在首次 Swift 登录成功后，对下载流程的修正记录。
-
-在首次独立 Swift 试验中登录成功（无需验证码），随后下载失败：
-https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41727238337
-
-因此可以确认当前凭据在这条客户端链路中能完成登录，不应继续把所有问题归因于双重认证。
-
-检查源码时，发现下载命令会在刚登录成功后无条件重新认证，并在目标应用缺授权时直接抛错。改为复用刚建立的会话；遇明确 licenseRequired 时，只对当地商店已确认 price==0 的免费应用获取许可并重试一次。外层仍检查官方 US 元数据免费；两处免费检查同时生效。不自动同意账号安全升级或新的条款。
-
-新增下载失败分类，所有上游原始输出仍在内存内处理，不转发账号或授权信息。当时还需要真实下载验证；后续成功记录见 [原始下载结果](../NATIVE-DOWNLOAD-RESULTS.md)。
+当前说明见[对应指南](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/AUTH-COMPATIBILITY.md)。
