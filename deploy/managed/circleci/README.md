@@ -1,4 +1,14 @@
-# CircleCI on-demand migration
+# CircleCI on-demand runtime
+
+## 当前生产证据（2026-11-27）
+
+截至2026-11-27，生产已切换到原机器人 + Cloudflare Workers/D1 + 按需CircleCI macOS ARM64 + 私有Drive交付。[成功切换45918215266](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45918215266)对应处理源码`185a52110922e0f67ac2c7dff4e1fa85b3b4c98e`。CircleCI75真实国区任务已完成下载、17镜像/120,976页严格验证、342,632,968字节私有上传及主人通知；新平台历史版本交付和新TF任务仍待分别真实验收。
+
+当前操作步骤见[运行手册](../../../docs/OPERATIONS.md)，指令见[Telegram](../../../docs/TELEGRAM.md)。账号会话维护在main的既有工作流进行，新机器人处理源码来自upgrade/managed-runtime-v0.2，不能混用。维护分支上的文档整理不更新生产HEAD。
+
+公共运行包以runtime-pins.json为准，目前为job62；不是下面历史job40/42的归档。/status已通过一次快照查询消除逐任务外部核对，用户截图约1秒。HOME/CFFIXED_USER_HOME绑定和真实Foundation回归已由CircleCI75实际任务验证。新入口仅主人私聊，完成通知是私有Drive链接；旧多用户、附件和五秒进度卡不在当前范围。
+
+下方均为按时间保留的实现/切换检查点，不以旧“尚未生产”“等待恢复旧机”覆盖本节。不要因文档整理重新接受历史邀请、重复GoClub/红果漫剧下载或重发已确认通知。
 
 ## 生产切换及真实消息验收（2026-11-27）
 
@@ -10,7 +20,7 @@
 
 旧机之后未保全的变化仍未知；不伪造物理停机或无缺口证明。旧offset/browser原样保留，切换前的消息持久隔离，不重放旧任务。计费入口保持关闭，无本地构建/项目测试或旧机SSH依赖。
 
-## 最新决定：旧机不可用，转离线恢复（2026-11-26 23:38 UTC）
+## 历史决定：旧机不可用，转离线恢复（2026-11-26 23:38 UTC）
 
 已从长期Secrets中的原加密源生成并验证离线恢复计划：[45912001065](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45912001065)。29条任务、89条更新、14条metadata（含offset/browser）和原TF状态得到保留，旧pending继续held；源接受账本不存在，不初始化。用户保留原机器人并更换Token，独立MANAGED_TELEGRAM_BOT_TOKEN已通过同bot身份与旧Token失效检查。5个旧导出/版本查询工作流已停用，无活动任务；新CircleCI工作流保持独立。
 

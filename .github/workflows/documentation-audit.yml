@@ -1,0 +1,58 @@
+name: Repository documentation audit
+on:
+  push:
+    branches: [main, upgrade/managed-runtime-maintenance-v0.2]
+    paths: ['**/*.md', '.github/workflows/documentation-audit.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  documentation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Validate tracked Markdown paths without runtime or private inputs
+        run: |
+          python3 - <<'PY'
+          import pathlib,re,subprocess,urllib.parse
+          files=subprocess.check_output(["git","ls-files","-z"]).decode().split("\0")
+          root=pathlib.Path.cwd().resolve()
+          checked=0;errors=[]
+          for name in files:
+              if not name.endswith(".md"):continue
+              path=root/name;text=path.read_text();checked+=1
+              for match in re.finditer(r"\[[^\]]*\]\(([^)\n]+)\)",text):
+                  target=match[1].strip()
+                  if target.startswith("<") and target.endswith(">"):target=target[1:-1]
+                  target=target.split(' "')[0]
+                  if re.match(r"^(?:[a-zA-Z][a-zA-Z0-9+.-]*:|#|//)",target):continue
+                  target=urllib.parse.unquote(target.split("#")[0])
+                  if not target:continue
+                  resolved=(path.parent/target).resolve()
+                  if not resolved.is_relative_to(root) or not resolved.exists():
+                      errors.append((name,target))
+              if re.search(r"https://github[.]com/zwthys-cyber/ipa-decrypt-lab/(?:tree|blob)/circleci-project-setup/",text):
+                  errors.append((name,"deleted_branch_link"))
+          for name,target in errors:print(f"{name}: {target}")
+          if errors:raise SystemExit(1)
+          print(f"markdown_paths_verified: {checked}")
+          PY
+      - name: Require unchanged native source contract on documentation maintenance
+        if: github.ref == 'refs/heads/upgrade/managed-runtime-maintenance-v0.2'
+        run: |
+          python3 - <<'PY'
+          import subprocess
+          baseline="185a52110922e0f67ac2c7dff4e1fa85b3b4c98e"
+          paths=("tools","tests",".github/ops",".github/actions/export-progress",
+            ".github/workflows/native-runtime-build.yml",".github/workflows/cn-auth-runtime.yml",
+            ".github/workflows/testflight-runtime-build.yml","deploy/managed/circleci/runtime.py",
+            "deploy/managed/circleci/test_runtime.py","deploy/managed/circleci/build-public-runtime.sh",
+            "deploy/managed/circleci/build-public-tf-runtime.sh","deploy/managed/circleci/public-build-common.sh")
+          changed=subprocess.check_output(["git","diff","--name-only",baseline,"HEAD","--",*paths],text=True)
+          if changed:raise SystemExit("native_contract_changed_during_documentation_maintenance")
+          print("native_contract_unchanged")
+          PY

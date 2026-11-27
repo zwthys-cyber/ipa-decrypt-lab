@@ -1,6 +1,8 @@
 # 认证兼容与故障诊断
 
-本文记录既有生产认证的兼容性。v0.2 的受控运行时验证和生产迁移条件见[当前项目状态](PROJECT-STATUS.md)。
+截至2026-11-27，生产已切换到原机器人 + Cloudflare Workers/D1 + 按需CircleCI macOS ARM64 + 私有Drive交付。[成功切换45918215266](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45918215266)对应处理源码`185a52110922e0f67ac2c7dff4e1fa85b3b4c98e`。CircleCI75真实国区任务已完成下载、17镜像/120,976页严格验证、342,632,968字节私有上传及主人通知；新平台历史版本交付和新TF任务仍待分别真实验收。
+
+当前普通处理位于CircleCI，原账号维护仍使用main的受控GitHub工作流。2026-11-27的会话维护及保存会话复用均成功；原任务74诊断为account_cache_unavailable，修正HOME/CFFIXED_USER_HOME后75完整成功。cn_session_requires_maintenance是通用退出码，不能直接说成会话失效；旧摘要请求HTTP401也不独自证明原下载根因。具体维护见[运行手册](OPERATIONS.md)。
 
 截至 2026-11-25，最新公开发行版为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。2026-11-08 的[正式 X 导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)已验证原生登录、下载及完整解密恢复；不要再把历史 204/403/SP 失败写成当前运行状态。
 
@@ -18,6 +20,7 @@ GitHub Actions 的 `store-login-diagnostic.yml` 只执行有界登录及清理�
 
 | 现象 | 可确定的范围 |
 | --- | --- |
+| `account_cache_unavailable` | 先检查原生工具是否读取了隔离HOME/CFFIXED_USER_HOME；不能直接重新登录或注册电脑 |
 | `validated_runtime_missing` | 运行包缺失、过期或源码指纹不匹配；先完成原生构建，不应重设账号 |
 | 空 204、HTML 403/404、301 无 Location | 认证协议或服务响应异常；不能单凭状态码判定密码错误或 IP 被封 |
 | SP 挑战 | 需要 Store 设备注册；不等于密码错误或已成功登录 |
@@ -41,4 +44,4 @@ GitHub Actions 的 `store-login-diagnostic.yml` 只执行有界登录及清理�
 
 ## TF 使用独立保存会话（2026-11-09）
 
-TF 普通任务恢复原独立虚拟 Mac 会话，不能把 App Store Cookie 当作已经验证的 TF 会话。Apple 明文仅在 GitHub worker 临时解封，VPS 状态助手保存会话密文及持久接受意图。普通任务不走密码/GSA登录，不重建身份、不使用聊天旧验证码、不新增 FairPlay 授权。会话拒绝或限流后明确停止，不能以自动重登、换身份或重复接受来掩盖失败。独立会话、实际取包与明文/交付证据见 [TF 记录](TESTFLIGHT.md)。
+TF 普通任务恢复原独立虚拟 Mac 会话，不能把 App Store Cookie 当作已经验证的 TF 会话。Apple明文仅在对应CI私有临时目录解封；旧VPS状态助手的密文/意图行为属于历史实现，当前控制和接受去重由D1管理。普通任务不走密码/GSA登录，不重建身份、不使用聊天旧验证码、不新增 FairPlay 授权。会话拒绝或限流后明确停止，不能以自动重登、换身份或重复接受来掩盖失败。独立会话、实际取包与明文/交付证据见 [TF 记录](TESTFLIGHT.md)。

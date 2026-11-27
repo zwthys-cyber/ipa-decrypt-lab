@@ -1,82 +1,59 @@
 # IPA Decrypt Lab
 
-截至 2026-11-25，公开发行版为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)，线上 Telegram 控制器仍由 Debian VPS 运行。v0.2 是开发中的迁移分支。
+截至 2026-11-27，原 Telegram 机器人已切换到 **Cloudflare Workers / D1 控制面 + 按需 CircleCI macOS ARM64 工作机 + 私有 Google Drive 交付**。旧 VPS 已退出派发，日常任务不依赖旧机，也无需常驻 macOS 工作机。
 
-| 范围 | 已验证状态 |
+| 分支 | 当前用途 |
 | --- | --- |
-| 公开成品 | alpha.5 随附 Linux amd64 和两个 macOS Intel 运行包。包内文件、摘要和源码来源见[发布说明](docs/RELEASES.md)。 |
-| 线上服务 | [2026-11-10 部署](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42727462163)接入国区历史版本，[2026-11-25 只读检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45638716965)确认控制器健康。 |
-| v0.2 迁移 | GitHub Actions 验证了 Linux ARM64 镜像构建、独立导入和持久卷启动。真实小样本的私有 Drive 链接已送达，经接收人确认可打开。详见[项目状态](docs/PROJECT-STATUS.md)。 |
-| CircleCI | 主仓库[首条 Linux 流水线](https://app.circleci.com/workflow/7fcc4b73-7caa-4de2-8f16-763288eb34e2)通过 84 项测试，覆盖只读 IPA 审计与 free-pilot。项目自有 iOS 样例另已在 [CircleCI M4 Pro](https://app.circleci.com/workflow/40131029-8872-4661-8351-f1b0fd0034ba/job/c35d0d9a-2113-4b8a-b3fe-07db03f99967) 上构建并通过归档校验。 |
+| [upgrade/managed-runtime-v0.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/tree/upgrade/managed-runtime-v0.2) | 生产运行源码；最近已验证的处理版本为 `185a52110922e0f67ac2c7dff4e1fa85b3b4c98e` |
+| [upgrade/managed-runtime-maintenance-v0.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/tree/upgrade/managed-runtime-maintenance-v0.2) | 修改、文档整理和 CI 验证；提交到这里不代表已经上线 |
+| [main](https://github.com/zwthys-cyber/ipa-decrypt-lab/tree/main) | 默认分支及既有账号维护、Intel 构建/发行工作流；不是当前机器人运行源码 |
 
-按链接触发的试验版目前可以登记请求。生产迁移仍需符合零费用要求的运行环境、可核验的 TestFlight 接受记录和获授权的处理链路。[迁移方案](docs/MANAGED-RUNTIME.md) · [零费用约束](docs/ZERO-COST.md)
+公开预览发行版仍为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。它的 Linux amd64 / macOS Intel 附件是旧架构快照，不包含当前 CircleCI 生产架构。准确来源以附件 BUILDINFO 为准。
 
-## 下载
+## 已验证的真实链路
 
-当前成品版本为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。里面有 Linux amd64 服务器端，以及 macOS 26 / 15 Intel 运行包；用途、配置和校验方法见 [发布说明](docs/RELEASES.md)。
+| 验证 | 结果 |
+| --- | --- |
+| 生产切换 | [45918215266](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45918215266)：新源码、原机器人 webhook、该源码真实 cron、历史状态读回均通过 |
+| 默认区 Go Club | CircleCI job72：6 个镜像 / 8,000 页；私有文件和主人通知已确认，已保留，不重复下载 |
+| 国区红果漫剧 | [CircleCI job75](https://app.circleci.com/workflow/2ae89675-bc82-451c-b290-4ee63c2c360a/job/a1e13406-0c02-43ec-a679-5a5bfa77fd53)：17 个镜像 / 120,976 页，342,632,968 字节；下载、严格明文验证、账号数据清理、私有上传和机器人通知通过 |
+| 回复延迟 | 用户 /status 截图约 1 秒；是单次观测，不是服务延迟保证 |
 
-这些包需要配合仓库工作流和自己的私有配置使用。alpha.5 本次重打包纳入 TF 自动任务与 Beta 文件命名；包的准确源码和构建来源以附件 `BUILDINFO.json` 为准，原标签保留。国区历史功能属于之后的主分支与线上更新，当前公开 alpha.5 附件尚不包含这项功能。Apple 账号、授权模型、Telegram 凭据和应用 IPA 都不随发布包提供。
+红果漫剧该次全程约 4 分 23 秒，其中工作机排队约 50 秒。成功解密和私有交付不等于已验证重签名、安装或应用运行。
 
-## 既有生产功能
+## 当前使用
 
-- 发送 App Store 链接或 App ID，默认下载最新版；`/cn/` 自动使用中国区，其他地区或纯数字使用原外区账号。
-- 主人发送 TestFlight 邀请链接，自动处理可用的 iOS 测试构建；额外协议、失效会话或模型不兼容时明确停止。
-- 进度卡显示下载路线；任务恢复、取消和取文件始终绑定原账号。
-- 用 `/versions` 先查看最近一批历史版本，按需加载更早版本并直接点选。
-- 用 `/version` 指定版本号或 Apple 历史版本 ID；国区历史查询和下载必须提供 `/cn/` 链接，纯数字 ID 仍默认外区。
-- 已部署的进度卡在同一张 Telegram 消息中显示步骤进度条、真实下载字节比例、全程与阶段耗时；约 5 秒更新计时，重启后继续累计。
-- 收到带应用图标的 IPA：App Store 为 `名称_版本.ipa`，TestFlight 为 `名称_Beta_版本.ipa`。
-- 服务重启后继续跟踪任务；发送结果不明时保留记录，避免重复发文件。
+仅接受配置主人的机器人私聊；不开放旧 VPS 白名单和收费入口。
 
-管理员用 `/allow 用户ID [每日额度]` 授权、`/deny 用户ID` 移除、`/users` 查看白名单。新用户默认每天 3 次，全服务总额度仍默认每天 20 次。详见[白名单说明](docs/MULTI-USER.md)。
+- 直接发送 App Store 链接或数字 App ID：提交最新版。完整 `/cn/` 链接使用独立国区账号，其余链接和数字 ID 使用默认外区账号。
+- `/versions AppStore链接或AppID`：请求历史列表；`/version AppStore链接或AppID 版本号`：指定版本，也支持 Apple 历史 ID。国区必须保留完整 `/cn/` 链接。
+- `/status`：读取最近 5 条新运行时任务的状态。
+- `/get pilot_任务编号`：领取已核验、尚在领取期限内的私有 Drive 文件；用自己的 Google 账号打开。
+- `/cancel pilot_任务编号`：记录取消请求，等待后台终止确认。
 
-完整指令见 [Telegram 使用说明](docs/TELEGRAM.md)。
+历史列表及 TestFlight 入口已经接入新控制面，但**新架构上的真实历史版本交付和新 TF 请求仍待分别验收**。旧架构已有的成功记录不能替代新平台实测。旧 `/latest`、`/decrypt`、`/id`、`/allow`、`/deny`、`/users` 和无任务编号的 `/cancel` 不在当前新入口支持范围内。详见 [Telegram 使用说明](docs/TELEGRAM.md)。
 
-## 既有生产架构
+## 运行与维护
 
-任务分成两部分：
+Cloudflare 接收 webhook、持久化任务/去重和定时核对；GitHub 负责构建、测试和短期角色凭据签发；CircleCI 工作机复用已固定来源与摘要的公共 ARM64 运行包，处理后交给控制面验证私有 Drive 文件并通知主人。普通任务不编译项目。
 
-1. **Debian VPS**：接收 Telegram 指令、保存任务状态、取回结果并发送文件。
-2. **GitHub Actions**：构建和测试程序，在 macOS 上下载应用、复用已有模型解密、校验结果，再生成短期加密产物。
+当前 App Store IPA 上限为 **2,000,000,000 字节**。独立 Linux 工具的 10 GB 合成归档校验不是机器人的 10 GB 下载能力，也不是已验证的真实 10 GB 网盘传输。
 
-普通任务使用约 **28 MB 的预编译运行包**，不用每次安装 Go、编译程序或恢复整个 Swift 构建目录。源码更新后，再由独立工作流构建和测试新包。固定 Apple 公共资源也会复用缓存，并在每次使用前校验。
+生产分支 HEAD 必须等于控制面的运行源码。维护从独立维护分支开始，完成 CI，先关闭空闲旧入口，再推进已验证源码、切换并等待该源码的 cron 回执；不能直接往开启中的生产分支补提交。文档更新无需重放 Apple 任务。
 
-My BVF 的最新一次 GitHub 导出实测约 59 秒，此前预编译版样本为 1 分 49 秒。历史查询复用同批连接后，QQ 首批 10 项约 55 秒，下一批约 1 分 3 秒。再次打开已缓存的列表不启动 GitHub。这些是单次样本，排队、Apple 响应和文件大小仍会影响耗时，Telegram 上传另计。[测试记录](docs/PROJECT-STATUS.md)
+- [当前操作手册](docs/OPERATIONS.md)：架构、分支、维护发布、凭据及故障处理。
+- [项目状态](docs/PROJECT-STATUS.md)：精确证据、已验证范围和剩余验收。
+- [文档索引](docs/DOCUMENTATION.md)：当前说明和历史资料。
+- [仓库整理审计](docs/REPOSITORY-AUDIT.md)：冗余候选、历史工作流及文档修订。
+- [发行附件](docs/RELEASES.md)：alpha.5 快照及校验。
+- [旧 VPS 部署档案](docs/VPS-DEPLOYMENT.md)：仅供旧版本追溯，不用于恢复现网入口。
 
-X 的后续加速对比已通过：删除账号元数据时直接复制保留项的压缩数据，完整校验仍保留。复核从约 40.4 秒降到 13.8 秒，GitHub 原生作业从 128 秒降到 103 秒；成品包约增大 3%。这是单次后台对比，完整 Telegram 交付仍受排队与网络影响。[实测与边界](docs/PROJECT-STATUS.md)
+保留了 29 条旧任务、89 条 updates、14 条 metadata 和已知 TF 接受/回传去重记录；2 条旧 pending 及源丢失后的未知变化保持隔离，不自动重放。保存的历史文件、邀请意图和稳定 HMAC 不得因清理仓库而重置。
 
-## 既有生产验证记录（截至 2026-11-10）
-
-国区历史版本已完成真实验证并接入线上：保存会话查询到 LocalSend 的32条版本记录，首批读取10条；选择旧于当前版本的1.18.1（历史ID `889619746`），验证31个加密镜像、11,716页并完成加密导出。证明与部署记录见 [项目状态](docs/PROJECT-STATUS.md)。此轮没有发送样本文件、初始化模型或新增电脑授权。
-
-
-TestFlight 主人自动任务已部署，持久会话恢复、资格检查、测试包下载和严格明文校验均已通过。真实新请求 [CapyPlayer 导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42714371079) 验证了46个加密镜像、17,724页；用户提供的 Telegram 截图确认已收到 `CapyPlayer_1.1.7.ipa`。该请求已有成员资格，没有新接受邀请或电脑授权。
-
-后续 [Beta 命名部署](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42714903713) 已通过双平台运行包、CN客户端和 [真实无重复发送导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42716962584) 门禁及服务健康检查。新的 TF 文件使用 `名称_Beta_版本.ipa`。这不代表应用安装运行或所有 TF 应用/模型兼容性已验证。完整范围见 [TestFlight 记录](docs/TESTFLIGHT.md)。
-
-此前的 App Store 验证如下：
-
-2026-11-08 已恢复 Apple 新原生认证与 Store AMD 设备验证。X（App ID `333903271`）已通过正式运行包完成登录、下载、解密和完整性校验：32 个加密切片、86,704 页，清理后 IPA 为 271,261,630 字节。[完整验证记录](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)。本次记录不包含新的 Telegram 文件发送或安装运行测试。
-
-已在全新的 GitHub macOS 运行器上验证了模型恢复、模型复用、检查点重放和完整 IPA 校验，也完成过 92 MB 文件的 Telegram 私聊交付。历史版本下载、可点击列表和两个 Intel 平台的成品包也都有运行记录。
-
-解密成功的判断包含完整切片和页面校验，不能只看 `cryptid=0`。尚未把重签名、安装和实际运行纳入验证，所以结果里的 `runtime_verified` 仍为 `false`。
-
-进度卡升级已[部署](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42443436341)，并通过[实际 X 导出与数字快照验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42444399936)。官方 Actions 已升级为固定提交的 Node.js 24 版本；新 downloader 和双平台生产任务均无 Node.js 20 弃用警告。alpha.3 已打包这些进度和提速改动；alpha.2 保留为历史快照。
-
-## 部署与配置
-
-完整文档入口见 [文档索引](docs/DOCUMENTATION.md)。登录流程、兼容限制和诊断入口见 [认证兼容说明](docs/AUTH-COMPATIBILITY.md)。
-
-- [VPS 部署](docs/VPS-DEPLOYMENT.md)：运行环境、Secrets、部署、备份和回滚。
-- [任务恢复](docs/SESSION-RECOVERY.md)：重启、取消和发送不确定时的处理。
-- [项目状态](docs/PROJECT-STATUS.md)：当前实现、验证记录和待办。
-- [零费用试验](docs/ZERO-COST.md)：云端试验、平台限制和实际验证记录。
-
-正式成品由 GitHub Actions 构建和验证，VPS 运行已验证的成品。CircleCI 覆盖独立的开发验证。当前实现不依赖个人 iPhone，也不接入第三方解密服务。
+所有项目构建和测试只在 GitHub / 已授权的 CircleCI 执行；当前工作区和旧 VPS 不运行编译或测试。不依赖个人 iPhone 或第三方解密服务。零费用是配置约束，不代表供应商额度、排队和长期可用性的保证，见 [费用与历史评估](docs/ZERO-COST.md)。
 
 ## 依赖与许可证
 
-下载客户端基于 [ApplePackage](https://github.com/Lakr233/ApplePackage)，辅助工具使用 [ipatool](https://github.com/majd/ipatool)，离线后端使用 [UnfairPlay](https://github.com/DrWhax/unfairplay)，传输加密使用 [age](https://github.com/FiloSottile/age)，Telegram 文件交付使用官方 [Bot API server](https://github.com/tdlib/telegram-bot-api)。
+下载客户端基于 [ApplePackage](https://github.com/Lakr233/ApplePackage)，辅助工具使用 [ipatool](https://github.com/majd/ipatool)，离线后端使用 [UnfairPlay](https://github.com/DrWhax/unfairplay)，传输加密使用 [age](https://github.com/FiloSottile/age)。旧 VPS 文件交付采用官方 [Bot API server](https://github.com/tdlib/telegram-bot-api)；当前新任务通过 Telegram 通知私有 Drive 链接。
 
-保留各依赖的许可证和来源。仓库代码的许可证见 [LICENSE](LICENSE)；依赖代码按各自许可证分发。
+仓库许可证见 [LICENSE](LICENSE)，各依赖保留各自许可证。账号、模型、私钥、机器人 Token 和第三方 IPA 不随源码或发行附件提供。

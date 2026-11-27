@@ -19,6 +19,15 @@ Last reviewed 2026-11-27. Use [the current project status](docs/PROJECT-STATUS.m
 
 - Telegram integration resumed on 2026-11-04. Implement bounded GitHub-hosted bot sessions and verified private delivery; the later explicit authorization permits finished-service execution on the VPS, but never permanent Actions hosting.
 
+## Latest verified production and documentation scope (2026-11-27)
+
+- Production processing source185a52110922e0f67ac2c7dff4e1fa85b3b4c98e, cutover45918215266 succeeded with its own webhook/cron. Real owner CN request CircleCI75/publisher45918580709 verified17images/120976pages/342632968bytes and acknowledged owner-private Drive notice. Do not repeat this request or notification. Installation/runtime is unverified; fresh history and TF delivery on this platform remain separate acceptance items.
+- Owner separately approved one CN session maintenance in this conversation:45917018396 authenticated without OTP and45917154187 verified saved-session reuse; latest sealed refresh was promoted. No GUID/model/enrollment changes. This completed authorization is not a standing grant for future password login or session replacement.
+- CircleCI74 failed before download with account_cache_unavailable; the isolated macOS Foundation home now requires both HOME and CFFIXED_USER_HOME. Actual macOS check45917974219 and real75 passed. A generic resume error or the old summary request's HTTP401 must not alone be reported as the root cause.
+- Current entry is owner-only, pilot_ task IDs, /get and /cancel require task IDs, /status reads at most5 committed rows, and delivery is a private Drive link. Legacy whitelist commands, local BotAPI attachments and five-second progress cards are not migrated capabilities. Keep current documentation candid.
+- Nine old branches were archived under archive/branches/2026-11-27/ and deleted with readback. Preserve their tags, remaining main/production/maintenance branches and the original TF intent. main remains the default/account-maintenance/Intel-release source, not the production task ref.
+- Documentation-only upkeep belongs on the maintenance branch. main may receive scoped navigation/history notices without changing its code. Do not push documentation commits to the open production ref or rerun an Apple task to validate prose. See docs/OPERATIONS.md and docs/REPOSITORY-AUDIT.md.
+
 ## Production and maintenance source contract (2026-11-27)
 
 - Initial production cutover45913375750 succeeded at aaa2278038b7f2d22bed459b647cccb0cba3e93f:29legacy rows/2held,89updates/14metadata, originalGoClub file/notice preserved, historicalTF tombstone sealed, webhook and actualcron verified. Artifact15161451437 is sanitized. Owner screenshot at08:02:40 confirms real/status reply. Keep the distinction from source physical stop: source_disabled_verified remains false and the lost-source gap remains held.

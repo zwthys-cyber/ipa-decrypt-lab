@@ -1,4 +1,6 @@
-# 零费用版：独立测试环境部署
+# 零费用版：独立测试环境部署档案
+
+> 2026-11-27：当前生产已采用Cloudflare/D1 + CircleCI + 私有Drive，见[操作手册](../../../docs/OPERATIONS.md)。下文是2026-11-25独立free-pilot环境的部署/验收记录，不是现网重装步骤，也不应另设同bot入口。
 
 截至 2026-11-25，[最新的独立构建](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45663099506)已通过。项目自有小样本的 Drive 存取和 Telegram 链接收件已有实测。试验 webhook 的生产切换和实际 10 GB 网盘上传仍待验证。详见[状态与证据](../../../docs/PROJECT-STATUS.md)。
 

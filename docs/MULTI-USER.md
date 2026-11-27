@@ -1,6 +1,6 @@
-# 多用户白名单
+# 多用户白名单（旧VPS历史功能）
 
-本文适用于截至 2026-11-25 仍在 VPS 运行的生产机器人。独立 webhook 试验的授权和额度见[零费用试验](ZERO-COST.md)。
+2026-11-27当前Cloudflare/CircleCI入口仅接受配置主人的私聊，没有迁入/allow、/deny、/users、/id或其他用户权限。下文是2026-11-25之前VPS版的白名单实现与验证档案，不能用来给新入口授权用户。当前指令见[Telegram](TELEGRAM.md)，运行范围见[操作手册](OPERATIONS.md)。
 
 本版仅面向管理员授权的私聊用户，不是公开注册或收费服务。原有 `TELEGRAM_OWNER_ID` 是唯一管理员；部署后默认没有其他用户。无需增加 GitHub Secrets。
 

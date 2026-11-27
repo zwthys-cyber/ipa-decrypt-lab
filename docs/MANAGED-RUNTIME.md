@@ -1,6 +1,16 @@
-# Managed runtime pilot (v0.2)
+# Managed runtime v0.2
 
-## 三包构建与独立加载已验证（2026-11-26，最新）
+## 当前运行方式（2026-11-27）
+
+截至2026-11-27，生产已切换到原机器人 + Cloudflare Workers/D1 + 按需CircleCI macOS ARM64 + 私有Drive交付。[成功切换45918215266](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45918215266)对应处理源码`185a52110922e0f67ac2c7dff4e1fa85b3b4c98e`。CircleCI75真实国区任务已完成下载、17镜像/120,976页严格验证、342,632,968字节私有上传及主人通知；新平台历史版本交付和新TF任务仍待分别真实验收。
+
+当前架构的使用及升级步骤集中在[操作手册](OPERATIONS.md)，[CircleCI维护说明](../deploy/managed/circleci/README.md)保留实现证据。当前公共base/CN/TF运行包固定为job62，准确来源及摘要以runtime-pins.json为准。早期job40/42和Linux容器/SSH状态卷是历史验证，不能用作当前生产来源或重启旧VPS的指令。
+
+## 下方资料的历史范围
+
+下方原始检查点保留架构探索、候选方案与失败条件。旧“Migration block”“生产未完成”“尚未接入D1”等结论由上面的生产切换及真实任务证据更新；它们不表示现网仍使用VPS或Linux控制容器。当前上限为2,000,000,000字节，独立10GB归档试验不扩大机器人能力。
+
+## 三包构建与独立加载已验证（2026-11-26，历史检查点）
 
 同源码公共构建 [CircleCI job 40](https://app.circleci.com/workflow/ca2fe102-a78d-4284-a20f-321d5ccdfa1e/job/1e3c2e16-037e-47cd-8166-3096fc4cb817) 已成功，源码 `fa258c072f246011079affe7cecd369422ecef0d`，macOS 26.3.1 / ARM64 / Xcode 26.5。base 21 项 Swift、CN 29 项 Swift、TF 24 项 CTest，以及 Go/Python/Node 检查、三包库存/摘要与迁移后运行验证通过。base/CN 各 82 个文件，TF 12 个文件；版本与归档摘要已固定在 `deploy/managed/circleci/runtime-pins.json`。此前失败的部分产物不是这些已固定的成功包。
 
@@ -11,7 +21,7 @@
 CircleCI API/真实 OIDC 身份及 D1 8 项恢复验证见下方历史检查点。这些底座已验证，**生产迁移尚未完成**：任务入口、凭据/加密会话与 TF 历史账本交接、取消和未知结果闭环、真实私有 Drive 上传与端到端交付、费用门禁及单一机器人入口切换仍需完成。没有切换线上机器人、操作新的 Apple 邀请或重复历史文件发送。当前服务器没有执行本项目编译或测试。
 
 
-## CircleCI 接入与持久化调度候选（2026-11-26，最新）
+## CircleCI 接入与持久化调度候选（2026-11-26，历史检查点）
 
 用户已配置 `CIRCLECI_API_TOKEN`，无需再次索要。令牌在 GitHub 密钥步骤内认证通过，账号与既有触发者一致，可读取固定项目/定义并提交任务。使用 API v3 创建 run；创建后查询接口可能短暂返回 404，只能重读同一 ID，绝不因此重复 POST。[完整调度与真实 OIDC 验证 45820517834](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45820517834)通过，源码 `cd3964da45324b59bf1f8d56a5a02a1c9bf5d649`。
 

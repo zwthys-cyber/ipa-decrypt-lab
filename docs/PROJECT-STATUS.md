@@ -1,6 +1,20 @@
 # 项目进展
 
-## 国区会话维护及原生缓存目录修正（2026-11-27，维护候选）
+## 当前生产与真实国区交付（2026-11-27）
+
+截至2026-11-27，生产已切换到原机器人 + Cloudflare Workers/D1 + 按需CircleCI macOS ARM64 + 私有Drive交付。[成功切换45918215266](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45918215266)对应处理源码`185a52110922e0f67ac2c7dff4e1fa85b3b4c98e`。CircleCI75真实国区任务已完成下载、17镜像/120,976页严格验证、342,632,968字节私有上传及主人通知；新平台历史版本交付和新TF任务仍待分别真实验收。
+
+[CircleCI75](https://app.circleci.com/workflow/2ae89675-bc82-451c-b290-4ee63c2c360a/job/a1e13406-0c02-43ec-a679-5a5bfa77fd53)排队约49.9秒，执行约212.8秒，全程约262.7秒；脱敏收据decryption_proven/file_upload/telegram_send/production均为true。签发[45918580709](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45918580709)成功。安装及实际运行仍未验证。此前73/74为独立失败请求，未自动重放；75是主人重新提交的新请求。
+
+国区维护[45917018396](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45917018396)及原生会话复用[45917154187](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45917154187)均通过，没有使用验证码或新增/撤销电脑授权。HTTP401不足以单独证明原CircleCI失败根因；新诊断确定74为account_cache_unavailable。HOME/CFFIXED_USER_HOME修复通过[真实Foundation检查45917974219](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45917974219)，并由75验证实际成功。
+
+/status截图约1秒回复。当前入口只有主人权限、pilot_任务编号和私有Drive通知；旧白名单、附件发送、五秒计时卡未迁入新入口，详见[操作手册](OPERATIONS.md)及[Telegram指令](TELEGRAM.md)。2条旧pending和源丢失后的未知变化继续held；source_disabled_verified仍为false。
+
+运行分支必须固定到控制面源码。此次仓库/文档整理只提交维护分支和默认分支导航，不改变上述生产HEAD、不重跑Apple任务。9个旧分支已在archive/branches/2026-11-27/标签逐一归档后删除；保留main、生产和维护3分支。[仓库审计](REPOSITORY-AUDIT.md)记录548文件/27份原有Markdown的检查结论。
+
+以下为按日期保留的检查点。其中“当前”“最新”“尚未上线”只适用于当时记录；以本节及最近成功切换回执为准。
+
+## 国区会话维护及原生缓存目录修正（2026-11-27，上线前记录）
 
 用户已单独授权维护原国区会话。GitHub45917018396成功以原账号/GUID登录，无验证码；密封会话按run/source/摘要/收据和仓库公钥绑定更新APPLE_CN_SESSION_B64。原生只读复用检查45917154187成功，随后保存其最新刷新会话；未下载、授权/撤销电脑或更换模型。旧摘要接口HTTP401仅说明该请求被拒绝，不能单独认定CircleCI失败根因。
 
@@ -10,7 +24,7 @@
 
 ## 国区真实任务与会话诊断（2026-11-27）
 
-生产切换45915238970已成功，当前运行源码73c62183dc61984869ebaec98349a32ba99331df；用户08:16:32→08:16:33的/status截图确认约1秒回复。该运行分支保持不变，以下诊断改进只在维护分支准备。
+该检查点生产切换45915238970已成功，当时运行源码73c62183dc61984869ebaec98349a32ba99331df；用户08:16:32→08:16:33的/status截图确认约1秒回复。该运行分支保持不变，以下诊断改进只在维护分支准备。
 
 用户实际发送红果漫剧6745890963后，CircleCI73成功取得cn角色凭据（GitHub45916424720），在resume-cn阶段失败，未开始下载、解密或上传。cn_session_requires_maintenance只是通用退出错误，不能单独证明会话过期或验证码挑战。随后只读检查[45916808829](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45916808829)验证了保存会话结构与国区绑定，但Apple返回HTTP401；未登录、使用验证码、授权/撤销电脑、下载或更新Secret。需要维护原会话，不能自动重放这次失败任务。
 

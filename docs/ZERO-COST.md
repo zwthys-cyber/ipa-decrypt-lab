@@ -1,6 +1,14 @@
 # Zero-cost deployment constraints
 
-## Status as of 2026-11-25
+## Current scope — 2026-11-27
+
+The production entry now uses Cloudflare Workers/D1, on-demand CircleCI macOS ARM64 workers and owner-private Drive delivery. The old VPS no longer dispatches jobs. [Cutover45918215266](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45918215266) and CircleCI75 verified the current CN download, full plaintext checks, private upload and acknowledged Telegram notice. Default-region GoClub was previously verified on the new stack. Fresh history/TF delivery and installation/runtime remain separate acceptance items.
+
+The owner chose this on-demand architecture. No paid-plan upgrade or metered-overage authorization is implied. Actual account quotas and provider billing configuration still govern availability; this document does not establish a perpetual free tier or an account-wide billing guarantee. The production IPA limit is2,000,000,000bytes; the10GB Linux archive fixture proves only that standalone tool's synthetic integrity check.
+
+Use [Operations](OPERATIONS.md) for current procedures. The provider limits, candidate conclusions and phases below are dated research records, not a current pricing comparison or instructions to restart the VPS.
+
+## Historical status as of 2026-11-25
 
 The VPS remains the production Telegram poller. The webhook pilot can register requests and verify existing private links. Automatic dispatch and a production cutover remain open. The [small private link test](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45644694693) reached the existing Telegram bot, and the owner confirmed access. The [current GitHub run](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45663099506) passed the Linux ARM64 image and dual-architecture archive checks; the [main project CircleCI run](https://app.circleci.com/workflow/7fcc4b73-7caa-4de2-8f16-763288eb34e2) passed 84 tests. These results cover the referenced builds and fixtures. See [the project status](PROJECT-STATUS.md) for the deployment and backup records.
 

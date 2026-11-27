@@ -1,29 +1,33 @@
-# 原始 IPA 下载与当前生产入口
+# 下载、验证与私有交付
 
-截至 2026-11-25，现有生产入口仍由 VPS 和 GitHub Actions 组成。v0.2 的 Linux 工具用于已取得归档的校验与交付，见[归档工具](../deploy/managed/free-pilot/LINUX-ARCHIVE.zh-CN.md)和[当前状态](PROJECT-STATUS.md)。
+更新于2026-11-27。生产处理源码`185a52110922e0f67ac2c7dff4e1fa85b3b4c98e`，原机器人通过Cloudflare/D1接入CircleCI macOS ARM64工作机，完成后发私有Drive链接。旧private-delivery、china-private-delivery、testflight-private-delivery、version-catalog、china-version-catalog共5个工作流已停用，不是新入口的下载路径。
 
-当前下载组件随 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5) 发布。正式入口是 Telegram 管理员与白名单私聊，以及 GitHub 的 `private-delivery.yml`（外区）、`china-private-delivery.yml`（中国区）和主人专用 `testflight-private-delivery.yml`；历史列表分别使用 `version-catalog.yml`（外区）与 `china-version-catalog.yml`（国区）。2026-11-08 [X 完整导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42439908718/attempts/2)已验证下载与解密恢复。
+## 当前App Store流程
 
-## App Store 处理流程
+1. 主人私聊输入严格解析的AppStore链接或数字ID，按/cn/选择原独立国区账号，其余默认外区。仅免费应用，当前IPA上限2,000,000,000字节。
+2. 控制面先持久化意图，串行提交source/run/job绑定的CircleCI任务；GitHub签发短期角色信封，工作机不取得交付主私钥或Drive刷新凭据。
+3. 加载pins固定的已验证ARM64公共运行包，核对来源、归档/逐文件摘要、原生输入合约及主机ABI，普通任务不编译项目。
+4. 国区恢复原会话/GUID/checkpoint/model，临时HOME与CFFIXED_USER_HOME一致；日常任务不自动密码回退、新验证码、换身份或电脑授权。
+5. 获取原包，绑定AppID/bundle/请求版本；复用已有模型，严格验证全部受保护页面的预加密CodeDirectory哈希，清理账号数据并核对ZIP/CRC/摘要。
+6. 工作机上传私有Drive文件，控制面独立核对归属、名称、字节数、SHA-256和私有权限；只有全部通过后确认交付并向主人发送链接。未知通知不自动重复。
 
-1. 依据链接选择账号；国区检查中国区元数据及 CNY 免费价格，外区保留原美区预检，并核对容量。
-2. 取得精确源码指纹和 macOS Intel 平台匹配的 CI 运行包。
-3. 通过原生 Apple 登录完成 Store AMD/SP 验证；保留商店区域和系统配置请求上下文。
-4. 请求免费许可，携带会话、完整 storefront、设备证明及账号绑定 kbsync，使用白名单 ent/download 接口获取原包。
-5. 核对 App ID、bundle、请求版本及包结构，再执行模型复用、全部加密切片/页面校验与账号元数据清理。
-6. 生成短期 age 密文和脱敏收据；常驻控制器在对应授权用户私聊交付前再次复核。
+当前实现入口是[工作机](../deploy/managed/circleci/managed_worker.py)、[AppStore适配](../deploy/managed/circleci/appstore_worker.py)、[TF适配](../deploy/managed/circleci/tf_worker.py)和[控制面](../deploy/managed/circleci/runtime-api.mjs)。共享tools及.github/ops仍用于公共原生构建、兼容性和账号维护，不能因旧派发停用就整目录删除。
 
-Python 编排位于 `tools/native_store.py` 和 `tools/private_export.py`；Swift 兼容代码位于 `tools/StoreAMD.swift`、`tools/LabEntDownload.swift` 及原生 bag 桥接。账号、模型和真实应用不进入公共源码、构建缓存或 Release。
+## 实际证明和边界
 
-## 配置与验证范围
+CircleCI75红果漫剧6745890963完成17镜像/120,976页、342,632,968字节严格明文及私有交付证明，通知已确认。GoClub已在新架构完成默认区真实任务。签名、安装和实际运行不在这些证明范围内。
 
-Apple Secrets 使用 `APPLE_ID`、`APPLE_PASSWORD`，需要时配置短期 `APPLE_2FA_CODE`；模型使用已有 `FAIRPLAY_MODEL_B64`，不为重试重新注册或生成模型。机器人和交付凭据见[VPS 部署](VPS-DEPLOYMENT.md)。编译及测试只在 GitHub-hosted 运行器执行，VPS 只运行成品。
+/versions、/version及TF已接入，仍待新平台真实历史版本交付和新TF请求验收；旧LocalSend/CapyPlayer成功记录保持历史范围。新入口仅主人，不包含旧白名单和本地BotAPI附件发送。指令见[Telegram](TELEGRAM.md)，维护见[运行手册](OPERATIONS.md)。
 
-登录、下载、明文校验和安装运行分别判断。X 的验证通过 32 个加密切片、86,704 页，`runtime_verified=false`；本轮没有增加安装运行或 Telegram 文件发送证据。
+国区会话维护在main的独立受控工作流执行，2026-11-27的单独授权维护已完成。会话拒绝、缓存路径、未知邀请结果与模型不兼容必须分开诊断，不能用放宽校验或换账号掩盖失败。
+
+## 下方历史资料的范围
+
+以下保留2026-11-03至11-10的客户端调查及旧VPS集成结论，不作为当前运行平台、派发工作流或交付方式的说明。
 
 ## 早期 Go 下载器与认证调查
 
-`store-download.yml`（Original App Store IPA）保留为固定 ipatool 提交的受控研究入口，不是生产机器人采用的下载路径。旧 ARM 对照也不能推广成现有生产平台支持；当前生产仅允许 macOS 26 Intel 与 macOS 15 Intel。
+`store-download.yml`（Original App Store IPA）保留为固定 ipatool 提交的受控研究入口，不是生产机器人采用的下载路径。旧 ARM 对照也不能推广成现有生产平台支持；当时旧生产仅允许macOS26/15 Intel；当前生产改为CircleCI macOS ARM64。
 
 早期 generic BadLogin、5002、空响应与 HTTP 拒绝没有证明密码错误、账号封禁或明确双重认证要求。早期兼容对照与下载证据见[认证兼容](AUTH-COMPATIBILITY.md)和[下载结果](../NATIVE-DOWNLOAD-RESULTS.md)。历史失败结论由[最新项目状态](PROJECT-STATUS.md)中的实测更新。
 

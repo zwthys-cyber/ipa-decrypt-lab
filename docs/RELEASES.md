@@ -1,8 +1,8 @@
 # 成品包下载
 
-[v0.2 草稿 PR](https://github.com/zwthys-cyber/ipa-decrypt-lab/pull/1)的 ARM64 镜像和 CircleCI 产物是 CI 验证包。公开资产仍按本页的 alpha.5 源码和摘要清单核对。
+2026-11-27当前机器人已按[运行手册](OPERATIONS.md)切换到Cloudflare/D1、CircleCI ARM64和私有Drive；不是下载本页旧VPS附件即可获得的新服务。最近验证的生产处理源码为`185a52110922e0f67ac2c7dff4e1fa85b3b4c98e`，成功切换45918215266。生产部署、CI运行包和公开Release是三种不同来源。
 
-最新公开发行版为 **v0.1.0-alpha.5**（截至 2026-11-25），下载入口是 [GitHub Releases](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。alpha.5 本次重打包增加主人专用 TestFlight 自动任务、持久会话与 `名称_Beta_版本.ipa` 命名，并保留 App Store 链接地区识别与独立中国区最新版下载，保留白名单、用户隔离、进度卡、完整计时和导出加速。alpha.2/alpha.3 保留为历史版本。旧版 `v0.1.0-alpha.1` 的公开 Release 和附件由本次发布替换，源码标签及历史发布说明保留。
+最新公开发行版为 **v0.1.0-alpha.5**（2026-11-27核对，GitHub标记为预览版prerelease），下载入口是 [GitHub Releases](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。alpha.5 本次重打包增加主人专用 TestFlight 自动任务、持久会话与 `名称_Beta_版本.ipa` 命名，并保留 App Store 链接地区识别与独立中国区最新版下载，保留白名单、用户隔离、进度卡、完整计时和导出加速。alpha.2/alpha.3 保留为历史版本。旧版 `v0.1.0-alpha.1` 的公开 Release 和附件由本次发布替换，源码标签及历史发布说明保留。
 
 ## 选哪个包
 
@@ -36,11 +36,11 @@ macOS 可用 `shasum -a 256 文件名`，再与清单中对应条目比较。只
 
 发布附件来自 GitHub 上通过验证的构建。服务器端在 Ubuntu 与 Debian 13 环境验证，macOS 包分别在对应 Intel 平台验证；具体运行编号写在 `BUILDINFO.json`。
 
-公开 Release 保存的是这个版本的快照。在线任务仍使用 Actions 中按源码指纹匹配的包，不会因为发布了一个 Release 就自动切换到其中的任意附件。发布也不会自动重启或升级 VPS。
+公开 Release 保存的是这个版本的快照。当前线上任务使用CircleCI pins固定的ARM64包；下述Actions Intel构建/附件流程属于旧alpha.5发行。发布Release不会自动切换生产入口或运行包。发布也不会自动重启或升级 VPS。
 
 保留现有 LICENSE，这次发布没有把项目改成开源许可。第三方依赖仍按各自许可证分发。
 
-## 重新构建与发布
+## 旧alpha.5附件的重新构建与发布
 
 所有构建与验证都在 GitHub-hosted Actions 执行。发布前固定 main 的源码提交：
 

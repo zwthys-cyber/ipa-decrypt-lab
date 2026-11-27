@@ -1,6 +1,6 @@
-# VPS 部署
+# VPS部署档案（已退出当前派发）
 
-截至 2026-11-25，生产控制器继续在 Debian VPS 上轮询。最近一次成功[部署](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42727462163)源于 `b70d0f3`，[只读健康检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45638716965)确认当时服务正常。v0.2 的 ARM64 镜像和备份验收另见[托管运行时](MANAGED-RUNTIME.md)。
+2026-11-27旧VPS不可用，已通过原bot新Token、旧Token拒绝及5个旧工作流停用完成离线切换。当前入口为Cloudflare/D1和按需CircleCI，部署见[操作手册](OPERATIONS.md)。下文只保留alpha.5/VPS旧架构的构建、配置和历史恢复方法，不是重启旧poller的操作指令；不要重启旧入口、重新启用退休工作流或覆盖新Token。未观察到旧机物理停机，source_disabled_verified仍为false。
 
 编译和测试都在 GitHub 上执行，VPS 只运行验证过的成品。服务器负责 Telegram、任务记录和文件交付；Apple 下载及 FairPlay 解密仍由 GitHub macOS 处理。
 
