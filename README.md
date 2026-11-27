@@ -27,7 +27,7 @@
 
 - 直接发送 App Store 链接或数字 App ID：提交最新版。完整 `/cn/` 链接使用独立国区账号，其余链接和数字 ID 使用默认外区账号。
 - `/versions AppStore链接或AppID`：请求历史列表；`/version AppStore链接或AppID 版本号`：指定版本，也支持 Apple 历史 ID。国区必须保留完整 `/cn/` 链接。
-- `/status`：读取最近 5 条新运行时任务的状态。
+- `/status`：按进行中、已完成、历史记录分组查看，每页3项，按钮翻页/领取/取消。
 - `/get pilot_任务编号`：领取已核验、尚在领取期限内的私有 Drive 文件；用自己的 Google 账号打开。
 - `/cancel pilot_任务编号`：记录取消请求，等待后台终止确认。
 

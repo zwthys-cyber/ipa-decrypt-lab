@@ -44,7 +44,7 @@ async function setup(bindings={}){
  const base=await mkdtemp(join(tmpdir(),"runtime-api-"));
  const folder=join(base,"circleci");await mkdir(folder);await mkdir(join(base,"free-pilot"));
  await copyFile(new URL("../free-pilot/drive-auth.mjs",import.meta.url),join(base,"free-pilot","drive-auth.mjs"));
- const files=["runtime-api.mjs","runtime-recovery.mjs","runtime-catalog.mjs","runtime-canary.mjs","runtime-notify.mjs","runtime-tasks.mjs","runtime-telegram.mjs","tf-acceptance.mjs","runtime-schema.mjs","runtime-auth.mjs","runtime-lease.mjs","runtime-upload.mjs","runtime-drive.mjs","runtime-fixture.mjs",
+ const files=["runtime-presentation.mjs","runtime-api.mjs","runtime-recovery.mjs","runtime-catalog.mjs","runtime-canary.mjs","runtime-notify.mjs","runtime-tasks.mjs","runtime-telegram.mjs","tf-acceptance.mjs","runtime-schema.mjs","runtime-auth.mjs","runtime-lease.mjs","runtime-upload.mjs","runtime-drive.mjs","runtime-fixture.mjs",
   "oidc.mjs","github-oidc.mjs"];
  await Promise.all(files.map(name=>copyFile(new URL(name,import.meta.url),join(folder,name))));
  const entry=join(folder,"entry.mjs");
@@ -109,6 +109,7 @@ async function setup(bindings={}){
      event:"workflow_dispatch",run_attempt:1,head_sha:${JSON.stringify(source)},head_branch:C.ref.slice(11),
      status:"in_progress",path:G.workflows.lease,display_title:"CircleCI lease "+managedJob});
    if(url.startsWith("https://api.telegram.org/bot")){
+    if(url.endsWith("/answerCallbackQuery"))return Response.json({ok:true,result:true});
     notifications++;
     const value=JSON.parse(options.body);
     if(String(value.chat_id)!==env.RUNTIME_OWNER_ID)throw Error("wrong_notification_owner");
@@ -135,7 +136,7 @@ async function setup(bindings={}){
     headers:{"content-type":"application/json","x-ipazake-source-sha":env.RUNTIME_SOURCE_SHA,"x-ipazake-control-token":env.CIRCLECI_CONTROL_TOKEN},
     body:JSON.stringify({...value,_source:env.RUNTIME_SOURCE_SHA})}),env,${now},provider);
    const answer=await result.json();if(!answer.ok)throw Error(answer.code);return answer;
-  },${now});
+  },${now},provider);
   return handleRuntimeV2(request,env,${now},provider);
  }};
  `);
@@ -334,6 +335,14 @@ test("production lifecycle binds profile lease, immutable proof, registered file
   const completed=await (await s.request("status",{job_id:id},"admin",secret,{"x-fixture-terminal":"1"})).json();assert.equal(completed.state,"completed");
   const link=await (await s.request("owner-get",{job_id:id})).json();assert.equal(link.ok,true);
   assert.equal(link.url,"https://drive.google.com/file/d/"+file_id+"/view");
+  const callback={update_id:120,callback_query:{id:"synthetic-get",from:{id:Number(owner),is_bot:false},
+   message:{message_id:15,date:now,chat:{id:Number(owner),type:"private"},from:{id:123456789,is_bot:true}},data:"rt:get:"+id.slice(6)}};
+  const result=await s.mf.dispatchFetch(origin+"/telegram",{method:"POST",headers:{"content-type":"application/json","x-telegram-bot-api-secret-token":"S".repeat(48)},body:JSON.stringify(callback)});
+  assert.equal(result.status,200,await result.clone().text());
+  const card=await result.json();assert.equal(card.method,"editMessageText");
+  assert.ok(card.text.includes("文件已准备好"));assert.ok(!card.text.includes(id));
+  assert.equal(card.reply_markup.inline_keyboard[0][0].url,link.url);
+  assert.equal((await s.mf.dispatchFetch(origin+"/fixture-drive").then(r=>r.json())).notifications,1);
   assert.equal((await s.mf.dispatchFetch(origin+"/fixture-drive").then(r=>r.json())).deleted,false);
  }finally{await s.close();}
 });
@@ -343,6 +352,10 @@ test("cancellation stops checkpoints and waits for terminal confirmation",{timeo
   const c=await signed("circle"),identity={job_id:id,worker_job_id:worker};
   await s.request("claim",identity,"circle",c);
   assert.equal((await (await s.request("checkpoint",{...identity,stage:"downloading"},"circle",c)).json()).proceed,true);
+  const callback={update_id:121,callback_query:{id:"synthetic-cancel",from:{id:Number(owner),is_bot:false},
+   message:{message_id:16,date:now,chat:{id:Number(owner),type:"private"},from:{id:123456789,is_bot:true}},data:"rt:cancel:"+id.slice(6)}};
+  const reply=await s.mf.dispatchFetch(origin+"/telegram",{method:"POST",headers:{"content-type":"application/json","x-telegram-bot-api-secret-token":"S".repeat(48)},body:JSON.stringify(callback)});
+  const cancelled=await reply.json();assert.equal(cancelled.method,"editMessageText");assert.ok(cancelled.text.includes("取消"));
   assert.equal((await (await s.request("owner-cancel",{job_id:id})).json()).state,"cancel_pending");
   assert.equal((await (await s.request("checkpoint",{...identity,stage:"working"},"circle",c)).json()).proceed,false);
   assert.equal((await s.request("lease-request",{...identity,recipient:"age1"+"q".repeat(58),nonce:"c".repeat(32),expires_at:now+300},"circle",c)).status,409);
@@ -538,21 +551,38 @@ test("the scheduled reconciler releases a known ended catalog and dispatches its
  }finally{await s.close();}
 });
 
-test("five status entries use one snapshot, stay below eight D1 calls and never query providers",{timeout:60000},async()=>{
+test("task pages stay bounded, owner-private and below eight D1 calls without provider queries",{timeout:60000},async()=>{
  const s=await production();try{
   await handoff(s);
   for(let i=0;i<6;i++){
    const id="pilot_"+(100+i).toString(16).padStart(32,"0");
-   await s.db.prepare("INSERT INTO runtime_jobs(job_id,owner_id,request_id,profile,kind,target,version,source_sha,state,created_at,deadline,finished_at,file_id) VALUES(?,?,?,'default','export','123456','',?,'completed',?,?,?,'SYNTHETIC_FILE')")
-    .bind(id,i===5?"99999":owner,(100+i).toString(16).padStart(32,"0"),source,now-i,now+1000,now-10).run();
+   await s.db.prepare("INSERT INTO runtime_jobs(job_id,owner_id,request_id,profile,kind,target,version,source_sha,state,created_at,deadline,finished_at,file_id,filename,plaintext_bytes,link_expires) VALUES(?,?,?,'default','export','123456','',?,'completed',?,?,?,'SYNTHETIC_FILE',?,342632968,?)")
+    .bind(id,i===5?"99999":owner,(100+i).toString(16).padStart(32,"0"),source,now-i,now+1000,now-10,"Synthetic "+i+"_1.0.ipa",now+3600).run();
   }
-  const body={update_id:101,message:{date:now,chat:{id:Number(owner),type:"private"},from:{id:Number(owner),is_bot:false},text:"/status"}};
-  const result=await s.mf.dispatchFetch(origin+"/telegram",{method:"POST",
+  await s.db.prepare("INSERT INTO runtime_jobs(job_id,owner_id,request_id,profile,kind,target,version,source_sha,state,created_at,deadline) VALUES(?,?,?,'default','export','999999','',?,'closed',?,?)")
+   .bind("pilot_"+"f".repeat(32),owner,"f".repeat(32),source,now,now+1000).run();
+  const post=body=>s.mf.dispatchFetch(origin+"/telegram",{method:"POST",
    headers:{"content-type":"application/json","x-telegram-bot-api-secret-token":"S".repeat(48),"x-fixture-query-budget":"1"},
    body:JSON.stringify(body)});
-  assert.equal(result.status,200,await result.clone().text());
-  const answer=await result.json();assert.equal(answer.text.split("\n").length,5);
-  assert.ok(!answer.text.includes((105).toString(16).padStart(32,"0")));
+  const message=text=>({update_id:101,message:{date:now,chat:{id:Number(owner),type:"private"},from:{id:Number(owner),is_bot:false},text}});
+  const result=await post(message("/status"));assert.equal(result.status,200,await result.clone().text());
+  const answer=await result.json();assert.ok(answer.text.startsWith("已完成"));
+  assert.equal((answer.text.match(/^[1-3]\. /gm)||[]).length,3);
+  assert.ok(answer.text.includes("Synthetic 0"));assert.ok(!answer.text.includes("Synthetic 3"));
+  assert.ok(!answer.text.includes("Synthetic 5"));assert.ok(!answer.text.includes("pilot_"));
+  assert.ok(!answer.text.includes("999999"));
+  assert.ok(answer.reply_markup.inline_keyboard.flat().some(b=>b.callback_data==="rt:list:c:1"));
+  const callback=(data,user=Number(owner),bot=123456789)=>({update_id:102,callback_query:{id:"synthetic-navigation",from:{id:user,is_bot:false},
+   message:{message_id:12,date:now,chat:{id:user,type:"private"},from:{id:bot,is_bot:true}},data}});
+  const second=await post(callback("rt:list:c:1"));assert.equal(second.status,200);
+  const page=await second.json();assert.equal(page.method,"editMessageText");assert.equal(page.message_id,12);
+  assert.ok(page.text.includes("Synthetic 3"));assert.ok(page.text.includes("Synthetic 4"));assert.ok(!page.text.includes("Synthetic 5"));
+  assert.equal((page.text.match(/^[1-3]\. /gm)||[]).length,2);
+  const history=await (await post(callback("rt:list:h:0"))).json();assert.ok(history.text.includes("999999"));
+  for(const bad of [callback("rt:list:c:0",99999),callback("rt:list:c:0",Number(owner),99999),callback("rt:list:c:-1"),callback("rt:list:c:99999")]){
+   const reply=await (await post(bad)).json();assert.equal(reply.method,undefined);
+  }
+  const home=await (await post(message("/start"))).json();assert.ok(home.text.includes("\n\n"));assert.ok(home.reply_markup.inline_keyboard.length);
   assert.equal((await s.mf.dispatchFetch(origin+"/fixture-count").then(r=>r.json())).nativePosts,0);
  }finally{await s.close();}
 });

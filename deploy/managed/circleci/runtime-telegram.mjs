@@ -1,10 +1,10 @@
+import {HOME,HELP,MENU,taskView,fileCard} from "./runtime-presentation.mjs";
 import {quarantineUpdate} from "./runtime-recovery.mjs";
 // Owner-private managed entry; it remains closed until the final handoff is sealed.
 import {requireEntry} from "./runtime-tasks.mjs";
 const ID=/^pilot_[a-f0-9]{32}$/;
 function response(status,value={ok:true}){return Response.json(value,{status,headers:{"cache-control":"no-store"}});}
 function say(owner,text,extra={}){return response(200,{method:"sendMessage",chat_id:Number(owner),text,...extra});}
-const HELP="发送 App Store／TestFlight 链接开始处理；/versions 链接 查看历史版本；/version 链接 版本号 可指定历史版本；/status 查看任务；/get 任务编号 领取私有文件；/cancel 任务编号 取消。";
 async function sameSecret(a,b){
  const digest=async x=>new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(x)));
  const [left,right]=await Promise.all([digest(a),digest(b)]);let diff=0;
@@ -37,7 +37,7 @@ export function parseTask(text){
   return found?{profile:url.pathname.split("/")[1]?.toLowerCase()==="cn"?"cn":"default",target:found[1],version}:null;
  }catch{return null;}
 }
-export async function handleManagedTelegram(request,env,invoke,now=Math.floor(Date.now()/1000)){
+export async function handleManagedTelegram(request,env,invoke,now=Math.floor(Date.now()/1000),send=fetch){
  if(new URL(request.url).pathname!=="/telegram"||request.method!=="POST"||new URL(request.url).search)return response(404,{ok:false});
  if(env.RUNTIME_TELEGRAM_ENABLED!=="1")return response(503,{ok:false});
  let handoff;try{handoff=await requireEntry(env);}catch{return response(503,{ok:false});}
@@ -58,16 +58,21 @@ export async function handleManagedTelegram(request,env,invoke,now=Math.floor(Da
   const raw=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("telegram-managed\0"+owner+"\0"+update.update_id+suffix));
   return ({default:"",cn:"cn_",tf:"tf_"}[profile])+Array.from(new Uint8Array(raw),x=>x.toString(16).padStart(2,"0")).join("").slice(0,32);
  }
- const callback=update.callback_query;
+ const callback=update.callback_query;let callbackCommand=null;
  if(callback){
   const m=callback.message,actor=callback.from;
+  const navigation=typeof callback.data==="string"&&/^rt:(home|help|status|list:([ach]):([0-9]{1,4})|get:([a-f0-9]{32})|cancel:([a-f0-9]{32}))$/.exec(callback.data);
   const match=typeof callback.data==="string"&&/^cv:([a-f0-9]{32}):([vpnr])(?::([1-9][0-9]{5,19}))?$/.exec(callback.data);
   if(actor?.is_bot!==false||!Number.isSafeInteger(actor?.id)||String(actor.id)!==owner||
    m?.chat?.type!=="private"||m.chat.id!==actor.id||m?.from?.is_bot!==true||
    String(m.from.id)!==(env.TELEGRAM_BOT_TOKEN||"").split(":")[0]||
    !Number.isSafeInteger(m.message_id)||m.message_id<=0||!Number.isSafeInteger(m.date)||m.date>now+60||m.date<now-21600||
-   typeof callback.id!=="string"||!callback.id.length||callback.id.length>128||!match||
-   ((match[2]==="v")!==!!match[3]))return response(200);
+   typeof callback.id!=="string"||!callback.id.length||callback.id.length>128||(!match&&!navigation)||
+   (match&&((match[2]==="v")!==!!match[3])))return response(200);
+  if(navigation){
+   callbackCommand=navigation[2]?"/tasks "+navigation[2]+" "+navigation[3]:navigation[4]?"/get pilot_"+navigation[4]:
+    navigation[5]?"/cancel pilot_"+navigation[5]:navigation[1]==="home"?"/start":"/"+navigation[1];
+  }else{
   try{
    // Region is read from the acknowledged menu, never from callback text.
    const view=await env.DB.prepare("SELECT j.profile FROM runtime_catalog_views v JOIN runtime_jobs j ON j.job_id=v.job_id WHERE v.view_id=? AND v.owner_id=?").bind(match[1],owner).first();
@@ -75,7 +80,7 @@ export async function handleManagedTelegram(request,env,invoke,now=Math.floor(Da
    const value=await invoke("catalog-action",{request_id:await requestTag(view.profile,":catalog-action"),view_id:match[1],
     message_id:m.message_id,action:match[2],version_id:match[3]||""});
    return response(200,{method:"answerCallbackQuery",callback_query_id:callback.id,
-    text:value.selected?"已选择，任务 "+value.job_id:value.menu_notified?"已打开版本列表。":"已提交版本查询，可用 /status 查看。"});
+    text:value.selected?"已选择版本，开始处理。":value.menu_notified?"已打开版本列表。":"已提交版本查询，可用 /status 查看。"});
   }catch(error){
    if(["runtime_catalog_view_expired","runtime_catalog_already_selected","runtime_catalog_selection","runtime_catalog_page_limit"].includes(error?.message))
     return response(200,{method:"answerCallbackQuery",callback_query_id:callback.id,text:"列表已使用或已过期，请重新发送 /versions 链接。"});
@@ -84,54 +89,65 @@ export async function handleManagedTelegram(request,env,invoke,now=Math.floor(Da
    return response(503,{ok:false});
   }
  }
- const m=update?.message;
- if(m?.chat?.type!=="private"||
+ }
+ const m=callbackCommand?callback.message:update?.message;
+ if(!callbackCommand&&(m?.chat?.type!=="private"||
   m?.from?.is_bot!==false||!Number.isSafeInteger(m?.from?.id)||m.from.id<=0||m.chat.id!==m.from.id||
   String(m.from.id)!==owner||!Number.isSafeInteger(m.date)||m.date<now-86400||m.date>now+60||
-  typeof m.text!=="string"||m.text.length>1024)return response(200);
- const text=m.text.trim();
+  typeof m.text!=="string"||m.text.length>1024))return response(200);
+ const text=callbackCommand||m.text.trim();
+ const respond=async(text,extra={})=>{
+  if(!callbackCommand)return say(owner,text,{reply_markup:MENU,link_preview_options:{is_disabled:true},...extra});
+  // Acknowledge the spinner separately; editing an existing message does not resend a file.
+  try{await send("https://api.telegram.org/bot"+env.TELEGRAM_BOT_TOKEN+"/answerCallbackQuery",{
+   method:"POST",redirect:"manual",signal:AbortSignal.timeout(2000),headers:{"content-type":"application/json"},
+   body:JSON.stringify({callback_query_id:callback.id})});}catch{}
+  return response(200,{method:"editMessageText",chat_id:Number(owner),message_id:m.message_id,text,reply_markup:MENU,link_preview_options:{is_disabled:true},...extra});
+ };
  try{
-  if(["/start","/help"].includes(text))return say(owner,HELP);
-  if(text==="/status"){
-   // Cron reconciles external runs. Status reads one committed snapshot and never calls providers.
-   const rows=await env.DB.prepare("SELECT j.job_id,j.state,j.finished_at,j.file_id,s.job_id catalog_job,s.result_json IS NOT NULL catalog_ready FROM runtime_jobs j LEFT JOIN runtime_catalog_specs s ON s.job_id=j.job_id WHERE j.owner_id=? AND j.kind='export' ORDER BY j.created_at DESC,j.job_id DESC LIMIT 5").bind(owner).all();
-   const labels={waiting:"等待处理",dispatch_intent:"正在提交",dispatch_unknown:"提交结果待核对",submitted:"等待工作机",
-    running:"处理中",uploading:"上传私有文件",link_ready:"等待最终确认",completed:"已核验，可用 /get 领取",
-    closed:"任务已结束",cancelled:"已取消",cancel_pending:"取消结果待核对",failed_pending:"等待工作机结束确认"};
-   const lines=(rows.results||[]).map(row=>{
-    if(row.catalog_job&&row.catalog_ready)return row.job_id+" · 版本查询已完成，可用 /versions 重新打开";
-    const ready=row.finished_at!==null&&!!row.file_id&&["link_ready","completed"].includes(row.state);
-    return row.job_id+" · "+(ready?labels.completed:labels[row.state]||"状态待核对");
-   });
-   return say(owner,lines.join("\n")||"暂无新任务。");
+  if(text==="/start")return respond(HOME);
+  if(text==="/help")return respond(HELP);
+  if(text==="/status"||text==="/history"||/^\/tasks [ach] [0-9]{1,4}$/.test(text)){
+   let group=text==="/history"?"h":text.startsWith("/tasks ")?text.split(" ")[1]:"a";
+   const page=text.startsWith("/tasks ")?Number(text.split(" ")[2]):0;
+   const filters={a:"j.state NOT IN ('closed','cancelled','completed') AND NOT (j.state='link_ready' AND j.finished_at IS NOT NULL)",
+    c:"(j.state='completed' OR (j.state='link_ready' AND j.finished_at IS NOT NULL))",
+    h:"j.state IN ('closed','cancelled')"};
+   const read=async group=>(await env.DB.prepare("SELECT j.job_id,j.state,j.profile,j.target,j.version,j.filename,j.plaintext_bytes,j.link_expires,j.finished_at,j.file_id,"+
+    "COALESCE(j.filename,(SELECT prior.filename FROM runtime_jobs prior WHERE prior.owner_id=j.owner_id AND prior.profile=j.profile AND prior.target=j.target AND prior.filename IS NOT NULL ORDER BY prior.created_at DESC LIMIT 1)) display_filename,"+
+    "s.job_id catalog_job,s.result_json IS NOT NULL catalog_ready FROM runtime_jobs j LEFT JOIN runtime_catalog_specs s ON s.job_id=j.job_id WHERE j.owner_id=? AND j.kind='export' AND "+filters[group]+
+    " ORDER BY j.created_at DESC,j.job_id DESC LIMIT 4 OFFSET ?").bind(owner,page*3).all()).results||[];
+   let rows=await read(group);
+   if(text==="/status"&&!rows.length){group="c";rows=await read(group);}
+   const view=taskView(rows,group,page,now);return respond(view.text,{reply_markup:view.reply_markup});
   }
   if(text.startsWith("/get ")||text.startsWith("/cancel ")){
    const get=text.startsWith("/get "),id=text.slice(get?5:8).trim();
-   if(!ID.test(id))return say(owner,"任务编号无效。");
+   if(!ID.test(id))return respond("任务编号无效。");
    const value=await invoke(get?"owner-get":"owner-cancel",{job_id:id});
-   if(!get)return say(owner,value.state==="cancelled"?"已取消。":value.state==="completed"?"文件已完成核验，无法取消已完成任务。":"已记录取消请求，确认工作机结束前不会释放任务容量。");
-   return say(owner,"私有文件已核验\n文件："+value.filename+"\n大小："+value.bytes+" 字节\nSHA-256："+value.sha256+
-    "\n请登录自己的 Google 账号访问。领取期限不等于网盘文件权限到期。",
-    {reply_markup:{inline_keyboard:[[{text:"打开私有文件",url:value.url}]]},link_preview_options:{is_disabled:true}});
+   if(!get)return respond(value.state==="cancelled"?"已取消。":value.state==="completed"?"文件已完成核验，无法取消已完成任务。":"已记录取消请求，确认工作机结束前不会释放任务容量。");
+   return respond(fileCard(value.filename,value.bytes),
+    {reply_markup:{inline_keyboard:[[{text:"打开文件",url:value.url}],[{text:"我的文件",callback_data:"rt:list:c:0"},{text:"首页",callback_data:"rt:home"}]]},link_preview_options:{is_disabled:true}});
   }
   if(text.startsWith("/versions ")){
    const parsed=parseTask(text.slice(10).trim());
-   if(!parsed||parsed.profile==="tf"||parsed.version)return say(owner,"请发送 /versions App Store链接 或 /versions AppID。");
+   if(!parsed||parsed.profile==="tf"||parsed.version)return respond("请发送 /versions App Store链接 或 /versions AppID。");
    const value=await invoke("catalog-open",{profile:parsed.profile,target:parsed.target,request_id:await requestTag(parsed.profile,":catalog")});
-   return say(owner,value.menu_notified?"已打开版本列表。":"已提交历史版本查询："+value.job_id+"\n查询完成后会发送版本按钮。可用 /status 查看。");
+   return respond(value.menu_notified?"已打开版本列表。":"已提交版本查询\n\n查询完成后会发送版本按钮。");
   }
-  const parsed=parseTask(text);if(!parsed)return say(owner,HELP);
+  const parsed=parseTask(text);if(!parsed)return respond(HELP);
   const raw=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("telegram-managed\0"+owner+"\0"+update.update_id));
   const tag=Array.from(new Uint8Array(raw),x=>x.toString(16).padStart(2,"0")).join("").slice(0,32);
   const request_id=({default:"",cn:"cn_",tf:"tf_"}[parsed.profile])+tag;
   const value=await invoke("admit-export",{...parsed,request_id});
-  return say(owner,"已提交："+value.job_id+"\n可用 /status 查看状态；完成后用 /get "+value.job_id+" 领取私有文件。");
+  return respond("已加入处理队列\n\n"+(parsed.profile==="cn"?"国区":parsed.profile==="tf"?"TestFlight":"App Store")+" · "+(parsed.profile==="tf"?"测试应用":"App "+parsed.target)+"\n完成后会通知你。",
+   {reply_markup:{inline_keyboard:[[{text:"查看进度",callback_data:"rt:status"},{text:"取消任务",callback_data:"rt:cancel:"+value.job_id.slice(6)}]]}});
  }catch(error){
   if(["runtime_entry_disabled","runtime_handoff_required","runtime_tf_handoff_required"].includes(error?.message))
-   return say(owner,"迁移交接尚未完成，当前没有提交新的下载任务。");
-  if(error?.message==="runtime_catalog_rate_limit")return say(owner,"已达到目录查询频率或每日上限，请稍后重试。");
-  if(error?.message==="runtime_daily_or_queue_limit")return say(owner,"已达到每日或等待任务上限。");
-  if(error?.message==="runtime_link_unavailable")return say(owner,"文件尚未完成核验，或领取期限已过。");
+   return respond("迁移交接尚未完成，当前没有提交新的下载任务。");
+  if(error?.message==="runtime_catalog_rate_limit")return respond("已达到目录查询频率或每日上限，请稍后重试。");
+  if(error?.message==="runtime_daily_or_queue_limit")return respond("已达到每日或等待任务上限。");
+  if(error?.message==="runtime_link_unavailable")return respond("文件尚未完成核验，或领取期限已过。");
   // A webhook retry reuses the same request ID; never invent a replacement task.
   return response(503,{ok:false});
  }

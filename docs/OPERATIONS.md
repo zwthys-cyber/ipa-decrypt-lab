@@ -12,7 +12,7 @@
 | 私有 Google Drive | 保持主人文件的私有权限，由控制面核对归属、名称、大小和 SHA-256 | [验证模块](../deploy/managed/circleci/runtime-drive.mjs) |
 | main 的既有维护工作流 | 原账号会话维护、Intel 构建和旧公开发行包 | [国区会话检查](../.github/workflows/china-session-check.yml) |
 
-只有配置主人的私聊可以提交新任务。当前没有旧白名单管理、VPS 常驻 poller、本地 Bot API 大文件传输或五秒计时进度卡。/status 读取一次最多五条的 D1 快照，外部状态由 cron 核对；排队和传输速度不保证。
+只有配置主人的私聊可以提交新任务。当前没有旧白名单管理、VPS 常驻 poller、本地 Bot API 大文件传输或五秒计时进度卡。/status 按组读取D1快照，每页3项，翻页更新原消息，外部状态由 cron 核对；排队和传输速度不保证。
 
 ## 维护发布顺序
 

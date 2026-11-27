@@ -1,3 +1,4 @@
+import {fileCard} from "./runtime-presentation.mjs";
 // One owner-private completion notification. Unknown sends are never repeated.
 import {need} from "./runtime-auth.mjs";
 export const NOTIFY_SCHEMA="CREATE TABLE IF NOT EXISTS runtime_notifications(job_id TEXT PRIMARY KEY,state TEXT NOT NULL,created_at INTEGER NOT NULL,message_id INTEGER)";
@@ -15,8 +16,8 @@ export async function notifyOwner(env,task,now,send){
   const response=await send("https://api.telegram.org/bot"+token+"/sendMessage",{
    method:"POST",redirect:"manual",signal:AbortSignal.timeout(10000),headers:{"content-type":"application/json"},
    body:JSON.stringify({chat_id:Number(task.owner_id),
-    text:"私有文件已核验\n文件："+task.filename+"\n大小："+task.plaintext_bytes+" 字节\n请登录自己的 Google 账号访问。",
-    reply_markup:{inline_keyboard:[[{text:"打开私有文件",url:"https://drive.google.com/file/d/"+encodeURIComponent(task.file_id)+"/view"}]]},
+    text:fileCard(task.filename,task.plaintext_bytes),
+    reply_markup:{inline_keyboard:[[{text:"打开文件",url:"https://drive.google.com/file/d/"+encodeURIComponent(task.file_id)+"/view"}]]},
     link_preview_options:{is_disabled:true}})
   });
   need(response.status===200,"runtime_notify_unconfirmed");

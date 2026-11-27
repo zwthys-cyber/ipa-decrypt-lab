@@ -16,6 +16,7 @@ test("a confirmed owner-private notice is sent once across repeated finish ackno
   const send=async(url,options)=>{
    calls++;assert.equal(options.redirect,"manual");assert.equal(options.method,"POST");
    const body=JSON.parse(options.body);assert.equal(body.chat_id,12345);
+   assert.ok(body.text.includes("文件已准备好"));assert.ok(body.text.includes("100 B"));assert.ok(!body.text.includes("pilot_"));
    assert.equal(body.reply_markup.inline_keyboard[0][0].url,"https://drive.google.com/file/d/"+task.file_id+"/view");
    return Response.json({ok:true,result:{message_id:1,chat:{id:12345,type:"private"}}});
   };
