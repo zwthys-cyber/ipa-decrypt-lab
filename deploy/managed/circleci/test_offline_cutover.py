@@ -43,6 +43,13 @@ class CutoverTests(unittest.TestCase):
   with patch.object(cut,"api",return_value=dict(schedules=[dict(cron=str(i)) for i in range(3)])):
    with self.assertRaisesRegex(ValueError,"offline_cron_limit"):cut.schedules(env)
 
+ def test_existing_minute_schedule_is_read_without_restarting_propagation(self):
+  env=dict(CF_ACCOUNT_ID="a"*32,CF_API_TOKEN="synthetic")
+  with patch.object(cut,"api",return_value=dict(schedules=[dict(cron="* * * * *")])) as api:
+   cut.schedules(env)
+  self.assertEqual(api.call_count,1)
+  self.assertNotIn("method",api.call_args.kwargs)
+
  def test_invalid_owner_or_missing_hmac_never_deploys_or_changes_mode(self):
   with patch.dict(os.environ,{},clear=True),patch.object(cut,"deploy") as deploy,patch.object(cut,"mode") as mode:
    with self.assertRaisesRegex(ValueError,"offline_cutover_context"):cut.run("unused")

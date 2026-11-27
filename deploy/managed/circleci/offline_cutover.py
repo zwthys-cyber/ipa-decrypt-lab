@@ -72,6 +72,7 @@ def schedules(env):
  before=api(env["CF_ACCOUNT_ID"],env["CF_API_TOKEN"],path)
  need(type(before) is dict and type(before.get("schedules")) is list,"offline_cron_inventory")
  cron={row["cron"] for row in before["schedules"]}
+ if "* * * * *" in cron:return
  cron.add("* * * * *");need(len(cron)<=3,"offline_cron_limit")
  desired=[dict(cron=value) for value in sorted(cron)]
  api(env["CF_ACCOUNT_ID"],env["CF_API_TOKEN"],path,desired,method="PUT")
