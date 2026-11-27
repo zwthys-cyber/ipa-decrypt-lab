@@ -525,7 +525,7 @@ test("owner catalog requests bypass daily totals while staging still rejects the
   await handoff(s);
   for(let i=0;i<20;i++){
    const id="pilot_"+i.toString(16).padStart(32,"0"),rid=i.toString(16).padStart(32,"0");
-   await s.db.prepare("INSERT INTO runtime_jobs(job_id,owner_id,request_id,profile,kind,target,version,source_sha,state,created_at,deadline) VALUES(?,?,?,'default','export','123456','',?,'closed',?,?)").bind(id,owner,rid,source,Math.floor(now/86400)*86400,now+1000).run();
+   await s.db.prepare("INSERT INTO runtime_jobs(job_id,owner_id,request_id,profile,kind,target,version,source_sha,state,created_at,deadline) VALUES(?,?,?,'cn','export','123456','',?,'closed',?,?)").bind(id,owner,"cn_"+rid,source,Math.floor(now/86400)*86400,now+1000).run();
    await s.db.prepare("INSERT INTO runtime_catalog_specs(job_id,before_id,page_index) VALUES(?,'',0)").bind(id).run();
   }
   const catalog=await s.request("catalog-open",catalogRequest("f","default"));assert.equal(catalog.status,200,await catalog.clone().text());
