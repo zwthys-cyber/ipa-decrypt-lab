@@ -25,6 +25,8 @@ jobs:
           for name in files:
               if not name.endswith(".md"):continue
               path=root/name;text=path.read_text();checked+=1
+              if re.search(r"\u65e7(?:\u7248|\u6709|\u7684)?\s*vps|\bold\s*vps\b",text,re.I):
+                  errors.append((name,"disallowed_runtime_wording"))
               for match in re.finditer(r"\[[^\]]*\]\(([^)\n]+)\)",text):
                   target=match[1].strip()
                   if target.startswith("<") and target.endswith(">"):target=target[1:-1]

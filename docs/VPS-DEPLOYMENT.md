@@ -99,7 +99,7 @@ main 新增流程步骤比例、真实下载字节计数和完整耗时。VPS �
 
 ## 后端导出提速（2026-11-08）
 
-[运行包 42445031389](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42445031389) 加入仅限 GitHub 的 raw ZIP 成员复制清理，替代导出阶段的 Python 全包重复压缩；[实际 X 导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42445425200) 通过全部检查。它不改变 VPS 的解密、恢复或 Telegram 发送协议，无需为此重启当前服务。旧 VPS 的 delivery-crypt 继续使用 decrypt 命令，新 scrub 命令在 VPS 模式下被拒绝。源码指纹校验仍生效，不能混用不匹配的包。
+[运行包 42445031389](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42445031389) 加入仅限 GitHub 的 raw ZIP 成员复制清理，替代导出阶段的 Python 全包重复压缩；[实际 X 导出](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42445425200) 通过全部检查。它不改变 VPS 的解密、恢复或 Telegram 发送协议，无需为此重启当前服务。原运行环境 的 delivery-crypt 继续使用 decrypt 命令，新 scrub 命令在 VPS 模式下被拒绝。源码指纹校验仍生效，不能混用不匹配的包。
 
 ## 白名单版本升级
 
