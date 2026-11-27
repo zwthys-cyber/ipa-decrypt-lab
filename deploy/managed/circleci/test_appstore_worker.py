@@ -69,6 +69,7 @@ class WorkerTests(unittest.TestCase):
     def execute(self,binary,args,env,timeout,root,checkpoint):
         checkpoint();args=list(map(str,args));self.calls.append((Path(binary).name,args,dict(env)))
         self.assertNotIn("GITHUB_ACTIONS",env)
+        self.assertEqual(env.get("CFFIXED_USER_HOME"),env["HOME"])
         if args==["--prewarm"]:
             return subprocess.CompletedProcess([],0 if env.get("LAB_KBSYNC_CHILD")=="1" else 2,"","")
         if Path(binary).name=="age":

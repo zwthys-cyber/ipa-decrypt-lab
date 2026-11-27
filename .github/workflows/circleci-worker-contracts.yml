@@ -15,6 +15,7 @@ on:
       - 'deploy/managed/circleci/test_runtime_uploader.py'
       - 'deploy/managed/circleci/verified_export.py'
       - 'deploy/managed/circleci/task_context.py'
+      - 'deploy/managed/circleci/test_native_home.py'
       - 'deploy/managed/circleci/private_process.py'
       - 'deploy/managed/circleci/cn_profile.py'
       - 'deploy/managed/circleci/test_appstore_worker.py'
@@ -59,6 +60,16 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p test_private_export.py -v
           python3 -m unittest discover -s tests -p test_ipa_audit.py -v
+
+  macos-native-home:
+    runs-on: macos-26-intel
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify actual Foundation account-cache isolation without credentials
+        run: python3 deploy/managed/circleci/test_native_home.py -v
 
   public-native-producer:
     needs: synthetic-worker

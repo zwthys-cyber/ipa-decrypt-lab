@@ -43,5 +43,6 @@ def credentials(profile,values):
 
 def minimal_env(env,home):
     result={k:env[k] for k in ("PATH","LANG") if k in env}
-    result.update(HOME=str(home),TMPDIR=str(home),TMP=str(home),TEMP=str(home))
+    # macOS Foundation resolves the passwd home before HOME; bind its explicit override too.
+    result.update(HOME=str(home),CFFIXED_USER_HOME=str(home),TMPDIR=str(home),TMP=str(home),TEMP=str(home))
     return result
