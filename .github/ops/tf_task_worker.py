@@ -15,7 +15,7 @@ from task_progress import WorkerProgress
 from telegram_queue import GitHub
 from tf_task_session import restore,RECIPIENT
 from tf_task_contract import fingerprint as worker_fingerprint
-from tf_task_ssh import fetch,rpc
+from tf_task_transport import fetch,rpc
 from tf_virtual_zip_directories import canonicalize
 from tf_virtual_beta_download import archive_binding
 from tf_virtual import public_env

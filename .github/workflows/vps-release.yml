@@ -78,7 +78,7 @@ jobs:
       - name: Assemble public runtime bundle
         run: |
           cp dist/telegram-bot-api package/bin/
-          for module in testflight_state account_profile version_catalog app_presentation version_request app_preflight capacity telegram_daemon multi_user persistent_journal telegram_controller telegram_runtime telegram_api telegram_menu telegram_queue task_progress delivery_scheduler ipa_audit; do
+          for module in testflight_state tf_state_http account_profile version_catalog app_presentation version_request app_preflight capacity telegram_daemon multi_user persistent_journal telegram_controller telegram_runtime telegram_api telegram_menu telegram_queue task_progress delivery_scheduler ipa_audit managed_migration; do
             cp "tools/$module.py" package/tools/
           done
           cp deploy/ipazake.service deploy/install.sh deploy/prune_releases.py package/deploy/
@@ -95,6 +95,16 @@ jobs:
               echo forbidden_vps_keygen; exit 1
             fi
           '
+      - name: Validate managed container packaging without credentials
+        run: |
+          docker build --platform linux/amd64 --target state -f deploy/managed/Dockerfile -t ipazake-state:ci package
+          docker build --platform linux/amd64 --target controller -f deploy/managed/Dockerfile -t ipazake-managed:ci package
+          if docker run --rm --network none ipazake-state:ci; then echo managed_state_missing_volume_not_rejected; exit 1; fi
+          docker run --rm --entrypoint /usr/bin/python3 ipazake-managed:ci -c 'import os,sys; sys.path.insert(0,"/opt/ipazake/tools"); from telegram_daemon import credential_mode; assert os.geteuid()==10001 and credential_mode()=="environment"'
+          docker run --rm --entrypoint /opt/ipazake/bin/telegram-bot-api ipazake-managed:ci --version
+          if docker run --rm ipazake-managed:ci; then
+            echo managed_missing_volume_not_rejected; exit 1
+          fi
       - name: Package verified public release
         run: |
           tar -czf vps-controller.tar.gz -C package .

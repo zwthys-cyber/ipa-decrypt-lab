@@ -1,7 +1,7 @@
 # Native download investigation — 2026-11-03
 
 
-> Documentation review — 2026-11-09: This document preserves historical experiments and their original results. Current App Store and owner-only TestFlight automation, the CapyPlayer plaintext proof/user receipt, and Beta filename deployment are recorded in [project status](docs/PROJECT-STATUS.md). Current packages and exact build provenance are listed in [release documentation](docs/RELEASES.md); see the [documentation index](docs/DOCUMENTATION.md) for operations. Historical failures do not supersede later verified results. Installation/runtime and universal app compatibility remain unverified.
+> 历史记录。2026-11-25 文档复核时保留原始实验及证据。当前线上、发行与开发状态见[项目状态](docs/PROJECT-STATUS.md)。
 
 
 This document records the original download investigation. The later model-based decryption path is documented in [project status](docs/PROJECT-STATUS.md).

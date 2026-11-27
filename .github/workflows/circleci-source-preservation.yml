@@ -1,0 +1,68 @@
+name: Preserve CircleCI migration source
+on:
+  push:
+    branches: [upgrade/managed-runtime-v0.2]
+    paths:
+      - 'deploy/managed/circleci/*preserv*'
+      - '.github/workflows/circleci-source-preservation.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: circleci-source-preservation
+  cancel-in-progress: false
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify live SQLite backup, absent ledger and unsafe paths on GitHub
+        working-directory: deploy/managed/circleci
+        run: |
+          python3 test_preserve_source.py -v
+          python3 -m py_compile preserve_source.py verify_preservation.py
+  preserve:
+    needs: contracts
+    if: github.ref == 'refs/heads/upgrade/managed-runtime-v0.2' && github.run_attempt == 1 && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[preserve-circleci-source]'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install only transport tools on GitHub
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends sshpass age
+      - name: Preserve transactional online copies without stopping or altering the source
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          SSHPASS: ${{ secrets.VPS_SSH_PASSWORD }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          preserve_temp=$(mktemp -d)
+          trap 'rm -rf -- "$preserve_temp"' EXIT
+          mkdir -m 700 preservation-output
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$preserve_temp/known_hosts"
+          printf '%s\n' "$DELIVERY_AGE_IDENTITY" > "$preserve_temp/identity"
+          recipient=age1cp0tv9wcxjqpvcmwt6eh6yqxqg25a2msnelc3mxlj9xqcu6fz4cqekfq5d
+          test "$(age-keygen -y "$preserve_temp/identity")" = "$recipient"
+          if ! sshpass -e ssh -4 -o "UserKnownHostsFile=$preserve_temp/known_hosts" -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o LogLevel=ERROR "root@$VPS_HOST" \
+            'env LAB_RUNTIME=vps PYTHONDONTWRITEBYTECODE=1 python3 -' \
+            < deploy/managed/circleci/preserve_source.py 2> "$preserve_temp/private-error" | age -r "$recipient" -o preservation-output/source.tar.gz.age; then
+            echo source_preservation_failed >&2
+            exit 1
+          fi
+          age -d -i "$preserve_temp/identity" preservation-output/source.tar.gz.age | python3 deploy/managed/circleci/verify_preservation.py
+          cd preservation-output
+          sha256sum source.tar.gz.age tf-session.age > SHA256SUMS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: encrypted-circleci-source-${{ github.run_id }}
+          path: preservation-output/
+          retention-days: 1
+          if-no-files-found: error

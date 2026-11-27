@@ -167,7 +167,10 @@ int main(int argc,char **argv) {
         if(argc==2 && std::string(argv[1])=="--plain-transport-self-test")return lab_tf_plain_transport_contract();
         if(argc==2 && std::string(argv[1])=="--task-self-test")return lab_tf_task_contract();
         if(argc==6 && std::string(argv[1])=="--tf-task") {
-            require(std::getenv("GITHUB_ACTIONS") && std::string(std::getenv("GITHUB_ACTIONS"))=="true");
+            const auto actions=std::getenv("GITHUB_ACTIONS"),circle=std::getenv("CIRCLECI");
+            require((actions && std::string(actions)=="true") ||
+                (circle && std::string(circle)=="true" && (!actions || std::string(actions).empty())));
+            // Full provider, run, worker, source and expiry binding occurs before any TF transport.
             const std::filesystem::path root=argv[3],output=argv[5];
             (void)read_profile(root);
             struct stat info{};

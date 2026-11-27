@@ -1,5 +1,7 @@
 # Telegram 使用说明
 
+截至 2026-11-25，本文指令对应现有 VPS 上的 Telegram 服务。Webhook 试验版可以登记请求和核验私有链接，生产接收模式仍为 VPS 轮询。详见[项目状态](PROJECT-STATUS.md)和[零费用试验](ZERO-COST.md)。
+
 ## TestFlight 主人入口（2026-11-09）
 
 主人在私聊中直接发送完整的 `https://testflight.apple.com/join/<邀请码>` 链接，即提交独立 TF 任务。后台检查资格、必要时有界接受邀请、获取可用测试构建并完成解密验证，再自动回传；不会改为下载 App Store 正式版。任务编号以 `tf_` 开头，`/status`、`/cancel`、`/get` 继续绑定原请求和主人。

@@ -1,0 +1,197 @@
+version: 2.1
+
+parameters:
+  managed_runtime:
+    type: boolean
+    default: false
+  managed_job:
+    type: string
+    default: ""
+  managed_source:
+    type: string
+    default: ""
+  managed_origin:
+    type: string
+    default: ""
+
+  build_native_runtime:
+    type: boolean
+    default: false
+
+  runtime_consumer:
+    type: boolean
+    default: false
+
+  validate_arm64_archive:
+    type: boolean
+    default: false
+
+  dispatch_probe:
+    type: boolean
+    default: false
+  probe_source:
+    type: string
+    default: ""
+  probe_id:
+    type: string
+    default: ""
+
+  control_probe_url:
+    type: string
+    default: ""
+  control_probe_job:
+    type: string
+    default: ""
+
+jobs:
+  managed-runtime-task:
+    macos:
+      xcode: "26.5"
+    resource_class: m4pro.medium
+    steps:
+      - checkout
+      - run:
+          name: Prepare only standard runtime tools before any private lease
+          command: |
+            set -euo pipefail
+            test "$(uname -m)" = arm64
+            brew install age
+      - run:
+          name: Execute the exact source-bound managed task
+          no_output_timeout: 12m
+          environment:
+            MANAGED_JOB: << pipeline.parameters.managed_job >>
+            MANAGED_SOURCE: << pipeline.parameters.managed_source >>
+            MANAGED_ORIGIN: << pipeline.parameters.managed_origin >>
+            MANAGED_RUN_ID: << pipeline.id >>
+          command: python3 deploy/managed/circleci/managed_worker.py
+      - store_artifacts:
+          path: managed-runtime-out
+          destination: managed-runtime-proof
+  dispatch-contract-probe:
+    docker:
+      - image: cimg/python:3.13-node
+    resource_class: small
+    steps:
+      - checkout
+      - run:
+          name: Validate the source-bound synthetic dispatch
+          environment:
+            PROBE_SOURCE: << pipeline.parameters.probe_source >>
+            PROBE_ID: << pipeline.parameters.probe_id >>
+            PROBE_PIPELINE: << pipeline.id >>
+            PROBE_CONTROL_URL: << pipeline.parameters.control_probe_url >>
+            PROBE_CONTROL_JOB: << pipeline.parameters.control_probe_job >>
+          command: |
+            set -euo pipefail
+            python3 deploy/managed/circleci/test_probe.py -v
+            python3 deploy/managed/circleci/probe.py worker
+            node --test deploy/managed/circleci/oidc.test.mjs
+            node deploy/managed/circleci/oidc-probe.mjs
+            if [ -n "$PROBE_CONTROL_URL" ]; then
+              sudo apt-get update -qq
+              sudo apt-get install -y --no-install-recommends age
+            fi
+            node deploy/managed/circleci/control-probe.mjs
+      - store_artifacts:
+          path: dispatch-probe-out
+          destination: synthetic-dispatch-probe
+  arm64-ios-archive:
+    macos:
+      xcode: "26.5"
+    resource_class: m4pro.medium
+    steps:
+      - checkout
+      - run:
+          name: Verify the Apple silicon runner
+          command: |
+            set -euo pipefail
+            test "$(uname -m)" = arm64
+            xcodebuild -version
+            python3 --version
+      - run:
+          name: Run the archive verifier tests
+          command: |
+            set -euo pipefail
+            python3 deploy/managed/free-pilot/test_archive_verify.py -v
+            python3 deploy/managed/circleci/test_runtime.py -v
+      - when:
+          condition:
+            not: << pipeline.parameters.runtime_consumer >>
+          steps:
+            - run:
+                name: Build the project-owned ARM64 iOS sample
+                command: |
+                  set -euo pipefail
+                  fixture_commit=3bd9bcf51567379659931094a842707ec064cf13
+                  fixture_dir=build/arm64-fixture
+                  git init --quiet "$fixture_dir"
+                  git -C "$fixture_dir" fetch --depth=1 --no-tags \
+                    https://github.com/zwthys-cyber/macos-compat.git "$fixture_commit"
+                  git -C "$fixture_dir" checkout --quiet --detach FETCH_HEAD
+                  test "$(git -C "$fixture_dir" rev-parse HEAD)" = "$fixture_commit"
+                  bash "$fixture_dir/sample/build-ipa.sh"
+            - run:
+                name: Verify the packaged sample with the v0.2 archive tool
+                command: |
+                  set -euo pipefail
+                  output_dir=build/arm64-fixture/build/ipa
+                  artifact="$output_dir/ARMSample-unsigned.ipa"
+                  expected=$(awk '$2 == "ARMSample-unsigned.ipa" {print $1}' "$output_dir/SHA256SUMS")
+                  [[ "$expected" =~ ^[0-9a-f]{64}$ ]]
+                  chmod 0600 "$artifact"
+                  python3 deploy/managed/free-pilot/archive_verify.py "$artifact" \
+                    --expected-sha256 "$expected" --confirm-authorized-file |
+                    tee "$output_dir/delivery-verification.json"
+            - store_artifacts:
+                path: build/arm64-fixture/build/ipa
+                destination: arm64-ios-sample
+
+      - run:
+          name: Gate the one-off public runtime producer
+          command: |
+            set -euo pipefail
+            if [ "<< pipeline.parameters.build_native_runtime >>" != true ] &&
+               [ "<< pipeline.parameters.runtime_consumer >>" != true ] &&
+               ! git log -1 --format=%B | grep -Eq '\[circleci-((tf-)?runtime-build|runtime-consumer)\]'; then
+              circleci-agent step halt
+            fi
+      - run:
+          name: Build and relocate the credential-free ARM64 runtime
+          no_output_timeout: 20m
+          command: |
+            if [ "<< pipeline.parameters.runtime_consumer >>" = true ] ||
+               git log -1 --format=%B | grep -Fq '[circleci-runtime-consumer]'; then
+              bash deploy/managed/circleci/verify-runtime-consumer.sh
+            elif git log -1 --format=%B | grep -Fq '[circleci-tf-runtime-build]'; then
+              bash deploy/managed/circleci/build-public-tf-runtime.sh
+            else
+              bash deploy/managed/circleci/build-public-runtime.sh
+            fi
+      - store_artifacts:
+          path: circle-runtime-dist
+          destination: public-arm64-native-runtime
+
+workflows:
+  managed-runtime-tasks:
+    when: << pipeline.parameters.managed_runtime >>
+    jobs:
+      - managed-runtime-task
+  synthetic-dispatch-probe:
+    when:
+      and:
+        - << pipeline.parameters.dispatch_probe >>
+        - not: << pipeline.parameters.managed_runtime >>
+    jobs:
+      - dispatch-contract-probe
+  arm64-archive-validation:
+    when:
+      and:
+        - not: << pipeline.parameters.dispatch_probe >>
+        - not: << pipeline.parameters.managed_runtime >>
+        - or:
+            - << pipeline.parameters.build_native_runtime >>
+            - << pipeline.parameters.validate_arm64_archive >>
+            - << pipeline.parameters.runtime_consumer >>
+    jobs:
+      - arm64-ios-archive

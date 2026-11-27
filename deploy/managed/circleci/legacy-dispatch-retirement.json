@@ -1,0 +1,50 @@
+{
+  "schema": "circleci-legacy-dispatch-retirement-v1",
+  "repository": "zwthys-cyber/ipa-decrypt-lab",
+  "installed_source": "b70d0f3730651ebcc03c8d4ca31e9e5d4bd84c51",
+  "source_ssh_used": false,
+  "source_service_stop_verified": false,
+  "telegram_isolation_verified": false,
+  "production_cutover": false,
+  "workflows": [
+    {
+      "id": 407064604,
+      "path": ".github/workflows/private-delivery.yml",
+      "state": "disabled_manually",
+      "active_runs_before": 0,
+      "total_runs_before": 52
+    },
+    {
+      "id": 411713917,
+      "path": ".github/workflows/china-private-delivery.yml",
+      "state": "disabled_manually",
+      "active_runs_before": 0,
+      "total_runs_before": 4
+    },
+    {
+      "id": 412609354,
+      "path": ".github/workflows/testflight-private-delivery.yml",
+      "state": "disabled_manually",
+      "active_runs_before": 0,
+      "total_runs_before": 1
+    },
+    {
+      "id": 407542960,
+      "path": ".github/workflows/version-catalog.yml",
+      "state": "disabled_manually",
+      "active_runs_before": 0,
+      "total_runs_before": 10
+    },
+    {
+      "id": 412705779,
+      "path": ".github/workflows/china-version-catalog.yml",
+      "state": "disabled_manually",
+      "active_runs_before": 0,
+      "total_runs_before": 0
+    }
+  ],
+  "source_startup_guard": ".github/workflows/private-delivery.yml must be active before old local Bot API and journal recovery start",
+  "requires_fresh_readback": true,
+  "observed_on": "2026-11-26",
+  "readback_run": 45911826276
+}

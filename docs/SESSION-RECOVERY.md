@@ -1,5 +1,7 @@
 # 常驻服务任务恢复
 
+2026-11-25 的[加密备份](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45637494802)和[只读检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45638716965)记录了控制器 SQLite、Telegram 状态、TestFlight 会话密文及回执库。标准路径下的 TestFlight 接受记录当时缺失，托管迁移仍缺其可核验来源。详见[托管运行时](MANAGED-RUNTIME.md)。
+
 将任务恢复逻辑放在 `tools/persistent_journal.py`，状态保存在 VPS 私有 SQLite 数据库，不再向 GitHub Checks 写入恢复记录。旧 Checks 实现和实验工作流已删除，历史证据可从 Git 历史与 [41890117885](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41890117885) 查阅。
 
 ## 采用的恢复规则

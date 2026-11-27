@@ -1,0 +1,94 @@
+name: CircleCI actual worker adapter contracts
+on:
+  push:
+    branches: [upgrade/managed-runtime-v0.2]
+    paths:
+      - 'deploy/managed/circleci/appstore_worker.py'
+      - 'deploy/managed/circleci/catalog_worker.py'
+      - 'deploy/managed/circleci/test_catalog_worker.py'
+      - 'deploy/managed/circleci/runtime_uploader.py'
+      - 'deploy/managed/circleci/runtime_execution.py'
+      - 'deploy/managed/circleci/managed_worker.py'
+      - 'deploy/managed/circleci/owner_canary.py'
+      - 'deploy/managed/circleci/test_owner_canary.py'
+      - 'deploy/managed/circleci/test_runtime_execution.py'
+      - 'deploy/managed/circleci/test_runtime_uploader.py'
+      - 'deploy/managed/circleci/verified_export.py'
+      - 'deploy/managed/circleci/task_context.py'
+      - 'deploy/managed/circleci/test_native_home.py'
+      - 'deploy/managed/circleci/private_process.py'
+      - 'deploy/managed/circleci/cn_profile.py'
+      - 'deploy/managed/circleci/test_appstore_worker.py'
+      - 'deploy/managed/circleci/credential_envelope.py'
+      - 'deploy/managed/circleci/tf_worker.py'
+      - 'deploy/managed/circleci/test_tf_worker.py'
+      - 'deploy/managed/circleci/native_request.py'
+      - 'deploy/managed/circleci/runtime-pins.json'
+      - 'deploy/managed/circleci/verify-runtime-consumer.sh'
+      - '.github/ops/tf_task_native.cpp'
+      - '.github/ops/tf_virtual_client.cpp'
+      - '.github/workflows/circleci-worker-contracts.yml'
+      - '.github/workflows/circleci-owner-task.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: circleci-worker-contracts
+  cancel-in-progress: false
+jobs:
+  synthetic-worker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install standard age transport without account credentials
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends age
+      - name: Verify CircleCI identities, saved CN session, cancellation, ZIP proofs and real encryption
+        working-directory: deploy/managed/circleci
+        run: |
+          python3 test_runtime_uploader.py -v
+          python3 test_runtime_execution.py -v
+          python3 test_appstore_worker.py -v
+          python3 test_catalog_worker.py -v
+          python3 test_tf_worker.py -v
+          python3 test_credential_envelope.py -v
+      - name: Preserve existing full plaintext and archive validators
+        run: |
+          python3 -m unittest discover -s tests -p test_private_export.py -v
+          python3 -m unittest discover -s tests -p test_ipa_audit.py -v
+
+  macos-native-home:
+    runs-on: macos-26-intel
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify actual Foundation account-cache isolation without credentials
+        run: python3 deploy/managed/circleci/test_native_home.py -v
+
+  public-native-producer:
+    needs: synthetic-worker
+    if: github.ref == 'refs/heads/upgrade/managed-runtime-v0.2' && (contains(github.event.head_commit.message, '[circleci-runtime-build]') || contains(github.event.head_commit.message, '[circleci-runtime-consumer]'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 43
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Request exactly one credential-free producer after adapter verification
+        env:
+          CIRCLECI_API_TOKEN: ${{ secrets.CIRCLECI_API_TOKEN }}
+          NATIVE_REQUEST_MODE: ${{ contains(github.event.head_commit.message, '[circleci-runtime-consumer]') && 'consumer' || 'producer' }}
+        run: python3 deploy/managed/circleci/native_request.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: circleci-native-producer-request-${{ github.sha }}
+          path: circleci-native-request.json
+          retention-days: 1
+          if-no-files-found: error

@@ -37,11 +37,44 @@ def load_credentials(path, systemd=False):
                       and info.st_mode & 0o222==0)
     if path.is_symlink() or not path.is_file() or not private_file or info.st_size>32768:
         raise QueueError("insecure_credentials_file")
-    values=json.loads(path.read_text())
+    return validate_credentials(json.loads(path.read_text()))
+
+def validate_credentials(values):
     if (not isinstance(values,dict) or set(values)!=KEYS
             or not all(isinstance(v,str) and v and "\n" not in v for v in values.values())):
         raise QueueError("invalid_service_credentials")
     return values
+
+def credential_mode():
+    mode=os.environ.get("IPAZAKE_CREDENTIAL_MODE","systemd")
+    if mode not in ("systemd","environment"):
+        raise QueueError("invalid_credential_mode")
+    return mode
+
+def service_credentials(mode):
+    if mode=="environment":
+        if os.environ.get("CREDENTIALS_DIRECTORY"):
+            raise QueueError("ambiguous_credential_source")
+        return validate_credentials({k:os.environ.get(k,"") for k in KEYS})
+    credentials=Path(os.environ["CREDENTIALS_DIRECTORY"])/"bot.json"
+    return load_credentials(credentials,systemd=True)
+
+def require_managed_volume(root, mountinfo=None):
+    # The managed pilot must not silently start on an ephemeral container layer.
+    if (root.is_symlink() or not root.is_dir() or
+            root.stat().st_uid!=os.geteuid() or root.stat().st_mode & 0o077):
+        raise QueueError("managed_volume_not_private")
+    target=str(root.resolve()).replace("\\","\\134").replace(" ","\\040").replace("\t","\\011").replace("\n","\\012")
+    if mountinfo is None:
+        mountinfo=Path("/proc/self/mountinfo").read_text()
+    if not any(len(row.split())>5 and row.split()[4]==target for row in mountinfo.splitlines()):
+        raise QueueError("managed_volume_not_mounted")
+
+def require_managed_journal(journal):
+    # TestFlight's durable session and acceptance permit still use the VPS.
+    # Do not recover or dispatch a historical TF task from a pilot controller.
+    if any(rid.startswith("tf_") for (rid,) in journal.db.execute("SELECT rid FROM tasks")):
+        raise QueueError("managed_testflight_migration_required")
 
 def heartbeat(path, state, current=None):
     payload={"schema":"ipa-service-health-v1","state":state,"at":int(time.time()),
@@ -92,6 +125,9 @@ def main():
     os.umask(0o077)
     os.environ["LAB_RUNTIME"]="vps"
     root=Path(os.environ.get("IPAZAKE_STATE","/var/lib/ipazake"))
+    mode=credential_mode()
+    if mode=="environment":
+        require_managed_volume(root)
     root.mkdir(parents=True,mode=0o700,exist_ok=True)
     lock=(root/"controller.lock").open("a")
     journal=None
@@ -100,8 +136,7 @@ def main():
     pulse_thread=None
     try:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        credentials=Path(os.environ["CREDENTIALS_DIRECTORY"])/"bot.json"
-        os.environ.update(load_credentials(credentials,systemd=True))
+        os.environ.update(service_credentials(mode))
         owner=owner_id(os.environ["TELEGRAM_OWNER_ID"])
         cap=int(os.environ.get("IPAZAKE_DAILY_TASK_LIMIT","20"))
         if not 1<=cap<=1000:
@@ -120,6 +155,8 @@ def main():
         if not isinstance(workflow,dict) or workflow.get("state")!="active":
             raise QueueError("worker_workflow_unavailable")
         journal=PersistentJournal(root/"state.sqlite3",owner)
+        if mode=="environment":
+            require_managed_journal(journal)
         stop=False
         def stopping(signum,frame):
             nonlocal stop
@@ -130,7 +167,8 @@ def main():
         heartbeat(root/"health.json","starting")
         with local_bot(base/"bin/telegram-bot-api",state_directory=root/"telegram") as bot:
             controller=MultiUserService(bot,github,owner,str(base/"bin/delivery-crypt"),
-                os.environ["TELEGRAM_BOT_TOKEN"],journal,cap,ServerController)
+                os.environ["TELEGRAM_BOT_TOKEN"],journal,cap,ServerController,
+                testflight_enabled=mode=="systemd")
             # Accept queued owner messages from at most the last day; SQLite prevents replay.
             controller.started=time.time()-86400
             event(**configure(bot,owner))

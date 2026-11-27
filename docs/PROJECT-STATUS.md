@@ -1,5 +1,219 @@
 # 项目进展
 
+## 国区会话维护及原生缓存目录修正（2026-11-27，维护候选）
+
+用户已单独授权维护原国区会话。GitHub45917018396成功以原账号/GUID登录，无验证码；密封会话按run/source/摘要/收据和仓库公钥绑定更新APPLE_CN_SESSION_B64。原生只读复用检查45917154187成功，随后保存其最新刷新会话；未下载、授权/撤销电脑或更换模型。旧摘要接口HTTP401仅说明该请求被拒绝，不能单独认定CircleCI失败根因。
+
+上一轮诊断上线45917262453于源码6e619dc72b7d1766d1af1eb6cb04d3553a5e39f5成功。用户重新发送后，CircleCI74及签发45917712478使用相同源码，原生诊断明确account_cache_unavailable，仍未下载。Apple CoreFoundation CFPlatform.c的目录解析优先顺序为CFFIXED_USER_HOME、passwd账号目录、最后HOME；只设置HOME不能确保FileManager使用临时账号缓存。
+
+维护候选在所有私有原生子进程环境同时绑定HOME与CFFIXED_USER_HOME，且覆盖任何继承值，原缓存读取/销毁和账号绑定要求不变。新增真正macOS Foundation回归，在隔离目录读取合成缓存并验证清理；现有模拟原生runner也必须断言相同目录绑定。仅GitHub执行测试，无本地运行、原生源码更改或账户操作。原失败任务73/74不自动重放，成功发布后由用户提交新请求验收。
+
+## 国区真实任务与会话诊断（2026-11-27）
+
+生产切换45915238970已成功，当前运行源码73c62183dc61984869ebaec98349a32ba99331df；用户08:16:32→08:16:33的/status截图确认约1秒回复。该运行分支保持不变，以下诊断改进只在维护分支准备。
+
+用户实际发送红果漫剧6745890963后，CircleCI73成功取得cn角色凭据（GitHub45916424720），在resume-cn阶段失败，未开始下载、解密或上传。cn_session_requires_maintenance只是通用退出错误，不能单独证明会话过期或验证码挑战。随后只读检查[45916808829](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45916808829)验证了保存会话结构与国区绑定，但Apple返回HTTP401；未登录、使用验证码、授权/撤销电脑、下载或更新Secret。需要维护原会话，不能自动重放这次失败任务。
+
+维护候选增加原生退出结果的固定词汇分类及私有缓存目录权限，原始stdout/stderr、账号、路径和链接均不公开；分类仍不能把ambiguous_bad_login说成明确验证码挑战。回归覆盖一次失败后不重试、不调用login/download、清除缓存和脱敏输出。会话替换须获得单独授权，保留原GUID、模型、checkpoint与历史意图；未获授权前不执行登录维护。
+
+## 生产切换及真实消息验收（2026-11-27）
+
+[离线生产切换45913375750](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45913375750)已成功，初次运行源码aaa2278038b7f2d22bed459b647cccb0cba3e93f，脱敏收据artifact15161451437。完整读回29条历史任务、89条updates、14条metadata，2条pending保持held；原Go Club已完成任务、私有文件和确认通知保留。原TF历史邀请按pinned接受/确认记录构造防重tombstone并seal，未重新接受。新Token属于原机器人，旧Token已失效，5个旧派发/目录工作流保持disabled；新webhook和真实cron触发均取得回读，production_cutover:true。
+
+用户随后提供IPAZaKe聊天截图：08:02:33发送/status，08:02:40收到Go Club“已核验，可用/get领取”和原失败任务“任务已结束”。真实入站及回复已确认，但约7秒延迟需优化。当前改为一次读取最新5条已提交状态，避免/status逐项调用完整核对与排队逻辑；外部终态由cron继续核对。新增真实workerd/D1查询预算回归，5条结果应在最多8次D1调用内完成，并隔离他人记录。每次源码升级也必须等该源码自己的cron观测回执，不能借上个版本的旧时间戳放行。
+
+**运行分支upgrade/managed-runtime-v0.2必须与Cloudflare.RUNTIME_SOURCE_SHA一致，不能在入口开启时直接推送。**CircleCI checkout和GitHub凭据签发都引用该分支HEAD。维护从独立upgrade/managed-runtime-maintenance-v0.2准备并验证，先用已验证的原运行包关闭空闲入口且保留旧source/DB/Secrets，再将同一已验证commit推进运行分支，执行Offline managed runtime cutover并等待新source的真实cron。上线后的新收据是最终运行源码依据，不再直接为补文档改动运行HEAD。
+
+旧机之后未保全的变化仍未知；不伪造物理停机或无缺口证明。旧offset/browser原样保留，切换前的消息持久隔离，不重放旧任务。计费入口保持关闭，无本地构建/项目测试或旧机SSH依赖。
+
+## 离线恢复与原机器人 Token 交接（2026-11-26 23:38 UTC）
+
+用户明确旧VPS无法使用，迁移改用保全的加密备份，不再等待SSH恢复；用户选择保留原机器人并更换Token。新Token仅存MANAGED_TELEGRAM_BOT_TOKEN，不覆盖旧工作流的TELEGRAM_BOT_TOKEN。
+
+[离线恢复45912001065](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45912001065)在源码bbf92311d908916834c27555d2df120a3cf4a5b4成功：重新认证并读回同一份378022字节源密文，完整保存29条任务（closed7/delivered20/pending2）、89条updates（unfinished0）、14条metadata，包括offset与version_browser，以及6个Telegram状态文件的索引。原私有回传1条confirmed、未知0，原接受账本仍不存在。恢复清单加密后再解密比对，SHA-256为675f966d71e0dd432a19f6a585d5fef637bc6da0c478a7e02ba74104887448da；artifact15160242814仅包含加密计划和脱敏收据。原加密源仍长期保存在独立13段Secrets，计划可从其重新生成。7项公开合成测试覆盖篡改/账号绑定、未知更新和接受结果保留、Token更换与旧工作流退役边界。
+
+真实Bot API只读身份检查已确认replacement_same_bot_verified:true、old_token_rejected:true；未发送消息，未提交新的Apple任务。5个旧工作流已在确认无运行任务后停用，并由独立GitHub运行重新核对disabled_manually、active_runs0：private-delivery.yml、china-private-delivery.yml、testflight-private-delivery.yml、version-catalog.yml、china-version-catalog.yml。已核对旧VPS实际安装源码b70d0f3730651ebcc03c8d4ca31e9e5d4bd84c51：启动时先要求private-delivery.yml active，再启动本地Bot API与恢复任务；同时停用所有旧派发入口，防止旧机继续提交下载。未撤销共用GitHub派发凭据，未停用新CircleCI签发/验证工作流，未清除历史记录。退役清单见deploy/managed/circleci/legacy-dispatch-retirement.json，启用前仍需新鲜读回。
+
+这是离线恢复准备与凭据更换验证，尚未写入正式D1交接、安装新webhook或启用生产。旧机是否停机仍未证明，恢复清单正确保留source_disabled_verified:false、telegram_isolation_verified:false、permanent_handoff:false。上次快照后旧服务曾恢复，无法保证其后全部变化可取回；缺口必须明确保留，两个pending及未知操作不重放。后续应实现独立的离线交接凭证（新Token/旧工作流隔离、历史数据逐项读回、旧消息隔离和后台调度），不能伪造旧机stopped_at或把有时限快照改成最终冻结证明。TF历史接受 tombstone 仍须按原公开证据重建后才能启用新接受权限。Go Club任务、文件和已确认通知不重复。
+
+## 版本目录、分页与选择下载已接通（2026-11-26）
+
+候选源码5b25f0298ff0e16ddfd10d084fcac0cf3ab632d6已接通 owner-private /versions、目录排队、默认/国区专用元数据凭据、分页按钮与精确版本选择。该源码的[控制端验证45910022331](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45910022331)成功：81项控制端/OIDC/D1/交付集成测试和16项既有入口测试全过；包含默认/CN目录实际签发协议、禁止目录任务访问上传/导出接口、消息确认、翻页与整组列表单次选择、缓存、刷新、独立查询配额、终态核对后队列推进。Python执行接线9项及既有工作机验证在[45909860642](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45909860642)通过。目录原生传输测试10项、age凭据测试11项保持通过。均为 GitHub 合成验证，不是新的真实账号查询或应用下载。
+
+控制器新增关联表记录目录子类型与不可变分页结果，不重建原runtime_jobs或删除已有Go Club任务、文件/通知记录。目录与导出共享串行调度；目录凭据只有登录/保存会话字段，不能访问模型、检查点、上传或解密路径。每日目录查询20次，初次/刷新间隔60秒、续页5秒；新鲜缓存24小时；每页最多10条、最多20页。菜单仅本人私聊，绑定机器人消息编号与6小时期限；选中后整组各页关闭；重复同一选择沿用固定导出请求；不同版本不能借旧列表再提交。通知先记意图，仅确认正确私聊回执后启用按钮；未知回执不自动重发，新命令可以重新打开缓存。
+
+增加runtimeTick与Worker scheduled处理器，核对已知CircleCI终态后推进等待队列。**当前未安装生产定时触发器、未部署本轮候选到正式入口、未setWebhook。**最终启用时仍需安装定时触发器并验证单入口，不能让无人点击/status时的等待队列停住。旧VPS仍被服务商暂停，最终冻结/状态差异/offset/历史浏览器及接受账本交接、旧poller永久停用仍未完成。不得把旧有时限快照作为最终交接凭证，也不得自动重跑Go Club或历史pending。
+
+附带修复 ARM 容器验证的清理竞争：原流程使用 detached --rm，停止返回时卷仍可能被异步删除中的容器引用；现在明确stop并rm本次测试容器，再删除自己的临时卷。GitHub [45910269227](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45910269227)（源码eb5acb39259cb79db959192ab01759088a7b23c6）全部通过，包括ARM状态服务两次启动/鉴权、镜像导入以及两个架构归档验证。没有在当前服务器或VPS上构建、安装测试依赖或执行项目测试。
+
+## 旧 VPS 停服与最新加密快照长期保留（2026-11-26 23:08 UTC）
+
+用户截图显示 KiwiVM 无法再次临时恢复服务（721104），与最新 GitHub SSH 超时一致。旧机最后暂停快照的原 artifact15139574335 会在2026-12-03 17:19:40 UTC到期，早于旧页面显示的12月5日流量重置日。因此已将**同一份378,022字节 age 密文**另存到仓库 Secrets：CIRCLECI_CANARY_45866115288_01 至 _13，以及 _INDEX。通过 GitHub API 在内存中校验固定来源/归档和完整摘要后分段保存；未解密、未创建本地文件、未覆盖早期13段基线备份或 TF 原会话。
+
+[独立读回45908994642](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45908994642)成功；源码2ab7f09a4d0fb87d635ec00b537ad67d2bece624，SHA-256仍为28654b814e6f38c7dddd0fdb79d5d2202aa8915c23db840c9792e6c2ed4b16dd，13段完整重组，readback_verified:true、permanent_handoff:false、apple_operation:false。该流程只读 Secrets，不领取管理令牌、交付身份或账号凭据。原artifact到期不再影响此副本，长期保留依赖仓库和这些Secrets仍存在。
+
+这是旧服务上次有时限暂停时的备份，随后旧服务曾恢复；不能证明恢复后至停服期间没有新状态。不能用它冒充最终冻结快照，也不能因 VPS 暂停就假设旧 poller 永远不会在流量重置后恢复。最终需确认源状态差异和旧入口永久停用，才能激活新日常入口。旧 pending 持续 held；Go Club 完成记录、私有文件和确认通知不重复。
+
+## 版本目录迁移推进（2026-11-26 23:03 UTC）
+
+新增 CircleCI 历史版本元数据执行器，复用已验证的原生运行包与目录分页解析器；按来源、任务、工作机、账号区域和游标绑定结果。查询最多10条版本记录，拒绝游标倒退、异常包文件及会话区域变化。普通账号密码仅传登录子进程；国区仅恢复既有会话，失效即要求维护。目录角色 default_catalog / cn_catalog 仅领取所需账号字段，不领取 FairPlay 模型、检查点、交付密钥或 Drive 凭据；独立 GitHub 签发作业保持最小 Secrets 范围。该执行器尚未接入正式控制端排队与 Telegram 分页按钮，不能据此声称目录全链路完成。
+
+新增 GitHub 合成测试覆盖模型隔离、账号区域变化、会话维护失败、取消清理、异常下载、游标与运行包摘要。[工作机验证45908601584](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45908601584)通过：新增目录10项、凭据加密11项，以及原默认/CN17项、TF6项、上传/执行与归档验证均通过；[控制端45908601586](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45908601586)亦成功。验证源码2315f12aafce9afb7abc1a73d1d961bf3471930b。无当前服务器编译或项目测试。
+
+最新[只读源状态检查45908023150](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45908023150)的公开检查通过，但源检查 SSH 超时（exit255、结果0字节）；尚不能取得最终冻结状态或停用旧轮询。用户后续 KiwiVM 截图明确显示无法再次临时恢复（错误码721104），页面要求等待流量重置或升级；这仍不能视为已完成永久停机交接。此前 Go Club 成功任务和确认通知保持原记录，不重复执行。
+
+## Go Club 真实 CircleCI 任务与私有交付通过（2026-11-26 17:20 UTC）
+
+用户本次提供的美区 Go Club 链接对应 App ID `6739782103`。成功源码 `f3451dd2ba31ac9d9524da4ed7b6ad8f22c1346a`；[GitHub 验收 45866115288](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45866115288)、[默认账号签发 45866462237](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45866462237)、[CircleCI job72](https://app.circleci.com/workflow/aa787787-32bb-4c8f-a9de-5776666cc997/job/ef34d39f-955e-45a9-aee8-a6b60bb4a0ba) 均成功。逻辑任务 `pilot_267d28bb7688af8bbc132595f7009a07`，run `bc58f448-c0fc-438e-936e-46ecd97797dd`。
+
+真实 macOS ARM 工作机完成默认账号登录、下载、解密、完整明文/归档验证、账号资料清理和私有 Drive 上传：**6 个加密镜像、8000 页、73,172,295 字节**。Cloudflare 独立核对 Drive 摘要、大小、名称与仅本人可见权限；机器人私聊链接取得 Telegram 回执，`telegram_notification_confirmed:true`。一次性凭据密文已清除；该凭据包 SHA-256 为 `1f765215b37e3ede8ddab9d2bb3a634c00400d1607771fd94a5e12a6a70cfd79`，不是应用文件摘要。公开产物仅有脱敏证明和加密的源状态快照，没有应用明文、模型、账号缓存或私有下载链接。真实用户文件保留在本人 Drive，未执行示例文件清理。此结果证明完整明文与私有交付，不是安装/运行或其他应用兼容性证明。
+
+验收前实际暂停空闲旧服务并保存一致快照，29 条历史任务完整导入只读验收记录，其中 2 条 pending 保持 held，未重放。快照密文 SHA-256 `28654b814e6f38c7dddd0fdb79d5d2202aa8915c23db840c9792e6c2ed4b16dd`，加密备份及脱敏收据位于该 GitHub 验收的 artifact `15139574335`。执行窗口仅授权本次默认账号/最新版本/精确请求与目标，最长15分钟，工作机有独立截止看门狗；旧机另有20分钟兜底恢复。结束后验收授权已撤销、Cloudflare 恢复 staging 并关闭新导出/Telegram 入口，旧服务已恢复。**没有执行永久 webhook 切换。**
+
+[恢复后只读检查 45867033676](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45867033676) 成功：健康记录新鲜、服务空闲、TF未完任务0、原会话密文匹配、原私有回传1条且未知0；源接受账本仍不存在，未初始化或重新接受历史邀请。
+
+已接通的代码包含 owner-private 链接入口、默认/CN/TF 分流、手动精确版本、幂等提交、工作机凭据领取、完整证明、持久上传、取消与终态确认、跨源码版本的本人历史领取，以及一次性完成通知。三类执行接线与拒绝边界通过 GitHub 合成集成测试；本次真实业务验收仅证明默认账号 Go Club。新阶段仅更新 Python/控制端，复用已验证 job62 的原生包，无项目本地编译/测试，也无每任务原生编译。
+
+首轮 [45864907910](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45864907910) / CircleCI job71 在公共资源预热时退出，尚未进入登录/下载。原生助手要求现有 `LAB_KBSYNC_CHILD=1` 子进程接口，单独预热调用曾遗漏；修复仅向该助手的最小环境设置此标记，未伪装 GitHub 环境或修改原生二进制。测试桩现复现真实门禁，并检查标记不泄漏给其他子进程。原失败记录保留，旧服务在两次验收后均恢复。
+
+剩余迁移：永久冻结状态和历史接受账本交接、完整版本目录/按钮迁移、单一机器人日常入口切换。旧 VPS 仍是日常生产入口；这次有时限验收不代表永久迁移完成。**不得自动重复 Go Club 下载或重发此已确认通知；后续继续工作应推进剩余交接。**
+
+
+## 当前迁移状态（2026-11-26）
+
+自动任务与凭据签发已完成真实云端验证：[控制端/工作机证明 45851572093](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45851572093)，[一次性签发 45851926514](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45851926514)。源码 `07701765cd5b7a011e9d27ae98dfbfb2eec24da8`，CircleCI run `edb6e561-752e-4e0d-b487-c425b37bca3d`。真实 macOS ARM 工作机下载固定公共运行包、领取并解开仅属于本任务的虚构凭据，服务端回读确认密文清除；SHA-256 `5e870ff3be84a7fe3a17bef9a6135be82bcd3d293ee8ba0517556d5670763e01`。没有 Apple 操作、上传或 Telegram 发送。已修复 GitHub App 项目名称误当仓库身份、签发者元数据读取，以及部署传播期间的源码版本绑定问题。同一逻辑任务的内部请求可恢复，外部派发意图只提交一次。
+
+源状态已经加密保全并存入分块 GitHub Secrets：[在线备份 45842375113](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45842375113)，[Secrets 回读 45843176901](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45843176901)。归档 SHA-256 `3ec6f97fc70ca3e1aa187046a5d3f6bd76a23fd34b077af43de3b867eb23bc29`；验证了原虚拟 TF 会话、10 个文件、7 条 closed / 20 条 delivered / 2 条 pending。源历史接受账本不存在，保留这一事实。在线快照 `frozen:false`，不能当作最终冻结交接；两个 pending 不自动重放。
+
+当前公共运行包已升级到成功的 CircleCI job62（源码 `2896fff82275ef791e3703cc17ed9473c77b151a`，workflow `1c28d9d9-f709-4cb4-b9ae-f5f4413208a5`），runtime-pins.json 是当前摘要来源，下面 job60/61 是历史证据。[工作机适配验证 45852931305](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45852931305) 已通过新增的私有交付回调和上传恢复测试，以及默认/CN/TF 原有回归。
+
+私有上传真实闭环已通过：[GitHub 45855018329](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45855018329)、[签发 45855245169](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45855245169)、[CircleCI job68](https://app.circleci.com/workflow/9faf88d4-a820-412d-8d99-b9b022f76c02/job/51afdfd2-3a3a-43c0-9133-faff76471add) 均成功，部署源码 `b1b43141f1ef45c76a2aac1011f6302969ea7d24`。任务 `pilot_06a7bb734c08c9f9e673bf1678d9270c`，run `7c80f489-4749-4926-a6b9-bddd98ab0f48`。真实 macOS 下载 job62 的项目自有 5496 字节 ARM IPA（SHA-256 `85025bd1cfea42339ed38b09e9580e1094b2949153c83c81e66d9b1ad9043e93`），完整 CRC/SHA 校验后上传 Drive。Cloudflare 独立回读摘要、大小、名称和仅本人可见 ACL，确认注册后仅删除该示例文件，回读 404 确认清理。两端回读 `file_upload:true`、`fixture_cleaned:true`、`ciphertext_cleared:true`；凭据密文 SHA-256 `e1e007538b503357af7336e3c13c87a7c7f8d301ad7ed801cf556ba2ceebe83d`。测试文件没有发送到 Telegram；这不是实际 DRM 导出或大文件交付证明。
+
+上传升级包括创建前持久化意图、同一会话断线续传、不可变内容绑定、服务端独立注册和测试清理日志。未知创建不重建；早先验证任务 job65/66/67 的失败记录保留，没有重置或重复它们的逻辑派发。真实 Google Location 带有 `fields` 和 `session_crd`，日志校验现已准确兼容：固定 Google HTTPS 路径、固定字段投影、有限长度的不透明会话参数，仍拒绝重定向/额外查询键。会话凭据只留在私有日志，公开证明不含 URL、参数值、Google token 或邮箱。新增长中文名称预算，保留版本与 Beta 文件标记。该次 GitHub 通过63项控制/OIDC/上传检查、16项旧入口回归、6项部署和6项上传适配检查；[工作机回归 45855018206](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45855018206) 包含17项默认/CN、6项TF、10项age与旧导出/归档校验。
+
+[新源只读核查 45854611541](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45854611541) 成功：健康记录新鲜、观察到服务空闲、TF未完任务0、私有回传1条且未知0、原会话与固定密文匹配、源接受账本依然不存在。这次观察没有停止服务或冻结状态，不能替代切换前的最终快照。
+
+尚未完成：真实任务入口与版本目录/取消闭环、历史状态与接受账本最终导入、冻结交接、费用限制核查、单一机器人入口切换，以及新链接的实际私有交付验收。控制端仍是 staging，真实 Apple 导出未开放；旧 VPS 保持唯一机器人。所有编译和测试均在 GitHub/CircleCI 执行。
+
+以下保留先前阶段的历史记录，后文“最新”仅指当时阶段。
+
+
+## 新运行包独立 ARM 加载与 macOS 适配验证通过（2026-11-26，最新）
+
+[CircleCI job61](https://app.circleci.com/workflow/b1d0deb7-f168-41a5-87f8-d5088f6d9023/job/02c0b8e6-ba26-4b9e-b38f-5c8b155a319d) 与 [GitHub 45839573020](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45839573020) 均成功，消费者源码 `92d8d4fbf9f7f4ec3aac48e0494fcc2f619f8fa3`。独立 ARM 主机实际下载 job60 的 base/CN/TF 三包并回读三份成功的 fetch receipt，核对固定摘要、源码输入、来源和 ABI；执行新的 TF 原生上下文自检，以及实际 macOS 上的13项默认/CN、6项TF虚构任务适配测试（真实 ZIP/age/进程取消）。消费者跳过 iOS 样例编译，断言没有 Swift/TF 构建树，不重新编译项目运行工具。新参数 `runtime_consumer: true` 显式选择该路径，普通推送保持不启动 macOS。
+
+job60 的21项基础 Swift、29项CN Swift、24项TF CTest、Go/Python/Node 与重定位检查均已从公开日志核对。三个新归档与 pins 相符：base `36fe7378fd311a0d0603a31874119113a76c69576150d6804819722189aaf76b`；CN `7233e062ab3a20a3de15c601ed2d0557b46f586224800418ee2183ddce2d77b0`；TF `f4942727f1265c7399bd6cede28bf1404f1f3ea4b0be589526e618f97b8ad7f8`。之前的 job40/42 为历史成功证据，后续消费者使用新 pins。
+
+独立的 [VPS 只读核查 45839765273](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45839765273) 未取得源状态，返回 source_audit_transport_failed；这不证明源服务停机或状态丢失。补充固定类别/退出码诊断后再次核查，不能以旧的 idle 观察替代新交接检查。未触碰原状态、没有安装候选账本、没有切换 Telegram 或开放真实 CircleCI 私密任务。当前执行适配/公共运行包已验证，真实凭据与源状态交接、任务入口和私有交付仍未完成。
+
+
+## 默认/CN/TF 执行适配与新公共运行包（2026-11-26）
+
+[GitHub 45838198217](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45838198217) 通过 13 项默认/CN 适配测试、6 项 TF 测试、10 项实际 age 交接、8 项旧导出与22项归档校验。适配复用现有完整明文报告、逐图像/页数、版本、库存、CRC 与账号资料清理，改用标准 age 加密；登录、下载、解密与加密子进程收到各自最小环境。取消/超时终止整个进程组，最终发布前失败不保留输出。测试使用虚构原生返回与账号资料，实际 ZIP/age/子进程操作，不是实际 Apple 导出成功证明。
+
+CN 独立校验保存会话、国区、GUID、checkpoint 与模型，使用 resume-cn，不伪装 GitHub 标志、不增加密码/OTP或注册流程。TF 单独支持 CircleCI run/worker/source/期限原生门禁，原 GitHub main/首次尝试门禁保留。TF 恢复已验证的原虚拟身份，CircleCI 的拟用凭据类型仅包含任务加密的保存会话和 CN 模型，不包含交付长期私钥；实际会话尚未从 VPS 交接。已有成员路径不申请接受许可；新邀请在未接入持久许可代理时明确停止。
+
+[CircleCI job60](https://app.circleci.com/workflow/cc64895c-dcb1-4e8c-861a-43731544d2f5/job/6ed40d3c-d26c-40b6-9ad6-9c73e2de911a) 已从源码 `f6c9f1c5c96553a7af4e78141a9b8ea68afd682d` 构建三包并通过验证，包含新的 TF 原生上下文自检。三包公共归档已独立下载计算 SHA-256，并更新 runtime-pins.json；共同源码指纹 `fa9a90e514db5e3e83e72669dbcadf4d8e81ee958625410d2cd74dabc549f968`。新的独立 ARM 消费者验证仍需单独记录，不能以这次 producer 成功代替。
+
+[GitHub 45839095118](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45839095118) 通过新增 7 项真实 workerd/D1 历史接受账本测试，连同已有控制/调度/OIDC/lease 共35项与旧入口16项检查。候选账本保持历史 confirmed/intent/unknown，保存许可前先提交意图，过期/重启不重新授权，历史冲突不覆盖；邀请键使用 owner 范围的 HMAC。账本仅为候选模块，没有部署新接口或封存真实历史状态，不能报告交接完成。
+
+生产仍由原 VPS 独占 Telegram 入口。剩余为真实凭据/TF 状态和历史账本交接、控制端实际任务路由、持久私有上传/取消/未知结果回查、费用设置确认与最终入口切换。当前服务器没有编译或执行项目测试。
+
+
+## 真实临时加密交接已验证（2026-11-26，最新）
+
+[GitHub 45834580675](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45834580675) 与 [CircleCI job 59](https://app.circleci.com/workflow/d6244a39-80f3-4f7c-a860-6613f9e3a520/job/a1f2c487-96b5-4ae2-8da7-6b9890f8584b) 均成功，源码 `021d212332810cae3962298ac18a43f208951388`。逻辑任务 `pilot_d32d8ee76ec8e4f32ced07ac249aaf39`，run `d6a6a2d1-91a6-48d4-ac6f-9cb749eb9013`。CircleCI 真实 OIDC 领取任务后生成临时 age 密钥，GitHub 将虚构凭据加密给该任务；控制端只存放密文，绑定 job/run/worker/source/recipient/nonce/期限，拒绝替换请求或密文。CircleCI 解密并检查完整上下文后回报完成。两端独立回读密文 SHA-256 均为 `94b94afd17fc80fc04cce453bcf92026263a77021422449d4be806b8594ddcbd`，D1 完成记录与密文清除标记均确认。bundle SHA-256 为 `47200f063a246ef10841808c41a1243612df9682ac5fe3aacbc22baa35ea6c56`。
+
+CI 通过 6 项真实 workerd 路由/D1/OIDC 集成、6 项不透明密文状态测试、8 项调度恢复、8 项 OIDC 和 6 项部署检查，保留旧入口回归；独立 [age 契约 45834580742](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45834580742) 再次通过 10 项实际加密测试。公有产物和日志仅含脱敏证明，不保留临时私钥、明文或密文凭据包。完成时清除 D1 密文；过期读取会拒绝并清除密文，不能将其描述为无人访问时也会准时执行的定时清理。
+
+此入口严格限定 `synthetic`，尚未启用真实 Apple 凭据交接或三类实际导出任务，生产切换仍未完成。下一步需要 CircleCI 原生适配现有 GitHub 专用导出/TF 会话与加密门禁，保持完整明文证明，不能通过伪装 `GITHUB_ACTIONS` 绕过。随后还需历史账本/会话交接、持久上传与取消/未知结果闭环、真实私有交付和单一机器人入口切换。VPS 仍是唯一线上机器人；没有 Apple 操作、重新接受历史邀请或重复发送历史文件。
+
+后续普通推送默认不启动 macOS 样例；仅显式设置 `validate_arm64_archive: true` 或 `build_native_runtime: true` 才选择 ARM 工作流。已有运行期构建/消费者 marker 仅在显式选择 ARM 后生效。Linux 签名探针仍独立选择，不能启动 macOS。此门禁减少无关构建消耗，不证明账户当前配额、账单或自动充值设置已核实。
+
+
+## 真实云端签名调度闭环已验证（2026-11-26）
+
+[GitHub 45833846829](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45833846829) 在源码 `61e9bfa2ffd63814799b00943c537e369c4d9bf4` 通过 workerd/D1、OIDC 与旧入口回归，并部署独立控制探针。Cloudflare Worker 使用私有 CircleCI 调度令牌提交一次任务，CircleCI [job 57](https://app.circleci.com/workflow/864a2051-adc9-4a64-be61-5b4bb82593e7/job/417fd373-ae51-41ba-a781-75cbed05dcf2) 用真实 V3 OIDC 身份领取并完成回调；控制端从 CircleCI API 确认同源码 run `0e8fa45d-81b7-4ac2-b44e-3ad74a25def9` 成功结束，D1 持久完成记录已回读。逻辑任务 `pilot_5b2dfa4b32bc4414f788e6558eb69c55`，公共 bundle SHA-256 `fc2375da1dc6b586b74dc6a5fc06dbebadce93f22bc1a235bded367b48da1581`。
+
+修复了 Workers 不支持 `redirect: "error"` 导致请求构造失败的问题：出站请求使用 `manual`，严格拒绝非预期 HTTP 状态，不跟随重定向；workerd 模拟接口先实际构造 Request，JWKS 重定向也有拒绝检查。早期无凭据空探针的不明确提交记录保留原始 unknown 意图，仅为该固定任务增加审计解决记录，未重置或重复提交旧任务。
+
+[GitHub 45833797131](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45833797131) 通过 10 项实际 age 加密测试：一次性私钥、任务/run/worker/source/nonce/期限绑定、篡改/错误密钥/额外凭据拒绝、最小子进程环境。后续 opaque lease 集成仍只允许 synthetic 配置，真实跨云加密交接的通过证据需单独记录。
+
+现有 Google 私有绑定、D1 及关闭的 Telegram/链接开关保持不变；VPS 仍是唯一生产机器人。本检查点没有 Apple 操作、IPA 上传、消息发送或生产切换。仍需完成三类实际任务的 CircleCI 适配、真实凭据/加密会话与 TF 历史账本交接、取消/未知结果闭环、私有 Drive 交付、费用门禁及单一入口交接。当前服务器未编译或执行项目测试。
+
+
+## 三包构建与独立加载已验证（2026-11-26，最新）
+
+同源码公共构建 [CircleCI job 40](https://app.circleci.com/workflow/ca2fe102-a78d-4284-a20f-321d5ccdfa1e/job/1e3c2e16-037e-47cd-8166-3096fc4cb817) 已成功，源码 `fa258c072f246011079affe7cecd369422ecef0d`，macOS 26.3.1 / ARM64 / Xcode 26.5。base 21 项 Swift、CN 29 项 Swift、TF 24 项 CTest，以及 Go/Python/Node 检查、三包库存/摘要与迁移后运行验证通过。base/CN 各 82 个文件，TF 12 个文件；版本与归档摘要已固定在 `deploy/managed/circleci/runtime-pins.json`。此前失败的部分产物不是这些已固定的成功包。
+
+独立全新 CircleCI 机器上的 [job 42](https://app.circleci.com/workflow/e7d74048-1f20-4aa3-92c8-8ee2bad6bfb2/job/acbd80db-9744-4fde-b097-f103bc4a0309) 也成功，验证源码 `00ede25676b1e98aae9cc99b5660eb170295c55e`。未编译本项目，实际下载三包，核对成功 job/workflow/run、项目与源码、原生输入 Git 对象、固定 SHA-256、包内逐文件摘要及当前主机 ABI，再运行默认/CN CLI 与 TF 自检；三份 consumer JSON 已从 CircleCI 公开产物回读核对。
+
+加载器拒绝失败/未结束/来源不符的 producer、原生输入变更、错误包类型、非许可下载地址、摘要不符或依赖版本变化。文档及独立消费者修改不强制重新编译；原生输入变化必须更新经过验证的 producer/pins。加载器对公开 CircleCI 仅作无令牌读取，运行前保留 CircleCI/ARM 主机门禁，不伪装 GitHub 环境。[GitHub run 45825545108](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45825545108) 通过 13 项包测试、8 项加载器测试和所有相关 shell 语法检查。
+
+CircleCI API/真实 OIDC 身份及 D1 8 项恢复验证见下方历史检查点。这些底座已验证，**生产迁移尚未完成**：任务入口、凭据/加密会话与 TF 历史账本交接、取消和未知结果闭环、真实私有 Drive 上传与端到端交付、费用门禁及单一机器人入口切换仍需完成。没有切换线上机器人、操作新的 Apple 邀请或重复历史文件发送。当前服务器没有执行本项目编译或测试。
+
+
+## CircleCI 接入与持久化调度候选（2026-11-26，最新）
+
+用户已配置 `CIRCLECI_API_TOKEN`，无需再次索要。令牌在 GitHub 密钥步骤内认证通过，账号与既有触发者一致，可读取固定项目/定义并提交任务。使用 API v3 创建 run；创建后查询接口可能短暂返回 404，只能重读同一 ID，绝不因此重复 POST。[完整调度与真实 OIDC 验证 45820517834](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45820517834)通过，源码 `cd3964da45324b59bf1f8d56a5a02a1c9bf5d649`。
+
+真实 CircleCI run `a9e78112-ddff-41b3-aeb3-c1bd9a938c0f`、[job 33](https://app.circleci.com/workflow/91165577-39cf-4158-a323-809d36e54042/job/23f40104-d13f-4ef7-bd11-ad3707d8ad9a)通过 CircleCI OIDC V3 签名、公钥、issuer/audience、时效、账号、项目、配置/检出仓库及分支、definition/run/job 和非 SSH 重跑检查。公钥地址来自该 issuer 的 discovery，为 `/.well-known/jwks-pub.json`。不保存或输出原始 JWT；当前任务无需另建 context 即可取得 V3 token。11 项 Python 调度测试和 7 项合成签名测试通过。此证明不等于 Worker 已接入这些身份检查或已获得生产凭据。
+
+新增 `deploy/managed/circleci/dispatch.mjs` 和独立迁移 `migrations/0001_dispatch.sql`，目前仅供合成任务，尚未接入实际机器人或应用到远程 D1。提交前持久化 intent，绑定 owner/job/request/source/run；全局串行，已有链接/取消/重复任务拒绝提交，未知结果不超时重置。POST/GET 限时 15 秒。只有来源和成功状态核对一致的 readback 才能释放下一任务。[D1 验证 45822528880](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45822528880)在实际本地 workerd/D1 上通过 8 个场景，覆盖并发、重启、意图或回执丢失、超时、防重提及错误 readback；CircleCI 传输为合成替身，不是真实云端 D1→CircleCI 提交证据。
+
+公共运行包升级至 `circleci-native-runtime-v2`，区分 base/cn/testflight，并绑定源码、ARM64、工具链、TF 依赖版本和逐文件摘要。源码 `230af2f3cc169652b8c09e5b034526c1e5f1d2ff` 的 job 35 已通过 base 的 21 项 Swift 和 CN 的 29 项 Swift 测试、两包打包及隐藏原目录后的 CLI 运行；整个 job 因后续 TF Homebrew 安装失败而失败，这些产物不能当作成功生产包获取。13 项包校验测试通过。
+
+TF 独立 ARM 构建已通过：[CircleCI job 39](https://app.circleci.com/workflow/39ffd3f2-5f09-491d-8fa0-aaf8913ca302/job/31d27271-8022-4fef-a3a8-9dd4d5e29d77)，源码 `2df098277cb266a5c5456c3fdd6b2e65cff7d38b`。显式更新 Homebrew 后依赖安装成功，24 项 CTest、打包校验和隐藏原构建目录后的三项 CLI 自检全部通过。schema v2 产物 12 个文件，归档 SHA-256 `a20265d58a46d2922ebadc36af6dfcc3006eba0950fc9ab63c05b6ad17863d56`，源码指纹 `f8c60a1b44f12ebe692b5baae34ad4e93fb34f9adad9f97481ab244231f01326`。已回读公开 receipt 核对来源和依赖。它仍依赖记录的 Homebrew ABI，并不证明干净机器无需依赖即可运行。三包同一源码的完整成功任务正在补做。
+
+剩余：三包同源码成功来源证明、任务端受信运行包获取、凭据与加密会话交接、TF 接受/取消/未知结果的完整持久化、私有 Drive 上传与回执、费用上限以及单一机器人入口切换。原 VPS 继续承担生产；没有切换 webhook、执行新的 Apple 操作或重复历史邀请/文件发送。所有编译、项目测试和模拟 D1 执行均只在 GitHub/CircleCI，当前服务器仅做 GitHub/API 协调。
+
+
+
+## Latest direction: owner-only, on-demand CircleCI (2026-11-26)
+
+The owner explicitly selected CircleCI for personal link-triggered use; 24-hour worker availability is not a requirement. This supersedes earlier hosting comparisons that treated an always-on worker as necessary. Target: Telegram webhook → Cloudflare Worker/D1 durable state → bounded CircleCI macOS worker → private Drive link. Keep App Store default/CN, available historical versions and owner-only TestFlight in migration scope.
+
+
+### Verified public ARM producer — 2026-11-26
+
+CircleCI workflow [ec99aa78-a31d-4cff-983b-e0fc4abac4c0, job 17](https://app.circleci.com/workflow/ec99aa78-a31d-4cff-983b-e0fc4abac4c0/job/1145ceb4-77f3-42d7-8ef4-8502428c2290) succeeded at source `b3ed18c5f7850d223e030a8ee84b75930f2f3700`. Actual host: macOS 26.3.1 ARM64, Xcode 26.5 build 17F42, Swift 6.3.2. Go/Python/Node checks, 21 selected Swift tests, allowlist/digest verification and relocated CLI execution passed. The initial job 16 failed because the image lacked Go; the successful source installs the bootstrap toolchain inside CircleCI.
+
+The public archive has 53 files; SHA-256 `7f3ffb80d5e2f20018b403d24533672e33e74238dd62cfee5cdbe6c3694b2c2c`, source fingerprint `b78dc6c819bff0735398f01e0533c10a465e0956d5b4374fde5180fc2fc602e3`. CircleCI artifacts list both `public-arm64-native-runtime/native-runtime.tar.gz` and `build-receipt.json`; the latter was read back and matched the source/workflow/job/toolchain and 53-file inventory. No independent consumer download/ABI execution or private account operation is claimed.
+
+GitHub [bundle contract run 45816912649](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45816912649) passed 9 focused tests and shell syntax checks; [managed runtime contracts 45816922963](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45816922963) passed. Compilation and project tests ran only in CI.
+
+
+The existing GitHub App integration already triggers CircleCI from this branch. The new public ARM64 producer is gated by the boolean pipeline parameter `build_native_runtime` or an explicit `[circleci-runtime-build]` commit marker. Ordinary pushes still run the existing owned-sample check, but do not rebuild the native runtime. The producer receives no account secrets and emits only public binaries/resources/licenses with source, architecture, CircleCI workflow/job and toolchain provenance. Relocation and fixture checks must pass before reuse. CircleCI packages use a separate schema; existing GitHub Intel producer guards and production fingerprints are preserved.
+
+This is a staged implementation, not a production cutover. Public artifact verification is not Apple acquisition/decryption evidence. CN/TF runtime variants, authenticated worker claims, durable acceptance/upload/cancellation handling, source-bound runtime fetching, bounded credits and actual owner-private delivery remain necessary. The CircleCI API token/account connection has since been verified; see the latest checkpoint above. Do not place tokens in chat or pipeline parameters. Existing VPS polling and all historical state remain in place until a separately verified handover; never activate a webhook concurrently with that poller.
+
+
+## 当前状态（2026-11-26）
+
+- **公开发行**为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。11 月 9 日刷新了公开附件，源码以 `BUILDINFO.json` 为准。国区历史版本属于之后的线上部署。详见[发布说明](RELEASES.md)。
+- **线上控制器**最近一次成功部署为 [42727462163](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42727462163)。11 月 25 日的[只读检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45638716965)记录服务健康、当时没有活动任务，仍采用 VPS 轮询。当天的[加密备份](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45637494802)包含控制器、Telegram 状态、TestFlight 会话密文和回执库；检查时标准路径中缺少可核验的 TestFlight 接受记录。
+- **v0.2** 仍是[草稿 PR](https://github.com/zwthys-cyber/ipa-decrypt-lab/pull/1)。最新[托管运行时验证](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45808213138)通过 ARM64 镜像构建、独立导入、持久卷预检、状态服务重启，以及双架构合成 ZIP64 全量读取。Drive 上传校验新增了媒体类型改标回归，仍核对大小、SHA-256、归属与权限。
+- **私有交付试验**完成了项目自有 ARM64 样例的 Drive 存取和[一次 Telegram 私聊链接发送](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45644694693)，接收人确认可打开。生产 webhook 切换和真实 10 GB 网盘传输仍待验证。详见[零费用试验记录](ZERO-COST.md)。
+- **主仓库 CircleCI** 的[首跑](https://app.circleci.com/workflow/7fcc4b73-7caa-4de2-8f16-763288eb34e2)通过 84 项测试，三个 Smarter Testing 套件均通过 Doctor。[CircleCI M4 Pro](https://app.circleci.com/workflow/40131029-8872-4661-8351-f1b0fd0034ba/job/c35d0d9a-2113-4b8a-b3fe-07db03f99967) 另通过了项目自有 iOS 样例的构建和归档校验。指定 `cimg/base:stable` 当前为 Linux amd64，glibc 2.31；workerd 集成仍由 GitHub Actions 验证。
+
+## 迁移来源审计与历史恢复候选（2026-11-26）
+
+[源审计 45811165425](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45811165425) 在 8 项公共测试通过后，经固定主机指纹和 IPv4 只读检查 VPS。心跳新鲜、当时空闲；TF 任务共 1 条、未完成 0 条；会话密文与原推广摘要一致；接受库及扫描范围内旧候选均不存在；原私有发送回执 1 条、未知发送 0 条。此轮没有停止服务、调用 Apple/Telegram、初始化或修改源记录库。Linux 运行器先前连接超时，Intel macOS 出口最终成功。
+
+原接受意图 Git blob 与首次提交一致；59 次保留研究运行中只有原作业出现接受步骤。原接受作业失败与后续只读成员确认成功分别核实，不能将失败记录改写成成功。[恢复候选 45812495918](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45812495918) 源码 `00dca9f` 通过 6 项公共测试、真实历史日志及意图包来源校验，生成带来源表的单条已确认历史记录库，并验证加密后的解密回读。只保留一天的密文、闭合收据和摘要；`production_installed=false`，安装前仍需重新核对完整源状态。
+
+已知历史来源现已可核验，恢复候选已经产出；没有将空库或未校验的初始化当作迁移完成。生产目标仍未落实：本轮官方资料复核发现 Fly.io 新 Free plan 用尽额度后自动转按量付费，Cloudflare Containers 需要付费计划；其他已查候选也未满足当前全部条件。详见[迁移运行环境与来源证据](MIGRATION-READINESS.md)。完整切换尚未执行。
+
+## 迁移源快照预检（2026-11-26）
+
+源码 [`82a7d4c`](https://github.com/zwthys-cyber/ipa-decrypt-lab/commit/82a7d4c2c119ade3f4780bd4e00868881be98cc6) 为离线迁移工具增加 `--inspect-source`：无需准备目标目录，就能分别报告控制器与 TestFlight 状态快照的结构有效性。输出仅有固定 schema 和三个布尔值；缺失接受记录库时失败退出，不创建替代库。三目录比对同样加强了接受表字段、邀请主键、状态及未完成 Telegram 更新的检查。
+
+[托管运行时验证 45808213138](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45808213138) 已成功：amd64/ARM64 各通过 18 项 managed 测试，其中 9 项为迁移专项，覆盖错误库结构、源数据只读、脱敏输出、退出码、未完成更新及未知接受结果在复制后仍拒绝重试。workerd/D1、双架构 10 GB 合成归档、ARM64 镜像/持久卷/重启/独立导入均通过。同提交的 [push 原生检查 45808202663](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45808202663) 在 Linux、macOS Intel 和 Apple silicon 三平台通过。
+
+此轮仅使用 GitHub API 修改源码、由 GitHub Actions 编译测试，没有在编辑服务器执行项目测试，也没有调用 Apple、读取生产私有状态、创建托管服务或发送 Telegram 消息。预检不能证明接受历史的来源或完整性；11 月 25 日发现的缺失记录库仍需核对来源。符合零费用及无 VPS 要求的生产运行环境、兼容且获授权的处理链路、生产切换和真实 10 GB 网盘传输仍未完成。操作方式见[迁移说明](MANAGED-RUNTIME.md#offline-source-snapshot-inspection)。
+
+以下记录以原验证日期为准。
+
 ## 国区历史版本已接入生产（2026-11-10）
 
 `/versions 国区完整链接` 可查询、翻页并点选历史版本；`/version 国区完整链接 版本号或历史ID` 固定国区账号下载。国区/外区缓存、查询请求、按钮、恢复和交付收据均独立绑定。纯数字ID仍默认外区；没有自动跨区或最新版回退。
@@ -47,7 +261,7 @@ TF 文件名现包含英文 `Beta`，例如 `CapyPlayer_Beta_1.1.7.ipa`；只改
 
 ## 2026-11-09 按链接选择中国区或原外区账号（历史阶段）
 
-用户要求按 App Store 链接识别地区。main 已实现 `/cn/` 自动选择独立中国区最新版工作流，其他地区链接和纯数字 App ID 保留原外区账号；该阶段国区历史请求被拒绝；11月10日已接入，见本页开头，始终不跨账号回退。编号、固定工作流、进度与回执绑定账号，SQLite 重启恢复、取消、取文件及白名单配额保持隔离。普通国区任务不恢复模型、不申请电脑授权、不接收验证码；会话失效转管理员维护。
+用户要求按 App Store 链接识别地区。main 已实现 `/cn/` 自动选择独立中国区最新版工作流，其他地区链接和纯数字 App ID 保留原外区账号；该阶段国区历史请求被拒绝；11月10日已接入，见本页的 11 月 10 日部署记录，始终不跨账号回退。编号、固定工作流、进度与回执绑定账号，SQLite 重启恢复、取消、取文件及白名单配额保持隔离。普通国区任务不恢复模型、不申请电脑授权、不接收验证码；会话失效转管理员维护。
 
 [链接与隔离回归 42564779892](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42564779892) 通过 480 项主 Python（1 跳过）、68 项隔离 Python 与 5 项 Node 检查；[主分支复核 42564839403](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42564839403) 也通过。[双 Intel 运行包 42564839454](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42564839454) 已成功，包含本轮公共导出流程复用及账号回执绑定。国区独立客户端、真实导出和 VPS 上线分别验证，后续完成记录单列，不把合成检查当作真实 Telegram 收发。
 

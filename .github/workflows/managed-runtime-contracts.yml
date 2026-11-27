@@ -1,0 +1,482 @@
+name: Managed runtime contracts
+on:
+  pull_request:
+    paths:
+      - 'tools/telegram_daemon.py'
+      - 'tools/multi_user.py'
+      - 'tests/test_managed_runtime.py'
+      - 'tests/test_managed_state_transport.py'
+      - 'tools/tf_state_http.py'
+      - 'tools/managed_migration.py'
+      - 'tools/managed_volume_preflight.py'
+      - 'tests/test_managed_migration.py'
+      - 'tools/testflight_state.py'
+      - '.github/ops/tf_task*.py'
+      - '.github/workflows/testflight-private-delivery.yml'
+      - 'deploy/managed/**'
+      - '.github/workflows/managed-runtime-contracts.yml'
+  workflow_dispatch:
+    inputs:
+      build_images:
+        description: Optional container image build; requires the existing public Bot API cache
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  synthetic:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify native architecture and run managed runtime tests
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          test "$(uname -m)" = "$EXPECTED_ARCH"
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends python3-pil
+          /usr/bin/python3 -m unittest discover -s tests -p 'test_managed*.py' -v
+          /usr/bin/python3 -m unittest discover -s .github/ops -p 'test_tf_task*.py' -v
+          node --test deploy/managed/cloudflare/worker.test.mjs deploy/managed/free-pilot/worker.test.mjs deploy/managed/free-pilot/private-link.test.mjs deploy/managed/free-pilot/drive-auth.test.mjs deploy/managed/free-pilot/drive-smoke.test.mjs
+          /usr/bin/python3 deploy/managed/free-pilot/test_sql.py -v
+          /usr/bin/python3 deploy/managed/free-pilot/test_link_sql.py -v
+          /usr/bin/python3 deploy/managed/free-pilot/test_private_upload.py -v
+          /usr/bin/python3 deploy/managed/free-pilot/test_zip_preflight.py -v
+          /usr/bin/python3 deploy/managed/free-pilot/test_archive_verify.py -v
+          /usr/bin/python3 deploy/managed/free-pilot/test_private_cleanup.py -v
+  arm64_delivery_helper:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: FiloSottile/age
+          ref: b74dce4cdbe35b5e5f66c06d9612b72f89028758
+          path: native-source/age
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.0'
+          cache-dependency-path: native-source/age/go.sum
+      - name: Verify and package native ARM64 delivery helper
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = aarch64
+          test "$(go env GOARCH)" = arm64
+          mkdir -p native-source/age/cmd/lab-delivery-crypt arm64-delivery
+          cp tools/delivery_crypto.go native-source/age/cmd/lab-delivery-crypt/main.go
+          cp tests/delivery_crypto_test.go native-source/age/cmd/lab-delivery-crypt/main_test.go
+          (
+            cd native-source/age
+            go test -p 2 -timeout 300s ./cmd/lab-delivery-crypt
+            CGO_ENABLED=0 go build -p 2 -trimpath -o ../../arm64-delivery/delivery-crypt ./cmd/lab-delivery-crypt
+            go list -deps -f '{{with .Module}}{{.Path}}{{"\t"}}{{.Dir}}{{end}}' ./cmd/lab-delivery-crypt |
+              sort -u |
+              while IFS=$'\t' read -r module directory; do
+                if [ -z "$module" ]; then continue; fi
+                destination="../../arm64-delivery/licenses/$module"
+                mkdir -p "$destination"
+                for notice in LICENSE LICENSE.txt COPYING NOTICE; do
+                  if [ -f "$directory/$notice" ]; then cp "$directory/$notice" "$destination/"; fi
+                done
+              done
+            cp "$(go env GOROOT)/LICENSE" ../../arm64-delivery/licenses/Go-LICENSE
+          )
+          cd arm64-delivery
+          LC_ALL=C readelf -h delivery-crypt | grep -E 'Machine:[[:space:]]+AArch64'
+          printf 'source_commit=%s\narchitecture=arm64\n' "$GITHUB_SHA" > BUILDINFO
+          { sha256sum delivery-crypt BUILDINFO; find licenses -type f -print0 | sort -z | xargs -0 sha256sum; } > SHA256SUMS
+          sha256sum -c SHA256SUMS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: arm64-delivery-helper-${{ github.sha }}
+          path: arm64-delivery/
+          retention-days: 7
+          if-no-files-found: error
+  workerd:
+    needs: synthetic
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      CLOUDFLARE_CF_FETCH_ENABLED: 'false'
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install pinned local simulator only
+        working-directory: deploy/managed/free-pilot
+        run: npm install --no-save --package-lock=false --no-audit --no-fund miniflare@4.20260730.0
+      - name: Verify actual local workerd D1 bindings
+        working-directory: deploy/managed/free-pilot
+        run: node --test workerd.integration.mjs
+  pilot_bundle:
+    needs: [synthetic, workerd]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install pinned public bundler only
+        working-directory: deploy/managed/free-pilot
+        run: npm install --no-save --package-lock=false --no-audit --no-fund esbuild@0.28.2
+      - name: Package a disabled-by-default browser deployment candidate
+        shell: bash
+        env:
+          SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          root=deploy/managed/free-pilot
+          mkdir -p pilot-dist/migrations
+          "$root/node_modules/.bin/esbuild" "$root/worker.mjs" --bundle --platform=browser --format=esm --target=es2022 --outfile=pilot-dist/worker.mjs
+          cp "$root"/migrations/000[1-4]_*.sql pilot-dist/migrations/
+          cp "$root/wrangler.example.json" "$root/private_upload.py" "$root/private_cleanup.py" "$root/zip_preflight.py" "$root/archive_verify.py" "$root/DEPLOY.zh-CN.md" pilot-dist/
+          cat pilot-dist/migrations/000[1-4]_*.sql > pilot-dist/schema-fresh.sql
+          printf 'source_head=%s\nchecked_out_commit=%s\n' "$SOURCE_HEAD" "$(git rev-parse HEAD)" > pilot-dist/BUILDINFO
+          node --check pilot-dist/worker.mjs
+          node --input-type=module - <<'JS'
+          import assert from "node:assert/strict";
+          import worker from "./pilot-dist/worker.mjs";
+          assert.equal((await worker.fetch(new Request("https://pilot.example.invalid/telegram",{method:"POST"}),{})).status,503);
+          assert.equal((await worker.fetch(new Request("https://pilot.example.invalid/telegram"),{})).status,404);
+          JS
+          python3 - <<'PY'
+          import json,sqlite3
+          from pathlib import Path
+          root=Path("pilot-dist")
+          config=json.loads((root/"wrangler.example.json").read_text())
+          assert config["workers_dev"] is False and config["preview_urls"] is False
+          assert config["vars"]=={"PILOT_ENABLED":"0","PILOT_LINK_ENABLED":"0"}
+          assert config["d1_databases"][0]["database_id"]=="REPLACE_WITH_ISOLATED_FREE_D1_ID"
+          db=sqlite3.connect(":memory:")
+          db.execute("PRAGMA foreign_keys=ON")
+          db.executescript((root/"schema-fresh.sql").read_text())
+          assert "retired_at" in {r[1] for r in db.execute("PRAGMA table_info(pilot_links)")}
+          assert db.execute("PRAGMA foreign_key_check").fetchall()==[]
+          db.close()
+          PY
+          (cd pilot-dist && sha256sum worker.mjs schema-fresh.sql BUILDINFO DEPLOY.zh-CN.md wrangler.example.json private_upload.py private_cleanup.py zip_preflight.py archive_verify.py migrations/*.sql > SHA256SUMS)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: free-pilot-deployment-${{ github.sha }}
+          path: pilot-dist/
+          retention-days: 7
+          if-no-files-found: error
+  linux_archive_bundle:
+    needs: synthetic
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Confirm Linux architecture and run local synthetic contracts
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          set -eu
+          test "$(uname -s)" = Linux
+          test "$(uname -m)" = "$EXPECTED_ARCH"
+          python3 deploy/managed/free-pilot/test_archive_verify.py -v
+          python3 deploy/managed/free-pilot/test_private_upload.py -v
+      - name: Full-read exact 10 GB synthetic ZIP64 contract
+        run: timeout 240s python3 deploy/managed/free-pilot/test_archive_10gb.py
+      - name: Build standalone Linux verification and operator upload tools
+        shell: bash
+        env:
+          SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          root=deploy/managed/free-pilot
+          mkdir -p linux-archive-dist "$RUNNER_TEMP/archive-src" "$RUNNER_TEMP/archive-smoke" "$RUNNER_TEMP/upload-src"
+          cp "$root/archive_verify.py" "$RUNNER_TEMP/archive-src/__main__.py"
+          cp "$root/zip_preflight.py" "$RUNNER_TEMP/archive-src/"
+          python3 -m zipapp "$RUNNER_TEMP/archive-src" -o linux-archive-dist/archive-verify.pyz
+          cp "$root/private_upload.py" "$root/archive_verify.py" "$root/zip_preflight.py" "$RUNNER_TEMP/upload-src/"
+          # zipapp -m calls main() without propagating its return value.
+          # Preserve the operator tool's fail-closed exit status in the executable.
+          printf 'from private_upload import main\nraise SystemExit(main())\n' > "$RUNNER_TEMP/upload-src/__main__.py"
+          python3 -m zipapp "$RUNNER_TEMP/upload-src" -o linux-archive-dist/private-upload.pyz
+          cp "$root/LINUX-ARCHIVE.zh-CN.md" linux-archive-dist/README.md
+          printf 'source_head=%s\nchecked_out_commit=%s\n' "$SOURCE_HEAD" "$(git rev-parse HEAD)" > linux-archive-dist/BUILDINFO
+          printf 'validated_host=%s\npython_version=%s\n' "$(uname -m)" "$(python3 --version)" >> linux-archive-dist/BUILDINFO
+          cp linux-archive-dist/*.pyz "$RUNNER_TEMP/archive-smoke/"
+          cp "$root/test_private_upload.py" "$RUNNER_TEMP/archive-smoke/"
+          cd "$RUNNER_TEMP/archive-smoke"
+          python3 - <<'PY'
+          import hashlib, json, os, subprocess, sys, zipfile
+          with zipfile.ZipFile("Synthetic.ipa","w") as z:
+              z.writestr("Payload/Synthetic.app/Info.plist", b"synthetic layout only")
+              z.writestr("Payload/Synthetic.app/resource.bin", b"test")
+          os.chmod("Synthetic.ipa",0o600)
+          digest=hashlib.sha256(open("Synthetic.ipa","rb").read()).hexdigest()
+          args=[sys.executable,"archive-verify.pyz","Synthetic.ipa","--confirm-authorized-file","--expected-sha256",digest]
+          result=json.loads(subprocess.check_output(args))
+          assert result["all_member_crc_verified"] is True and result["sha256"]==digest
+          assert result["ipa_layout_present"] and result["expected_sha256_matched"]
+          assert result["authenticity_verified"] is False and result["drm_status_verified"] is False
+          args[-1]="0"*64
+          assert subprocess.run(args,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==2
+          print("relocated_archive_tool_verified")
+          # Real CLI must refuse production uploads on Actions. No real credentials
+          # or real HTTP transport are used by the synthetic tests.
+          assert os.environ.get("GITHUB_ACTIONS")=="true"
+          args=[sys.executable,"private-upload.pyz","--file","Synthetic.ipa","--job","pilot_"+"a"*32,
+                "--journal","unused","--confirm-authorized-file","--confirm-free-account"]
+          result=subprocess.run(args,capture_output=True,text=True)
+          assert result.returncode==2 and result.stderr.strip()=="operator_only_no_live_ci_upload"
+          assert not os.path.exists("unused")
+          print("packaged_upload_ci_guard_verified")
+          PY
+          PYTHONPATH="$PWD/private-upload.pyz" python3 test_private_upload.py -v
+          cd "$GITHUB_WORKSPACE/linux-archive-dist"
+          sha256sum archive-verify.pyz private-upload.pyz README.md BUILDINFO > SHA256SUMS
+          sha256sum -c SHA256SUMS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: linux-archive-tools-${{ matrix.arch }}-${{ github.sha }}
+          path: linux-archive-dist/
+          retention-days: 7
+          if-no-files-found: error
+  arm64_images:
+    if: github.event_name == 'pull_request' || inputs.build_images
+    needs: [synthetic, arm64_delivery_helper]
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    outputs:
+      artifact_id: ${{ steps.upload_images.outputs.artifact-id }}
+      sums_sha256: ${{ steps.package_images.outputs.sums_sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: arm64-delivery-helper-${{ github.sha }}
+          path: arm64-delivery
+      - name: Verify the matching native ARM64 helper
+        run: |
+          test "$(uname -m)" = aarch64
+          cd arm64-delivery
+          sha256sum -c SHA256SUMS
+          grep -Fx "source_commit=$GITHUB_SHA" BUILDINFO
+          grep -Fx "architecture=arm64" BUILDINFO
+          LC_ALL=C readelf -h delivery-crypt | grep -E 'Machine:[[:space:]]+AArch64'
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        id: arm64_bot_api
+        with:
+          path: arm64-bot-api
+          key: telegram-bot-api-ubuntu24-arm64-e3e9dd8e5b3d7ab-v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        if: steps.arm64_bot_api.outputs.cache-hit != 'true'
+        with:
+          repository: tdlib/telegram-bot-api
+          ref: e3e9dd8e5b3d7ab8537cd5a10dc31d5ffa8f82d1
+          path: native-source/telegram-bot-api
+          submodules: recursive
+          persist-credentials: false
+      - name: Compile the pinned public Telegram Local Bot API
+        if: steps.arm64_bot_api.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gperf libssl-dev zlib1g-dev cmake ninja-build
+          source=native-source/telegram-bot-api
+          cmake -S "$source" -B build-arm64-bot-api -G Ninja -DCMAKE_BUILD_TYPE=Release -DTD_ENABLE_JNI=OFF
+          cmake --build build-arm64-bot-api --target telegram-bot-api --parallel 2
+          install -d arm64-bot-api
+          install -m 0755 build-arm64-bot-api/telegram-bot-api arm64-bot-api/
+          cp "$source/LICENSE_1_0.txt" arm64-bot-api/Telegram-Bot-API-LICENSE.txt
+          if [ -f "$source/td/LICENSE_1_0.txt" ]; then cp "$source/td/LICENSE_1_0.txt" arm64-bot-api/TDLib-LICENSE.txt; fi
+          printf '%s\n' 'e3e9dd8e5b3d7ab8537cd5a10dc31d5ffa8f82d1' > arm64-bot-api/UPSTREAM_COMMIT
+      - name: Verify the native Telegram executable before caching
+        run: |
+          grep -Fx 'e3e9dd8e5b3d7ab8537cd5a10dc31d5ffa8f82d1' arm64-bot-api/UPSTREAM_COMMIT
+          LC_ALL=C readelf -h arm64-bot-api/telegram-bot-api | grep -E 'Machine:[[:space:]]+AArch64'
+          arm64-bot-api/telegram-bot-api --version
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        if: steps.arm64_bot_api.outputs.cache-hit != 'true'
+        with:
+          path: arm64-bot-api
+          key: telegram-bot-api-ubuntu24-arm64-e3e9dd8e5b3d7ab-v1
+      - name: Assemble and check the ARM64 managed images without network access
+        run: |
+          bash deploy/managed/assemble-image-context.sh package arm64-delivery/delivery-crypt arm64-bot-api/telegram-bot-api
+          for role in controller state; do
+            image="ipazake-$role:$GITHUB_SHA"
+            docker build --platform linux/arm64 --target "$role" -f deploy/managed/Dockerfile -t "$image" package
+            test "$(docker image inspect --format '{{.Architecture}}' "$image")" = arm64
+            docker run --rm --network none --entrypoint /usr/bin/python3 "$image" \
+              -c 'import os,platform,sys; sys.path.insert(0,"/opt/ipazake/tools"); import telegram_daemon,tf_state_http; assert os.geteuid()==10001 and platform.machine()=="aarch64"'
+            if docker run --rm --network none "$image"; then echo missing_volume_not_rejected; exit 1; fi
+          done
+          docker run --rm --network none --entrypoint /opt/ipazake/bin/telegram-bot-api "ipazake-controller:$GITHUB_SHA" --version
+      - name: Preflight a controller volume without credentials or network
+        run: |
+          image="ipazake-controller:$GITHUB_SHA"
+          volume=$(docker volume create "ipazake-controller-check-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT")
+          trap 'docker volume rm "$volume" >/dev/null' EXIT
+          mount="type=volume,source=$volume,target=/var/lib/ipazake"
+          docker run --rm --network none --mount "$mount" --user 0:0 \
+            --entrypoint /bin/sh "$image" -c 'chown 10001:10001 /var/lib/ipazake && chmod 0700 /var/lib/ipazake'
+          preflight() {
+            docker run --rm --network none "$@" --entrypoint /usr/bin/python3 "$image" \
+              /opt/ipazake/tools/managed_volume_preflight.py
+          }
+          expect_rejection() {
+            local expected="$1" output
+            shift
+            if output=$(preflight "$@" 2>&1); then
+              echo "Invalid controller volume passed preflight: $expected"
+              return 1
+            fi
+            grep -Fx "$expected" <<<"$output"
+          }
+          preflight --mount "$mount"
+          expect_rejection managed_volume_not_mounted
+          expect_rejection managed_volume_read_only --mount "$mount,readonly"
+          expect_rejection managed_volume_insufficient_space \
+            --tmpfs /var/lib/ipazake:rw,size=32m,mode=0700,uid=10001,gid=10001
+          docker run --rm --network none --mount "$mount" --entrypoint /bin/sh "$image" \
+            -c 'test -z "$(ls -A /var/lib/ipazake)"'
+      - name: Verify state service startup and restart with a mounted volume
+        run: bash deploy/managed/verify-state-image.sh "ipazake-state:$GITHUB_SHA"
+      - name: Package verified ARM64 images and source provenance
+        id: package_images
+        run: |
+          mkdir -p managed-images-arm64/licenses
+          for role in controller state; do
+            docker save "ipazake-$role:$GITHUB_SHA" | gzip -n > "managed-images-arm64/$role.tar.gz"
+          done
+          cp -R arm64-delivery/licenses/. managed-images-arm64/licenses/
+          cp arm64-bot-api/*LICENSE.txt managed-images-arm64/licenses/
+          printf 'source_commit=%s\narchitecture=arm64\nbot_api_commit=%s\n' "$GITHUB_SHA" "$(cat arm64-bot-api/UPSTREAM_COMMIT)" > managed-images-arm64/BUILDINFO
+          for role in controller state; do
+            image_id=$(docker image inspect --format '{{.Id}}' "ipazake-$role:$GITHUB_SHA")
+            printf '%s_image_id=%s\n' "$role" "$image_id" >> managed-images-arm64/BUILDINFO
+          done
+          (
+            cd managed-images-arm64
+            { sha256sum controller.tar.gz state.tar.gz BUILDINFO; find licenses -type f -print0 | sort -z | xargs -0 sha256sum; } > SHA256SUMS
+            sha256sum --check --strict SHA256SUMS
+            sums_sha256=$(sha256sum SHA256SUMS | cut -d ' ' -f 1)
+            printf 'SHA256SUMS digest: %s\n' "$sums_sha256"
+            printf 'sums_sha256=%s\n' "$sums_sha256" >> "$GITHUB_OUTPUT"
+          )
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        id: upload_images
+        with:
+          name: managed-images-arm64-${{ github.sha }}
+          path: managed-images-arm64/
+          retention-days: 3
+          if-no-files-found: error
+  arm64_image_import:
+    needs: arm64_images
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          artifact-ids: ${{ needs.arm64_images.outputs.artifact_id }}
+          path: managed-images-arm64
+      - name: Verify and import the published ARM64 images
+        working-directory: managed-images-arm64
+        env:
+          EXPECTED_SUMS_SHA256: ${{ needs.arm64_images.outputs.sums_sha256 }}
+        run: |
+          test "$(uname -m)" = aarch64
+          [[ "$EXPECTED_SUMS_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          printf '%s  SHA256SUMS\n' "$EXPECTED_SUMS_SHA256" | sha256sum --check --strict
+          sha256sum --check --strict SHA256SUMS
+          grep -Fx "source_commit=$GITHUB_SHA" BUILDINFO
+          grep -Fx 'architecture=arm64' BUILDINFO
+          for role in controller state; do
+            image="ipazake-$role:$GITHUB_SHA"
+            if docker image inspect "$image" >/dev/null 2>&1; then
+              echo "Image tag was already present before import: $image"
+              exit 1
+            fi
+            docker load --input "$role.tar.gz"
+            test "$(docker image inspect --format '{{.Os}}/{{.Architecture}} {{.Config.User}}' "$image")" = 'linux/arm64 10001:10001'
+            image_id=$(docker image inspect --format '{{.Id}}' "$image")
+            grep -Fx "${role}_image_id=$image_id" BUILDINFO
+            source=$(docker run --rm --network none --read-only --entrypoint /bin/cat "$image" /opt/ipazake/SOURCE_COMMIT)
+            test "$source" = "$GITHUB_SHA"
+          done
+  images:
+    # Not part of the zero-cost control-plane pilot; never provision a host here.
+    if: github.event_name == 'workflow_dispatch' && inputs.build_images
+    needs: synthetic
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: dist/telegram-bot-api
+          key: telegram-bot-api-ubuntu24-x64-e3e9dd8e5b3d7ab-v1
+          fail-on-cache-miss: true
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: FiloSottile/age
+          ref: b74dce4cdbe35b5e5f66c06d9612b72f89028758
+          path: native-source/age
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.0'
+          cache-dependency-path: native-source/age/go.sum
+      - name: Build public helper and assemble isolated context
+        run: |
+          mkdir -p native-source/age/cmd/lab-delivery-crypt amd64-delivery
+          cp tools/delivery_crypto.go native-source/age/cmd/lab-delivery-crypt/main.go
+          cp tests/delivery_crypto_test.go native-source/age/cmd/lab-delivery-crypt/main_test.go
+          (cd native-source/age && go test -p 2 -timeout 300s ./cmd/lab-delivery-crypt && CGO_ENABLED=0 go build -p 2 -trimpath -o ../../amd64-delivery/delivery-crypt ./cmd/lab-delivery-crypt)
+          bash deploy/managed/assemble-image-context.sh package amd64-delivery/delivery-crypt dist/telegram-bot-api
+
+      - name: Build two images and check fail-closed startup
+        run: |
+          for role in controller state; do
+            docker build --platform linux/amd64 --target "$role" -f deploy/managed/Dockerfile -t "ipazake-$role:$GITHUB_SHA" package
+            docker run --rm --network none --entrypoint /usr/bin/python3 "ipazake-$role:$GITHUB_SHA" -c 'import os,sys; sys.path.insert(0,"/opt/ipazake/tools"); import telegram_daemon,tf_state_http; assert os.geteuid()==10001'
+            if docker run --rm --network none "ipazake-$role:$GITHUB_SHA"; then echo missing_volume_not_rejected; exit 1; fi
+          done
+          docker run --rm --network none --entrypoint /opt/ipazake/bin/telegram-bot-api "ipazake-controller:$GITHUB_SHA" --version
+      - name: Export build-only images and checksums
+        run: |
+          mkdir -p managed-images
+          for role in controller state; do
+            docker save "ipazake-$role:$GITHUB_SHA" | gzip -n > "managed-images/$role.tar.gz"
+          done
+          (cd managed-images && sha256sum controller.tar.gz state.tar.gz > SHA256SUMS)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: managed-images-${{ github.sha }}
+          path: managed-images/
+          retention-days: 3
+          if-no-files-found: error

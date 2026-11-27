@@ -1,6 +1,8 @@
 # 成品包下载
 
-当前版本为 **v0.1.0-alpha.5**，下载入口是 [GitHub Releases](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。alpha.5 本次重打包增加主人专用 TestFlight 自动任务、持久会话与 `名称_Beta_版本.ipa` 命名，并保留 App Store 链接地区识别与独立中国区最新版下载，保留白名单、用户隔离、进度卡、完整计时和导出加速。alpha.2/alpha.3 保留为历史版本。旧版 `v0.1.0-alpha.1` 的公开 Release 和附件由本次发布替换，源码标签及历史发布说明保留。
+[v0.2 草稿 PR](https://github.com/zwthys-cyber/ipa-decrypt-lab/pull/1)的 ARM64 镜像和 CircleCI 产物是 CI 验证包。公开资产仍按本页的 alpha.5 源码和摘要清单核对。
+
+最新公开发行版为 **v0.1.0-alpha.5**（截至 2026-11-25），下载入口是 [GitHub Releases](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。alpha.5 本次重打包增加主人专用 TestFlight 自动任务、持久会话与 `名称_Beta_版本.ipa` 命名，并保留 App Store 链接地区识别与独立中国区最新版下载，保留白名单、用户隔离、进度卡、完整计时和导出加速。alpha.2/alpha.3 保留为历史版本。旧版 `v0.1.0-alpha.1` 的公开 Release 和附件由本次发布替换，源码标签及历史发布说明保留。
 
 ## 选哪个包
 

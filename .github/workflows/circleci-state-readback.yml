@@ -1,0 +1,52 @@
+name: Verify preserved CircleCI source state
+on:
+  push:
+    branches: [upgrade/managed-runtime-v0.2]
+    paths:
+      - 'deploy/managed/circleci/*preserved*'
+      - 'deploy/managed/circleci/source-state-pins.json'
+      - '.github/workflows/circleci-state-readback.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: circleci-preserved-state-readback
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/upgrade/managed-runtime-v0.2'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Check reassembly and provenance before mounting encrypted state
+        working-directory: deploy/managed/circleci
+        run: python3 test_read_preserved.py -v
+      - name: Install standard authenticated decryption on GitHub only
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends age
+      - name: Read back encrypted Secrets and validate the original TF virtual profile without Apple traffic
+        env:
+          CIRCLECI_MIGRATION_45842375113_01: ${{ secrets.CIRCLECI_MIGRATION_45842375113_01 }}
+          CIRCLECI_MIGRATION_45842375113_02: ${{ secrets.CIRCLECI_MIGRATION_45842375113_02 }}
+          CIRCLECI_MIGRATION_45842375113_03: ${{ secrets.CIRCLECI_MIGRATION_45842375113_03 }}
+          CIRCLECI_MIGRATION_45842375113_04: ${{ secrets.CIRCLECI_MIGRATION_45842375113_04 }}
+          CIRCLECI_MIGRATION_45842375113_05: ${{ secrets.CIRCLECI_MIGRATION_45842375113_05 }}
+          CIRCLECI_MIGRATION_45842375113_06: ${{ secrets.CIRCLECI_MIGRATION_45842375113_06 }}
+          CIRCLECI_MIGRATION_45842375113_07: ${{ secrets.CIRCLECI_MIGRATION_45842375113_07 }}
+          CIRCLECI_MIGRATION_45842375113_08: ${{ secrets.CIRCLECI_MIGRATION_45842375113_08 }}
+          CIRCLECI_MIGRATION_45842375113_09: ${{ secrets.CIRCLECI_MIGRATION_45842375113_09 }}
+          CIRCLECI_MIGRATION_45842375113_10: ${{ secrets.CIRCLECI_MIGRATION_45842375113_10 }}
+          CIRCLECI_MIGRATION_45842375113_11: ${{ secrets.CIRCLECI_MIGRATION_45842375113_11 }}
+          CIRCLECI_MIGRATION_45842375113_12: ${{ secrets.CIRCLECI_MIGRATION_45842375113_12 }}
+          CIRCLECI_MIGRATION_45842375113_13: ${{ secrets.CIRCLECI_MIGRATION_45842375113_13 }}
+          TF_SAVED_SESSION_AGE_B64: ${{ secrets.TF_SAVED_SESSION_AGE_B64 }}
+          DELIVERY_AGE_IDENTITY: ${{ secrets.DELIVERY_AGE_IDENTITY }}
+        run: python3 deploy/managed/circleci/read_preserved.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: circleci-preserved-state-readback-${{ github.run_id }}
+          path: preserved-state-readback.json
+          retention-days: 1
+          if-no-files-found: error

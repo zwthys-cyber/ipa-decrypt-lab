@@ -1,0 +1,65 @@
+name: Retain verified encrypted canary archive
+on:
+  push:
+    branches: [upgrade/managed-runtime-v0.2]
+    paths:
+      - 'deploy/managed/circleci/*retain_canary_archive.py'
+      - '.github/workflows/circleci-retain-canary.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: circleci-canary-archive-retention
+  cancel-in-progress: false
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - working-directory: deploy/managed/circleci
+        run: python3 test_retain_canary_archive.py -v
+  retain:
+    needs: contracts
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/upgrade/managed-runtime-v0.2' && github.run_attempt == 1 && github.actor_id == '246379322'
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify Secrets in a separately dispatched run
+        env:
+          CIRCLECI_CANARY_45866115288_INDEX: ${{ secrets.CIRCLECI_CANARY_45866115288_INDEX }}
+          CIRCLECI_CANARY_45866115288_01: ${{ secrets.CIRCLECI_CANARY_45866115288_01 }}
+          CIRCLECI_CANARY_45866115288_02: ${{ secrets.CIRCLECI_CANARY_45866115288_02 }}
+          CIRCLECI_CANARY_45866115288_03: ${{ secrets.CIRCLECI_CANARY_45866115288_03 }}
+          CIRCLECI_CANARY_45866115288_04: ${{ secrets.CIRCLECI_CANARY_45866115288_04 }}
+          CIRCLECI_CANARY_45866115288_05: ${{ secrets.CIRCLECI_CANARY_45866115288_05 }}
+          CIRCLECI_CANARY_45866115288_06: ${{ secrets.CIRCLECI_CANARY_45866115288_06 }}
+          CIRCLECI_CANARY_45866115288_07: ${{ secrets.CIRCLECI_CANARY_45866115288_07 }}
+          CIRCLECI_CANARY_45866115288_08: ${{ secrets.CIRCLECI_CANARY_45866115288_08 }}
+          CIRCLECI_CANARY_45866115288_09: ${{ secrets.CIRCLECI_CANARY_45866115288_09 }}
+          CIRCLECI_CANARY_45866115288_10: ${{ secrets.CIRCLECI_CANARY_45866115288_10 }}
+          CIRCLECI_CANARY_45866115288_11: ${{ secrets.CIRCLECI_CANARY_45866115288_11 }}
+          CIRCLECI_CANARY_45866115288_12: ${{ secrets.CIRCLECI_CANARY_45866115288_12 }}
+          CIRCLECI_CANARY_45866115288_13: ${{ secrets.CIRCLECI_CANARY_45866115288_13 }}
+          CIRCLECI_CANARY_45866115288_14: ${{ secrets.CIRCLECI_CANARY_45866115288_14 }}
+          CIRCLECI_CANARY_45866115288_15: ${{ secrets.CIRCLECI_CANARY_45866115288_15 }}
+          CIRCLECI_CANARY_45866115288_16: ${{ secrets.CIRCLECI_CANARY_45866115288_16 }}
+          CIRCLECI_CANARY_45866115288_17: ${{ secrets.CIRCLECI_CANARY_45866115288_17 }}
+          CIRCLECI_CANARY_45866115288_18: ${{ secrets.CIRCLECI_CANARY_45866115288_18 }}
+          CIRCLECI_CANARY_45866115288_19: ${{ secrets.CIRCLECI_CANARY_45866115288_19 }}
+          CIRCLECI_CANARY_45866115288_20: ${{ secrets.CIRCLECI_CANARY_45866115288_20 }}
+        run: python3 deploy/managed/circleci/retain_canary_archive.py verify
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: canary-retention-proof-${{ github.run_id }}
+          path: canary-retention-proof.json
+          retention-days: 7
+          if-no-files-found: error

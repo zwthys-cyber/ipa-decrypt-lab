@@ -1,6 +1,8 @@
 #include "testflight/internal.hpp"
 #include <regex>
 #include <ctime>
+#include <functional>
+#include <map>
 #include <fcntl.h>
 #include <unistd.h>
 namespace apple_auth {
@@ -34,13 +36,39 @@ Json bound_context(const std::filesystem::path& root) {
         "Saved TF task identity mismatch");
     return context;
 }
+void request_binding(const Json& request,const std::function<std::string(const char*)>& env) {
+    const auto match=[](const Json& value,const char* pattern) {
+        return value.is_string() && std::regex_match(value.get<std::string>(),std::regex(pattern));
+    };
+    netdetail::require(request.is_object() &&
+        match(request.at("source_commit"),"[a-f0-9]{40}") &&
+        match(request.at("invite"),"[A-Za-z0-9_-]{6,80}") &&
+        match(request.at("request_id"),"tf_[a-f0-9]{32}"),"Invalid TF task identity");
+    if(request.at("schema")=="tf-worker-request-v1") {
+        netdetail::require(request.size()==5 && env("GITHUB_ACTIONS")=="true" &&
+            env("GITHUB_REF")=="refs/heads/main" && env("GITHUB_RUN_ATTEMPT")=="1" &&
+            request.at("run_id")==env("GITHUB_RUN_ID") && match(request.at("run_id"),"[1-9][0-9]{0,19}") &&
+            request.at("source_commit")==env("GITHUB_SHA"),"Invalid GitHub TF task request");
+    } else {
+        constexpr auto uuid="[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}";
+        const auto now=static_cast<std::int64_t>(std::time(nullptr));
+        netdetail::require(request.at("schema")=="tf-worker-request-circleci-v1" && request.size()==8 &&
+            env("CIRCLECI")=="true" && env("GITHUB_ACTIONS").empty() &&
+            env("CIRCLE_PROJECT_ID")=="04ca0b08-bd33-434c-a59c-5f4ca8d18688" &&
+            env("CIRCLE_BRANCH")=="upgrade/managed-runtime-v0.2" &&
+            request.at("run_id")==env("RUNTIME_RUN_ID") && match(request.at("run_id"),uuid) &&
+            request.at("worker_job_id")==env("CIRCLE_WORKFLOW_JOB_ID") && match(request.at("worker_job_id"),uuid) &&
+            request.at("source_commit")==env("CIRCLE_SHA1") &&
+            match(request.at("job_id"),"pilot_[a-f0-9]{32}") &&
+            request.at("deadline").is_number_integer() && request.at("deadline").get<std::int64_t>()>now &&
+            request.at("deadline").get<std::int64_t>()<=now+3600,"Invalid CircleCI TF task request");
+    }
+}
 Json task_request(const std::filesystem::path& path) {
     const auto request=Json::parse(netdetail::read_file(path,4096));
-    const auto run=std::getenv("GITHUB_RUN_ID"),source=std::getenv("GITHUB_SHA"),attempt=std::getenv("GITHUB_RUN_ATTEMPT");
-    netdetail::require(run && source && attempt && std::string(attempt)=="1" &&
-        request.at("schema")=="tf-worker-request-v1" && request.at("run_id")==run &&
-        request.at("source_commit")==source && std::regex_match(request.at("invite").get<std::string>(),std::regex("[A-Za-z0-9_-]{6,80}")) &&
-        std::regex_match(request.at("request_id").get<std::string>(),std::regex("tf_[a-f0-9]{32}")),"Invalid TF task request");
+    request_binding(request,[](const char* key) {
+        const auto value=std::getenv(key);return value?std::string(value):std::string();
+    });
     return request;
 }
 bool member(tfdetail::Engine& engine,const std::string& bundle,const std::string& app) {
@@ -116,6 +144,34 @@ APPLE_AUTH_CLIENT_EXPORT std::string lab_tf_task(const std::string& mode,const s
 }
 APPLE_AUTH_CLIENT_EXPORT int lab_tf_task_contract() {
     try {
+        // No provider calls or global environment mutation in context validation tests.
+        Json cir={{"schema","tf-worker-request-circleci-v1"},{"request_id","tf_"+std::string(32,'a')},
+            {"invite","SYNTH123"},{"run_id","12345678-1234-1234-1234-123456789abc"},
+            {"worker_job_id","23456789-1234-1234-1234-123456789abc"},{"source_commit",std::string(40,'b')},
+            {"job_id","pilot_"+std::string(32,'c')},{"deadline",std::time(nullptr)+300}};
+        std::map<std::string,std::string> circle={{"CIRCLECI","true"},{"CIRCLE_PROJECT_ID","04ca0b08-bd33-434c-a59c-5f4ca8d18688"},
+            {"CIRCLE_BRANCH","upgrade/managed-runtime-v0.2"},
+            {"CIRCLE_SHA1",cir.at("source_commit")},{"CIRCLE_WORKFLOW_JOB_ID",cir.at("worker_job_id")},
+            {"RUNTIME_RUN_ID",cir.at("run_id")}};
+        const auto lookup=[&](const char* key) {const auto it=circle.find(key);return it==circle.end()?std::string():it->second;};
+        request_binding(cir,lookup);
+        for(const auto* key:{"GITHUB_ACTIONS","CIRCLE_PROJECT_ID","CIRCLE_BRANCH","CIRCLE_SHA1",
+                "CIRCLE_WORKFLOW_JOB_ID","RUNTIME_RUN_ID"}) {
+            const auto saved=lookup(key);circle[key]="invalid";bool denied=false;
+            try{request_binding(cir,lookup);}catch(...){denied=true;}
+            netdetail::require(denied,"TF CircleCI context mismatch accepted");circle[key]=saved;
+        }
+        auto expired=cir;expired["deadline"]=std::time(nullptr)-1;bool expired_denied=false;
+        try{request_binding(expired,lookup);}catch(...){expired_denied=true;}
+        netdetail::require(expired_denied,"Expired TF CircleCI context accepted");
+        Json gh={{"schema","tf-worker-request-v1"},{"request_id",cir.at("request_id")},{"invite","SYNTH123"},
+            {"run_id","123456"},{"source_commit",cir.at("source_commit")}};
+        std::map<std::string,std::string> github={{"GITHUB_ACTIONS","true"},{"GITHUB_REF","refs/heads/main"},
+            {"GITHUB_RUN_ATTEMPT","1"},{"GITHUB_RUN_ID","123456"},{"GITHUB_SHA",cir.at("source_commit")}};
+        const auto gh_lookup=[&](const char* key) {const auto it=github.find(key);return it==github.end()?std::string():it->second;};
+        request_binding(gh,gh_lookup);github["GITHUB_RUN_ATTEMPT"]="2";bool rerun_denied=false;
+        try{request_binding(gh,gh_lookup);}catch(...){rerun_denied=true;}
+        netdetail::require(rerun_denied,"TF GitHub rerun accepted");
         unsigned calls=0;
         Json context={{"accountId","PUBLIC_FIXTURE"},{"sessionId","SYNTHETIC"},{"dsid","12345"},
             {"udid",std::string(40,'a')},{"deviceModel","Mac14,7"},

@@ -1,14 +1,15 @@
 # IPA Decrypt Lab
 
-这个项目将 App Store 和 TestFlight 应用的下载、解密校验和 Telegram 交付串成完整流程；中国区与原外区 App Store 均接入历史版本选择。机器人在 Debian VPS 上常驻运行，下载和解密交给 GitHub-hosted macOS。
+截至 2026-11-25，公开发行版为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)，线上 Telegram 控制器仍由 Debian VPS 运行。v0.2 是开发中的迁移分支。
 
-目前开放管理员和白名单用户私聊，可按链接处理中国区或原外区账号的免费应用，IPA 最大 **2000 MB**。每人任务、文件、进度和额度独立；收费和应用安装后的兼容性仍在待办里。
+| 范围 | 已验证状态 |
+| --- | --- |
+| 公开成品 | alpha.5 随附 Linux amd64 和两个 macOS Intel 运行包。包内文件、摘要和源码来源见[发布说明](docs/RELEASES.md)。 |
+| 线上服务 | [2026-11-10 部署](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42727462163)接入国区历史版本，[2026-11-25 只读检查](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45638716965)确认控制器健康。 |
+| v0.2 迁移 | GitHub Actions 验证了 Linux ARM64 镜像构建、独立导入和持久卷启动。真实小样本的私有 Drive 链接已送达，经接收人确认可打开。详见[项目状态](docs/PROJECT-STATUS.md)。 |
+| CircleCI | 主仓库[首条 Linux 流水线](https://app.circleci.com/workflow/7fcc4b73-7caa-4de2-8f16-763288eb34e2)通过 84 项测试，覆盖只读 IPA 审计与 free-pilot。项目自有 iOS 样例另已在 [CircleCI M4 Pro](https://app.circleci.com/workflow/40131029-8872-4661-8351-f1b0fd0034ba/job/c35d0d9a-2113-4b8a-b3fe-07db03f99967) 上构建并通过归档校验。 |
 
-中国区模型已恢复，并通过跨运行器复用、保存状态重放和真实导出，链接路由已[部署](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/42566050391)。`/cn/` 商店链接自动使用中国区账号，其他地区链接及数字 App ID 使用原外区账号。中国区与外区均支持免费应用最新版及可获取的历史版本。见 [中国区接入状态](docs/CHINA-ACCOUNT.md)。
-
-部分国区专属应用仍有许可兼容问题：抖音在 GitHub 境外出口下收到地区不可用相关提示，尚未修复，需大陆出口对照。样本成功不代表所有国区应用都能下载。见 [当前限制与证据](docs/CHINA-ACCOUNT.md)。
-
-机器人主人可直接发送 TestFlight 公开邀请链接，后台检查测试资格、必要时接受一次邀请、获取可用测试构建，完整解密验证后私聊回传。它使用独立持久会话和任务队列，不回退 App Store 正式版。证据与限制见 [TestFlight 自动处理](docs/TESTFLIGHT.md)。
+按链接触发的试验版目前可以登记请求。生产迁移仍需符合零费用要求的运行环境、可核验的 TestFlight 接受记录和获授权的处理链路。[迁移方案](docs/MANAGED-RUNTIME.md) · [零费用约束](docs/ZERO-COST.md)
 
 ## 下载
 
@@ -16,7 +17,7 @@
 
 这些包需要配合仓库工作流和自己的私有配置使用。alpha.5 本次重打包纳入 TF 自动任务与 Beta 文件命名；包的准确源码和构建来源以附件 `BUILDINFO.json` 为准，原标签保留。国区历史功能属于之后的主分支与线上更新，当前公开 alpha.5 附件尚不包含这项功能。Apple 账号、授权模型、Telegram 凭据和应用 IPA 都不随发布包提供。
 
-## 现在能做什么
+## 既有生产功能
 
 - 发送 App Store 链接或 App ID，默认下载最新版；`/cn/` 自动使用中国区，其他地区或纯数字使用原外区账号。
 - 主人发送 TestFlight 邀请链接，自动处理可用的 iOS 测试构建；额外协议、失效会话或模型不兼容时明确停止。
@@ -31,7 +32,7 @@
 
 完整指令见 [Telegram 使用说明](docs/TELEGRAM.md)。
 
-## 怎么运行
+## 既有生产架构
 
 任务分成两部分：
 
@@ -44,7 +45,7 @@ My BVF 的最新一次 GitHub 导出实测约 59 秒，此前预编译版样本�
 
 X 的后续加速对比已通过：删除账号元数据时直接复制保留项的压缩数据，完整校验仍保留。复核从约 40.4 秒降到 13.8 秒，GitHub 原生作业从 128 秒降到 103 秒；成品包约增大 3%。这是单次后台对比，完整 Telegram 交付仍受排队与网络影响。[实测与边界](docs/PROJECT-STATUS.md)
 
-## 已经验证到哪一步（2026-11-10）
+## 既有生产验证记录（截至 2026-11-10）
 
 国区历史版本已完成真实验证并接入线上：保存会话查询到 LocalSend 的32条版本记录，首批读取10条；选择旧于当前版本的1.18.1（历史ID `889619746`），验证31个加密镜像、11,716页并完成加密导出。证明与部署记录见 [项目状态](docs/PROJECT-STATUS.md)。此轮没有发送样本文件、初始化模型或新增电脑授权。
 
@@ -70,9 +71,9 @@ TestFlight 主人自动任务已部署，持久会话恢复、资格检查、测
 - [VPS 部署](docs/VPS-DEPLOYMENT.md)：运行环境、Secrets、部署、备份和回滚。
 - [任务恢复](docs/SESSION-RECOVERY.md)：重启、取消和发送不确定时的处理。
 - [项目状态](docs/PROJECT-STATUS.md)：当前实现、验证记录和待办。
-- [离线后端研究记录](OFFLINE-BACKEND.md)：早期失败、排查过程和后续结果。
+- [零费用试验](docs/ZERO-COST.md)：云端试验、平台限制和实际验证记录。
 
-编译、测试和构建验证全部在 GitHub 上执行，VPS 只运行成品。当前实现不依赖个人 iPhone，也不接入第三方解密服务。
+正式成品由 GitHub Actions 构建和验证，VPS 运行已验证的成品。CircleCI 覆盖独立的开发验证。当前实现不依赖个人 iPhone，也不接入第三方解密服务。
 
 ## 依赖与许可证
 

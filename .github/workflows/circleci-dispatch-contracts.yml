@@ -1,0 +1,31 @@
+name: CircleCI durable dispatch contracts
+on:
+  push:
+    branches: [upgrade/managed-runtime-v0.2]
+    paths:
+      - 'deploy/managed/circleci/dispatch*'
+      - 'deploy/managed/circleci/migrations/**'
+      - '.github/workflows/circleci-dispatch-contracts.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: circleci-durable-dispatch-contracts
+  cancel-in-progress: false
+jobs:
+  workerd-d1:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    env:
+      CLOUDFLARE_CF_FETCH_ENABLED: 'false'
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install pinned local workerd simulator
+        working-directory: deploy/managed/circleci
+        run: npm install --no-save --package-lock=false --no-audit --no-fund miniflare@4.20260730.0
+      - name: Verify durable intent, concurrency, restart and ambiguous outcome guards
+        working-directory: deploy/managed/circleci
+        run: node --test dispatch.integration.mjs
