@@ -1,49 +1,57 @@
-# 当前运行与维护手册
+# 维护手册
 
-核对日期：2026-11-27。生产处理版本 `185a52110922e0f67ac2c7dff4e1fa85b3b4c98e` 已通过 CircleCI75 真实国区任务和 [45918215266](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/45918215266) 切换检查。此后维护分支的文档提交不是新的生产部署；精确运行源码以最近成功的 cutover 收据和控制面 readiness 回读为准。
+本文面向维护者。日常机器人操作见[使用指南](TELEGRAM.md)，组件分工见[架构说明](MANAGED-RUNTIME.md)。
 
-## 组件与源码
+## 分支职责
 
-| 组件 | 当前职责 | 入口 |
-| --- | --- | --- |
-| Cloudflare Workers / D1 | 原机器人 webhook、主人校验、持久任务与意图、串行派发、定时核对、Drive 校验、私聊通知 | [控制入口](../deploy/managed/circleci/runtime-api.mjs)、[机器人入口](../deploy/managed/circleci/runtime-telegram.mjs) |
-| CircleCI macOS ARM64 | 按任务启动；恢复短期角色凭据，下载、模型复用、完整验证及私有上传 | [工作机](../deploy/managed/circleci/managed_worker.py)、[配置](../.circleci/config.yml) |
-| GitHub Actions | 无凭据公共构建/测试；经过 OIDC 绑定的短期凭据签发；受控维护切换 | [凭据签发](../.github/workflows/circleci-secret-lease.yml)、[切换](../.github/workflows/circleci-offline-cutover.yml) |
-| 私有 Google Drive | 保持主人文件的私有权限，由控制面核对归属、名称、大小和 SHA-256 | [验证模块](../deploy/managed/circleci/runtime-drive.mjs) |
-| main 的既有维护工作流 | 原账号会话维护、Intel 构建和旧公开发行包 | [国区会话检查](../.github/workflows/china-session-check.yml) |
+| 分支 | 用途 |
+| --- | --- |
+| `upgrade/managed-runtime-v0.2` | 生产处理源码，HEAD 必须与控制面配置一致 |
+| `upgrade/managed-runtime-maintenance-v0.2` | 修改、文档整理与 CI 验证 |
+| `main` | 默认入口、账号维护及历史 Intel 发行工作流 |
 
-只有配置主人的私聊可以提交新任务。当前没有旧白名单管理、VPS 常驻 poller、本地 Bot API 大文件传输或五秒计时进度卡。/status 按组读取D1快照，每页3项，翻页更新原消息，外部状态由 cron 核对；排队和传输速度不保证。
+文档整理可以留在维护分支，并同步 main 的阅读入口。生产入口开启时，不直接向生产分支追加提交。
 
-## 维护发布顺序
+## 发布流程
 
-1. 在 `upgrade/managed-runtime-maintenance-v0.2` 修改并检查；不得直接改开启中的生产分支。
-2. 在 GitHub 执行相关测试。涉及控制端时生成与候选源码一致的成功 `circleci-control-contracts.yml` 产物。纯文档整理可留在维护分支并同步默认分支的导航，不必切换生产。
-3. 运行 `circleci-maintenance-close.yml`，输入**旧生产源码**和对应的成功 control run。它使用旧包关闭空闲入口并保留原 source、D1 与 Secrets；存在活动任务则停止。
-4. 核对关闭回执后，以旧 HEAD 为 lease，将已验证维护 commit 快进到 `upgrade/managed-runtime-v0.2`。
-5. 运行 `circleci-offline-cutover.yml`。必须验证该源码自己的 webhook/cron、历史读回及持有状态；不能用上一版的 cron 时间放行。
-6. 成功后冻结运行分支 HEAD。文档或收据补充写在维护分支；生产源码证据来自成功运行，不靠再补一条生产提交。
+1. 在维护分支准备修改，运行相关 GitHub 检查。
+2. 涉及控制面时，取得与候选源码一致的成功 `circleci-control-contracts.yml` 产物。
+3. 运行 `circleci-maintenance-close.yml`，指定当前生产源码及其成功 control run。存在活动任务时停止切换。
+4. 核对关闭回执，以原生产 HEAD 为 lease，将已验证的维护 commit 快进到生产分支。
+5. 运行 `circleci-offline-cutover.yml`，确认同一源码的历史状态读回、webhook 和真实定时触发。
+6. 保持生产 HEAD 固定。后续说明和证据写入维护分支，部署来源以成功回执为准。
 
-CircleCI75 使用的公共 base/CN/TF 包来自 pins 中的 job62，当前原生输入合约仍匹配。文件只因名字“旧”就删除，可能使原生输入指纹失配、迫使重编译或破坏兼容性。[固定来源](../deploy/managed/circleci/runtime-pins.json) · [输入合约](../deploy/managed/circleci/fetch_runtime.py)。
+项目构建、测试和执行只在 GitHub 或已授权的 CircleCI 进行。本工作区不创建项目 checkout，也不运行项目测试。源码通过 GitHub API 修改。
 
-## 凭据和会话
+## 凭据维护
 
-- `MANAGED_TELEGRAM_BOT_TOKEN` 是原机器人的新 Token；与旧 `TELEGRAM_BOT_TOKEN` 分开。旧 Token 已拒绝，五个旧派发/目录工作流保持停用。
-- `MANAGED_TF_HMAC_KEY` 是稳定控制密钥；不能重新生成，否则历史接受去重失去一致性。
-- GitHub 保存 Apple 账号、模型和既有交付私钥；CircleCI 仅接收绑定 source/run/job/profile、短时有效的角色信封，不能取得交付主私钥或 Drive 刷新凭据。真实处理时 Apple 明文只在相应 CI 临时环境出现。
-- 国区普通任务仅恢复原会话/GUID/模型/checkpoint；不自动密码登录、获取新验证码、注册电脑或更换身份。2026-11-27 的单独会话维护已完成，不是今后任意登录的持续授权。
-- macOS 私有子进程同时固定 HOME 与 CFFIXED_USER_HOME，避免 Foundation 回到系统用户目录；缓存退出时清除。
-- 不在聊天、公开日志或源码里提交 Token、账号、模型、原生响应、私有文件 ID 或领取链接。
+| 项目 | 维护要求 |
+| --- | --- |
+| `MANAGED_TELEGRAM_BOT_TOKEN` | 当前机器人凭据，与历史 Token 分开保存 |
+| `MANAGED_TF_HMAC_KEY` | 稳定密钥，历史接受去重依赖它，不随部署重建 |
+| Apple 账号、GUID、模型及 checkpoint | 使用既有材料；会话维护单独执行，不借普通任务自动重登或注册电脑 |
+| 交付身份与 Drive 刷新凭据 | 保留在既定控制环境，工作机只获得所需短期权限 |
 
-## 领取、取消和未知结果
+五个已停用的历史派发/目录工作流继续停用。不要通过重建意图库、替换模型或重新生成密钥解决未知结果。凭据值、原生响应及私有链接不进入公开日志或源码。
 
-完成通知是私有 Drive 链接，原生完整性校验和控制面文件归属/权限/摘要检查都必须通过。领取窗口目前为注册后 24 小时；窗口结束不自动撤销 Drive 权限，也不证明文件已删除。不能将私有文件改成公开来绕过访问问题。
+## 公共运行包
 
-/cancel 必须带 `pilot_` 任务编号，已完成文件不能按未完成任务取消。取消意图先写入，已终止的外部工作才能释放串行容量。外部提交、TF 接受或通知结果不明时保留 unknown，不重复 POST、不自动重试；确认通知也不自动再发。
+普通任务加载 `runtime-pins.json` 固定的公共包，核对生产者、归档摘要、文件摘要、原生输入及主机 ABI。修改 tools、tests、.github/ops 或其他原生构建合约目录后，需要重新验证包来源。
 
-当前下载提交额度由 RUNTIME_DAILY_LIMIT 控制，未配置时为每 UTC 日 3 次（含失败/取消），上限配置允许 20；等待队列最多 30 条，实际工作串行。不要把旧白名单“每人3次、全服务20次”直接当作新入口配置。目录查询另有频率/每日限制。
+macOS 私有子进程同时固定 HOME 和 CFFIXED_USER_HOME，保证原生工具使用隔离的账号缓存。
 
-## 已恢复的历史与剩余验收
+## 运行检查
 
-29 条旧任务、89 条 updates、14 条 metadata 原样读回；2 条旧 pending 和保全快照后的未知变化保持 held。source_disabled_verified=false，代表无法观察旧机物理停机；已用新 Token、旧派发停用和交接核验隔离，不能改写成已取得旧机停机证明。
+- 以成功 cutover 收据和 readiness 回读确认源码、webhook 及定时触发。
+- 提交额度由 `RUNTIME_DAILY_LIMIT` 控制，未配置时每 UTC 日 3 次，包含失败与取消；允许配置到 20。
+- 等待队列最多 30 条，实际处理串行。目录查询有独立的频率和每日上限。
+- /status 读取分组快照，定时触发负责外部状态核对；不为每个列表项重复调用完整核对流程。
+- 文件领取窗口当前为注册后 24 小时。窗口结束不自动撤销 Drive 权限或删除文件。
 
-原 TF 历史邀请确认 tombstone 和已确认私有回传记录均保留；禁止重接原邀请或重复发送旧文件。默认区 Go Club 和国区红果漫剧已通过新平台真实链路；新平台上的历史版本完整交付、新 TF 任务仍需各自真实输入验收。安装、签名和应用运行不在当前证明范围内。
+## 故障处理
+
+先确定失败阶段，再选择对应检查。账号缓存路径、会话拒绝、地区许可、模型不匹配和文件核验失败需要分别处理，诊断方法见[认证诊断](AUTH-COMPATIBILITY.md)。
+
+外部提交、邀请接受或通知结果不明时，保留原意图并核对已有运行。取消必须等后台终止确认后再释放容量。确认过的文件和通知不自动重发。
+
+历史交接记录及两条 held 任务继续保留，源缺口保持明确标记。相关规则见[任务恢复](SESSION-RECOVERY.md)，当前验收范围见[项目状态](PROJECT-STATUS.md)。
