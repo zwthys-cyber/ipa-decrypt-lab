@@ -1,5 +1,7 @@
 # 独立 Swift 认证对照
 
+> 文档范围更新（2026-11-27）：本页在main保留旧代码/研究/发行历史。当前生产处理源码来自upgrade/managed-runtime-v0.2，已切换Cloudflare/D1 + CircleCI ARM64 + 私有Drive；main仍用于账号维护和旧Intel发行。[当前对应说明](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/DOWNLOADER.md) · [运行手册](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/OPERATIONS.md) · [项目状态](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/PROJECT-STATUS.md)。不要按历史VPS说明重启旧poller或重新启用5个退休派发工作流。
+
 
 > 2026-11-09 文档复核：本文保留早期实验及其原始结果，不作为当前功能或下载入口。App Store 与主人专用 TF 自动任务、CapyPlayer 实际导出/用户收件截图和 Beta 命名部署见 [项目状态](PROJECT-STATUS.md)；当前成品与准确来源见 [发布文档](RELEASES.md)，操作入口见 [文档索引](DOCUMENTATION.md)。安装运行及全部应用兼容性仍未验证。
 

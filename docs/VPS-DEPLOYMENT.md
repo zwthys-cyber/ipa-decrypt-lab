@@ -1,5 +1,7 @@
 # VPS 部署
 
+> 文档范围更新（2026-11-27）：本页在main保留旧代码/研究/发行历史。当前生产处理源码来自upgrade/managed-runtime-v0.2，已切换Cloudflare/D1 + CircleCI ARM64 + 私有Drive；main仍用于账号维护和旧Intel发行。[当前同名文档](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/VPS-DEPLOYMENT.md) · [运行手册](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/OPERATIONS.md) · [项目状态](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/PROJECT-STATUS.md)。不要按历史VPS说明重启旧poller或重新启用5个退休派发工作流。
+
 编译和测试都在 GitHub 上执行，VPS 只运行验证过的成品。服务器负责 Telegram、任务记录和文件交付；Apple 下载及 FairPlay 解密仍由 GitHub macOS 处理。
 
 当前部署环境为 Debian 13、x86_64、4 GB 内存的服务器。systemd 给机器人服务设置了 2 GiB 内存上限。交付前还会检查至少 8,147,483,648 字节（约 8.15 GB）可用磁盘。

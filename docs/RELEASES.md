@@ -1,5 +1,7 @@
 # 成品包下载
 
+> 文档范围更新（2026-11-27）：本页在main保留旧代码/研究/发行历史。当前生产处理源码来自upgrade/managed-runtime-v0.2，已切换Cloudflare/D1 + CircleCI ARM64 + 私有Drive；main仍用于账号维护和旧Intel发行。[当前同名文档](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/RELEASES.md) · [运行手册](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/OPERATIONS.md) · [项目状态](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/PROJECT-STATUS.md)。不要按历史VPS说明重启旧poller或重新启用5个退休派发工作流。
+
 当前版本为 **v0.1.0-alpha.5**，下载入口是 [GitHub Releases](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。alpha.5 本次重打包增加主人专用 TestFlight 自动任务、持久会话与 `名称_Beta_版本.ipa` 命名，并保留 App Store 链接地区识别与独立中国区最新版下载，保留白名单、用户隔离、进度卡、完整计时和导出加速。alpha.2/alpha.3 保留为历史版本。旧版 `v0.1.0-alpha.1` 的公开 Release 和附件由本次发布替换，源码标签及历史发布说明保留。
 
 ## 选哪个包

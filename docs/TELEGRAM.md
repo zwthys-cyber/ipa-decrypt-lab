@@ -1,5 +1,7 @@
 # Telegram 使用说明
 
+> 文档范围更新（2026-11-27）：本页在main保留旧代码/研究/发行历史。当前生产处理源码来自upgrade/managed-runtime-v0.2，已切换Cloudflare/D1 + CircleCI ARM64 + 私有Drive；main仍用于账号维护和旧Intel发行。[当前同名文档](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/TELEGRAM.md) · [运行手册](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/OPERATIONS.md) · [项目状态](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/PROJECT-STATUS.md)。不要按历史VPS说明重启旧poller或重新启用5个退休派发工作流。
+
 ## TestFlight 主人入口（2026-11-09）
 
 主人在私聊中直接发送完整的 `https://testflight.apple.com/join/<邀请码>` 链接，即提交独立 TF 任务。后台检查资格、必要时有界接受邀请、获取可用测试构建并完成解密验证，再自动回传；不会改为下载 App Store 正式版。任务编号以 `tf_` 开头，`/status`、`/cancel`、`/get` 继续绑定原请求和主人。

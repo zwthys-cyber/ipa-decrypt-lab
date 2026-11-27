@@ -1,5 +1,7 @@
 # 常驻服务任务恢复
 
+> 文档范围更新（2026-11-27）：本页在main保留旧代码/研究/发行历史。当前生产处理源码来自upgrade/managed-runtime-v0.2，已切换Cloudflare/D1 + CircleCI ARM64 + 私有Drive；main仍用于账号维护和旧Intel发行。[当前同名文档](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/SESSION-RECOVERY.md) · [运行手册](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/OPERATIONS.md) · [项目状态](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/PROJECT-STATUS.md)。不要按历史VPS说明重启旧poller或重新启用5个退休派发工作流。
+
 将任务恢复逻辑放在 `tools/persistent_journal.py`，状态保存在 VPS 私有 SQLite 数据库，不再向 GitHub Checks 写入恢复记录。旧 Checks 实现和实验工作流已删除，历史证据可从 Git 历史与 [41890117885](https://github.com/zwthys-cyber/ipa-decrypt-lab/actions/runs/41890117885) 查阅。
 
 ## 采用的恢复规则

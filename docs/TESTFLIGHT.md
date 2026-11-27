@@ -1,5 +1,7 @@
 # TestFlight 自动处理与验证记录
 
+> 文档范围更新（2026-11-27）：本页在main保留旧代码/研究/发行历史。当前生产处理源码来自upgrade/managed-runtime-v0.2，已切换Cloudflare/D1 + CircleCI ARM64 + 私有Drive；main仍用于账号维护和旧Intel发行。[当前同名文档](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/TESTFLIGHT.md) · [运行手册](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/OPERATIONS.md) · [项目状态](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/PROJECT-STATUS.md)。不要按历史VPS说明重启旧poller或重新启用5个退休派发工作流。
+
 ## 当前状态（2026-11-09）
 
 主人在机器人私聊中发送完整 Apple TF 邀请链接，即进入独立的 `tf_` 任务队列。后台恢复已保存的独立虚拟 Mac 会话，查询资格；必要时先持久记录接受意图，再发送一次接受请求，并通过账号目录核对实际成员资格。已有资格时不重复接受。随后获取可用 iOS 测试构建，校验目标、解密全部受保护页面、清除账户数据，并交给原有主人私聊交付链路。

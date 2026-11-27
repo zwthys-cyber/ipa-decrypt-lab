@@ -1,40 +1,44 @@
 # 项目文档索引
 
-本文档于 2026-11-10 更新，当前成品版本为 [v0.1.0-alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/releases/tag/v0.1.0-alpha.5)。Apple 新原生认证与 Store AMD/SP 设备注册已恢复，正式 X 导出通过 32 个加密切片、86,704 页完整验证。安装运行仍未验证。TF 已接入主人自动任务，CapyPlayer 新请求的实际解密与用户收件截图均已记录；最新部署为新 TF 文件添加 `Beta` 命名标识。本次 alpha.5 附件更新纳入该功能，新包来源以 `BUILDINFO.json` 为准，原标签保留，详见 [TF 记录](TESTFLIGHT.md)。
+更新于2026-11-27。当前生产为Cloudflare/D1、按需CircleCI macOS ARM64和私有Drive交付；处理源码来自upgrade/managed-runtime-v0.2，main保留默认分支及账号/旧发行维护用途。维护分支中的新文档不等于新生产部署。
 
-主分支与线上控制器另接入国区历史版本，完整国区链接用于查询与指定下载；alpha.5 附件仍是此前发布快照。实测与部署证据见 [项目状态](PROJECT-STATUS.md)。
-
-## 使用、部署与发布
+## 当前使用和维护
 
 | 文档 | 用途 |
 | --- | --- |
-| [README](../README.md) | 项目能力、运行架构与已验证范围 |
-| [项目状态](PROJECT-STATUS.md) | 当前事实、运行证据、边界与待办 |
-| [成品包与发布](RELEASES.md) | 平台选择、附件、摘要、来源与发布工作流 |
-| [新版发布说明](releases/v0.1.0-alpha.5.md) | TF/Beta 命名、地区识别、独立账号与重打包来源 |
-| [多用户白名单](MULTI-USER.md) | 管理员授权、用户隔离与限制 |
-| [进度与加速版](releases/v0.1.0-alpha.3.md) | alpha.3 的进度与提速快照 |
-| [登录修复版](releases/v0.1.0-alpha.2.md) | alpha.2 的兼容修复快照 |
-| [Telegram](TELEGRAM.md) | 指令、历史版本、配额、进度与交付 |
-| [VPS 部署](VPS-DEPLOYMENT.md) | 私有配置、安装、健康检查和回滚 |
-| [任务恢复](SESSION-RECOVERY.md) | SQLite、取消、未知发送结果和备份 |
-| [中国区账号接入](CHINA-ACCOUNT.md) | 实时验证码、独立模型/备份、保存模型复用、链接路由、会话维护及验证边界 |
-| [TestFlight 自动处理](TESTFLIGHT.md) | 主人入口、持久会话、独立队列、真实导出/回传证据与限制 |
-| [认证兼容](AUTH-COMPATIBILITY.md) | 当前原生登录、SP 挑战、bag 与设备证明 |
-| [下载模块](DOWNLOADER.md) | 当前工作流、组件及早期 Go 研究入口 |
-| [代理约束](../AGENTS.md) | 编译位置、凭据保护、平台及验证边界 |
+| [README](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/README.md) | 当前架构、分支与真实成功范围 |
+| [操作手册](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/OPERATIONS.md) | 维护发布、凭据、领取/取消和未知结果 |
+| [Telegram](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/TELEGRAM.md) | 实际支持的主人私聊指令和Drive交付 |
+| [项目状态](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/PROJECT-STATUS.md) | 精确源码、CI/真实任务证据及剩余验收 |
+| [任务恢复](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/SESSION-RECOVERY.md) | D1意图、隔离、取消和离线交接 |
+| [中国区账号](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/CHINA-ACCOUNT.md) | 会话维护、缓存修正及单应用许可边界 |
+| [下载模块](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/DOWNLOADER.md) | 当前处理流程与原生完整性要求 |
+| [认证兼容](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/AUTH-COMPATIBILITY.md) | 固定错误分类，区分缓存、会话和设备问题 |
+| [TestFlight](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/TESTFLIGHT.md) | 历史接受防重来源和新平台待验收范围 |
+| [仓库审计](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/REPOSITORY-AUDIT.md) | 548文件检查、冗余候选和文档修订 |
 
-## 历史研究与证据
+## 架构与固定来源
 
-| 文档 | 保留的历史范围 |
+| 文档 | 用途 |
 | --- | --- |
-| [原生认证对照](NATIVE-STORE.md) | 首次 Swift 登录及早期下载失败 |
-| [原生下载修正](NATIVE-DOWNLOAD-FIX.md) | 会话复用与免费许可处理 |
-| [原始下载结果](../NATIVE-DOWNLOAD-RESULTS.md) | 2026-11-03 原包获取及 remap 失败 |
-| [ent/download 调查](../ENT-DOWNLOAD.md) | 端点、会话、kbsync 与许可边界 |
-| [iOS 原生解密跟进](../IOS-DECRYPTION-FOLLOWUP.md) | SINF 与原生 syscall 实测 |
-| [离线后端档案](../OFFLINE-BACKEND.md) | 模型恢复、旧阻塞及跨运行器证据 |
-| [早期研究](RESEARCH.md) | 合成样本、平台差异与失败证据 |
-| [旧版发布记录](releases/v0.1.0-alpha.1.md) | 已被新版替换的公开成品范围 |
+| [托管运行时](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/MANAGED-RUNTIME.md) | 当前架构入口及历史候选验证 |
+| [迁移验收](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/MIGRATION-READINESS.md) | 已完成离线切换、保留缺口及历史调查 |
+| [CircleCI维护记录](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/deploy/managed/circleci/README.md) | 实现证据及源码维护约束 |
+| [CircleCI配置](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/.circleci/config.yml) | 当前按需工作机与公共构建配置 |
+| [公共运行包来源](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/deploy/managed/circleci/runtime-pins.json) | 当前固定的base/CN/TF来源及摘要 |
+| [费用约束与调查档案](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/ZERO-COST.md) | 用户约束、历史平台调查及范围限制 |
+| [仓库约束](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/AGENTS.md) | CI执行、凭据与未知结果保护 |
 
-历史材料中的“当前”“尚未实现”“暂停”按其原实验日期解释，不能覆盖最新项目状态。所有编译与测试在 GitHub-hosted Actions 执行；VPS 只运行已验证成品。Release 不含账号、模型、交付私钥、Telegram token 或应用文件；公开发布与 VPS 部署是两个独立动作。
+## 旧发行和研究档案
+
+| 文档 | 范围 |
+| --- | --- |
+| [公开附件](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/RELEASES.md) | alpha.5预览版旧VPS/Intel快照，非当前生产架构 |
+| [VPS部署](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/VPS-DEPLOYMENT.md) | 已退出派发的旧版本配置/构建/备份档案 |
+| [旧白名单](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/MULTI-USER.md) | VPS多用户实现；新入口仅主人 |
+| [free-pilot部署](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/deploy/managed/free-pilot/DEPLOY.zh-CN.md) | 早期独立试验，不替代当前生产切换 |
+| [Linux归档工具](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/deploy/managed/free-pilot/LINUX-ARCHIVE.zh-CN.md) | 独立10GB合成完整性验证，不扩大机器人2GB能力 |
+| [alpha.5](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/releases/v0.1.0-alpha.5.md)、[alpha.4](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/releases/v0.1.0-alpha.4.md)、[alpha.3](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/releases/v0.1.0-alpha.3.md)、[alpha.2](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/releases/v0.1.0-alpha.2.md)、[alpha.1](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/releases/v0.1.0-alpha.1.md) | 各版本当时的功能和证据 |
+| [原始下载调查](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/NATIVE-DOWNLOAD-RESULTS.md)、[离线后端](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/OFFLINE-BACKEND.md)、[早期研究](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/RESEARCH.md) | 日期内原始观察，不当作当前故障或平台限制 |
+
+默认main的旧代码文档保留历史范围；当前操作以维护分支最新说明及成功生产回执为准。切勿为同步说明而直接推进开启中的生产分支。

@@ -1,5 +1,7 @@
 # 中国区账号与链接识别
 
+> 文档范围更新（2026-11-27）：本页在main保留旧代码/研究/发行历史。当前生产处理源码来自upgrade/managed-runtime-v0.2，已切换Cloudflare/D1 + CircleCI ARM64 + 私有Drive；main仍用于账号维护和旧Intel发行。[当前同名文档](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/CHINA-ACCOUNT.md) · [运行手册](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/OPERATIONS.md) · [项目状态](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/PROJECT-STATUS.md)。不要按历史VPS说明重启旧poller或重新启用5个退休派发工作流。
+
 中国区独立模型已恢复，在新的 Intel 运行器复用及真实导出通过，链接路由已部署。机器人按 App Store 链接选择账号：中国区链接使用独立中国区账号，其余地区链接和数字 App ID 使用原外区账号。中国区支持免费应用最新版及可获取的历史版本，IPA 上限 2000 MB；原外区行为保留。
 
 ## 当前限制：国区专属应用的地区许可响应

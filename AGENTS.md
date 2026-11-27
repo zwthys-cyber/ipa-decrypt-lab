@@ -1,5 +1,11 @@
 # Project constraints
 
+## Current branch and production scope (2026-11-27)
+
+Production processing source185a52110922e0f67ac2c7dff4e1fa85b3b4c98e is on upgrade/managed-runtime-v0.2; cutover45918215266 and real CN CircleCI75 verified17images/120976pages/privateDrive upload and acknowledged owner notice. main is the account-maintenance and legacy Intel-release source, not the current bot task ref. Never push to the open production ref: prepare and test on upgrade/managed-runtime-maintenance-v0.2, close an idle old entry using its exact live artifact, promote the tested commit with a lease, then verify the new source's webhook and cron. Documentation-only main changes do not deploy code.
+
+Keep the original same-bot MANAGED_TELEGRAM_BOT_TOKEN separate from legacy TELEGRAM_BOT_TOKEN, stable MANAGED_TF_HMAC_KEY, existing GUID/models/checkpoints, all historical intents and held unknown work. Do not re-enable the5 retired dispatch/catalog workflows, repeat historical invitations or redownload/resend confirmed GoClub/CN75 deliveries. Owner-only pilot_ task IDs and privateDrive notices are the current entry; whitelist, localBotAPI attachments and five-second cards remain legacy behavior. Session maintenance45917018396/45917154187 was separately approved and completed without OTP or enrollment, not a continuing future login authorization. All project execution/build/test stays on GitHub/authorizedCircleCI; no local checkout or project tests. See [current constraints](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/AGENTS.md) and [operations](https://github.com/zwthys-cyber/ipa-decrypt-lab/blob/upgrade/managed-runtime-maintenance-v0.2/docs/OPERATIONS.md) for current scope; historical main sections below keep their original dates.
+
 - All project compilation, automated tests and build validation MUST run on GitHub-hosted Actions runners only. The VPS may run CI-verified finished services (2026-11-04).
 - Never build, install build dependencies or run test suites on the VPS or this workspace. Install only necessary system runtime packages and the CI-verified deployment bundle on the authorized VPS. No local project execution.
 - Edit source through GitHub APIs. Do not create local project checkouts or build caches.
