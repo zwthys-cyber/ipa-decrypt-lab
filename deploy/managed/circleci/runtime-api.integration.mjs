@@ -170,7 +170,7 @@ test("real workerd managed claim, automatic publisher, immutable lease and compl
   assert.equal(requested.status,200);const context=(await requested.json()).context;
   assert.equal(context.profile,"synthetic");
   assert.equal((await s.request("lease-request",value,"circle",c)).status,200);
-  assert.deepEqual(await s.mf.dispatchFetch(origin+"/fixture-count").then(r=>r.json()),{nativePosts:1,publisherPosts:1});
+  assert.deepEqual(await s.mf.dispatchFetch(origin+"/fixture-count").then(r=>r.json()),{nativePosts:1,publisherPosts:1,typingActions:0});
   const publisherBinding={job_id:job,publisher_run_id:publisher};
   assert.equal((await s.request("publisher/pending",publisherBinding,"github",g)).status,200);
   const ciphertext=btoa("age-encryption.org/v1\nfixture-opaque-cipher");
