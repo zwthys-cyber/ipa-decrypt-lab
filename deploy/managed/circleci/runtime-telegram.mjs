@@ -112,7 +112,7 @@ export async function handleManagedTelegram(request,env,invoke,now=Math.floor(Da
    const page=text.startsWith("/tasks ")?Number(text.split(" ")[2]):0;
    const filters={a:"j.state NOT IN ('closed','cancelled','completed') AND NOT (j.state='link_ready' AND j.finished_at IS NOT NULL)",
     c:"(j.state='completed' OR (j.state='link_ready' AND j.finished_at IS NOT NULL))",
-    h:"j.state IN ('closed','cancelled')"};
+    h:"j.state='cancelled'"};
    const read=async group=>(await env.DB.prepare("SELECT j.job_id,j.state,j.profile,j.target,j.version,j.filename,j.plaintext_bytes,j.link_expires,j.finished_at,j.file_id,"+
     "COALESCE(j.filename,(SELECT prior.filename FROM runtime_jobs prior WHERE prior.owner_id=j.owner_id AND prior.profile=j.profile AND prior.target=j.target AND prior.filename IS NOT NULL ORDER BY prior.created_at DESC LIMIT 1)) display_filename,"+
     "s.job_id catalog_job,s.result_json IS NOT NULL catalog_ready FROM runtime_jobs j LEFT JOIN runtime_catalog_specs s ON s.job_id=j.job_id WHERE j.owner_id=? AND j.kind='export' AND "+filters[group]+

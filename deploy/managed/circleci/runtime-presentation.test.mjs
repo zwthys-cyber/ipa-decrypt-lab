@@ -6,7 +6,7 @@ function row(i,changes={}){return {job_id:"pilot_"+i.toString(16).padStart(32,"0
  state:"completed",finished_at:now-5,file_id:"SYNTHETIC_FILE",filename:"演示应用_"+i+".ipa",
  plaintext_bytes:342632968,link_expires:now+3600,...changes};}
 test("home is brief and every button payload fits Telegram's limit",()=>{
- assert.ok(HOME.includes("\n\n"));assert.ok(!HOME.includes("pilot_"));assert.ok(HOME.length<220);
+ assert.ok(HOME.includes("\n\n"));assert.ok(!HOME.includes("pilot_"));assert.ok(HOME.length<220);assert.ok(!HOME.includes("仅限本人"));assert.ok(!HOME.includes("2 GB"));
  for(const r of MENU.inline_keyboard)for(const button of r)assert.ok(Buffer.byteLength(button.callback_data)<=64);
 });
 test("file cards display a readable name/version and decimal file size",()=>{
@@ -22,6 +22,7 @@ test("many applications render only three rows with pagination and private task 
  assert.ok(!view.text.includes("pilot_"));assert.ok(!view.text.includes("演示应用_4"));
  const buttons=view.reply_markup.inline_keyboard.flat();
  assert.equal(buttons.filter(b=>b.callback_data.startsWith("rt:get:")).length,3);
+ assert.ok(buttons.filter(b=>b.callback_data.startsWith("rt:get:")).every(b=>b.text==="演示应用"));
  assert.ok(buttons.some(b=>b.callback_data==="rt:list:c:1"));
  assert.ok(buttons.every(b=>Buffer.byteLength(b.callback_data)<=64));
  const next=taskView([row(4),row(5)],"c",1,now);

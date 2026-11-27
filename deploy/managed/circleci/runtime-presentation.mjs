@@ -1,6 +1,6 @@
 // Owner-facing text only. Full task identifiers stay in buttons and durable records.
 export const PAGE_SIZE=3;
-export const HOME="IPA 下载助手\n\n发送 App Store 链接或 App ID，获取最新版。\n需要旧版本？发送 /versions 加应用链接。\nTestFlight：直接发送邀请链接。\n\n仅限本人使用 · 单个 IPA 最大 2 GB";
+export const HOME="IPA 下载助手\n\n发送 App Store 链接或 App ID，获取最新版。\n需要旧版本？发送 /versions 加应用链接。\nTestFlight：直接发送邀请链接。";
 export const HELP="使用帮助\n\n最新版：直接发送应用链接或 App ID。\n历史版本：/versions 加链接，然后点选版本。\n指定版本：/version 加链接和版本号。\n\n国区请保留完整 /cn/ 链接。\n任务、领取和取消都可使用下方按钮。\n文件请用自己的 Google 账号打开。";
 export const MENU={inline_keyboard:[
  [{text:"进行中",callback_data:"rt:list:a:0"},{text:"已完成",callback_data:"rt:list:c:0"}],
@@ -41,7 +41,7 @@ export function taskView(records,group,page,now){
   const detail=[catalog?"历史版本查询":version,formatBytes(row.plaintext_bytes),
    catalog&&row.catalog_ready?"列表已就绪":ready?(available?"可领取":"领取期限已过"):labels[row.state]||"状态待核对"].filter(Boolean).join(" · ");
   const label=clean(taskName(row),16);
-  if(available)buttons.push([{text:"领取 "+(i+1)+" · "+label,callback_data:"rt:get:"+row.job_id.slice(6)}]);
+  if(available)buttons.push([{text:label,callback_data:"rt:get:"+row.job_id.slice(6)}]);
   else if(group==="a")buttons.push([{text:"取消 "+(i+1)+" · "+label,callback_data:"rt:cancel:"+row.job_id.slice(6)}]);
   return (i+1)+". "+taskName(row)+"\n"+detail;
  });

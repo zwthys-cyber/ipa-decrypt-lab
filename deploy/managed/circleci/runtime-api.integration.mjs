@@ -578,7 +578,8 @@ test("task pages stay bounded, owner-private and below eight D1 calls without pr
   const page=await second.json();assert.equal(page.method,"editMessageText");assert.equal(page.message_id,12);
   assert.ok(page.text.includes("Synthetic 3"));assert.ok(page.text.includes("Synthetic 4"));assert.ok(!page.text.includes("Synthetic 5"));
   assert.equal((page.text.match(/^[1-3]\. /gm)||[]).length,2);
-  const history=await (await post(callback("rt:list:h:0"))).json();assert.ok(history.text.includes("999999"));
+  const history=await (await post(callback("rt:list:h:0"))).json();assert.ok(!history.text.includes("999999"));assert.ok(history.text.includes("暂无任务"));
+  assert.equal((await s.db.prepare("SELECT count(*) n FROM runtime_jobs WHERE owner_id=? AND state='closed'").bind(owner).first()).n,1);
   for(const bad of [callback("rt:list:c:0",99999),callback("rt:list:c:0",Number(owner),99999),callback("rt:list:c:-1"),callback("rt:list:c:99999")]){
    const reply=await (await post(bad)).json();assert.equal(reply.method,undefined);
   }
