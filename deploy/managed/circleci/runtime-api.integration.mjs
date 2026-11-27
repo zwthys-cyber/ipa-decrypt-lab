@@ -44,7 +44,7 @@ async function setup(bindings={}){
  const base=await mkdtemp(join(tmpdir(),"runtime-api-"));
  const folder=join(base,"circleci");await mkdir(folder);await mkdir(join(base,"free-pilot"));
  await copyFile(new URL("../free-pilot/drive-auth.mjs",import.meta.url),join(base,"free-pilot","drive-auth.mjs"));
- const files=["runtime-presentation.mjs","runtime-api.mjs","runtime-recovery.mjs","runtime-catalog.mjs","runtime-canary.mjs","runtime-notify.mjs","runtime-tasks.mjs","runtime-telegram.mjs","tf-acceptance.mjs","runtime-schema.mjs","runtime-auth.mjs","runtime-lease.mjs","runtime-upload.mjs","runtime-drive.mjs","runtime-fixture.mjs",
+ const files=["runtime-chat-action.mjs","runtime-presentation.mjs","runtime-api.mjs","runtime-recovery.mjs","runtime-catalog.mjs","runtime-canary.mjs","runtime-notify.mjs","runtime-tasks.mjs","runtime-telegram.mjs","tf-acceptance.mjs","runtime-schema.mjs","runtime-auth.mjs","runtime-lease.mjs","runtime-upload.mjs","runtime-drive.mjs","runtime-fixture.mjs",
   "oidc.mjs","github-oidc.mjs"];
  await Promise.all(files.map(name=>copyFile(new URL(name,import.meta.url),join(folder,name))));
  const entry=join(folder,"entry.mjs");
@@ -53,9 +53,9 @@ async function setup(bindings={}){
  import {handleManagedTelegram} from "./runtime-telegram.mjs";
  const C=${JSON.stringify(C)},G=${JSON.stringify(G)};
  const run=${JSON.stringify(run)},workflow=${JSON.stringify(workflow)},worker=${JSON.stringify(worker)};
- let menus=[];let nativePosts=0,publisherPosts=0,notifications=0,deleted=false,managedJob="pilot_11111111111111111111111111111111";
+ let menus=[];let nativePosts=0,publisherPosts=0,typingActions=0,notifications=0,deleted=false,managedJob="pilot_11111111111111111111111111111111";
  export default {async fetch(request,env){
-  if(new URL(request.url).pathname==="/fixture-count")return Response.json({nativePosts,publisherPosts});
+  if(new URL(request.url).pathname==="/fixture-count")return Response.json({nativePosts,publisherPosts,typingActions});
   if(request.headers.get("x-fixture-query-budget")==="1"){
    const rawDB=env.DB,originals=new WeakMap();let calls=0;
    const use=()=>{if(++calls>8)throw Error("fixture_d1_query_budget");};
@@ -110,6 +110,11 @@ async function setup(bindings={}){
      status:"in_progress",path:G.workflows.lease,display_title:"CircleCI lease "+managedJob});
    if(url.startsWith("https://api.telegram.org/bot")){
     if(url.endsWith("/answerCallbackQuery"))return Response.json({ok:true,result:true});
+    if(url.endsWith("/sendChatAction")){
+     const action=JSON.parse(options.body);
+     if(String(action.chat_id)!==env.RUNTIME_OWNER_ID||action.action!=="typing")throw Error("wrong_typing_owner");
+     typingActions++;return Response.json({ok:true,result:true});
+    }
     notifications++;
     const value=JSON.parse(options.body);
     if(String(value.chat_id)!==env.RUNTIME_OWNER_ID)throw Error("wrong_notification_owner");
@@ -372,7 +377,9 @@ test("owner webhook deduplicates links and rejects consumed or foreign updates",
   assert.equal((await post(message(101),"wrong")).status,401);
   assert.equal((await post(message(99))).status,200);assert.equal((await post(message(101,99999))).status,200);
   assert.equal((await s.db.prepare("SELECT count(*) n FROM runtime_jobs").first()).n,0);
+  assert.equal((await s.mf.dispatchFetch(origin+"/fixture-count").then(r=>r.json())).typingActions,0);
   for(let i=0;i<3;i++)assert.equal((await post(message(101))).status,200);
+  assert.equal((await s.mf.dispatchFetch(origin+"/fixture-count").then(r=>r.json())).typingActions,3);
   assert.equal((await s.db.prepare("SELECT count(*) n FROM runtime_jobs").first()).n,1);
   assert.equal((await s.mf.dispatchFetch(origin+"/fixture-count").then(r=>r.json())).nativePosts,1);
  }finally{await s.close();}

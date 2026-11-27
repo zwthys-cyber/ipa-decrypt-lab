@@ -104,14 +104,15 @@ test("pre-cutover private updates are quarantined immutably and cannot start an 
   await sealRecovery(s.env,{records_sha256:s.packet.records_sha256,old_token:old},now-200,s.send);
   s.env.RUNTIME_MODE="production";s.env.RUNTIME_EXPORT_ENABLED="1";s.env.RUNTIME_TELEGRAM_ENABLED="1";
   await refreshRecoveryFence(s.env,now,s.send);
-  let calls=0;
+  let calls=0,typing=0;
+  const action=async(url)=>{assert.ok(url.endsWith("/sendChatAction"));typing++;return Response.json({ok:true,result:true});};
   const update={update_id:7,message:{date:now-190,chat:{id:Number(owner),type:"private"},from:{id:Number(owner),is_bot:false},text:"123456"}};
   const request=value=>new Request("https://ipazake-free-control-pilot.hahayesadd.workers.dev/telegram",{method:"POST",
    headers:{"content-type":"application/json","x-telegram-bot-api-secret-token":s.env.TELEGRAM_WEBHOOK_SECRET},body:JSON.stringify(value)});
-  for(let i=0;i<2;i++)assert.equal((await handleManagedTelegram(request(update),s.env,async()=>{calls++;throw Error("must_not_dispatch");},now)).status,200);
+  for(let i=0;i<2;i++)assert.equal((await handleManagedTelegram(request(update),s.env,async()=>{calls++;throw Error("must_not_dispatch");},now,action)).status,200);
   assert.equal(calls,0);assert.equal((await s.env.DB.prepare("SELECT count(*) n FROM runtime_recovery_quarantine").first()).n,1);
   await assert.rejects(quarantineUpdate(s.env,{...update,message:{...update.message,text:"changed"}},now),/update_conflict/);
-  const reply=await handleManagedTelegram(request({...update,update_id:8,message:{...update.message,date:now,text:"/help"}}),s.env,async()=>{calls++;},now);
-  assert.equal(reply.status,200);assert.equal(calls,0);
+  const reply=await handleManagedTelegram(request({...update,update_id:8,message:{...update.message,date:now,text:"/help"}}),s.env,async()=>{calls++;},now,action);
+  assert.equal(reply.status,200);assert.equal(calls,0);assert.equal(typing,1);
  }finally{await s.close();}
 });

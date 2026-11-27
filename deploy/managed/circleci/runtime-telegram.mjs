@@ -1,3 +1,4 @@
+import {showTyping} from "./runtime-chat-action.mjs";
 import {HOME,HELP,MENU,taskView,fileCard} from "./runtime-presentation.mjs";
 import {quarantineUpdate} from "./runtime-recovery.mjs";
 // Owner-private managed entry; it remains closed until the final handoff is sealed.
@@ -96,6 +97,7 @@ export async function handleManagedTelegram(request,env,invoke,now=Math.floor(Da
   String(m.from.id)!==owner||!Number.isSafeInteger(m.date)||m.date<now-86400||m.date>now+60||
   typeof m.text!=="string"||m.text.length>1024))return response(200);
  const text=callbackCommand||m.text.trim();
+ if(!callbackCommand)await showTyping(env,send);
  const respond=async(text,extra={})=>{
   if(!callbackCommand)return say(owner,text,{reply_markup:MENU,link_preview_options:{is_disabled:true},...extra});
   // Acknowledge the spinner separately; editing an existing message does not resend a file.

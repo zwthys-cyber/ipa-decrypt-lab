@@ -1,3 +1,4 @@
+import {showTyping} from "./runtime-chat-action.mjs";
 import {fileCard} from "./runtime-presentation.mjs";
 // One owner-private completion notification. Unknown sends are never repeated.
 import {need} from "./runtime-auth.mjs";
@@ -9,6 +10,7 @@ export async function notifyOwner(env,task,now,send){
  if(saved)return saved.state==="sent";
  const intent=await env.DB.prepare("INSERT INTO runtime_notifications(job_id,state,created_at) VALUES(?,'intent',?) ON CONFLICT DO NOTHING").bind(task.job_id,now).run();
  need(intent.success===true,"runtime_notify_storage");if(intent.meta?.changes!==1)return false;
+ await showTyping(env,send);
  let state="unknown",message=null;
  try{
   const token=env.TELEGRAM_BOT_TOKEN||"";
